@@ -1,0 +1,94 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-primary: #F4B400;
+  --color-primary-dark: #D89C00;
+  --color-primary-light: #FDE7B0;
+
+  /* main surface tokens (light defaults) */
+  --color-ink: #111827;
+  --color-bg: #F9FAFB;
+  --color-surface: #FFFFFF;
+  --color-border: #E5E7EB;
+  --color-muted: #6B7280;
+
+  /* sidebar tokens — separate from `ink` so it can invert independently */
+  --color-sidebar: #FFFFFF;
+  --color-sidebar-ink: #111827;
+  --color-sidebar-muted: #6B7280;
+  --color-sidebar-border: #E5E7EB;
+  --color-sidebar-hover: #F3F4F6;
+
+  --font-sans: "Inter", system-ui, sans-serif;
+
+  --shadow-card: 0 1px 2px 0 rgba(17, 24, 39, 0.04), 0 1px 3px 0 rgba(17, 24, 39, 0.06);
+  --shadow-header: 0 1px 3px 0 rgba(17, 24, 39, 0.08);
+  --shadow-dropdown: 0 10px 25px -5px rgba(17, 24, 39, 0.1), 0 8px 10px -6px rgba(17, 24, 39, 0.06);
+
+  --animate-fadeIn: fadeIn 0.15s ease-out;
+  --animate-slideIn: slideIn 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Dark mode overrides — same variable names, new values.
+   Every utility already built on var(--color-ink) etc. re-renders automatically. */
+.dark {
+  --color-ink: #F1F5F9;
+  --color-bg: #020617;
+  --color-surface: #0F172A;
+  --color-border: #334155;
+  --color-muted: #94A3B8;
+
+  /* sidebar stays dark navy in dark mode */
+  --color-sidebar: #0F172A;
+  --color-sidebar-ink: #F1F5F9;
+  --color-sidebar-muted: #94A3B8;
+  --color-sidebar-border: #1E293B;
+  --color-sidebar-hover: #1E293B;
+
+  --shadow-card: 0 1px 2px 0 rgba(0, 0, 0, 0.3), 0 1px 3px 0 rgba(0, 0, 0, 0.4);
+  --shadow-header: 0 1px 3px 0 rgba(0, 0, 0, 0.4);
+  --shadow-dropdown: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
+}
+
+@keyframes fadeIn {
+  0% { opacity: 0; transform: translateY(-4px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideIn {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(0); }
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-bg text-ink antialiased;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-border rounded-full;
+}
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-muted;
+}
+
+*:focus-visible {
+  outline: 2px solid #F4B400;
+  outline-offset: 2px;
+}
+
+.scrollbar-none::-webkit-scrollbar { display: none; }
+.scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
