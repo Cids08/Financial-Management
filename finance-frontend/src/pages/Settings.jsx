@@ -27,6 +27,7 @@ import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
 import { useCompany } from '../context/CompanyContext'
 import { useAccountSecurity } from '../hooks/useAccountSecurity'
+import { usePermissions } from '../context/PermissionsContext'
 
 const ACTIVITY_ICON = {
   Login: CheckCircle2,
@@ -122,6 +123,16 @@ function PasswordInput({ label, value, onChange, placeholder }) {
 }
 
 export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) {
+  // Company Branding + Regional/Financial Defaults are admin-only on the
+  // backend — routes/api.php gates PUT/logo endpoints with settings.manage
+  // (its own dedicated permission, not borrowed from users.manage — that
+  // was an earlier, now-reverted approach). GET /api/settings itself only
+  // needs settings.view, which every role has (see RolesAndPermissionsSeeder)
+  // so the sidebar logo/name still works for everyone; the edit forms here
+  // are hidden entirely for anyone without settings.manage specifically.
+  const { hasPermission, loading: permissionsLoading } = usePermissions()
+  const canManageBranding = hasPermission('settings.manage')
+
   /* Company Branding + regional/financial defaults (settings table) */
   const {
     name, tagline, address, email, phone, logoUrl,
@@ -281,194 +292,197 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
         <p className="mt-1 text-xs text-muted">Manage your account security and access.</p>
       </div>
 
-      {/* Company Branding */}
-      <div className={`${PANEL} ${PANEL_PAD}`}>
-        <div className="flex items-center gap-2.5 mb-4">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary-dark">
-            <Building2 size={17} />
-          </div>
-          <div>
-            <p className={SECTION_TITLE}>Company Branding</p>
-            <p className={SECTION_SUBTITLE}>Shown in the sidebar across the app.</p>
-          </div>
-        </div>
-
-        <form onSubmit={handleBrandSubmit} className="space-y-4 max-w-md">
-          {brandSaved && <InlineSuccess message="Branding updated." />}
-          <InlineError message={brandApiError} />
-
-          <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-primary overflow-hidden">
-              {companyLoading ? (
-                // Skeleton while the initial GET /api/settings is in flight,
-                // instead of flashing CompanyProvider's hardcoded default
-                // (no logo / "FMS") before the real data arrives.
-                <div className="h-full w-full animate-pulse bg-black/10" />
-              ) : logoUrl ? (
-                <img src={logoUrl} alt={name} className="h-full w-full object-cover" />
-              ) : (
-                <Building2 size={22} className="text-[#111827]" />
-              )}
+      {/* Company Branding — admin-only (users.manage). Hidden entirely for
+          everyone else, rather than shown and then 403'd on submit. While
+          permissions are still loading, nothing renders here yet to avoid
+          a flash of the form for someone who then loses access to it. */}
+      {!permissionsLoading && canManageBranding && (
+        <div className={`${PANEL} ${PANEL_PAD}`}>
+          <div className="flex items-center gap-2.5 mb-4">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary-dark">
+              <Building2 size={17} />
             </div>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              disabled={companyLoading}
-              onClick={() => setLogoModalOpen(true)}
-            >
-              Change Logo
-            </Button>
+            <div>
+              <p className={SECTION_TITLE}>Company Branding</p>
+              <p className={SECTION_SUBTITLE}>Shown in the sidebar across the app.</p>
+            </div>
           </div>
 
-          <div>
-            <label className={LABEL}>Company Name</label>
-            <input
-              type="text"
-              value={brandForm.name}
-              onChange={handleBrandField('name')}
-              className={INPUT}
-              placeholder="FMS"
-              disabled={companyLoading}
-            />
-          </div>
+          <form onSubmit={handleBrandSubmit} className="space-y-4 max-w-md">
+            {brandSaved && <InlineSuccess message="Branding updated." />}
+            <InlineError message={brandApiError} />
 
-          <div>
-            <label className={LABEL}>Tagline</label>
-            <input
-              type="text"
-              value={brandForm.tagline}
-              onChange={handleBrandField('tagline')}
-              className={INPUT}
-              placeholder="Enterprise Suite"
-              disabled={companyLoading}
-            />
-          </div>
+            <div className="flex items-center gap-4">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-primary overflow-hidden">
+                {companyLoading ? (
+                  <div className="h-full w-full animate-pulse bg-black/10" />
+                ) : logoUrl ? (
+                  <img src={logoUrl} alt={name} className="h-full w-full object-cover" />
+                ) : (
+                  <Building2 size={22} className="text-[#111827]" />
+                )}
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={companyLoading}
+                onClick={() => setLogoModalOpen(true)}
+              >
+                Change Logo
+              </Button>
+            </div>
 
-          {/* Previously missing from the frontend, present in the settings table */}
-          <div>
-            <label className={LABEL}>Company Address</label>
-            <div className="flex items-center gap-2 rounded-lg border border-border bg-bg px-3 py-2 focus-within:border-primary focus-within:bg-white transition-colors duration-150">
-              <MapPin size={15} className="text-muted shrink-0" />
+            <div>
+              <label className={LABEL}>Company Name</label>
               <input
                 type="text"
-                value={brandForm.address}
-                onChange={handleBrandField('address')}
-                placeholder="123 Construction Ave, Quezon City"
-                className="w-full text-sm text-ink bg-transparent outline-none border-0"
+                value={brandForm.name}
+                onChange={handleBrandField('name')}
+                className={INPUT}
+                placeholder="FMS"
                 disabled={companyLoading}
               />
             </div>
-          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className={LABEL}>Company Email</label>
-              <div className="flex items-center gap-2 rounded-lg border border-border bg-bg px-3 py-2 focus-within:border-primary focus-within:bg-white transition-colors duration-150">
-                <Mail size={15} className="text-muted shrink-0" />
-                <input
-                  type="email"
-                  value={brandForm.email}
-                  onChange={handleBrandField('email')}
-                  placeholder="finance@alibaton.com"
-                  className="w-full text-sm text-ink bg-transparent outline-none border-0"
-                  disabled={companyLoading}
-                />
-              </div>
+              <label className={LABEL}>Tagline</label>
+              <input
+                type="text"
+                value={brandForm.tagline}
+                onChange={handleBrandField('tagline')}
+                className={INPUT}
+                placeholder="Enterprise Suite"
+                disabled={companyLoading}
+              />
             </div>
+
             <div>
-              <label className={LABEL}>Company Phone</label>
+              <label className={LABEL}>Company Address</label>
               <div className="flex items-center gap-2 rounded-lg border border-border bg-bg px-3 py-2 focus-within:border-primary focus-within:bg-white transition-colors duration-150">
-                <Phone size={15} className="text-muted shrink-0" />
+                <MapPin size={15} className="text-muted shrink-0" />
                 <input
                   type="text"
-                  value={brandForm.phone}
-                  onChange={handleBrandField('phone')}
-                  placeholder="+63 2 8XXX XXXX"
+                  value={brandForm.address}
+                  onChange={handleBrandField('address')}
+                  placeholder="123 Construction Ave, Quezon City"
                   className="w-full text-sm text-ink bg-transparent outline-none border-0"
                   disabled={companyLoading}
                 />
               </div>
             </div>
-          </div>
 
-          <div className="flex justify-end pt-1">
-            <Button type="submit" variant="primary" size="md" loading={brandSaving} disabled={companyLoading}>
-              Save Branding
-            </Button>
-          </div>
-        </form>
-      </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className={LABEL}>Company Email</label>
+                <div className="flex items-center gap-2 rounded-lg border border-border bg-bg px-3 py-2 focus-within:border-primary focus-within:bg-white transition-colors duration-150">
+                  <Mail size={15} className="text-muted shrink-0" />
+                  <input
+                    type="email"
+                    value={brandForm.email}
+                    onChange={handleBrandField('email')}
+                    placeholder="finance@alibaton.com"
+                    className="w-full text-sm text-ink bg-transparent outline-none border-0"
+                    disabled={companyLoading}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className={LABEL}>Company Phone</label>
+                <div className="flex items-center gap-2 rounded-lg border border-border bg-bg px-3 py-2 focus-within:border-primary focus-within:bg-white transition-colors duration-150">
+                  <Phone size={15} className="text-muted shrink-0" />
+                  <input
+                    type="text"
+                    value={brandForm.phone}
+                    onChange={handleBrandField('phone')}
+                    placeholder="+63 2 8XXX XXXX"
+                    className="w-full text-sm text-ink bg-transparent outline-none border-0"
+                    disabled={companyLoading}
+                  />
+                </div>
+              </div>
+            </div>
 
-      {/* Regional & Financial Defaults — also from the settings table, also previously unused on the frontend */}
-      <div className={`${PANEL} ${PANEL_PAD}`}>
-        <div className="flex items-center gap-2.5 mb-4">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary-dark">
-            <Coins size={17} />
-          </div>
-          <div>
-            <p className={SECTION_TITLE}>Regional & Financial Defaults</p>
-            <p className={SECTION_SUBTITLE}>Used across budgets, forecasts, and reports.</p>
-          </div>
+            <div className="flex justify-end pt-1">
+              <Button type="submit" variant="primary" size="md" loading={brandSaving} disabled={companyLoading}>
+                Save Branding
+              </Button>
+            </div>
+          </form>
         </div>
+      )}
 
-        <form onSubmit={handleBrandSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-md">
-          <div>
-            <label className={LABEL}>Currency</label>
-            <select
-              value={brandForm.currency}
-              onChange={handleBrandField('currency')}
-              className={INPUT}
-              disabled={companyLoading}
-            >
-              {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className={LABEL}>Fiscal Year</label>
-            <input
-              type="number"
-              value={brandForm.fiscalYear}
-              onChange={handleBrandField('fiscalYear')}
-              className={INPUT}
-              disabled={companyLoading}
-            />
-          </div>
-          <div>
-            <label className={LABEL}>Default Tax Rate (%)</label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              max="100"
-              value={brandForm.defaultTaxRate}
-              onChange={handleBrandField('defaultTaxRate')}
-              className={INPUT}
-              disabled={companyLoading}
-            />
-          </div>
-          <div>
-            <label className={LABEL}>Forecast Horizon (months)</label>
-            <input
-              type="number"
-              min="1"
-              max="60"
-              value={brandForm.forecastMonths}
-              onChange={handleBrandField('forecastMonths')}
-              className={INPUT}
-              disabled={companyLoading}
-            />
+      {/* Regional & Financial Defaults — same gate as Company Branding. */}
+      {!permissionsLoading && canManageBranding && (
+        <div className={`${PANEL} ${PANEL_PAD}`}>
+          <div className="flex items-center gap-2.5 mb-4">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary-dark">
+              <Coins size={17} />
+            </div>
+            <div>
+              <p className={SECTION_TITLE}>Regional & Financial Defaults</p>
+              <p className={SECTION_SUBTITLE}>Used across budgets, forecasts, and reports.</p>
+            </div>
           </div>
 
-          <div className="sm:col-span-2 flex justify-end pt-1">
-            <Button type="submit" variant="primary" size="md" loading={brandSaving} disabled={companyLoading}>
-              Save Defaults
-            </Button>
-          </div>
-        </form>
-      </div>
+          <form onSubmit={handleBrandSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-md">
+            <div>
+              <label className={LABEL}>Currency</label>
+              <select
+                value={brandForm.currency}
+                onChange={handleBrandField('currency')}
+                className={INPUT}
+                disabled={companyLoading}
+              >
+                {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={LABEL}>Fiscal Year</label>
+              <input
+                type="number"
+                value={brandForm.fiscalYear}
+                onChange={handleBrandField('fiscalYear')}
+                className={INPUT}
+                disabled={companyLoading}
+              />
+            </div>
+            <div>
+              <label className={LABEL}>Default Tax Rate (%)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                max="100"
+                value={brandForm.defaultTaxRate}
+                onChange={handleBrandField('defaultTaxRate')}
+                className={INPUT}
+                disabled={companyLoading}
+              />
+            </div>
+            <div>
+              <label className={LABEL}>Forecast Horizon (months)</label>
+              <input
+                type="number"
+                min="1"
+                max="60"
+                value={brandForm.forecastMonths}
+                onChange={handleBrandField('forecastMonths')}
+                className={INPUT}
+                disabled={companyLoading}
+              />
+            </div>
 
-      {/* Change Password */}
+            <div className="sm:col-span-2 flex justify-end pt-1">
+              <Button type="submit" variant="primary" size="md" loading={brandSaving} disabled={companyLoading}>
+                Save Defaults
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Change Password — every authenticated user, no permission needed */}
       <div className={`${PANEL} ${PANEL_PAD}`}>
         <div className="flex items-center gap-2.5 mb-4">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary-dark">
@@ -829,21 +843,23 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
         </div>
       </Modal>
 
-      <LogoUploadModal
-        open={logoModalOpen}
-        currentUrl={logoUrl}
-        onClose={() => setLogoModalOpen(false)}
-        onUpload={async (file) => {
-          const result = await uploadLogo(file)
-          if (result.success) setLogoModalOpen(false)
-          return result
-        }}
-        onRemove={async () => {
-          const result = await removeLogo()
-          if (result.success) setLogoModalOpen(false)
-          return result
-        }}
-      />
+      {canManageBranding && (
+        <LogoUploadModal
+          open={logoModalOpen}
+          currentUrl={logoUrl}
+          onClose={() => setLogoModalOpen(false)}
+          onUpload={async (file) => {
+            const result = await uploadLogo(file)
+            if (result.success) setLogoModalOpen(false)
+            return result
+          }}
+          onRemove={async () => {
+            const result = await removeLogo()
+            if (result.success) setLogoModalOpen(false)
+            return result
+          }}
+        />
+      )}
     </div>
   )
 }

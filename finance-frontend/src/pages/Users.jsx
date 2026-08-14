@@ -10,6 +10,11 @@ import {
   UserCheck,
   UserX,
   Clock,
+  Copy,
+  CheckCircle2,
+  ShieldAlert,
+  Eye,
+  EyeOff,
 } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
@@ -17,13 +22,25 @@ import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
 import { useUsers } from '../hooks/useUsers'
 
+// Covers both the originally-assumed role names AND the actual ones this
+// project's roles table uses (Admin, Staff) — every entry has an explicit
+// dark: variant so a role never silently falls back to the unstyled
+// default. If a brand-new role name shows up that isn't listed here, the
+// fallback below (also dark-mode-safe now) keeps it readable either way.
 const ROLE_STYLES = {
-  Administrator: 'bg-primary/15 text-primary-dark',
+  Administrator: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
+  Admin: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
   'Finance Manager': 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400',
   Accountant: 'bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-400',
+  Staff: 'bg-cyan-50 text-cyan-600 dark:bg-cyan-500/10 dark:text-cyan-400',
   Collector: 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400',
   Auditor: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
 }
+
+// Was 'bg-gray-100 text-muted' — bg-gray-100 has no dark: variant, so any
+// role name not in the map above stayed pale-on-pale in dark mode. This
+// mirrors the Auditor style, which already handled dark mode correctly.
+const ROLE_STYLE_FALLBACK = 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
 
 const STATUS_STYLES = {
   Active: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
@@ -55,6 +72,66 @@ function formatDateTime(iso) {
     hour: 'numeric',
     minute: '2-digit',
   })
+}
+
+// Full mask, not partial — a fixed placeholder rather than "keep first
+// char + domain visible" or "keep last 4 digits visible". Partial masks
+// leak information (e.g. on a short list, seeing "j••••@alibaton.test"
+// narrows down who it is almost immediately); a fixed-length placeholder
+// reveals nothing, not even the real string's length.
+const MASKED_EMAIL = '••••••••••••'
+const MASKED_VALUE = '••••••••'
+
+// Shown once, right after a new user is created — the backend only ever
+// includes initial_password on the create response, never again, so this
+// is genuinely the only chance to see it in the UI.
+function NewUserCredentialsModal({ credentials, onClose }) {
+  const [copied, setCopied] = useState(false)
+
+  const copyText = `Employee No: ${credentials?.employee_no}\nPassword: ${credentials?.password}`
+
+  const handleCopy = () => {
+    navigator.clipboard?.writeText(copyText)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <Modal
+      open={!!credentials}
+      onClose={onClose}
+      title="User Created"
+      maxWidth="max-w-sm"
+      footer={<Button variant="primary" size="md" onClick={onClose}>Done</Button>}
+    >
+      <div className="space-y-3">
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+          <ShieldAlert size={14} className="shrink-0 mt-0.5" />
+          This password is shown only once. Share it with the new user securely — they should change it after their first login.
+        </div>
+
+        <div className="rounded-lg border border-border bg-bg p-3 space-y-2 font-mono text-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted font-sans">Employee No.</span>
+            <span className="text-ink">{credentials?.employee_no}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted font-sans">Password</span>
+            <span className="text-ink">{credentials?.password}</span>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="flex items-center gap-1.5 text-xs font-medium text-primary-dark hover:underline"
+        >
+          {copied ? <CheckCircle2 size={13} /> : <Copy size={13} />}
+          {copied ? 'Copied' : 'Copy credentials'}
+        </button>
+      </div>
+    </Modal>
+  )
 }
 
 export default function Users({ title = 'Users', crumbs = ['User Management', 'Users'] }) {
@@ -96,6 +173,21 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
   const [modalMode, setModalMode] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [formValidationError, setFormValidationError] = useState('')
+
+  // Set only right after a successful create, when the response includes
+  // initial_password. Cleared on close and never repopulated afterward.
+  const [newUserCredentials, setNewUserCredentials] = useState(null)
+
+  // Controls visibility of email + employee no. together per row — masked
+  // by default, revealed only when the eye icon is clicked.
+  const [revealedIds, setRevealedIds] = useState(new Set())
+  const toggleReveal = (id) => {
+    setRevealedIds((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
 
   useEffect(() => {
     if (!rolesLoading && roles.length && !form.role_id && modalMode === 'add') {
@@ -179,12 +271,19 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
       status: form.status,
     }
 
-    const result = modalMode === 'add'
+    const wasAdding = modalMode === 'add'
+    const result = wasAdding
       ? await createUser(payload)
       : await updateUser(modalMode.user_id, payload)
 
     if (result.success) {
       closeModal()
+      if (wasAdding && result.data?.initial_password) {
+        setNewUserCredentials({
+          employee_no: result.data.employee_no,
+          password: result.data.initial_password,
+        })
+      }
     }
     // On failure, formError (from the hook) surfaces via InlineError below —
     // the modal stays open so the person can fix it.
@@ -351,61 +450,75 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
                 </tr>
               )}
 
-              {!usersLoading && filteredUsers.map((u) => (
-                <tr key={u.user_id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
-                  <td className="px-4 py-3.5">
-                    <div className="flex items-center gap-2.5">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary-dark">
-                        {initials(u.first_name, u.last_name)}
+              {!usersLoading && filteredUsers.map((u) => {
+                const revealed = revealedIds.has(u.user_id)
+                return (
+                  <tr key={u.user_id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-start gap-2.5">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary-dark">
+                          {initials(u.first_name, u.last_name)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <p className="truncate font-medium text-ink">{u.first_name} {u.last_name}</p>
+                            <button
+                              type="button"
+                              onClick={() => toggleReveal(u.user_id)}
+                              aria-label={revealed ? 'Hide contact details' : 'Show contact details'}
+                              className="shrink-0 text-muted hover:text-ink transition-colors duration-150"
+                            >
+                              {revealed ? <EyeOff size={13} /> : <Eye size={13} />}
+                            </button>
+                          </div>
+                          <p className="truncate text-xs text-muted">{revealed ? u.email : MASKED_EMAIL}</p>
+                          <p className="truncate text-xs text-muted font-mono">{revealed ? u.employee_no : MASKED_VALUE}</p>
+                        </div>
                       </div>
-                      <div className="min-w-0">
-                        <p className="truncate font-medium text-ink">{u.first_name} {u.last_name}</p>
-                        <p className="truncate text-xs text-muted">{u.email}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3.5 whitespace-nowrap">
-                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${ROLE_STYLES[roleName(u.role_id)] || 'bg-gray-100 text-muted'}`}>
-                      {roleName(u.role_id)}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3.5 whitespace-nowrap">
-                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[u.status]}`}>
-                      {u.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3.5 whitespace-nowrap text-muted">
-                    <span className="flex items-center gap-1.5 text-xs">
-                      <Clock size={12} /> {formatDateTime(u.last_login)}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3.5 whitespace-nowrap text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      {!u.is_archived && (
-                        <Tooltip label="Edit user" align="start">
+                    </td>
+                    <td className="px-4 py-3.5 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${ROLE_STYLES[roleName(u.role_id)] || ROLE_STYLE_FALLBACK}`}>
+                        {roleName(u.role_id)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3.5 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[u.status]}`}>
+                        {u.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3.5 whitespace-nowrap text-muted">
+                      <span className="flex items-center gap-1.5 text-xs">
+                        <Clock size={12} /> {formatDateTime(u.last_login)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3.5 whitespace-nowrap text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        {!u.is_archived && (
+                          <Tooltip label="Edit user" align="start">
+                            <button
+                              type="button"
+                              onClick={() => openEditModal(u)}
+                              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
+                            >
+                              <Pencil size={15} />
+                            </button>
+                          </Tooltip>
+                        )}
+                        <Tooltip label={u.is_archived ? 'Restore user' : 'Archive user'} align="end">
                           <button
                             type="button"
-                            onClick={() => openEditModal(u)}
-                            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
+                            onClick={() => toggleArchive(u)}
+                            disabled={actionBusyId === u.user_id}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-50"
                           >
-                            <Pencil size={15} />
+                            {u.is_archived ? <RotateCcw size={15} /> : <Archive size={15} />}
                           </button>
                         </Tooltip>
-                      )}
-                      <Tooltip label={u.is_archived ? 'Restore user' : 'Archive user'} align="end">
-                        <button
-                          type="button"
-                          onClick={() => toggleArchive(u)}
-                          disabled={actionBusyId === u.user_id}
-                          className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-50"
-                        >
-                          {u.is_archived ? <RotateCcw size={15} /> : <Archive size={15} />}
-                        </button>
-                      </Tooltip>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
 
               {!usersLoading && filteredUsers.length === 0 && (
                 <tr>
@@ -437,6 +550,13 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
           {(formValidationError || formError) && (
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
               {formValidationError || formError}
+            </div>
+          )}
+
+          {isEditing && (
+            <div className="flex items-center justify-between rounded-lg border border-border bg-bg px-3 py-2">
+              <span className="text-xs text-muted">Employee No.</span>
+              <span className="text-xs font-mono font-medium text-ink">{modalMode.employee_no}</span>
             </div>
           )}
 
@@ -501,6 +621,11 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
           </div>
         </form>
       </Modal>
+
+      <NewUserCredentialsModal
+        credentials={newUserCredentials}
+        onClose={() => setNewUserCredentials(null)}
+      />
     </div>
   )
 }

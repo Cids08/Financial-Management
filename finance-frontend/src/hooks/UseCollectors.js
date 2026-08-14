@@ -132,6 +132,23 @@ export function useCollectors() {
     }
   }, [fetchCollectors])
 
+  /**
+   * GET /api/collectors/{id}/efficiency?period=day|week|month|year
+   * A plain fetcher rather than hook-owned state — the efficiency
+   * modal that calls this manages its own loading/data/error, since
+   * only one collector's efficiency is ever being viewed at a time.
+   */
+  const getEfficiency = useCallback(async (id, period = 'month') => {
+    try {
+      const res = await apiFetch(`/api/collectors/${id}/efficiency?period=${period}`)
+      const json = await res.json()
+      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to load efficiency.')
+      return { success: true, data: json.data }
+    } catch (err) {
+      return { success: false, message: err.message }
+    }
+  }, [])
+
   return {
     collectors, meta, loading, saving, error,
     search, setSearch,
@@ -139,5 +156,6 @@ export function useCollectors() {
     showArchived, setShowArchived,
     page, setPage,
     createCollector, updateCollector, archiveCollector, restoreCollector,
+    getEfficiency,
   }
 }

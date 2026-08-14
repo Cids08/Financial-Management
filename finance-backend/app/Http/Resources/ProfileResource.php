@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Str;
 
 class ProfileResource extends JsonResource
 {
@@ -18,7 +19,13 @@ class ProfileResource extends JsonResource
             'suffix'      => $this->suffix,
             'email'       => $this->email,
             'phone'       => $this->phone_number,
-            'role'        => $this->whenLoaded('role', fn () => $this->role?->name),
+
+            // roles.name is stored as a slug ('super-admin'); Str::headline()
+            // renders it for display ('Super Admin') without needing a
+            // separate display_name column. Idempotent on an already-nice
+            // string, so this is safe even if some roles are seeded pretty.
+            'role'        => $this->whenLoaded('role', fn () => $this->role?->name ? Str::headline($this->role->name) : null),
+
             'department'  => $this->whenLoaded('department', fn () => $this->department?->name),
 
             // This is the field that mattered for the broken-image bug:

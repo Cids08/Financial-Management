@@ -7,32 +7,19 @@ import Tooltip from '../components/Tooltip'
 import { apiFetch } from '../utils/api'
 import { useCompany } from '../context/CompanyContext'
 
-// Keeps dashes/spacing but replaces all but the last 4 characters with dots
+// Masks every character (keeps dashes/spaces as visual separators)
 function maskValue(value) {
   if (!value) return value
-  const visibleCount = 4
-  const chars = value.split('')
-  let visibleLeft = visibleCount
-  for (let i = chars.length - 1; i >= 0; i--) {
-    if (chars[i] === '-' || chars[i] === ' ') continue
-    if (visibleLeft > 0) {
-      visibleLeft--
-    } else {
-      chars[i] = '•'
-    }
-  }
-  return chars.join('')
+  return value
+    .split('')
+    .map((ch) => (ch === '-' || ch === ' ' ? ch : '•'))
+    .join('')
 }
 
-// Masks the local part of an email, keeping the first character and the full domain visible
+// Fully masks an email — no part of the local name or domain is shown
 function maskEmail(value) {
   if (!value) return value
-  const atIndex = value.indexOf('@')
-  if (atIndex <= 0) return value
-  const local = value.slice(0, atIndex)
-  const domain = value.slice(atIndex)
-  if (local.length <= 1) return `${local}•••${domain}`
-  return `${local[0]}${'•'.repeat(Math.max(local.length - 1, 3))}${domain}`
+  return '•'.repeat(10)
 }
 
 function formatCurrency(value, currency = 'PHP') {

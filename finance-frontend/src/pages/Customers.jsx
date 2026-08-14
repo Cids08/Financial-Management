@@ -7,32 +7,19 @@ import Tooltip from '../components/Tooltip'
 import { apiFetch } from '../utils/api'
 import { useCompany } from '../context/CompanyContext'
 
-// Keeps dashes/spacing but replaces all but the last 4 characters with dots
+// Masks every character (keeps dashes/spaces as visual separators)
 function maskValue(value) {
   if (!value) return value
-  const visibleCount = 4
-  const chars = value.split('')
-  let visibleLeft = visibleCount
-  for (let i = chars.length - 1; i >= 0; i--) {
-    if (chars[i] === '-' || chars[i] === ' ') continue
-    if (visibleLeft > 0) {
-      visibleLeft--
-    } else {
-      chars[i] = '•'
-    }
-  }
-  return chars.join('')
+  return value
+    .split('')
+    .map((ch) => (ch === '-' || ch === ' ' ? ch : '•'))
+    .join('')
 }
 
-// Masks the local part of an email, keeping the first character and the full domain visible
+// Fully masks an email — no part of the local name or domain is shown
 function maskEmail(value) {
   if (!value) return value
-  const atIndex = value.indexOf('@')
-  if (atIndex <= 0) return value
-  const local = value.slice(0, atIndex)
-  const domain = value.slice(atIndex)
-  if (local.length <= 1) return `${local}•••${domain}`
-  return `${local[0]}${'•'.repeat(Math.max(local.length - 1, 3))}${domain}`
+  return '•'.repeat(10)
 }
 
 function formatCurrency(value, currency = 'PHP') {
@@ -65,6 +52,9 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
   const [statusFilter, setStatusFilter] = useState('all')
   const [showArchived, setShowArchived] = useState(false)
 
+  const [page, setPage] = useState(1)
+  const [meta, setMeta] = useState({ currentPage: 1, lastPage: 1, total: 0 })
+
   const [modalMode, setModalMode] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [formError, setFormError] = useState('')
@@ -88,7 +78,8 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
       if (search) params.set('search', search)
       if (statusFilter !== 'all') params.set('status', statusFilter)
       if (showArchived) params.set('archived', '1')
-      params.set('per_page', '100')
+      params.set('page', String(page))
+      params.set('per_page', '12') // matches Departments.jsx's page size
 
       const res = await apiFetch(`/api/customers?${params.toString()}`)
       const json = await res.json()
@@ -98,12 +89,21 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
       }
 
       setCustomers(json.data || [])
+      if (json.meta) {
+        setMeta({ currentPage: json.meta.current_page, lastPage: json.meta.last_page, total: json.meta.total })
+      }
+
+      // If an archive/restore emptied the current page, step back a page
+      // instead of showing a blank table — same behavior as Departments.jsx.
+      if ((json.data || []).length === 0 && page > 1) {
+        setPage((p) => p - 1)
+      }
     } catch (err) {
       setLoadError(err.message || 'Failed to load customers.')
     } finally {
       setLoading(false)
     }
-  }, [search, statusFilter, showArchived])
+  }, [search, statusFilter, showArchived, page])
 
   const fetchStats = useCallback(async () => {
     try {
@@ -129,6 +129,13 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
   // Stats now come from a dedicated /stats endpoint (see fetchStats above) —
   // they reflect true global counts regardless of the current table filter,
   // rather than being derived from whatever subset is currently loaded.
+
+  // Any filter change invalidates the current page number — jumping back
+  // to page 1 avoids landing on an out-of-range page for the new result set.
+  const updateFilter = (setter) => (value) => {
+    setter(value)
+    setPage(1)
+  }
 
   const toggleArchive = async (c) => {
     try {
@@ -209,10 +216,10 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
   }
 
   const statCards = [
-    { key: 'total', label: 'Total Customers', value: stats.total, icon: UsersIcon, iconBg: 'bg-primary/15', iconColor: 'text-primary-dark', isActive: statusFilter === 'all' && !showArchived, onClick: () => { setStatusFilter('all'); setShowArchived(false) } },
-    { key: 'active', label: 'Active', value: stats.active, icon: UserCheck, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: statusFilter === 'Active' && !showArchived, onClick: () => { setStatusFilter('Active'); setShowArchived(false) } },
-    { key: 'inactive', label: 'Inactive', value: stats.inactive, icon: UserX, iconBg: 'bg-red-50 dark:bg-red-500/10', iconColor: 'text-red-600 dark:text-red-400', isActive: statusFilter === 'Inactive' && !showArchived, onClick: () => { setStatusFilter('Inactive'); setShowArchived(false) } },
-    { key: 'archived', label: 'Archived', value: stats.archived, icon: Archive, iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-500 dark:text-slate-400', isActive: showArchived, onClick: () => setShowArchived(true) },
+    { key: 'total', label: 'Total Customers', value: stats.total, icon: UsersIcon, iconBg: 'bg-primary/15', iconColor: 'text-primary-dark', isActive: statusFilter === 'all' && !showArchived, onClick: () => { updateFilter(setStatusFilter)('all'); setShowArchived(false) } },
+    { key: 'active', label: 'Active', value: stats.active, icon: UserCheck, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: statusFilter === 'Active' && !showArchived, onClick: () => { updateFilter(setStatusFilter)('Active'); setShowArchived(false) } },
+    { key: 'inactive', label: 'Inactive', value: stats.inactive, icon: UserX, iconBg: 'bg-red-50 dark:bg-red-500/10', iconColor: 'text-red-600 dark:text-red-400', isActive: statusFilter === 'Inactive' && !showArchived, onClick: () => { updateFilter(setStatusFilter)('Inactive'); setShowArchived(false) } },
+    { key: 'archived', label: 'Archived', value: stats.archived, icon: Archive, iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-500 dark:text-slate-400', isActive: showArchived, onClick: () => { setShowArchived(true); setPage(1) } },
   ]
 
   const isModalOpen = modalMode !== null
@@ -257,15 +264,15 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
       <div className={`${PANEL} ${PANEL_PAD} flex flex-col gap-3 lg:flex-row lg:items-center`}>
         <div className="relative flex-1">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by name, contact, or email..." className={`${INPUT} pl-9`} />
+          <input type="text" value={search} onChange={(e) => updateFilter(setSearch)(e.target.value)} placeholder="Search by name, contact, or email..." className={`${INPUT} pl-9`} />
         </div>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={INPUT}>
+        <select value={statusFilter} onChange={(e) => updateFilter(setStatusFilter)(e.target.value)} className={INPUT}>
           <option value="all">All Statuses</option>
           <option value="Active">Active</option>
           <option value="Inactive">Inactive</option>
         </select>
         <label className="flex items-center gap-2 text-sm text-muted cursor-pointer whitespace-nowrap">
-          <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} className="rounded border-border accent-primary" />
+          <input type="checkbox" checked={showArchived} onChange={(e) => { setShowArchived(e.target.checked); setPage(1) }} className="rounded border-border accent-primary" />
           Show archived
         </label>
       </div>
@@ -356,6 +363,32 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
           </table>
         </div>
       </div>
+
+      {!loading && meta.total > 0 && (
+        <div className="flex items-center justify-between gap-3 text-xs text-muted">
+          <p>
+            Page {meta.currentPage} of {meta.lastPage} · {meta.total} customer{meta.total === 1 ? '' : 's'} total
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={meta.currentPage <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              Previous
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={meta.currentPage >= meta.lastPage}
+              onClick={() => setPage((p) => Math.min(meta.lastPage, p + 1))}
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      )}
 
       <Modal
         open={isModalOpen}

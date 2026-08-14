@@ -10,8 +10,13 @@ class DepartmentService
 {
     public function list(array $filters = []): \Illuminate\Contracts\Pagination\LengthAwarePaginator
     {
-        return Department::query()
-            ->withCount('users')
+        $query = Department::query()->withCount('users');
+
+        $query = ($filters['archived'] ?? false)
+            ? $query->onlyTrashed()
+            : $query;
+
+        return $query
             ->search($filters['search'] ?? null)
             ->orderBy('department_name')
             ->orderBy('id')
@@ -33,17 +38,25 @@ class DepartmentService
         return $department->fresh()->loadCount('users');
     }
 
-    public function delete(Department $department): void
+    /**
+     * @throws ValidationException
+     */
+    public function archive(Department $department): void
     {
         $headcount = $department->users()->count();
 
         if ($headcount > 0) {
             throw ValidationException::withMessages([
-                'department' => ["This department has {$headcount} employee(s) assigned. Reassign them before deleting."],
+                'department' => ["This department has {$headcount} employee(s) assigned. Reassign them before archiving."],
             ]);
         }
 
-        $department->delete();
+        $department->delete(); // soft delete — Department already uses SoftDeletes
+    }
+
+    public function restore(Department $department): void
+    {
+        $department->restore();
     }
 
     public function locatePage(Department $department, int $perPage): int
@@ -67,6 +80,7 @@ class DepartmentService
             'total' => Department::count(),
             'active' => Department::where('is_active', true)->count(),
             'inactive' => Department::where('is_active', false)->count(),
+            'archived' => Department::onlyTrashed()->count(),
         ];
     }
 }

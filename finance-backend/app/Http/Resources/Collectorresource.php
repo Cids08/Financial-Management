@@ -24,6 +24,8 @@ class CollectorResource extends JsonResource
                 ? asset('storage/' . ltrim($this->profile_photo, '/'))
                 : null,
             'assigned_area'   => $this->assigned_area,
+            'service_area_id' => $this->service_area_id,
+            'service_area_name' => $this->whenLoaded('serviceArea', fn () => $this->serviceArea?->name),
             'commission_rate' => (float) $this->commission_rate,
             'monthly_target'  => (float) $this->monthly_target,
             'is_active'       => $this->status === 'Active',

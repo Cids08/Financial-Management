@@ -30,21 +30,13 @@ const TYPE_ICON = {
   'Money Market': Landmark,
 }
 
-// Keeps spacing/formatting but replaces all but the last 4 characters with asterisks
+// Fully masks the account number (keeps spaces as visual separators)
 function maskAccountNumber(value) {
   if (!value) return ''
-  const visibleCount = 4
-  const chars = value.split('')
-  let visibleLeft = visibleCount
-  for (let i = chars.length - 1; i >= 0; i--) {
-    if (chars[i] === ' ') continue
-    if (visibleLeft > 0) {
-      visibleLeft--
-    } else {
-      chars[i] = '•'
-    }
-  }
-  return chars.join('')
+  return value
+    .split('')
+    .map((ch) => (ch === ' ' ? ch : '•'))
+    .join('')
 }
 
 export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Master Data', 'Cash Accounts'] }) {

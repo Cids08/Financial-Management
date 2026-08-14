@@ -92,4 +92,27 @@ class CollectorController extends Controller
             'data'    => new CollectorResource($collector),
         ]);
     }
+
+    /**
+     * GET /api/collectors/{collector}/efficiency?period=day|week|month|year
+     *
+     * Powers Collectors.jsx's EfficiencyModal — returns a list of recent
+     * period buckets (not a single number), each with collected vs.
+     * target and a computed efficiency %.
+     */
+    public function efficiency(Request $request, Collector $collector): JsonResponse
+    {
+        $period = $request->string('period')->toString();
+        if (! in_array($period, ['day', 'week', 'month', 'year'], true)) {
+            $period = 'month';
+        }
+
+        $rows = $this->collectorService->getEfficiency($collector, $period);
+
+        return response()->json([
+            'success' => true,
+            'message' => '',
+            'data'    => $rows,
+        ]);
+    }
 }

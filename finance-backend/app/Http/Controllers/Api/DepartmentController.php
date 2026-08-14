@@ -10,6 +10,7 @@ use App\Models\Department;
 use App\Services\DepartmentService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class DepartmentController extends Controller
 {
@@ -19,9 +20,11 @@ class DepartmentController extends Controller
 
     public function index(Request $request): JsonResponse
     {
+        // ?archived=1 mirrors the "Show archived" toggle on Roles.jsx/Users.jsx.
         $departments = $this->departmentService->list([
             'search' => $request->string('search')->toString(),
             'per_page' => $request->integer('per_page', 15),
+            'archived' => $request->boolean('archived'),
         ]);
 
         return response()->json([
@@ -70,11 +73,11 @@ class DepartmentController extends Controller
         ]);
     }
 
-    public function destroy(Department $department): JsonResponse
+    public function archive(Department $department): JsonResponse
     {
         try {
-            $this->departmentService->delete($department);
-        } catch (\Illuminate\Validation\ValidationException $e) {
+            $this->departmentService->archive($department);
+        } catch (ValidationException $e) {
             return response()->json([
                 'success' => false,
                 'message' => collect($e->errors())->flatten()->first(),
@@ -84,7 +87,21 @@ class DepartmentController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Department deleted successfully.',
+            'message' => 'Department archived successfully.',
+            'data' => null,
+        ]);
+    }
+
+    // {department} must resolve a soft-deleted record here, hence
+    // withTrashed() on the route — same pattern as UserController/
+    // RoleController's restore routes.
+    public function restore(Department $department): JsonResponse
+    {
+        $this->departmentService->restore($department);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Department restored successfully.',
             'data' => null,
         ]);
     }

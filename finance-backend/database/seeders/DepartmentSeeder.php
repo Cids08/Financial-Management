@@ -18,7 +18,14 @@ class DepartmentSeeder extends Seeder
         ];
 
         foreach ($departments as $data) {
-            Department::create($data);
+            // updateOrCreate instead of create — re-running this seeder
+            // (e.g. after `migrate:fresh --seed`, or by accident) now
+            // updates the existing 5 rows instead of piling up duplicates
+            // every time.
+            Department::updateOrCreate(
+                ['department_name' => $data['department_name']],
+                $data
+            );
         }
     }
 }

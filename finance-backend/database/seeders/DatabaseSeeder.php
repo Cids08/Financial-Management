@@ -11,7 +11,19 @@ class DatabaseSeeder extends Seeder
         $this->call([
             SuperAdminSeeder::class,
             DepartmentSeeder::class,
-            PermissionSeeder::class,
+            RolesAndPermissionsSeeder::class,
+            AccountsReceivableSeeder::class,
+            JournalEntrySeeder::class,
+            ChartOfAccountSeeder::class,
+            TaxObligationSeeder::class,
+            ExpenseCategorySeeder::class,
+            ServiceAreaSeeder::class,
+            CollectionSeeder::class,
+            CollectorSeeder::class,
+            MissingPermissionsSeeder::class,
+            ExpenseSeeder::class,
+            CashAccountSeeder::class,
+            BudgetSeeder::class,
             // ...other seeders (RoleSeeder, DepartmentSeeder, etc.) go here
         ]);
     }

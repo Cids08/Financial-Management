@@ -1,10 +1,25 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Search, Plus, Pencil, Trash2, Building2, Users, Mail, Phone, UserCog } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, Building2, Users, Mail, Phone, UserCog, Eye, EyeOff } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
 import { apiFetch } from '../utils/api'
+
+// Masks every character (keeps dashes/spaces as visual separators)
+function maskValue(value) {
+  if (!value) return value
+  return value
+    .split('')
+    .map((ch) => (ch === '-' || ch === ' ' ? ch : '•'))
+    .join('')
+}
+
+// Fully masks an email — no part of the local name or domain is shown
+function maskEmail(value) {
+  if (!value) return value
+  return '•'.repeat(10)
+}
 
 const EMPTY_FORM = { department_name: '', department_head: '', department_email: '', department_phone: '', description: '', status: 'Active' }
 
@@ -26,15 +41,26 @@ export default function Departments({ title = 'Departments', crumbs = ['Master D
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [meta, setMeta] = useState({ currentPage: 1, lastPage: 1, total: 0 })
+  const [showArchived, setShowArchived] = useState(false)
+  const [revealedIds, setRevealedIds] = useState(new Set())
+
+  const toggleReveal = (id) => {
+    setRevealedIds((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
 
   const [modalMode, setModalMode] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [formError, setFormError] = useState('')
   const [saving, setSaving] = useState(false)
 
-  const [deptToDelete, setDeptToDelete] = useState(null)
-  const [deleting, setDeleting] = useState(false)
-  const [deleteError, setDeleteError] = useState('')
+  const [deptToArchive, setDeptToArchive] = useState(null)
+  const [archiving, setArchiving] = useState(false)
+  const [archiveError, setArchiveError] = useState('')
+  const [restoreBusyId, setRestoreBusyId] = useState(null)
 
   const fetchDepartments = useCallback(async () => {
     setLoading(true)
@@ -44,6 +70,7 @@ export default function Departments({ title = 'Departments', crumbs = ['Master D
       if (search) params.set('search', search)
       params.set('page', String(page))
       params.set('per_page', '12') // 12 divides evenly into the 1/2/3-column card grid
+      if (showArchived) params.set('archived', '1')
 
       const res = await apiFetch(`/api/departments?${params.toString()}`)
       const json = await res.json()
@@ -57,8 +84,8 @@ export default function Departments({ title = 'Departments', crumbs = ['Master D
         setMeta({ currentPage: json.meta.current_page, lastPage: json.meta.last_page, total: json.meta.total })
       }
 
-      // If a delete emptied the current page (e.g. the last item on page 3
-      // was just removed), step back a page instead of showing a blank grid.
+      // If an archive/restore emptied the current page, step back a page
+      // instead of showing a blank grid.
       if ((json.data || []).length === 0 && page > 1) {
         setPage((p) => p - 1)
       }
@@ -67,12 +94,19 @@ export default function Departments({ title = 'Departments', crumbs = ['Master D
     } finally {
       setLoading(false)
     }
-  }, [search, page])
+  }, [search, page, showArchived])
 
   useEffect(() => {
     const timeout = setTimeout(fetchDepartments, 300) // debounce search typing
     return () => clearTimeout(timeout)
   }, [fetchDepartments])
+
+  // Switching views should always land back on page 1 — an archived-list
+  // page number has no relationship to the active list's pagination.
+  const toggleShowArchived = (checked) => {
+    setShowArchived(checked)
+    setPage(1)
+  }
 
   const openAdd = () => { setForm(EMPTY_FORM); setFormError(''); setModalMode('add') }
   const openEdit = (d) => {
@@ -126,23 +160,41 @@ export default function Departments({ title = 'Departments', crumbs = ['Master D
     }
   }
 
-  const confirmDelete = async () => {
-    setDeleting(true)
-    setDeleteError('')
+  const confirmArchive = async () => {
+    setArchiving(true)
+    setArchiveError('')
     try {
-      const res = await apiFetch(`/api/departments/${deptToDelete.department_id}`, { method: 'DELETE' })
+      const res = await apiFetch(`/api/departments/${deptToArchive.department_id}`, { method: 'DELETE' })
       const json = await res.json()
 
       if (!res.ok || !json.success) {
-        throw new Error(json.message || 'Failed to delete department.')
+        throw new Error(json.message || 'Failed to archive department.')
       }
 
-      setDeptToDelete(null)
+      setDeptToArchive(null)
       fetchDepartments()
     } catch (err) {
-      setDeleteError(err.message || 'Failed to delete department.')
+      setArchiveError(err.message || 'Failed to archive department.')
     } finally {
-      setDeleting(false)
+      setArchiving(false)
+    }
+  }
+
+  const restoreDepartment = async (department) => {
+    setRestoreBusyId(department.department_id)
+    try {
+      const res = await apiFetch(`/api/departments/${department.department_id}/restore`, { method: 'PATCH' })
+      const json = await res.json()
+
+      if (!res.ok || !json.success) {
+        throw new Error(json.message || 'Failed to restore department.')
+      }
+
+      fetchDepartments()
+    } catch (err) {
+      setLoadError(err.message || 'Failed to restore department.')
+    } finally {
+      setRestoreBusyId(null)
     }
   }
 
@@ -158,14 +210,25 @@ export default function Departments({ title = 'Departments', crumbs = ['Master D
           <h1 className="text-xl font-bold tracking-tight text-ink">{title}</h1>
           <p className="mt-1 text-xs text-muted">Manage organizational departments used across budgets and disbursements.</p>
         </div>
-        <Button variant="primary" size="sm" icon={Plus} onClick={openAdd}>Add Department</Button>
+        <div className="flex items-center gap-3">
+          <Button variant="primary" size="sm" icon={Plus} onClick={openAdd}>Add Department</Button>
+        </div>
       </div>
 
-      <div className={`${PANEL} p-4`}>
-        <div className="relative">
+      <div className={`${PANEL} p-4 flex flex-col gap-3 sm:flex-row sm:items-center`}>
+        <div className="relative flex-1">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
           <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search departments..." className={`${INPUT} pl-9`} />
         </div>
+        <label className="flex items-center gap-2 text-sm text-muted cursor-pointer whitespace-nowrap">
+          <input
+            type="checkbox"
+            checked={showArchived}
+            onChange={(e) => toggleShowArchived(e.target.checked)}
+            className="rounded border-border accent-primary"
+          />
+          Show archived
+        </label>
       </div>
 
       {loadError && (
@@ -178,25 +241,42 @@ export default function Departments({ title = 'Departments', crumbs = ['Master D
         {loading ? (
           <div className={`${PANEL} p-10 text-center text-sm text-muted sm:col-span-2 xl:col-span-3`}>Loading departments…</div>
         ) : departments.length === 0 ? (
-          <div className={`${PANEL} p-10 text-center text-sm text-muted sm:col-span-2 xl:col-span-3`}>No departments match your search.</div>
+          <div className={`${PANEL} p-10 text-center text-sm text-muted sm:col-span-2 xl:col-span-3`}>
+            {showArchived ? 'No archived departments.' : 'No departments match your search.'}
+          </div>
         ) : (
           departments.map((d) => (
-            <div key={d.department_id} className={`${PANEL} p-4 flex flex-col gap-3`}>
+            <div key={d.department_id} className={`${PANEL} p-4 flex flex-col gap-3 ${showArchived ? 'opacity-75' : ''}`}>
               <div className="flex items-start justify-between">
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/15 text-primary-dark">
                   <Building2 size={18} />
                 </div>
                 <div className="flex items-center gap-1">
-                  <Tooltip label="Edit department" align="start">
-                    <button type="button" onClick={() => openEdit(d)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                      <Pencil size={15} />
-                    </button>
-                  </Tooltip>
-                  <Tooltip label="Delete department" align="end">
-                    <button type="button" onClick={() => { setDeptToDelete(d); setDeleteError('') }} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 transition-colors duration-150">
-                      <Trash2 size={15} />
-                    </button>
-                  </Tooltip>
+                  {showArchived ? (
+                    <Tooltip label="Restore department" align="end">
+                      <button
+                        type="button"
+                        onClick={() => restoreDepartment(d)}
+                        disabled={restoreBusyId === d.department_id}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-50"
+                      >
+                        <RotateCcw size={15} />
+                      </button>
+                    </Tooltip>
+                  ) : (
+                    <>
+                      <Tooltip label="Edit department" align="start">
+                        <button type="button" onClick={() => openEdit(d)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                          <Pencil size={15} />
+                        </button>
+                      </Tooltip>
+                      <Tooltip label="Archive department" align="end">
+                        <button type="button" onClick={() => { setDeptToArchive(d); setArchiveError('') }} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 transition-colors duration-150">
+                          <Archive size={15} />
+                        </button>
+                      </Tooltip>
+                    </>
+                  )}
                 </div>
               </div>
               <div>
@@ -209,14 +289,37 @@ export default function Departments({ title = 'Departments', crumbs = ['Master D
 
               {(d.department_head || d.department_email || d.department_phone) && (
                 <div className="flex flex-col gap-1 text-xs text-muted">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-medium uppercase tracking-wide text-muted/70">Contact details</span>
+                    {(d.department_email || d.department_phone) && (
+                      <Tooltip label={revealedIds.has(d.department_id) ? 'Hide details' : 'Show details'} align="end">
+                        <button
+                          type="button"
+                          onClick={() => toggleReveal(d.department_id)}
+                          className="flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
+                        >
+                          {revealedIds.has(d.department_id) ? <EyeOff size={13} /> : <Eye size={13} />}
+                        </button>
+                      </Tooltip>
+                    )}
+                  </div>
                   {d.department_head && (
-                    <span className="flex items-center gap-1.5"><UserCog size={12} className="shrink-0" /> {d.department_head}</span>
+                    <span className="flex items-center gap-1.5">
+                      <UserCog size={12} className="shrink-0" />
+                      {d.department_head}
+                    </span>
                   )}
                   {d.department_email && (
-                    <span className="flex items-center gap-1.5"><Mail size={12} className="shrink-0" /> {d.department_email}</span>
+                    <span className="flex items-center gap-1.5">
+                      <Mail size={12} className="shrink-0" />
+                      {revealedIds.has(d.department_id) ? d.department_email : maskEmail(d.department_email)}
+                    </span>
                   )}
                   {d.department_phone && (
-                    <span className="flex items-center gap-1.5"><Phone size={12} className="shrink-0" /> {d.department_phone}</span>
+                    <span className="flex items-center gap-1.5">
+                      <Phone size={12} className="shrink-0" />
+                      {revealedIds.has(d.department_id) ? d.department_phone : maskValue(d.department_phone)}
+                    </span>
                   )}
                 </div>
               )}
@@ -303,36 +406,36 @@ export default function Departments({ title = 'Departments', crumbs = ['Master D
       </Modal>
 
       <Modal
-        open={deptToDelete !== null}
-        onClose={() => { setDeptToDelete(null); setDeleteError('') }}
-        title="Delete Department"
+        open={deptToArchive !== null}
+        onClose={() => { setDeptToArchive(null); setArchiveError('') }}
+        title="Archive Department"
         maxWidth="max-w-sm"
         footer={
           <>
-            <Button variant="secondary" size="md" onClick={() => { setDeptToDelete(null); setDeleteError('') }}>Cancel</Button>
+            <Button variant="secondary" size="md" onClick={() => { setDeptToArchive(null); setArchiveError('') }}>Cancel</Button>
             <Button
               variant="danger"
               size="md"
-              loading={deleting}
-              disabled={deptToDelete?.headcount > 0}
-              onClick={confirmDelete}
+              loading={archiving}
+              disabled={deptToArchive?.headcount > 0}
+              onClick={confirmArchive}
             >
-              Delete
+              Archive
             </Button>
           </>
         }
       >
         <div className="space-y-3">
-          {deleteError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{deleteError}</div>
+          {archiveError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{archiveError}</div>
           )}
           <p className="text-sm text-ink">
-            Are you sure you want to delete <span className="font-semibold">{deptToDelete?.department_name}</span>?
+            Are you sure you want to archive <span className="font-semibold">{deptToArchive?.department_name}</span>?
           </p>
-          {deptToDelete?.headcount > 0 && (
+          {deptToArchive?.headcount > 0 && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
-              This department has {deptToDelete.headcount} employee{deptToDelete.headcount === 1 ? '' : 's'} assigned. Reassign
-              {deptToDelete.headcount === 1 ? ' them' : ' them all'} to another department before deleting.
+              This department has {deptToArchive.headcount} employee{deptToArchive.headcount === 1 ? '' : 's'} assigned. Reassign
+              {deptToArchive.headcount === 1 ? ' them' : ' them all'} to another department before archiving.
             </div>
           )}
         </div>

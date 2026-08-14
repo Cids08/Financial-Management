@@ -1,30 +1,17 @@
-import { useMemo, useState } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, Boxes, Wrench, Truck as TruckIcon, Building2 } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Search, Plus, Pencil, Archive, RotateCcw, Boxes, Wrench, Truck as TruckIcon, Building2, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
 import { formatCurrency, formatDate } from '../utils/formatters'
+import { useFixedAssets } from '../hooks/useFixedAssets'
+import { apiFetch } from '../utils/api'
 
-const categories = [
-  { category_id: 1, category_name: 'Heavy Equipment' },
-  { category_id: 2, category_name: 'Vehicles' },
-  { category_id: 3, category_name: 'Office Equipment' },
-  { category_id: 4, category_name: 'IT Equipment' },
-]
-
-const departments = [
-  { department_id: 1, department_name: 'Finance' },
-  { department_id: 2, department_name: 'Operations' },
-  { department_id: 3, department_name: 'Marketing' },
-  { department_id: 4, department_name: 'Human Resources' },
-]
-
-const suppliers = [
-  { supplier_id: 1, supplier_name: 'Northgate Supplies Inc.' },
-  { supplier_id: 2, supplier_name: 'Pinnacle Freight Co.' },
-  { supplier_id: 3, supplier_name: 'Coastal Steel Traders' },
-]
+// asset_category is a plain string column per the ERD (no lookup table) —
+// this list is just the frontend's suggested set for the dropdown; typing
+// a new one and saving it works fine too since there's no FK to violate.
+const ASSET_CATEGORIES = ['Heavy Equipment', 'Vehicles', 'Office Equipment', 'IT Equipment']
 
 const CATEGORY_ICON = {
   'Heavy Equipment': Wrench,
@@ -33,18 +20,11 @@ const CATEGORY_ICON = {
   'IT Equipment': Boxes,
 }
 
-const initialAssets = [
-  { id: 1, asset_code: 'FA-1001', asset_name: 'Mobile Crane Unit A', category_id: 1, purchase_date: '2023-02-14', purchase_cost: 8500000, salvage_value: 850000, useful_life: 10, status: 'Active', department_id: 2, supplier_id: 1, remarks: 'Primary lifting unit for Site B.', is_archived: false },
-  { id: 2, asset_code: 'FA-1002', asset_name: 'Dump Truck #3', category_id: 2, purchase_date: '2022-08-01', purchase_cost: 2600000, salvage_value: 200000, useful_life: 8, status: 'Active', department_id: 2, supplier_id: 2, remarks: 'Assigned to hauling division.', is_archived: false },
-  { id: 3, asset_code: 'FA-1003', asset_name: 'Executive Office Desks (Set of 6)', category_id: 3, purchase_date: '2021-05-20', purchase_cost: 180000, salvage_value: 10000, useful_life: 7, status: 'Active', department_id: 1, supplier_id: 3, remarks: '', is_archived: false },
-  { id: 4, asset_code: 'FA-1004', asset_name: 'Server Rack & Backup NAS', category_id: 4, purchase_date: '2024-01-10', purchase_cost: 420000, salvage_value: 20000, useful_life: 5, status: 'Under Maintenance', department_id: 1, supplier_id: 3, remarks: 'RAID rebuild in progress.', is_archived: false },
-  { id: 5, asset_code: 'FA-0987', asset_name: 'Flatbed Trailer (retired)', category_id: 2, purchase_date: '2016-03-02', purchase_cost: 950000, salvage_value: 50000, useful_life: 10, status: 'Disposed', department_id: 2, supplier_id: 2, remarks: 'Decommissioned, pending sale.', is_archived: true },
-]
-
 const EMPTY_FORM = {
-  asset_code: '', asset_name: '', category_id: categories[0].category_id, purchase_date: '',
-  purchase_cost: '', salvage_value: '', useful_life: '', status: 'Active',
-  department_id: departments[0].department_id, supplier_id: suppliers[0].supplier_id, remarks: '',
+  asset_code: '', asset_name: '', asset_category: ASSET_CATEGORIES[0],
+  serial_number: '', brand: '', model: '', location: '',
+  department_id: '', purchase_date: '', purchase_cost: '', salvage_value: '',
+  useful_life_years: '', status: 'Active', remarks: '',
 }
 
 const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
@@ -60,99 +40,101 @@ const STATUS_STYLES = {
   Disposed: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
 }
 
-// Straight-line depreciation: (cost - salvage) / useful_life per year, floored at salvage value
-function currentBookValue(asset) {
-  const years = (Date.now() - new Date(asset.purchase_date).getTime()) / (1000 * 60 * 60 * 24 * 365.25)
-  const annualDep = (asset.purchase_cost - asset.salvage_value) / (asset.useful_life || 1)
-  const value = asset.purchase_cost - annualDep * years
-  return Math.max(asset.salvage_value, Math.round(value))
-}
-
 export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master Data', 'Fixed Assets'] }) {
-  const [assets, setAssets] = useState(initialAssets)
-  const [search, setSearch] = useState('')
-  const [categoryFilter, setCategoryFilter] = useState('all')
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [showArchived, setShowArchived] = useState(false)
+  const {
+    assets, meta, loading, saving, error,
+    search, setSearch,
+    categoryFilter, setCategoryFilter,
+    statusFilter, setStatusFilter,
+    showArchived, setShowArchived,
+    page, setPage,
+    createAsset, updateAsset, archiveAsset, restoreAsset,
+  } = useFixedAssets()
+
+  // Departments come from the real API now (see routes: GET /api/departments).
+  // ASSUMPTION: DepartmentResource returns { id, department_name } — the
+  // ERD column name. If your actual resource uses different keys, adjust
+  // the two references below (department.id / department.department_name).
+  const [departments, setDepartments] = useState([])
+  useEffect(() => {
+    apiFetch('/api/departments')
+      .then((res) => res.json())
+      .then((json) => { if (json.success) setDepartments(json.data) })
+      .catch(() => {}) // non-fatal — form still works with a manual department_id if this fails
+  }, [])
 
   const [modalMode, setModalMode] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [formError, setFormError] = useState('')
 
-  const categoryName = (id) => categories.find((c) => c.category_id === Number(id))?.category_name ?? 'Unknown'
-  const departmentName = (id) => departments.find((d) => d.department_id === Number(id))?.department_name ?? 'Unknown'
-  const supplierName = (id) => suppliers.find((s) => s.supplier_id === Number(id))?.supplier_name ?? 'Unknown'
-
-  const filtered = useMemo(() => {
-    return assets.filter((a) => {
-      if (!showArchived && a.is_archived) return false
-      if (showArchived && !a.is_archived) return false
-      if (categoryFilter !== 'all' && a.category_id !== Number(categoryFilter)) return false
-      if (statusFilter !== 'all' && a.status !== statusFilter) return false
-      const q = search.toLowerCase()
-      if (search && !a.asset_name.toLowerCase().includes(q) && !a.asset_code.toLowerCase().includes(q)) return false
-      return true
-    })
-  }, [assets, search, categoryFilter, statusFilter, showArchived])
-
-  const stats = useMemo(() => {
-    const active = assets.filter((a) => !a.is_archived)
-    return {
-      total: active.length,
-      totalValue: active.reduce((sum, a) => sum + currentBookValue(a), 0),
-      maintenance: active.filter((a) => a.status === 'Under Maintenance').length,
-      archived: assets.filter((a) => a.is_archived).length,
-    }
-  }, [assets])
-
-  const toggleArchive = (id) => {
-    setAssets((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, is_archived: !a.is_archived, status: !a.is_archived ? 'Disposed' : a.status } : a))
-    )
-  }
-
   const openAdd = () => { setForm(EMPTY_FORM); setFormError(''); setModalMode('add') }
   const openEdit = (a) => {
     setForm({
-      asset_code: a.asset_code, asset_name: a.asset_name, category_id: a.category_id, purchase_date: a.purchase_date,
-      purchase_cost: a.purchase_cost, salvage_value: a.salvage_value, useful_life: a.useful_life, status: a.status,
-      department_id: a.department_id, supplier_id: a.supplier_id, remarks: a.remarks,
+      asset_code: a.asset_code,
+      asset_name: a.asset_name,
+      asset_category: a.asset_category,
+      serial_number: a.serial_number || '',
+      brand: a.brand || '',
+      model: a.model || '',
+      location: a.location || '',
+      department_id: a.department_id || '',
+      purchase_date: a.purchase_date,
+      purchase_cost: a.purchase_cost,
+      salvage_value: a.salvage_value,
+      useful_life_years: a.useful_life,
+      status: a.status,
+      remarks: a.remarks || '',
     })
     setFormError('')
     setModalMode(a)
   }
   const closeModal = () => { setModalMode(null); setFormError('') }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     if (!form.asset_code.trim() || !form.asset_name.trim() || !form.purchase_date) {
       setFormError('Asset code, asset name, and purchase date are required.')
       return
     }
+
     const payload = {
-      ...form,
-      category_id: Number(form.category_id),
-      department_id: Number(form.department_id),
-      supplier_id: Number(form.supplier_id),
+      asset_code: form.asset_code,
+      asset_name: form.asset_name,
+      asset_category: form.asset_category,
+      serial_number: form.serial_number || null,
+      brand: form.brand || null,
+      model: form.model || null,
+      location: form.location || null,
+      department_id: form.department_id ? Number(form.department_id) : null,
+      purchase_date: form.purchase_date,
       purchase_cost: Number(form.purchase_cost) || 0,
       salvage_value: Number(form.salvage_value) || 0,
-      useful_life: Number(form.useful_life) || 1,
+      useful_life_years: Number(form.useful_life_years) || 1,
+      status: form.status,
+      remarks: form.remarks || null,
     }
-    if (modalMode === 'add') {
-      const nextId = Math.max(0, ...assets.map((a) => a.id)) + 1
-      setAssets((prev) => [...prev, { id: nextId, ...payload, is_archived: false }])
-    } else if (modalMode) {
-      const editingId = modalMode.id
-      setAssets((prev) => prev.map((a) => (a.id === editingId ? { ...a, ...payload } : a)))
+
+    const result = modalMode === 'add'
+      ? await createAsset(payload)
+      : await updateAsset(modalMode.id, payload)
+
+    if (!result.success) {
+      setFormError(result.message)
+      return
     }
     closeModal()
   }
 
+  // Page-scoped — see Collectors.jsx/CashAccounts.jsx for the same caveat.
+  // meta.total (Total Assets card) is the one accurate global number.
+  const maintenanceThisPage = assets.filter((a) => a.status === 'Under Maintenance').length
+  const bookValueThisPage = assets.reduce((sum, a) => sum + a.book_value, 0)
+
   const statCards = [
-    { key: 'total', label: 'Total Assets', value: stats.total, icon: Boxes, iconBg: 'bg-primary/15', iconColor: 'text-primary-dark', isActive: categoryFilter === 'all' && statusFilter === 'all' && !showArchived, onClick: () => { setCategoryFilter('all'); setStatusFilter('all'); setShowArchived(false) } },
-    { key: 'value', label: 'Total Book Value', value: formatCurrency(stats.totalValue), icon: Building2, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: false, onClick: () => { setShowArchived(false) } },
-    { key: 'maintenance', label: 'Under Maintenance', value: stats.maintenance, icon: Wrench, iconBg: 'bg-amber-50 dark:bg-amber-500/10', iconColor: 'text-amber-600 dark:text-amber-400', isActive: statusFilter === 'Under Maintenance' && !showArchived, onClick: () => { setStatusFilter('Under Maintenance'); setShowArchived(false) } },
-    { key: 'archived', label: 'Archived / Disposed', value: stats.archived, icon: Archive, iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-500 dark:text-slate-400', isActive: showArchived, onClick: () => setShowArchived(true) },
+    { key: 'total', label: 'Total Assets', value: meta.total, icon: Boxes, iconBg: 'bg-primary/15', iconColor: 'text-primary-dark', isActive: categoryFilter === 'all' && statusFilter === 'all' && !showArchived, onClick: () => { setCategoryFilter('all'); setStatusFilter('all'); setShowArchived(false) } },
+    { key: 'value', label: 'Book Value (this page)', value: formatCurrency(bookValueThisPage), icon: Building2, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: false, onClick: () => setShowArchived(false) },
+    { key: 'maintenance', label: 'Under Maintenance (this page)', value: maintenanceThisPage, icon: Wrench, iconBg: 'bg-amber-50 dark:bg-amber-500/10', iconColor: 'text-amber-600 dark:text-amber-400', isActive: statusFilter === 'Under Maintenance' && !showArchived, onClick: () => { setStatusFilter('Under Maintenance'); setShowArchived(false) } },
+    { key: 'archived', label: 'Archived / Disposed', value: showArchived ? meta.total : '—', icon: Archive, iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-500 dark:text-slate-400', isActive: showArchived, onClick: () => setShowArchived(true) },
   ]
 
   const isModalOpen = modalMode !== null
@@ -169,6 +151,10 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
         </div>
         <Button variant="primary" size="sm" icon={Plus} onClick={openAdd}>Add Asset</Button>
       </div>
+
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{error}</div>
+      )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {statCards.map((card) => {
@@ -197,11 +183,11 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
       <div className={`${PANEL} ${PANEL_PAD} flex flex-col gap-3 lg:flex-row lg:items-center`}>
         <div className="relative flex-1">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by asset name or code..." className={`${INPUT} pl-9`} />
+          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by asset name, code, or serial no..." className={`${INPUT} pl-9`} />
         </div>
         <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className={INPUT}>
           <option value="all">All Categories</option>
-          {categories.map((c) => <option key={c.category_id} value={c.category_id}>{c.category_name}</option>)}
+          {ASSET_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={INPUT}>
           <option value="all">All Statuses</option>
@@ -221,7 +207,7 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
             <thead>
               <tr className="border-b border-border">
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Asset</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Department / Supplier</th>
+                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Department / Location</th>
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Purchased</th>
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Book Value</th>
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Status</th>
@@ -229,8 +215,13 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
               </tr>
             </thead>
             <tbody>
-              {filtered.map((a) => {
-                const CatIcon = CATEGORY_ICON[categoryName(a.category_id)] || Boxes
+              {loading && (
+                <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">
+                  <Loader2 size={16} className="inline animate-spin mr-2" /> Loading assets…
+                </td></tr>
+              )}
+              {!loading && assets.map((a) => {
+                const CatIcon = CATEGORY_ICON[a.asset_category] || Boxes
                 return (
                   <tr key={a.id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
                     <td className="px-4 py-3.5">
@@ -240,17 +231,20 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
                         </div>
                         <div className="min-w-0">
                           <p className="truncate font-medium text-ink">{a.asset_name}</p>
-                          <p className="truncate text-xs text-muted font-mono">{a.asset_code} &middot; {categoryName(a.category_id)}</p>
+                          <p className="truncate text-xs text-muted font-mono">{a.asset_code} &middot; {a.asset_category}</p>
+                          {(a.brand || a.model) && (
+                            <p className="truncate text-[11px] text-muted">{[a.brand, a.model].filter(Boolean).join(' · ')}</p>
+                          )}
                         </div>
                       </div>
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
-                      <p className="text-ink text-xs">{departmentName(a.department_id)}</p>
-                      <p className="text-muted text-xs">{supplierName(a.supplier_id)}</p>
+                      <p className="text-ink text-xs">{a.department_name || '—'}</p>
+                      <p className="text-muted text-xs">{a.location || '—'}</p>
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap text-muted text-xs">{formatDate(a.purchase_date)}</td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
-                      <p className="font-medium tabular-nums text-ink">{formatCurrency(currentBookValue(a))}</p>
+                      <p className="font-medium tabular-nums text-ink">{formatCurrency(a.book_value)}</p>
                       <p className="text-[11px] text-muted">of {formatCurrency(a.purchase_cost)}</p>
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
@@ -263,9 +257,13 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
                             <Pencil size={15} />
                           </button>
                         </Tooltip>
-                        <Tooltip label={a.is_archived ? 'Restore asset' : 'Archive asset'} align="end">
-                          <button type="button" onClick={() => toggleArchive(a.id)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                            {a.is_archived ? <RotateCcw size={15} /> : <Archive size={15} />}
+                        <Tooltip label={showArchived ? 'Restore asset' : 'Archive asset'} align="end">
+                          <button
+                            type="button"
+                            onClick={() => (showArchived ? restoreAsset(a.id) : archiveAsset(a.id))}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
+                          >
+                            {showArchived ? <RotateCcw size={15} /> : <Archive size={15} />}
                           </button>
                         </Tooltip>
                       </div>
@@ -273,12 +271,26 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
                   </tr>
                 )
               })}
-              {filtered.length === 0 && (
+              {!loading && assets.length === 0 && (
                 <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">No assets match your filters.</td></tr>
               )}
             </tbody>
           </table>
         </div>
+
+        {meta.last_page > 1 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-border text-xs text-muted">
+            <span>Page {meta.current_page} of {meta.last_page} &middot; {meta.total} total</span>
+            <div className="flex items-center gap-1">
+              <button type="button" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-bg disabled:opacity-40 disabled:pointer-events-none transition-colors duration-150">
+                <ChevronLeft size={14} />
+              </button>
+              <button type="button" disabled={page >= meta.last_page} onClick={() => setPage((p) => p + 1)} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-bg disabled:opacity-40 disabled:pointer-events-none transition-colors duration-150">
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <Modal
@@ -288,13 +300,18 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
         footer={
           <>
             <Button variant="secondary" size="md" onClick={closeModal}>Cancel</Button>
-            <Button variant="primary" size="md" onClick={handleSubmit}>{isEditing ? 'Save Changes' : 'Add Asset'}</Button>
+            <Button variant="primary" size="md" onClick={handleSubmit} disabled={saving}>{saving ? 'Saving…' : isEditing ? 'Save Changes' : 'Add Asset'}</Button>
           </>
         }
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           {formError && (
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{formError}</div>
+          )}
+          {isEditing && (
+            <div className="rounded-lg border border-border bg-bg px-3 py-2 text-xs text-muted">
+              Book value: <span className="font-mono text-ink">{formatCurrency(modalMode.book_value)}</span> (recalculated automatically on save)
+            </div>
           )}
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -303,8 +320,8 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
             </div>
             <div>
               <label className={LABEL}>Category</label>
-              <select value={form.category_id} onChange={(e) => setForm((f) => ({ ...f, category_id: e.target.value }))} className={INPUT}>
-                {categories.map((c) => <option key={c.category_id} value={c.category_id}>{c.category_name}</option>)}
+              <select value={form.asset_category} onChange={(e) => setForm((f) => ({ ...f, asset_category: e.target.value }))} className={INPUT}>
+                {ASSET_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
           </div>
@@ -314,17 +331,30 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Department</label>
-              <select value={form.department_id} onChange={(e) => setForm((f) => ({ ...f, department_id: e.target.value }))} className={INPUT}>
-                {departments.map((d) => <option key={d.department_id} value={d.department_id}>{d.department_name}</option>)}
-              </select>
+              <label className={LABEL}>Brand</label>
+              <input type="text" value={form.brand} onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))} className={INPUT} placeholder="Komatsu" />
             </div>
             <div>
-              <label className={LABEL}>Supplier</label>
-              <select value={form.supplier_id} onChange={(e) => setForm((f) => ({ ...f, supplier_id: e.target.value }))} className={INPUT}>
-                {suppliers.map((s) => <option key={s.supplier_id} value={s.supplier_id}>{s.supplier_name}</option>)}
-              </select>
+              <label className={LABEL}>Model</label>
+              <input type="text" value={form.model} onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))} className={INPUT} placeholder="PC200-8" />
             </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={LABEL}>Serial Number</label>
+              <input type="text" value={form.serial_number} onChange={(e) => setForm((f) => ({ ...f, serial_number: e.target.value }))} className={INPUT} placeholder="SN-88213" />
+            </div>
+            <div>
+              <label className={LABEL}>Location</label>
+              <input type="text" value={form.location} onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))} className={INPUT} placeholder="Site B Yard" />
+            </div>
+          </div>
+          <div>
+            <label className={LABEL}>Department</label>
+            <select value={form.department_id} onChange={(e) => setForm((f) => ({ ...f, department_id: e.target.value }))} className={INPUT}>
+              <option value="">Unassigned</option>
+              {departments.map((d) => <option key={d.id} value={d.id}>{d.department_name}</option>)}
+            </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -333,7 +363,7 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
             </div>
             <div>
               <label className={LABEL}>Useful Life (years)</label>
-              <input type="number" value={form.useful_life} onChange={(e) => setForm((f) => ({ ...f, useful_life: e.target.value }))} className={INPUT} placeholder="10" />
+              <input type="number" value={form.useful_life_years} onChange={(e) => setForm((f) => ({ ...f, useful_life_years: e.target.value }))} className={INPUT} placeholder="10" />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">

@@ -3,6 +3,7 @@ import { apiFetch } from '../utils/api'
 
 export function useRoles() {
   const [roles, setRoles] = useState([])
+  const [archivedRoles, setArchivedRoles] = useState([])
   const [rolesLoading, setRolesLoading] = useState(true)
   const [rolesError, setRolesError] = useState(null)
 
@@ -11,6 +12,7 @@ export function useRoles() {
 
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [deleteError, setDeleteError] = useState(null)
+  const [actionBusyId, setActionBusyId] = useState(null)
 
   const [permissions, setPermissions] = useState([])
   const [permissionsLoading, setPermissionsLoading] = useState(true)
@@ -19,14 +21,24 @@ export function useRoles() {
   const [permSaving, setPermSaving] = useState(false)
   const [permError, setPermError] = useState(null)
 
+  // Fetches both the active and archived lists together — a role only
+  // ever needs to move between them (on archive/restore), never be
+  // partially stale in one while the other refreshes.
   const fetchRoles = useCallback(async () => {
     setRolesLoading(true)
     setRolesError(null)
     try {
-      const res = await apiFetch('/api/roles')
-      const json = await res.json()
-      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to load roles.')
-      setRoles(json.data)
+      const [activeRes, archivedRes] = await Promise.all([
+        apiFetch('/api/roles'),
+        apiFetch('/api/roles?archived=1'),
+      ])
+      const [activeJson, archivedJson] = await Promise.all([activeRes.json(), archivedRes.json()])
+
+      if (!activeRes.ok || !activeJson.success) throw new Error(activeJson.message || 'Failed to load roles.')
+      if (!archivedRes.ok || !archivedJson.success) throw new Error(archivedJson.message || 'Failed to load archived roles.')
+
+      setRoles(activeJson.data)
+      setArchivedRoles(archivedJson.data)
     } catch (err) {
       setRolesError(err.message)
     } finally {
@@ -132,13 +144,17 @@ export function useRoles() {
     }
   }, [fetchRoles])
 
-  const deleteRole = useCallback(async (roleId) => {
+  // Named archiveRole (not deleteRole) to match the reality of what the
+  // backend does — DELETE /api/roles/{id} is a soft delete, same as
+  // archiveUser. The HTTP method is historical; the behavior is archive.
+  const archiveRole = useCallback(async (roleId) => {
     setDeleteBusy(true)
+    setActionBusyId(roleId)
     setDeleteError(null)
     try {
       const res = await apiFetch(`/api/roles/${roleId}`, { method: 'DELETE' })
       const json = await res.json()
-      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to delete role.')
+      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to archive role.')
       await fetchRoles()
       return { success: true }
     } catch (err) {
@@ -146,17 +162,37 @@ export function useRoles() {
       return { success: false, message: err.message }
     } finally {
       setDeleteBusy(false)
+      setActionBusyId(null)
+    }
+  }, [fetchRoles])
+
+  const restoreRole = useCallback(async (roleId) => {
+    setActionBusyId(roleId)
+    setDeleteError(null)
+    try {
+      const res = await apiFetch(`/api/roles/${roleId}/restore`, { method: 'POST' })
+      const json = await res.json()
+      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to restore role.')
+      await fetchRoles()
+      return { success: true }
+    } catch (err) {
+      setDeleteError(err.message)
+      return { success: false, message: err.message }
+    } finally {
+      setActionBusyId(null)
     }
   }, [fetchRoles])
 
   return {
     roles,
+    archivedRoles,
     rolesLoading,
     rolesError,
     formSaving,
     formError,
     deleteBusy,
     deleteError,
+    actionBusyId,
     permissions,
     permissionsLoading,
     permissionsError,
@@ -164,7 +200,8 @@ export function useRoles() {
     permError,
     createRole,
     updateRole,
-    deleteRole,
+    archiveRole,
+    restoreRole,
     fetchRoleWithPermissions,
     updateRolePermissions,
     refetch: fetchRoles,

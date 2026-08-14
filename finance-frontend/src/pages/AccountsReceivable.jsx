@@ -1,45 +1,19 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search, Plus, Pencil, Archive, RotateCcw, Receipt, Wallet, AlertTriangle, Info, Printer, Upload, ScanLine, X, CheckCircle2 } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
 import { formatCurrency } from '../utils/formatters'
-
-// Lookup: customers (from Master Data > Customers)
-const CUSTOMERS = [
-  { customer_id: 1, customer_name: 'Delacruz Trading' },
-  { customer_id: 2, customer_name: 'Meridian Retail Corp.' },
-  { customer_id: 3, customer_name: 'Northgate Traders' },
-  { customer_id: 4, customer_name: 'Bayview Logistics' },
-  { customer_id: 5, customer_name: 'Sierra Hardware Supply' },
-]
-// Lookup: users (created_by / archived_by come from users table on the ERD)
-const USERS = [
-  { user_id: 1, first_name: 'Ana', last_name: 'Reyes' },
-  { user_id: 2, first_name: 'Marco', last_name: 'Santos' },
-  { user_id: 3, first_name: 'Liza', last_name: 'Fernandez' },
-]
-const customerName = (id) => CUSTOMERS.find((c) => c.customer_id === Number(id))?.customer_name || 'Unknown'
-const userName = (id) => {
-  const u = USERS.find((u) => u.user_id === Number(id))
-  return u ? `${u.first_name} ${u.last_name}` : '—'
-}
-
-const initialAR = [
-  { ar_id: 1, customer_id: 1, invoice_number: 'INV-2026-0001', invoice_date: '2026-06-01', due_date: '2026-07-01', original_amount: 125000, balance: 125000, payment_method: 'Bank Transfer', payment_terms: 'Net 30', purchase_order_no: 'PO-5521', reference_no: 'REF-AR-001', penalty_rate: 2, penalty_amount: 0, remarks: '', status: 'Overdue', created_by: 1, is_archived: false, archived_at: null, archived_by: null, created_at: '2026-06-01T09:12:00', updated_at: '2026-07-20T14:03:00' },
-  { ar_id: 2, customer_id: 2, invoice_number: 'INV-2026-0002', invoice_date: '2026-07-05', due_date: '2026-08-05', original_amount: 89000, balance: 40000, payment_method: 'Check', payment_terms: 'Net 30', purchase_order_no: 'PO-5544', reference_no: 'REF-AR-002', penalty_rate: 0, penalty_amount: 0, remarks: 'Partial payment received', status: 'Partial', created_by: 2, is_archived: false, archived_at: null, archived_by: null, created_at: '2026-07-05T10:45:00', updated_at: '2026-07-22T11:30:00' },
-  { ar_id: 3, customer_id: 3, invoice_number: 'INV-2026-0003', invoice_date: '2026-07-10', due_date: '2026-08-10', original_amount: 56000, balance: 56000, payment_method: 'Bank Transfer', payment_terms: 'Net 30', purchase_order_no: 'PO-5560', reference_no: 'REF-AR-003', penalty_rate: 0, penalty_amount: 0, remarks: '', status: 'Open', created_by: 1, is_archived: false, archived_at: null, archived_by: null, created_at: '2026-07-10T08:20:00', updated_at: '2026-07-10T08:20:00' },
-  { ar_id: 4, customer_id: 4, invoice_number: 'INV-2026-0004', invoice_date: '2026-05-15', due_date: '2026-06-15', original_amount: 210000, balance: 0, payment_method: 'Bank Transfer', payment_terms: 'Net 30', purchase_order_no: 'PO-5490', reference_no: 'REF-AR-004', penalty_rate: 0, penalty_amount: 0, remarks: 'Paid in full', status: 'Paid', created_by: 3, is_archived: false, archived_at: null, archived_by: null, created_at: '2026-05-15T13:00:00', updated_at: '2026-06-10T09:15:00' },
-  { ar_id: 5, customer_id: 5, invoice_number: 'INV-2026-0005', invoice_date: '2026-04-20', due_date: '2026-05-20', original_amount: 34000, balance: 34000, payment_method: 'Cash', payment_terms: 'Net 30', purchase_order_no: 'PO-5455', reference_no: 'REF-AR-005', penalty_rate: 3, penalty_amount: 1020, remarks: 'Under review', status: 'Overdue', created_by: 2, is_archived: true, archived_at: '2026-07-28T16:40:00', archived_by: 2, created_at: '2026-04-20T15:10:00', updated_at: '2026-07-28T16:40:00' },
-]
+import { useAccountsReceivable } from '../hooks/useAccountsReceivable'
+import { apiFetch } from '../utils/api'
 
 const PAYMENT_METHODS = ['Bank Transfer', 'Check', 'Cash', 'Credit Card', 'GCash']
-const STATUS_OPTIONS = ['Open', 'Partial', 'Paid', 'Overdue']
+const STATUS_OPTIONS = ['Pending', 'Partially Paid', 'Paid', 'Overdue', 'Cancelled']
 const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const MAX_IMAGE_MB = 8
 
-const EMPTY_FORM = { customer_id: CUSTOMERS[0].customer_id, invoice_number: '', invoice_date: '', due_date: '', original_amount: '', balance: '', payment_method: 'Bank Transfer', payment_terms: 'Net 30', purchase_order_no: '', reference_no: '', penalty_rate: '', remarks: '', status: 'Open' }
+const EMPTY_FORM = { customer_id: '', collector_id: '', invoice_number: '', invoice_date: '', due_date: '', original_amount: '', balance: '', payment_method: 'Bank Transfer', payment_terms: 'Net 30', purchase_order_no: '', reference_no: '', penalty_rate: '', remarks: '', status: 'Pending' }
 
 const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
 const PANEL_PAD = 'p-4'
@@ -49,10 +23,11 @@ const INPUT = `w-full h-9 px-3 rounded-lg border border-border bg-bg text-sm tex
 const LABEL = 'block text-xs font-medium text-muted mb-1.5'
 
 const STATUS_STYLES = {
-  Open: 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400',
-  Partial: 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400',
+  Pending: 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400',
+  'Partially Paid': 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400',
   Paid: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
   Overdue: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
+  Cancelled: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
 }
 
 function formatDate(value) {
@@ -71,24 +46,30 @@ function addDaysISO(days) {
   return d.toISOString().slice(0, 10)
 }
 
-// Stand-in for a real OCR/invoice-parsing API call. In production, swap this
-// for something like `POST /api/invoices/scan` with the file and use the
-// response to fill the form the same way. Kept deterministic-ish so it feels
-// like a real read rather than obviously random junk.
-function simulateScan() {
-  const amount = [18500, 24900, 32750, 45200, 67800, 112000][Math.floor(Math.random() * 6)]
-  const randomCustomer = CUSTOMERS[Math.floor(Math.random() * CUSTOMERS.length)]
-  const invoiceSuffix = String(Math.floor(1000 + Math.random() * 9000))
-  return {
-    customer_id: randomCustomer.customer_id,
-    invoice_number: `INV-2026-${invoiceSuffix}`,
-    invoice_date: addDaysISO(0),
-    due_date: addDaysISO(30),
-    original_amount: amount,
-    balance: amount,
-    payment_terms: 'Net 30',
-    reference_no: `REF-AR-${invoiceSuffix}`,
-  }
+/**
+ * Lightweight fetch-on-mount lookups for the form's dropdowns — same
+ * pattern used for collectors/budgets/categories elsewhere. All three
+ * assume their resource matches the shape the old mock data used
+ * (customer_id/customer_name, user_id/first_name/last_name,
+ * collector_id/first_name/last_name) since that's the established
+ * "resource mirrors the mock 1:1" convention in this codebase
+ * (CollectorResource, ExpenseResource, etc). If your actual
+ * CustomerResource/UserResource use different keys, adjust the
+ * `json.data` mapping below rather than the rest of this file.
+ */
+function useLookup(path) {
+  const [options, setOptions] = useState([])
+
+  useEffect(() => {
+    let cancelled = false
+    apiFetch(path)
+      .then((res) => res.json())
+      .then((json) => { if (!cancelled && json.success) setOptions(json.data) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [path])
+
+  return options
 }
 
 // Read-only "detail row" used inside the record info panel — keeps every DB
@@ -127,18 +108,43 @@ function InvoiceScanUpload({ onScanned }) {
     const reader = new FileReader()
     reader.onload = () => {
       setPreview(reader.result)
-      runScan()
+      runScan(file)
     }
     reader.readAsDataURL(file)
   }
 
-  const runScan = () => {
+  const runScan = async (file) => {
     setStatus('scanning')
-    setTimeout(() => {
-      const extracted = simulateScan()
-      onScanned(extracted)
+    setError('')
+    try {
+      const formData = new FormData()
+      formData.append('image', file)
+      const res = await apiFetch('/api/invoices/scan', { method: 'POST', body: formData })
+      const json = await res.json()
+
+      if (!res.ok || !json.success) {
+        // Real rejection from the OCR service — e.g. it couldn't find any
+        // receipt-like text in the image — not a random guess.
+        setError(json.message || "Couldn't read this image. Please fill in the details manually.")
+        setStatus('idle')
+        setPreview(null)
+        return
+      }
+
+      onScanned({
+        invoice_number: json.data.invoice_number || '',
+        invoice_date: json.data.invoice_date || '',
+        due_date: json.data.due_date || '',
+        original_amount: json.data.amount || '',
+        balance: json.data.amount || '',
+        reference_no: json.data.reference_no || '',
+      })
       setStatus('done')
-    }, 1100)
+    } catch (err) {
+      setError('Failed to reach the scan service. Please fill in the details manually.')
+      setStatus('idle')
+      setPreview(null)
+    }
   }
 
   const clearImage = () => {
@@ -203,7 +209,15 @@ function InvoiceScanUpload({ onScanned }) {
 }
 
 export default function AccountsReceivable({ title = 'Accounts Receivable', crumbs = ['Financial Transactions', 'Accounts Receivable'] }) {
-  const [records, setRecords] = useState(initialAR)
+  const { records, loading, saving, error, fetchRecords, createRecord, updateRecord, toggleArchive } = useAccountsReceivable()
+  const customers = useLookup('/api/customers')
+  const users = useLookup('/api/users')
+  const collectors = useLookup('/api/collectors?archived=0&per_page=200')
+
+  useEffect(() => {
+    fetchRecords()
+  }, [fetchRecords])
+
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [showArchived, setShowArchived] = useState(false)
@@ -214,13 +228,32 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
 
   const [detailRecord, setDetailRecord] = useState(null)
 
+  const customerName = (id) => {
+    const found = records.find((r) => r.customer_id === Number(id))
+    if (found?.customer_name) return found.customer_name
+    return customers.find((c) => c.customer_id === Number(id))?.customer_name || 'Unknown'
+  }
+
+  const userName = (id) => {
+    const u = users.find((u) => u.user_id === Number(id))
+    return u ? `${u.first_name} ${u.last_name}` : '—'
+  }
+
+  const collectorName = (id) => {
+    if (!id) return 'Unassigned'
+    const found = records.find((r) => r.collector_id === Number(id))
+    if (found?.collector_name) return found.collector_name
+    const c = collectors.find((c) => c.collector_id === Number(id))
+    return c ? `${c.first_name} ${c.last_name}` : 'Unassigned'
+  }
+
   const filtered = useMemo(() => {
     return records.filter((r) => {
       if (!showArchived && r.is_archived) return false
       if (showArchived && !r.is_archived) return false
       if (statusFilter !== 'all' && r.status !== statusFilter) return false
       const q = search.toLowerCase()
-      if (search && !r.invoice_number.toLowerCase().includes(q) && !customerName(r.customer_id).toLowerCase().includes(q) && !r.reference_no.toLowerCase().includes(q)) {
+      if (search && !r.invoice_number.toLowerCase().includes(q) && !customerName(r.customer_id).toLowerCase().includes(q) && !(r.reference_no || '').toLowerCase().includes(q)) {
         return false
       }
       return true
@@ -237,23 +270,17 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
     }
   }, [records])
 
-  const toggleArchive = (id) => {
-    setRecords((prev) => prev.map((r) => {
-      if (r.ar_id !== id) return r
-      const nextArchived = !r.is_archived
-      return {
-        ...r,
-        is_archived: nextArchived,
-        archived_at: nextArchived ? new Date().toISOString() : null,
-        archived_by: nextArchived ? 1 : null, // current user, mocked
-        updated_at: new Date().toISOString(),
-      }
-    }))
+  const handleToggleArchive = async (id) => {
+    await toggleArchive(id)
   }
 
-  const openAdd = () => { setForm(EMPTY_FORM); setFormError(''); setModalMode('add') }
+  const openAdd = () => {
+    setForm({ ...EMPTY_FORM, customer_id: customers[0]?.customer_id ?? '' })
+    setFormError('')
+    setModalMode('add')
+  }
   const openEdit = (r) => {
-    setForm({ customer_id: r.customer_id, invoice_number: r.invoice_number, invoice_date: r.invoice_date, due_date: r.due_date, original_amount: r.original_amount, balance: r.balance, payment_method: r.payment_method, payment_terms: r.payment_terms, purchase_order_no: r.purchase_order_no, reference_no: r.reference_no, penalty_rate: r.penalty_rate, remarks: r.remarks, status: r.status })
+    setForm({ customer_id: r.customer_id, collector_id: r.collector_id || '', invoice_number: r.invoice_number, invoice_date: r.invoice_date, due_date: r.due_date, original_amount: r.original_amount, balance: r.balance, payment_method: r.payment_method, payment_terms: r.payment_terms, purchase_order_no: r.purchase_order_no, reference_no: r.reference_no, penalty_rate: r.penalty_rate, remarks: r.remarks, status: r.status })
     setFormError('')
     setModalMode(r)
   }
@@ -266,7 +293,6 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
   const handleScanned = (extracted) => {
     setForm((f) => ({
       ...f,
-      customer_id: f.invoice_number ? f.customer_id : extracted.customer_id,
       invoice_number: f.invoice_number || extracted.invoice_number,
       invoice_date: f.invoice_date || extracted.invoice_date,
       due_date: f.due_date || extracted.due_date,
@@ -283,6 +309,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
     const rows = [
       ['Invoice Number', r.invoice_number],
       ['Customer', customerName(r.customer_id)],
+      ['Collector', collectorName(r.collector_id)],
       ['Invoice Date', formatDate(r.invoice_date)],
       ['Due Date', formatDate(r.due_date)],
       ['Payment Method', r.payment_method],
@@ -334,27 +361,38 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
     win.print()
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!form.invoice_number.trim() || !form.due_date || !form.original_amount) {
-      setFormError('Invoice number, due date, and original amount are required.')
+    if (!form.customer_id || !form.invoice_number.trim() || !form.due_date || !form.original_amount) {
+      setFormError('Customer, invoice number, due date, and original amount are required.')
       return
     }
+    setFormError('')
+
     const payload = {
-      ...form,
       customer_id: Number(form.customer_id),
+      collector_id: form.collector_id ? Number(form.collector_id) : null,
+      invoice_number: form.invoice_number.trim(),
+      invoice_date: form.invoice_date,
+      due_date: form.due_date,
       original_amount: Number(form.original_amount) || 0,
-      balance: Number(form.balance) || 0,
-      penalty_rate: Number(form.penalty_rate) || 0,
-      penalty_amount: (Number(form.penalty_rate) || 0) > 0 ? Math.round(((Number(form.original_amount) || 0) * (Number(form.penalty_rate) || 0)) / 100) : 0,
+      balance: form.balance === '' ? undefined : Number(form.balance),
+      payment_method: form.payment_method,
+      payment_terms: form.payment_terms,
+      purchase_order_no: form.purchase_order_no,
+      reference_no: form.reference_no,
+      penalty_rate: form.penalty_rate === '' ? undefined : Number(form.penalty_rate),
+      remarks: form.remarks,
+      status: form.status,
     }
-    const now = new Date().toISOString()
-    if (modalMode === 'add') {
-      const nextId = Math.max(0, ...records.map((r) => r.ar_id)) + 1
-      setRecords((prev) => [...prev, { ar_id: nextId, ...payload, created_by: 1, is_archived: false, archived_at: null, archived_by: null, created_at: now, updated_at: now }])
-    } else if (modalMode) {
-      const editingId = modalMode.ar_id
-      setRecords((prev) => prev.map((r) => (r.ar_id === editingId ? { ...r, ...payload, updated_at: now } : r)))
+
+    const result = modalMode === 'add'
+      ? await createRecord(payload)
+      : await updateRecord(modalMode.ar_id, payload)
+
+    if (!result.success) {
+      setFormError(result.message || 'Failed to save invoice.')
+      return
     }
     closeModal()
   }
@@ -381,6 +419,12 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
         <Button variant="primary" size="sm" icon={Plus} onClick={openAdd}>Add Invoice</Button>
       </div>
 
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+          {error}
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {statCards.map((card) => {
           const Icon = card.icon
@@ -398,7 +442,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
               </div>
               <div className="min-w-0">
                 <p className="text-xs text-muted">{card.label}</p>
-                <p className="text-lg font-bold text-ink">{card.value}</p>
+                <p className="text-lg font-bold text-ink">{loading ? '—' : card.value}</p>
               </div>
             </button>
           )
@@ -426,7 +470,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
             <thead>
               <tr className="border-b border-border">
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Invoice</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Customer</th>
+                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Customer / Collector</th>
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Terms / PO</th>
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Due Date</th>
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Original / Balance</th>
@@ -436,13 +480,19 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
               </tr>
             </thead>
             <tbody>
-              {filtered.map((r) => (
+              {loading && (
+                <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-muted">Loading invoices…</td></tr>
+              )}
+              {!loading && filtered.map((r) => (
                 <tr key={r.ar_id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
                   <td className="px-4 py-3.5">
                     <p className="font-medium text-ink">{r.invoice_number}</p>
                     <p className="text-xs text-muted">{r.reference_no} &middot; {r.payment_method}</p>
                   </td>
-                  <td className="px-4 py-3.5 text-ink whitespace-nowrap">{customerName(r.customer_id)}</td>
+                  <td className="px-4 py-3.5 text-ink whitespace-nowrap">
+                    <p>{customerName(r.customer_id)}</p>
+                    <p className={`text-xs ${r.collector_id ? 'text-muted' : 'text-amber-600 dark:text-amber-400'}`}>{collectorName(r.collector_id)}</p>
+                  </td>
                   <td className="px-4 py-3.5 whitespace-nowrap text-ink text-xs">
                     <p>{r.payment_terms}</p>
                     <p className="text-muted">{r.purchase_order_no}</p>
@@ -484,7 +534,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                         </button>
                       </Tooltip>
                       <Tooltip label={r.is_archived ? 'Restore invoice' : 'Archive invoice'} align="end">
-                        <button type="button" onClick={() => toggleArchive(r.ar_id)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                        <button type="button" onClick={() => handleToggleArchive(r.ar_id)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                           {r.is_archived ? <RotateCcw size={15} /> : <Archive size={15} />}
                         </button>
                       </Tooltip>
@@ -492,7 +542,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                   </td>
                 </tr>
               ))}
-              {filtered.length === 0 && (
+              {!loading && filtered.length === 0 && (
                 <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-muted">No invoices match your filters.</td></tr>
               )}
             </tbody>
@@ -508,7 +558,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
         footer={
           <>
             <Button variant="secondary" size="md" onClick={closeModal}>Cancel</Button>
-            <Button variant="primary" size="md" onClick={handleSubmit}>{isEditing ? 'Save Changes' : 'Add Invoice'}</Button>
+            <Button variant="primary" size="md" loading={saving} onClick={handleSubmit}>{isEditing ? 'Save Changes' : 'Add Invoice'}</Button>
           </>
         }
       >
@@ -523,13 +573,21 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
             <div>
               <label className={LABEL}>Customer</label>
               <select value={form.customer_id} onChange={(e) => setForm((f) => ({ ...f, customer_id: e.target.value }))} className={INPUT}>
-                {CUSTOMERS.map((c) => <option key={c.customer_id} value={c.customer_id}>{c.customer_name}</option>)}
+                <option value="">Select customer</option>
+                {customers.map((c) => <option key={c.customer_id} value={c.customer_id}>{c.customer_name}</option>)}
               </select>
             </div>
             <div>
               <label className={LABEL}>Invoice Number</label>
               <input type="text" value={form.invoice_number} onChange={(e) => setForm((f) => ({ ...f, invoice_number: e.target.value }))} className={INPUT} placeholder="INV-2026-0001" />
             </div>
+          </div>
+          <div>
+            <label className={LABEL}>Collector</label>
+            <select value={form.collector_id} onChange={(e) => setForm((f) => ({ ...f, collector_id: e.target.value }))} className={INPUT}>
+              <option value="">Unassigned</option>
+              {collectors.map((c) => <option key={c.collector_id} value={c.collector_id}>{c.first_name} {c.last_name}</option>)}
+            </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -636,6 +694,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                 <DetailRow label="Invoice Number" value={detailRecord.invoice_number} />
                 <DetailRow label="Invoice Date" value={formatDate(detailRecord.invoice_date)} />
                 <DetailRow label="Due Date" value={formatDate(detailRecord.due_date)} />
+                <DetailRow label="Collector" value={collectorName(detailRecord.collector_id)} />
               </div>
               <div className="px-3 py-2">
                 <DetailRow label="Original Amount" value={formatCurrency(detailRecord.original_amount)} />
@@ -654,7 +713,6 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                 <DetailRow label="Created by" value={userName(detailRecord.created_by)} />
                 <DetailRow label="Created at" value={formatDateTime(detailRecord.created_at)} />
                 <DetailRow label="Updated at" value={formatDateTime(detailRecord.updated_at)} />
-                <DetailRow label="Archived" value={detailRecord.is_archived ? 'Yes' : 'No'} />
                 {detailRecord.is_archived && (
                   <>
                     <DetailRow label="Archived by" value={userName(detailRecord.archived_by)} />

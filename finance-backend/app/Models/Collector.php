@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Collector extends Model
@@ -20,6 +21,7 @@ class Collector extends Model
         'email',
         'profile_photo',
         'assigned_area',
+        'service_area_id',
         'commission_rate',
         'monthly_target',
         'status',
@@ -42,6 +44,23 @@ class Collector extends Model
     public function deletedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'deleted_by');
+    }
+
+    public function serviceArea(): BelongsTo
+    {
+        return $this->belongsTo(ServiceArea::class);
+    }
+
+    // Invoices assigned to this collector — this assignment is what
+    // CollectionService checks against when recording a collection.
+    public function accountsReceivables(): HasMany
+    {
+        return $this->hasMany(AccountsReceivable::class, 'collector_id');
+    }
+
+    public function collections(): HasMany
+    {
+        return $this->hasMany(Collection::class);
     }
 
     public function scopeSearch($query, ?string $term)

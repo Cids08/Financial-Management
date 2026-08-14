@@ -1,80 +1,31 @@
-import { useMemo, useState } from 'react'
-import { Search, BookOpen, Scale, TrendingUp, TrendingDown, Info, ListTree, Rows3 } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Search, BookOpen, Scale, TrendingUp, TrendingDown, Info, ListTree, Rows3, Loader2, AlertTriangle } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
 import { formatCurrency } from '../utils/formatters'
+import { apiFetch } from '../utils/api'
 
-// Simplified chart of accounts for display purposes
-const ACCOUNTS = [
-  { account_code: '1000', account_name: 'Cash on Hand', type: 'Asset' },
-  { account_code: '1010', account_name: 'BDO Operating Account', type: 'Asset' },
-  { account_code: '1011', account_name: 'BPI Payroll Account', type: 'Asset' },
-  { account_code: '1012', account_name: 'Metrobank Reserve Fund', type: 'Asset' },
-  { account_code: '1100', account_name: 'Accounts Receivable', type: 'Asset' },
-  { account_code: '2000', account_name: 'Accounts Payable', type: 'Liability' },
-  { account_code: '2100', account_name: 'Taxes Payable', type: 'Liability' },
-  { account_code: '4000', account_name: 'Sales Revenue', type: 'Revenue' },
-  { account_code: '5100', account_name: 'Operating Expenses', type: 'Expense' },
-  { account_code: '5200', account_name: 'Collection Commission Expense', type: 'Expense' },
-  { account_code: '5300', account_name: 'Tax Expense', type: 'Expense' },
-]
-
-// O(1) lookups instead of a fresh Array.find() scan on every call
-const ACCOUNTS_MAP = new Map(ACCOUNTS.map((a) => [a.account_code, a]))
-const accountLabel = (code) => {
-  const a = ACCOUNTS_MAP.get(code)
-  return a ? `${a.account_code} — ${a.account_name}` : code
-}
-const accountName = (code) => ACCOUNTS_MAP.get(code)?.account_name || '—'
-
-const REFERENCE_TYPES = ['Collections', 'Disbursements', 'Accounts Receivable', 'Accounts Payable', 'Budgets', 'Expenses', 'Tax Obligations']
+const REFERENCE_TYPES = ['Collections', 'Disbursements', 'Accounts Receivable', 'Accounts Payable', 'Expenses', 'Tax Obligations']
 
 const REFERENCE_STYLES = {
   Collections: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
   Disbursements: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
   'Accounts Receivable': 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400',
   'Accounts Payable': 'bg-purple-50 text-purple-600 dark:bg-purple-500/10 dark:text-purple-400',
-  Budgets: 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400',
   Expenses: 'bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-400',
   'Tax Obligations': 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
 }
 
-// Each real-world transaction posts as a matched pair of lines sharing reference_type + reference_id.
-// Every entry here is system-generated the moment its source transaction (a Collection,
-// Disbursement, Budget release, Expense, or Tax Obligation payment) is saved — there is no
-// manual posting path, so the ledger can never fall out of balance from a one-sided entry.
-const initialEntries = [
-  { journal_id: 1, reference_type: 'Collections', reference_id: 1, account_code: '1012', debit: 60000, credit: 0, description: 'OR-10021 — Delacruz Trading collection', transaction_date: '2026-07-15', created_at: '2026-07-15T09:30:00' },
-  { journal_id: 2, reference_type: 'Collections', reference_id: 1, account_code: '1100', debit: 0, credit: 60000, description: 'OR-10021 — Delacruz Trading collection', transaction_date: '2026-07-15', created_at: '2026-07-15T09:30:00' },
-
-  { journal_id: 3, reference_type: 'Collections', reference_id: 2, account_code: '1010', debit: 49000, credit: 0, description: 'OR-10022 — Meridian Retail Corp. collection', transaction_date: '2026-07-20', created_at: '2026-07-20T11:10:00' },
-  { journal_id: 4, reference_type: 'Collections', reference_id: 2, account_code: '1100', debit: 0, credit: 49000, description: 'OR-10022 — Meridian Retail Corp. collection', transaction_date: '2026-07-20', created_at: '2026-07-20T11:10:00' },
-
-  { journal_id: 5, reference_type: 'Disbursements', reference_id: 1, account_code: '2000', debit: 84500, credit: 0, description: 'Payment to Northgate Supplies Inc.', transaction_date: '2026-07-18', created_at: '2026-07-18T14:00:00' },
-  { journal_id: 6, reference_type: 'Disbursements', reference_id: 1, account_code: '1010', debit: 0, credit: 84500, description: 'Payment to Northgate Supplies Inc.', transaction_date: '2026-07-18', created_at: '2026-07-18T14:00:00' },
-
-  { journal_id: 7, reference_type: 'Expenses', reference_id: 1, account_code: '5200', debit: 1500, credit: 0, description: 'Collector commission — Ramon Torres', transaction_date: '2026-07-15', created_at: '2026-07-15T09:35:00' },
-  { journal_id: 8, reference_type: 'Expenses', reference_id: 1, account_code: '1000', debit: 0, credit: 1500, description: 'Collector commission — Ramon Torres', transaction_date: '2026-07-15', created_at: '2026-07-15T09:35:00' },
-
-  { journal_id: 9, reference_type: 'Tax Obligations', reference_id: 101, account_code: '5300', debit: 84500, credit: 0, description: 'BIR VAT payment — June 2026 (BIR-VAT-0620)', transaction_date: '2026-07-18', created_at: '2026-07-18T10:15:00' },
-  { journal_id: 10, reference_type: 'Tax Obligations', reference_id: 101, account_code: '1010', debit: 0, credit: 84500, description: 'BIR VAT payment — June 2026 (BIR-VAT-0620)', transaction_date: '2026-07-18', created_at: '2026-07-18T10:15:00' },
-]
-
 const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
 const PANEL_PAD = 'p-4'
 
-// bg-surface + !text-ink (Tailwind important) instead of bg-bg/text-ink, so this
-// can't lose a specificity fight against a parent panel's own background/text
-// tinting. INPUT_TEXT_STYLE + outline:'none' are the belt-and-suspenders layer.
 const INPUT = `w-full h-9 px-3 rounded-lg border border-border bg-surface !text-ink
   placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary
   transition-all duration-150`
 const INPUT_TEXT_STYLE = { color: 'var(--color-ink, #0f172a)', caretColor: 'var(--color-ink, #0f172a)', outline: 'none' }
 
-// Search field — same rounded-lg box/height as the filter dropdowns (not a pill),
-// just with left padding for the icon.
 const SEARCH_INPUT = `w-full h-9 pl-9 pr-3 rounded-lg border border-border bg-surface !text-ink
   placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary
   transition-all duration-150`
@@ -99,64 +50,157 @@ function DetailRow({ label, value }) {
 
 const EMPTY_FILTERS = { search: '', referenceFilter: 'all', accountFilter: 'all', dateFrom: '', dateTo: '', lineFilter: 'all' }
 
+const DATE_PRESETS = [
+  { key: 'all', label: 'All Time' },
+  { key: 'today', label: 'Today' },
+  { key: 'week', label: 'This Week' },
+  { key: 'month', label: 'This Month' },
+  { key: 'quarter', label: 'This Quarter' },
+  { key: 'year', label: 'This Year' },
+  { key: 'custom', label: 'Custom Range' },
+]
+
+const toISODate = (d) => d.toISOString().slice(0, 10)
+
+/** Returns { from, to } (either can be '') for a given preset key, anchored to now. */
+function resolveDatePreset(key) {
+  const now = new Date()
+  const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
+
+  switch (key) {
+    case 'today': {
+      const day = startOfDay(now)
+      return { from: toISODate(day), to: toISODate(day) }
+    }
+    case 'week': {
+      const day = startOfDay(now)
+      const start = new Date(day)
+      start.setDate(day.getDate() - day.getDay()) // Sunday
+      const end = new Date(start)
+      end.setDate(start.getDate() + 6)
+      return { from: toISODate(start), to: toISODate(end) }
+    }
+    case 'month': {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1)
+      const end = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+      return { from: toISODate(start), to: toISODate(end) }
+    }
+    case 'quarter': {
+      const quarterStartMonth = Math.floor(now.getMonth() / 3) * 3
+      const start = new Date(now.getFullYear(), quarterStartMonth, 1)
+      const end = new Date(now.getFullYear(), quarterStartMonth + 3, 0)
+      return { from: toISODate(start), to: toISODate(end) }
+    }
+    case 'year': {
+      const start = new Date(now.getFullYear(), 0, 1)
+      const end = new Date(now.getFullYear(), 11, 31)
+      return { from: toISODate(start), to: toISODate(end) }
+    }
+    case 'all':
+    default:
+      return { from: '', to: '' }
+  }
+}
+
 export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Financial Transactions', 'General Ledger'] }) {
-  const [entries] = useState(initialEntries)
   const [view, setView] = useState('journal') // 'journal' | 'trial-balance'
   const [search, setSearch] = useState(EMPTY_FILTERS.search)
+  const [debouncedSearch, setDebouncedSearch] = useState(EMPTY_FILTERS.search)
   const [referenceFilter, setReferenceFilter] = useState(EMPTY_FILTERS.referenceFilter)
   const [accountFilter, setAccountFilter] = useState(EMPTY_FILTERS.accountFilter)
   const [dateFrom, setDateFrom] = useState(EMPTY_FILTERS.dateFrom)
   const [dateTo, setDateTo] = useState(EMPTY_FILTERS.dateTo)
-  // 'all' | 'debit' | 'credit' — which side of the ledger to show; driven by the stat cards
-  const [lineFilter, setLineFilter] = useState(EMPTY_FILTERS.lineFilter)
+  const [datePreset, setDatePreset] = useState('all')
+  const [lineFilter, setLineFilter] = useState(EMPTY_FILTERS.lineFilter) // 'all' | 'debit' | 'credit'
+  const [page, setPage] = useState(1)
 
-  const [detailGroup, setDetailGroup] = useState(null) // reference_type + reference_id group shown in detail modal
+  const [detailGroup, setDetailGroup] = useState(null) // lines for the journal entry shown in the detail modal
+  const [detailLoading, setDetailLoading] = useState(false)
 
-  // AUTOMATION: grand totals and the balance check are recomputed live from the entries
-  // themselves — there's nothing to toggle or refresh. If debits ever stop equaling
-  // credits (e.g. a source module posted a one-sided pair), the ledger flags it immediately.
-  const grandTotals = useMemo(() => {
-    const debit = entries.reduce((sum, e) => sum + e.debit, 0)
-    const credit = entries.reduce((sum, e) => sum + e.credit, 0)
-    return { debit, credit, balanced: Math.abs(debit - credit) < 0.005, difference: debit - credit }
-  }, [entries])
+  const [accounts, setAccounts] = useState([])
+  const [lines, setLines] = useState([])
+  const [meta, setMeta] = useState({ current_page: 1, last_page: 1, total: 0, grand_totals: { debit: 0, credit: 0, balanced: true, difference: 0 } })
+  const [trialBalance, setTrialBalance] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
-  const filtered = useMemo(() => {
-    return entries
-      .filter((e) => {
-        if (lineFilter === 'debit' && !e.debit) return false
-        if (lineFilter === 'credit' && !e.credit) return false
-        if (referenceFilter !== 'all' && e.reference_type !== referenceFilter) return false
-        if (accountFilter !== 'all' && e.account_code !== accountFilter) return false
-        if (dateFrom && e.transaction_date < dateFrom) return false
-        if (dateTo && e.transaction_date > dateTo) return false
-        const q = search.toLowerCase()
-        if (search && !e.description.toLowerCase().includes(q) && !accountName(e.account_code).toLowerCase().includes(q) && !e.account_code.includes(q)) {
-          return false
-        }
-        return true
+  // Debounce free-text search so it doesn't fire a request on every keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 350)
+    return () => clearTimeout(t)
+  }, [search])
+
+  // Chart of accounts for the filter dropdown — fetched once.
+  // FIX: was hitting /api/chart-of-accounts, which doesn't exist — the
+  // route is nested under the general-ledger prefix in routes/api.php
+  // (Route::prefix('general-ledger')->group(...) -> '/chart-of-accounts'
+  // resolves to /api/general-ledger/chart-of-accounts).
+  useEffect(() => {
+    apiFetch('/api/general-ledger/chart-of-accounts')
+      .then((res) => res.json())
+      .then((json) => setAccounts(json.data || []))
+      .catch(() => setAccounts([]))
+  }, [])
+
+  const filterParams = useMemo(() => {
+    const params = new URLSearchParams()
+    if (debouncedSearch) params.set('search', debouncedSearch)
+    if (referenceFilter !== 'all') params.set('reference_type', referenceFilter)
+    if (accountFilter !== 'all') params.set('account_id', accountFilter)
+    if (dateFrom) params.set('date_from', dateFrom)
+    if (dateTo) params.set('date_to', dateTo)
+    if (lineFilter !== 'all') params.set('side', lineFilter)
+    return params
+  }, [debouncedSearch, referenceFilter, accountFilter, dateFrom, dateTo, lineFilter])
+
+  // Reset to page 1 whenever a filter changes (not on page changes themselves).
+  useEffect(() => { setPage(1) }, [filterParams])
+
+  // Journal lines — depends on filters + page.
+  useEffect(() => {
+    if (view !== 'journal') return
+    setLoading(true)
+    setError(null)
+    const params = new URLSearchParams(filterParams)
+    params.set('page', String(page))
+
+    apiFetch(`/api/general-ledger/lines?${params.toString()}`)
+      .then((res) => res.json())
+      .then((json) => {
+        setLines(json.data || [])
+        setMeta(json.meta || meta)
       })
-      .sort((a, b) => a.transaction_date.localeCompare(b.transaction_date) || a.journal_id - b.journal_id)
-  }, [entries, search, referenceFilter, accountFilter, dateFrom, dateTo, lineFilter])
+      .catch(() => setError('Could not load journal entries. Please try again.'))
+      .finally(() => setLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, filterParams, page])
 
-  const filteredTotals = useMemo(() => ({
-    debit: filtered.reduce((sum, e) => sum + e.debit, 0),
-    credit: filtered.reduce((sum, e) => sum + e.credit, 0),
-  }), [filtered])
+  // Trial balance — depends on filters only (no pagination).
+  useEffect(() => {
+    if (view !== 'trial-balance') return
+    setLoading(true)
+    setError(null)
+    apiFetch(`/api/general-ledger/trial-balance?${filterParams.toString()}`)
+      .then((res) => res.json())
+      .then((json) => setTrialBalance(json.data || []))
+      .catch(() => setError('Could not load the trial balance. Please try again.'))
+      .finally(() => setLoading(false))
+  }, [view, filterParams])
 
-  // Trial balance: one row per account with summed debits/credits and a net balance
-  const trialBalance = useMemo(() => {
-    const byAccount = new Map()
-    for (const e of filtered) {
-      if (!byAccount.has(e.account_code)) byAccount.set(e.account_code, { account_code: e.account_code, debit: 0, credit: 0 })
-      const row = byAccount.get(e.account_code)
-      row.debit += e.debit
-      row.credit += e.credit
-    }
-    return Array.from(byAccount.values())
-      .map((row) => ({ ...row, net: row.debit - row.credit }))
-      .sort((a, b) => a.account_code.localeCompare(b.account_code))
-  }, [filtered])
+  const trialTotals = useMemo(() => ({
+    debit: trialBalance.reduce((sum, r) => sum + Number(r.total_debit || 0), 0),
+    credit: trialBalance.reduce((sum, r) => sum + Number(r.total_credit || 0), 0),
+  }), [trialBalance])
+
+  const grandTotals = meta.grand_totals || { debit: 0, credit: 0, balanced: true, difference: 0 }
+
+  const applyDatePreset = (key) => {
+    setDatePreset(key)
+    if (key === 'custom') return // leave dateFrom/dateTo as the user last set them
+    const { from, to } = resolveDatePreset(key)
+    setDateFrom(from)
+    setDateTo(to)
+  }
 
   const resetFilters = () => {
     setSearch(EMPTY_FILTERS.search)
@@ -164,16 +208,15 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
     setAccountFilter(EMPTY_FILTERS.accountFilter)
     setDateFrom(EMPTY_FILTERS.dateFrom)
     setDateTo(EMPTY_FILTERS.dateTo)
+    setDatePreset('all')
     setLineFilter(EMPTY_FILTERS.lineFilter)
   }
 
-  // Each card is now a real quick-filter, mirroring the pattern used on Users/Roles:
-  // clicking it narrows (or reveals) the relevant view, and highlights while active.
   const statCards = [
     {
       key: 'entries',
       label: 'Total Line Entries',
-      value: entries.length,
+      value: meta.total ?? 0,
       icon: BookOpen,
       iconBg: 'bg-primary/15',
       iconColor: 'text-primary-dark',
@@ -212,9 +255,14 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
     },
   ]
 
-  const openGroupDetail = (e) => {
-    const group = entries.filter((x) => x.reference_type === e.reference_type && x.reference_id === e.reference_id)
-    setDetailGroup(group)
+  const openGroupDetail = (line) => {
+    setDetailLoading(true)
+    setDetailGroup({ journal_entry_id: line.journal_entry_id }) // open modal immediately with a loading state
+    apiFetch(`/api/general-ledger/entries/${line.journal_entry_id}`)
+      .then((res) => res.json())
+      .then((json) => setDetailGroup(json.data))
+      .catch(() => setDetailGroup(null))
+      .finally(() => setDetailLoading(false))
   }
   const closeDetail = () => setDetailGroup(null)
 
@@ -225,7 +273,7 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
       <div>
         <h1 className="text-xl font-bold tracking-tight text-ink">{title}</h1>
         <p className="mt-1 text-xs text-muted">
-          Every posted Collection, Disbursement, Budget, Expense, and Tax Obligation lands here automatically as a balanced debit/credit pair. This ledger is system-generated and view-only.
+          Every posted Collection, Disbursement, Expense, and Tax Obligation lands here automatically as a balanced debit/credit pair. This ledger is system-generated and view-only.
         </p>
       </div>
 
@@ -255,8 +303,16 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
       </div>
 
       {!grandTotals.balanced && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+        <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+          <AlertTriangle size={15} className="shrink-0" />
           Ledger is out of balance by {formatCurrency(Math.abs(grandTotals.difference))}. Check the source transaction that posted a one-sided entry.
+        </div>
+      )}
+
+      {error && (
+        <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+          <AlertTriangle size={15} className="shrink-0" />
+          {error}
         </div>
       )}
 
@@ -280,7 +336,7 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
           </select>
           <select value={accountFilter} onChange={(e) => setAccountFilter(e.target.value)} className={INPUT} style={INPUT_TEXT_STYLE}>
             <option value="all">All Accounts</option>
-            {ACCOUNTS.map((a) => <option key={a.account_code} value={a.account_code}>{a.account_code} — {a.account_name}</option>)}
+            {accounts.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
           </select>
           {lineFilter !== 'all' && (
             <button
@@ -293,13 +349,33 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
           )}
         </div>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+          <select
+            value={datePreset}
+            onChange={(e) => applyDatePreset(e.target.value)}
+            className={INPUT}
+            style={{ ...INPUT_TEXT_STYLE, maxWidth: '11rem' }}
+          >
+            {DATE_PRESETS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+          </select>
           <div className="flex items-center gap-2">
             <label className="text-xs text-muted whitespace-nowrap">From</label>
-            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className={INPUT} style={INPUT_TEXT_STYLE} />
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => { setDatePreset('custom'); setDateFrom(e.target.value) }}
+              className={INPUT}
+              style={INPUT_TEXT_STYLE}
+            />
           </div>
           <div className="flex items-center gap-2">
             <label className="text-xs text-muted whitespace-nowrap">To</label>
-            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className={INPUT} style={INPUT_TEXT_STYLE} />
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => { setDatePreset('custom'); setDateTo(e.target.value) }}
+              className={INPUT}
+              style={INPUT_TEXT_STYLE}
+            />
           </div>
           <div className="ml-auto flex items-center gap-1 rounded-lg border border-border bg-bg p-1">
             <button
@@ -318,9 +394,16 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
             </button>
           </div>
         </div>
+
       </div>
 
-      {view === 'journal' ? (
+      {loading && (
+        <div className={`${PANEL} ${PANEL_PAD} flex items-center justify-center gap-2 py-10 text-sm text-muted`}>
+          <Loader2 size={16} className="animate-spin" /> Loading…
+        </div>
+      )}
+
+      {!loading && view === 'journal' && (
         <div className={PANEL}>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -336,17 +419,19 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((e) => (
+                {lines.map((e) => (
                   <tr
                     key={e.journal_id}
                     onClick={() => openGroupDetail(e)}
                     className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150 cursor-pointer"
                   >
                     <td className="px-4 py-3.5 whitespace-nowrap text-ink">{formatDate(e.transaction_date)}</td>
-                    <td className="px-4 py-3.5 whitespace-nowrap text-ink">{accountLabel(e.account_code)}</td>
+                    <td className="px-4 py-3.5 whitespace-nowrap text-ink">{e.account_code} — {e.account_name}</td>
                     <td className="px-4 py-3.5 text-ink max-w-70 truncate">{e.description}</td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${REFERENCE_STYLES[e.reference_type]}`}>{e.reference_type}</span>
+                      {e.reference_type && (
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${REFERENCE_STYLES[e.reference_type] || 'bg-slate-100 text-slate-600'}`}>{e.reference_type}</span>
+                      )}
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap text-right tabular-nums text-ink">{e.debit ? formatCurrency(e.debit) : '—'}</td>
                     <td className="px-4 py-3.5 whitespace-nowrap text-right tabular-nums text-ink">{e.credit ? formatCurrency(e.credit) : '—'}</td>
@@ -363,24 +448,26 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
                     </td>
                   </tr>
                 ))}
-                {filtered.length === 0 && (
+                {lines.length === 0 && (
                   <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-muted">No journal entries match your filters.</td></tr>
                 )}
               </tbody>
-              {filtered.length > 0 && (
-                <tfoot>
-                  <tr className="border-t-2 border-border font-semibold">
-                    <td colSpan={4} className="px-4 py-3 text-right text-xs uppercase tracking-wide text-muted">Filtered Totals</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-right tabular-nums text-ink">{formatCurrency(filteredTotals.debit)}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-right tabular-nums text-ink">{formatCurrency(filteredTotals.credit)}</td>
-                    <td></td>
-                  </tr>
-                </tfoot>
-              )}
             </table>
           </div>
+
+          {meta.last_page > 1 && (
+            <div className="flex items-center justify-between border-t border-border px-4 py-3 text-xs text-muted">
+              <span>Page {meta.current_page} of {meta.last_page} · {meta.total} lines</span>
+              <div className="flex gap-2">
+                <Button variant="secondary" size="sm" disabled={meta.current_page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Previous</Button>
+                <Button variant="secondary" size="sm" disabled={meta.current_page >= meta.last_page} onClick={() => setPage((p) => p + 1)}>Next</Button>
+              </div>
+            </div>
+          )}
         </div>
-      ) : (
+      )}
+
+      {!loading && view === 'trial-balance' && (
         <div className={PANEL}>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -393,20 +480,23 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
                 </tr>
               </thead>
               <tbody>
-                {trialBalance.map((row) => (
-                  <tr
-                    key={row.account_code}
-                    onClick={() => { setAccountFilter(row.account_code); setView('journal') }}
-                    className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150 cursor-pointer"
-                  >
-                    <td className="px-4 py-3.5 text-ink">{accountLabel(row.account_code)}</td>
-                    <td className="px-4 py-3.5 whitespace-nowrap text-right tabular-nums text-ink">{row.debit ? formatCurrency(row.debit) : '—'}</td>
-                    <td className="px-4 py-3.5 whitespace-nowrap text-right tabular-nums text-ink">{row.credit ? formatCurrency(row.credit) : '—'}</td>
-                    <td className={`px-4 py-3.5 whitespace-nowrap text-right tabular-nums font-medium ${row.net > 0 ? 'text-blue-600 dark:text-blue-400' : row.net < 0 ? 'text-purple-600 dark:text-purple-400' : 'text-muted'}`}>
-                      {row.net === 0 ? '—' : formatCurrency(Math.abs(row.net)) + (row.net > 0 ? ' Dr' : ' Cr')}
-                    </td>
-                  </tr>
-                ))}
+                {trialBalance.map((row) => {
+                  const net = Number(row.net_balance || 0)
+                  return (
+                    <tr
+                      key={row.account_id}
+                      onClick={() => { setAccountFilter(String(row.account_id)); setView('journal') }}
+                      className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150 cursor-pointer"
+                    >
+                      <td className="px-4 py-3.5 text-ink">{row.account_code} — {row.account_name}</td>
+                      <td className="px-4 py-3.5 whitespace-nowrap text-right tabular-nums text-ink">{row.total_debit ? formatCurrency(row.total_debit) : '—'}</td>
+                      <td className="px-4 py-3.5 whitespace-nowrap text-right tabular-nums text-ink">{row.total_credit ? formatCurrency(row.total_credit) : '—'}</td>
+                      <td className={`px-4 py-3.5 whitespace-nowrap text-right tabular-nums font-medium ${net > 0 ? 'text-blue-600 dark:text-blue-400' : net < 0 ? 'text-purple-600 dark:text-purple-400' : 'text-muted'}`}>
+                        {net === 0 ? '—' : formatCurrency(Math.abs(net)) + (net > 0 ? ' Dr' : ' Cr')}
+                      </td>
+                    </tr>
+                  )
+                })}
                 {trialBalance.length === 0 && (
                   <tr><td colSpan={4} className="px-4 py-10 text-center text-sm text-muted">No entries match your filters.</td></tr>
                 )}
@@ -415,10 +505,10 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
                 <tfoot>
                   <tr className="border-t-2 border-border font-semibold">
                     <td className="px-4 py-3 text-right text-xs uppercase tracking-wide text-muted">Totals</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-right tabular-nums text-ink">{formatCurrency(filteredTotals.debit)}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-right tabular-nums text-ink">{formatCurrency(filteredTotals.credit)}</td>
-                    <td className={`px-4 py-3 whitespace-nowrap text-right tabular-nums ${Math.abs(filteredTotals.debit - filteredTotals.credit) < 0.005 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-                      {Math.abs(filteredTotals.debit - filteredTotals.credit) < 0.005 ? 'Balanced' : formatCurrency(Math.abs(filteredTotals.debit - filteredTotals.credit)) + ' off'}
+                    <td className="px-4 py-3 whitespace-nowrap text-right tabular-nums text-ink">{formatCurrency(trialTotals.debit)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-right tabular-nums text-ink">{formatCurrency(trialTotals.credit)}</td>
+                    <td className={`px-4 py-3 whitespace-nowrap text-right tabular-nums ${Math.abs(trialTotals.debit - trialTotals.credit) < 0.005 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                      {Math.abs(trialTotals.debit - trialTotals.credit) < 0.005 ? 'Balanced' : formatCurrency(Math.abs(trialTotals.debit - trialTotals.credit)) + ' off'}
                     </td>
                   </tr>
                 </tfoot>
@@ -429,16 +519,23 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
       )}
 
       <Modal open={!!detailGroup} onClose={closeDetail} title="Transaction Detail" footer={<Button variant="secondary" size="md" onClick={closeDetail}>Close</Button>}>
-        {detailGroup && (
+        {detailLoading && (
+          <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted">
+            <Loader2 size={16} className="animate-spin" /> Loading…
+          </div>
+        )}
+        {!detailLoading && detailGroup?.lines && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-ink">{detailGroup[0].description}</p>
-              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${REFERENCE_STYLES[detailGroup[0].reference_type]}`}>{detailGroup[0].reference_type}</span>
+              <p className="text-sm font-semibold text-ink">{detailGroup.description}</p>
+              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${detailGroup.is_balanced ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400' : 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400'}`}>
+                {detailGroup.is_balanced ? 'Balanced' : 'Out of Balance'}
+              </span>
             </div>
             <div className="rounded-lg border border-border divide-y divide-border">
-              {detailGroup.map((line) => (
-                <div key={line.journal_id} className="px-3 py-2">
-                  <DetailRow label="Account" value={accountLabel(line.account_code)} />
+              {detailGroup.lines.map((line) => (
+                <div key={line.id} className="px-3 py-2">
+                  <DetailRow label="Account" value={`${line.account_code} — ${line.account_name}`} />
                   <DetailRow label="Debit" value={line.debit ? formatCurrency(line.debit) : '—'} />
                   <DetailRow label="Credit" value={line.credit ? formatCurrency(line.credit) : '—'} />
                   <DetailRow label="Posted" value={formatDateTime(line.created_at)} />

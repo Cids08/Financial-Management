@@ -7,26 +7,12 @@ import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
 import { formatCurrency } from '../utils/formatters'
+import { useAiRecommendations } from '../hooks/useAiRecommendations'
 
-// Mirrors the `financial_forecasts` table — used here only to resolve the
-// forecast_id foreign key on each recommendation to a readable label.
-const FORECASTS = [
-  { forecast_id: 1, forecast_type: 'Cash Flow', forecast_period: 'Q4 2026', predicted_amount: 1850000 },
-  { forecast_id: 2, forecast_type: 'Revenue', forecast_period: 'Q4 2026', predicted_amount: 2360000 },
-  { forecast_id: 3, forecast_type: 'Collections', forecast_period: 'August 2026', predicted_amount: 495000 },
-  { forecast_id: 4, forecast_type: 'Expenses', forecast_period: 'August 2026', predicted_amount: 612000 },
-  { forecast_id: 5, forecast_type: 'Accounts Receivable', forecast_period: 'Q4 2026', predicted_amount: 980000 },
-  { forecast_id: 6, forecast_type: 'Cash Flow', forecast_period: 'FY 2027', predicted_amount: 8400000 },
-]
-const forecastLabel = (id) => {
-  const f = FORECASTS.find((f) => f.forecast_id === id)
-  return f ? `${f.forecast_type} — ${f.forecast_period}` : `Forecast #${id}`
-}
-
-const GENERATORS = { 101: 'Maria Santos', 102: 'Ramon Torres', 103: 'System (Scheduled)' }
-
-// Mirrors the `ai_recommendations` table:
-// recommendation_id, forecast_id, recommendation_type, summary, recommendation, generated_by, generated_at
+// Mirrors the `ai_recommendations` table (category -> recommendation_type,
+// mapped server-side by AiRecommendationResource). Kept as a display list —
+// if a category comes back from the API that isn't in this map, it still
+// renders with a generic icon/style rather than crashing.
 const RECOMMENDATION_TYPES = ['Cash Flow Management', 'Cost Reduction', 'Revenue Optimization', 'Risk Alert', 'Budget Adjustment']
 
 const TYPE_META = {
@@ -36,45 +22,7 @@ const TYPE_META = {
   'Risk Alert': { icon: ShieldAlert, style: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400' },
   'Budget Adjustment': { icon: AlertTriangle, style: 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400' },
 }
-
-const initialRecommendations = [
-  {
-    recommendation_id: 1, forecast_id: 6, recommendation_type: 'Risk Alert',
-    summary: 'Projected FY 2027 cash flow shows a 13.5% error margin — treat the upper range with caution.',
-    recommendation: 'The FY 2027 cash flow model carries a wider confidence band than usual (MAPE 13.5%). Before committing to large capital outlays next year, re-run the forecast once Q3 2026 actuals are posted so the trailing window includes a full year of collector-level collection data. Consider holding a contingency reserve of at least 10% of the predicted shortfall until the model stabilizes.',
-    generated_by: 103, generated_at: '2026-07-29T17:05:00',
-  },
-  {
-    recommendation_id: 2, forecast_id: 4, recommendation_type: 'Cost Reduction',
-    summary: 'Expense growth is outpacing revenue growth for August — review discretionary Operating Expenses.',
-    recommendation: 'August expenses are forecast at ₱612,000 against a revenue base growing more slowly in the same window. The largest driver is Operating Expenses rather than Tax Expense or commissions. Recommend a line-by-line review of Operating Expenses postings from the last 60 days to identify any recurring charges that could be renegotiated or deferred to Q1 2027.',
-    generated_by: 101, generated_at: '2026-07-25T13:12:00',
-  },
-  {
-    recommendation_id: 3, forecast_id: 3, recommendation_type: 'Cash Flow Management',
-    summary: 'Collections are trending below the historical average for the third straight month.',
-    recommendation: 'Collections for August are projected at ₱495,000, roughly 8% below the trailing six-month average. Two collectors account for most of the shortfall against their monthly targets. Recommend prioritizing follow-up on overdue Accounts Receivable balances tied to those assigned areas before the BDO Operating Account dips below its reserve threshold.',
-    generated_by: 102, generated_at: '2026-07-25T13:15:00',
-  },
-  {
-    recommendation_id: 4, forecast_id: 2, recommendation_type: 'Revenue Optimization',
-    summary: 'Revenue forecast for Q4 2026 is strong — a good window to renegotiate supplier terms.',
-    recommendation: 'Revenue is forecast at ₱2,360,000 for Q4 2026 with a 91% confidence level, the strongest of the current models. With healthier projected inflows, this is a favorable window to renegotiate early-payment discounts with top suppliers, or to accelerate planned Fixed Asset purchases that were deferred earlier in the year.',
-    generated_by: 101, generated_at: '2026-07-21T08:25:00',
-  },
-  {
-    recommendation_id: 5, forecast_id: 5, recommendation_type: 'Budget Adjustment',
-    summary: 'Accounts Receivable forecast confidence is the lowest among active models at 73%.',
-    recommendation: 'The Accounts Receivable forecast for Q4 2026 has the lowest confidence level of the active models (73%), largely due to inconsistent invoice_date to collection_date gaps in the historical window. Recommend tightening payment_terms enforcement on new invoices and flagging any Accounts Receivable balance over 90 days for a targeted collections push.',
-    generated_by: 102, generated_at: '2026-07-28T09:45:00',
-  },
-  {
-    recommendation_id: 6, forecast_id: 1, recommendation_type: 'Cash Flow Management',
-    summary: 'Cash Flow forecast for Q4 2026 supports maintaining current reserve levels across accounts.',
-    recommendation: 'The Q4 2026 cash flow model (87% confidence) suggests current balances across the BDO Operating, BPI Payroll, and Metrobank Reserve accounts are adequate to cover projected Disbursements and Tax Obligations without drawing down the reserve fund. No reallocation is recommended this quarter.',
-    generated_by: 101, generated_at: '2026-07-21T08:30:00',
-  },
-]
+const DEFAULT_TYPE_META = { icon: Sparkles, style: 'bg-gray-100 text-muted' }
 
 const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
 const PANEL_PAD = 'p-4'
@@ -110,18 +58,19 @@ const SUGGESTED_PROMPTS = [
 // Lightweight, fully client-side response engine grounded in the recommendations
 // already on screen — this stands in for a real assistant backend. Swap this
 // function out for an actual API call (e.g. POST /api/ai-advisor) when ready.
-function generateAIReply(question, recs) {
+function generateAIReply(question, recs, forecastLabel) {
   const q = question.toLowerCase()
 
   const matchType = RECOMMENDATION_TYPES.find((t) => q.includes(t.toLowerCase().split(' ')[0]))
   if (q.includes('risk') || q.includes('alert')) {
     const risk = recs.filter((r) => r.recommendation_type === 'Risk Alert')
     if (risk.length === 0) return "There are no open Risk Alert recommendations right now — nothing flagged."
-    return `There ${risk.length === 1 ? 'is' : 'are'} ${risk.length} Risk Alert recommendation${risk.length === 1 ? '' : 's'} right now. The most recent: "${risk[0].summary}" (linked to ${forecastLabel(risk[0].forecast_id)}).`
+    return `There ${risk.length === 1 ? 'is' : 'are'} ${risk.length} Risk Alert recommendation${risk.length === 1 ? '' : 's'} right now. The most recent: "${risk[0].summary}" (linked to ${forecastLabel(risk[0])}).`
   }
   if (q.includes('confidence') || q.includes('lowest') || q.includes('uncertain')) {
     const weakest = recs.find((r) => r.recommendation_type === 'Budget Adjustment') || recs[0]
-    return `${forecastLabel(weakest.forecast_id)} currently carries the most uncertainty among active models. Related guidance: "${weakest.summary}"`
+    if (!weakest) return "There isn't enough data yet to answer that."
+    return `${forecastLabel(weakest)} currently carries the most uncertainty among active models. Related guidance: "${weakest.summary}"`
   }
   if (q.includes('expense') || q.includes('cost') || q.includes('reduce') || q.includes('cut')) {
     const cost = recs.filter((r) => r.recommendation_type === 'Cost Reduction')
@@ -129,7 +78,7 @@ function generateAIReply(question, recs) {
     return cost.map((r) => `• ${r.summary}`).join('\n')
   }
   if (q.includes('collect')) {
-    const collections = recs.filter((r) => r.forecast_id === 3 || r.recommendation_type === 'Cash Flow Management')
+    const collections = recs.filter((r) => r.recommendation_type === 'Cash Flow Management')
     if (collections.length === 0) return "No collections-related guidance is open right now."
     return collections.map((r) => `• ${r.summary}`).join('\n')
   }
@@ -141,7 +90,7 @@ function generateAIReply(question, recs) {
   if (matchType) {
     const matches = recs.filter((r) => r.recommendation_type === matchType)
     if (matches.length === 0) return `There are no open ${matchType} recommendations right now.`
-    return matches.map((r) => `• ${r.summary} (${forecastLabel(r.forecast_id)})`).join('\n')
+    return matches.map((r) => `• ${r.summary} (${forecastLabel(r)})`).join('\n')
   }
   if (q.includes('summar')) {
     return recs.slice(0, 4).map((r) => `• [${r.recommendation_type}] ${r.summary}`).join('\n')
@@ -150,11 +99,35 @@ function generateAIReply(question, recs) {
 }
 
 export default function AIRecommendations({ title = 'AI Financial Recommendations', crumbs = ['Analytics', 'AI Financial Recommendations'] }) {
-  const [recommendations] = useState(initialRecommendations)
+  const { recommendations, loading, error, fetchRecommendations } = useAiRecommendations()
+
+  useEffect(() => {
+    fetchRecommendations()
+  }, [fetchRecommendations])
+
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
   const [forecastFilter, setForecastFilter] = useState('all')
   const [detail, setDetail] = useState(null)
+
+  // Each recommendation already carries its forecast's type/period/predicted
+  // amount flattened in (see AiRecommendationResource) — this label helper
+  // just formats that, replacing the old hardcoded FORECASTS lookup array.
+  const forecastLabel = (r) => {
+    if (!r) return 'Unlinked forecast'
+    if (r.forecast_type && r.forecast_period) return `${r.forecast_type} — ${r.forecast_period}`
+    return `Forecast #${r.forecast_id}`
+  }
+
+  // Distinct forecasts derived from whatever recommendations came back, for
+  // the "All Linked Forecasts" filter dropdown — no separate endpoint needed.
+  const distinctForecasts = useMemo(() => {
+    const seen = new Map()
+    for (const r of recommendations) {
+      if (!seen.has(r.forecast_id)) seen.set(r.forecast_id, r)
+    }
+    return Array.from(seen.values())
+  }, [recommendations])
 
   // Which stat card is currently engaged — only one at a time, so cards never
   // highlight simultaneously (matches the pattern on Financial Forecasting).
@@ -188,37 +161,37 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
       if (typeFilter !== 'all' && r.recommendation_type !== typeFilter) return false
       if (forecastFilter !== 'all' && r.forecast_id !== Number(forecastFilter)) return false
       const q = search.toLowerCase()
-      if (search && !r.summary.toLowerCase().includes(q) && !r.recommendation_type.toLowerCase().includes(q) && !forecastLabel(r.forecast_id).toLowerCase().includes(q)) {
+      if (search && !r.summary.toLowerCase().includes(q) && !(r.recommendation_type || '').toLowerCase().includes(q) && !forecastLabel(r).toLowerCase().includes(q)) {
         return false
       }
       return true
     })
     return activeStat === 'forecasts'
-      ? rows.sort((a, b) => forecastLabel(a.forecast_id).localeCompare(forecastLabel(b.forecast_id)))
-      : rows.sort((a, b) => b.generated_at.localeCompare(a.generated_at))
+      ? [...rows].sort((a, b) => forecastLabel(a).localeCompare(forecastLabel(b)))
+      : [...rows].sort((a, b) => (b.generated_at || '').localeCompare(a.generated_at || ''))
   }, [recommendations, search, typeFilter, forecastFilter, activeStat])
 
   const stats = useMemo(() => {
     const riskAlerts = recommendations.filter((r) => r.recommendation_type === 'Risk Alert').length
-    const distinctForecasts = new Set(recommendations.map((r) => r.forecast_id)).size
-    return { total: recommendations.length, riskAlerts, distinctForecasts }
+    const distinctForecastCount = new Set(recommendations.map((r) => r.forecast_id)).size
+    return { total: recommendations.length, riskAlerts, distinctForecasts: distinctForecastCount }
   }, [recommendations])
 
   const statCards = [
     {
-      key: 'total', label: 'Total Recommendations', value: stats.total, icon: Sparkles,
+      key: 'total', label: 'Total Recommendations', value: loading ? '—' : stats.total, icon: Sparkles,
       iconBg: 'bg-primary/15', iconColor: 'text-primary-dark',
       isActive: activeStat === 'all',
       onClick: () => setActiveStat('all'),
     },
     {
-      key: 'risk', label: 'Risk Alerts', value: stats.riskAlerts, icon: ShieldAlert,
+      key: 'risk', label: 'Risk Alerts', value: loading ? '—' : stats.riskAlerts, icon: ShieldAlert,
       iconBg: 'bg-red-50 dark:bg-red-500/10', iconColor: 'text-red-600 dark:text-red-400',
       isActive: activeStat === 'risk',
       onClick: () => toggleStat('risk'),
     },
     {
-      key: 'forecasts', label: 'Forecasts Covered', value: stats.distinctForecasts, icon: Bot,
+      key: 'forecasts', label: 'Forecasts Covered', value: loading ? '—' : stats.distinctForecasts, icon: Bot,
       iconBg: 'bg-blue-50 dark:bg-blue-500/10', iconColor: 'text-blue-600 dark:text-blue-400',
       isActive: activeStat === 'forecasts',
       onClick: () => toggleStat('forecasts'),
@@ -233,7 +206,7 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
     setChatInput('')
     setIsThinking(true)
     setTimeout(() => {
-      const reply = generateAIReply(trimmed, recommendations)
+      const reply = generateAIReply(trimmed, recommendations, forecastLabel)
       setMessages((prev) => [...prev, { role: 'assistant', text: reply, at: new Date().toISOString() }])
       setIsThinking(false)
     }, 550)
@@ -256,6 +229,12 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
           </p>
         </div>
       </div>
+
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+          {error}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {statCards.map((card) => {
@@ -319,19 +298,24 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
             </select>
             <select value={forecastFilter} onChange={(e) => setForecastFilter(e.target.value)} className={INPUT} style={INPUT_TEXT_STYLE}>
               <option value="all">All Linked Forecasts</option>
-              {FORECASTS.map((f) => <option key={f.forecast_id} value={f.forecast_id}>{forecastLabel(f.forecast_id)}</option>)}
+              {distinctForecasts.map((r) => <option key={r.forecast_id} value={r.forecast_id}>{forecastLabel(r)}</option>)}
             </select>
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {filtered.map((r) => {
-              const meta = TYPE_META[r.recommendation_type]
+            {loading && (
+              <div className={`${PANEL} ${PANEL_PAD} col-span-full text-center text-sm text-muted py-10`}>
+                Loading recommendations…
+              </div>
+            )}
+            {!loading && filtered.map((r) => {
+              const meta = TYPE_META[r.recommendation_type] || DEFAULT_TYPE_META
               const Icon = meta.icon
               return (
                 <div key={r.recommendation_id} className={`${PANEL} ${PANEL_PAD} flex flex-col gap-3`}>
                   <div className="flex items-start justify-between gap-3">
                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${meta.style}`}>
-                      <Icon size={13} /> {r.recommendation_type}
+                      <Icon size={13} /> {r.recommendation_type || 'Uncategorized'}
                     </span>
                     <Tooltip label="View full recommendation" align="end">
                       <button type="button" onClick={() => setDetail(r)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
@@ -341,13 +325,13 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
                   </div>
                   <p className="text-sm text-ink leading-relaxed">{r.summary}</p>
                   <div className="mt-auto flex items-center justify-between text-xs text-muted pt-2 border-t border-border">
-                    <span>{forecastLabel(r.forecast_id)}</span>
+                    <span>{forecastLabel(r)}</span>
                     <span>{formatDateTime(r.generated_at)}</span>
                   </div>
                 </div>
               )
             })}
-            {filtered.length === 0 && (
+            {!loading && filtered.length === 0 && (
               <div className={`${PANEL} ${PANEL_PAD} col-span-full text-center text-sm text-muted py-10`}>
                 No recommendations match your filters.
               </div>
@@ -436,17 +420,17 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
         {detail && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${TYPE_META[detail.recommendation_type].style}`}>
-                {(() => { const Icon = TYPE_META[detail.recommendation_type].icon; return <Icon size={13} /> })()}
-                {detail.recommendation_type}
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${(TYPE_META[detail.recommendation_type] || DEFAULT_TYPE_META).style}`}>
+                {(() => { const Icon = (TYPE_META[detail.recommendation_type] || DEFAULT_TYPE_META).icon; return <Icon size={13} /> })()}
+                {detail.recommendation_type || 'Uncategorized'}
               </span>
-              <span className="text-xs text-muted">{forecastLabel(detail.forecast_id)}</span>
+              <span className="text-xs text-muted">{forecastLabel(detail)}</span>
             </div>
             <p className="text-sm font-semibold text-ink">{detail.summary}</p>
             <div className="rounded-lg border border-border bg-bg px-4 py-3">
               <p className="text-sm text-ink leading-relaxed">{detail.recommendation}</p>
             </div>
-            <p className="text-xs text-muted">Generated by {GENERATORS[detail.generated_by] || `User #${detail.generated_by}`} on {formatDateTime(detail.generated_at)}</p>
+            <p className="text-xs text-muted">Generated by {detail.generated_by_name || `User #${detail.generated_by}`} on {formatDateTime(detail.generated_at)}</p>
           </div>
         )}
       </Modal>

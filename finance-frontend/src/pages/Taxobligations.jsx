@@ -1,21 +1,11 @@
 import { useMemo, useState } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, Receipt, CheckCircle2, Clock3, AlertTriangle, Info, Printer, Sparkles } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, Receipt, CheckCircle2, Clock3, AlertTriangle, Info, Printer, Sparkles, Eye, EyeOff, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
 import { formatCurrency } from '../utils/formatters'
-
-// Users (created_by / archived_by on the ERD)
-const USERS = [
-  { user_id: 1, first_name: 'Ana', last_name: 'Reyes' },
-  { user_id: 2, first_name: 'Marco', last_name: 'Santos' },
-  { user_id: 3, first_name: 'Liza', last_name: 'Fernandez' },
-]
-const userName = (id) => {
-  const u = USERS.find((u) => u.user_id === Number(id))
-  return u ? `${u.first_name} ${u.last_name}` : '—'
-}
+import { useTaxObligations } from '../hooks/useTaxObligations'
 
 const pad = (n) => String(n).padStart(2, '0')
 const QUARTER_LABELS = { 1: 'Q1 (Jan–Mar)', 2: 'Q2 (Apr–Jun)', 3: 'Q3 (Jul–Sep)', 4: 'Q4 (Oct–Dec)' }
@@ -23,30 +13,31 @@ const QUARTER_LABELS = { 1: 'Q1 (Jan–Mar)', 2: 'Q2 (Apr–Jun)', 3: 'Q3 (Jul�
 // AUTOMATION: each tax type carries its own filing cadence, BIR form code, and
 // statutory due-date rule, so the form only ever asks "which period?" — the
 // due date and reference-number prefix are computed, never typed from scratch.
+// Also carries a suggested default tax_rate, since the ERD requires one —
+// still fully editable, this is just a sane starting point per tax type.
 const TAX_TYPE_CONFIG = {
   'VAT': {
-    code: 'VAT', periodType: 'month',
+    code: 'VAT', periodType: 'month', defaultRate: 12,
     computeDue: (y, m) => { let ny = y, nm = m + 1; if (nm > 12) { nm = 1; ny += 1 }; return `${ny}-${pad(nm)}-20` },
   },
   'Withholding Tax': {
-    code: 'EWT', periodType: 'month',
+    code: 'EWT', periodType: 'month', defaultRate: 2,
     computeDue: (y, m) => { let ny = y, nm = m + 1; if (nm > 12) { nm = 1; ny += 1 }; return `${ny}-${pad(nm)}-10` },
   },
   'Percentage Tax': {
-    code: 'PT', periodType: 'month',
+    code: 'PT', periodType: 'month', defaultRate: 3,
     computeDue: (y, m) => { let ny = y, nm = m + 1; if (nm > 12) { nm = 1; ny += 1 }; return `${ny}-${pad(nm)}-20` },
   },
   'Documentary Stamp Tax': {
-    code: 'DST', periodType: 'month',
+    code: 'DST', periodType: 'month', defaultRate: 1.5,
     computeDue: (y, m) => { let ny = y, nm = m + 1; if (nm > 12) { nm = 1; ny += 1 }; return `${ny}-${pad(nm)}-05` },
   },
   'Income Tax': {
-    code: 'ITR', periodType: 'quarter',
-    // Quarterly ITR: due mid-2nd-month-after quarter end; Q4/annual due the following April 15
+    code: 'ITR', periodType: 'quarter', defaultRate: 25,
     computeDue: (y, q) => ({ 1: `${y}-05-15`, 2: `${y}-08-15`, 3: `${y}-11-15`, 4: `${y + 1}-04-15` }[q]),
   },
   'Local Business Tax': {
-    code: 'LBT', periodType: 'quarter',
+    code: 'LBT', periodType: 'quarter', defaultRate: 2,
     computeDue: (y, q) => ({ 1: `${y}-01-20`, 2: `${y}-04-20`, 3: `${y}-07-20`, 4: `${y}-10-20` }[q]),
   },
 }
@@ -86,36 +77,20 @@ function buildEmptyForm() {
   const { tax_period, due_date } = computePeriodAndDue(taxType, year, month, quarter)
   return {
     tax_type: taxType, period_year: year, period_month: month, period_quarter: quarter,
-    tax_period, due_date, amount: '', is_paid: false, payment_date: '', reference_number: '', remarks: '',
+    tax_period, due_date, tax_rate: TAX_TYPE_CONFIG[taxType].defaultRate, taxable_amount: '',
+    is_paid: false, payment_date: '', reference_number: '', remarks: '',
   }
 }
 
-const initialTaxObligations = [
-  { tax_id: 1, tax_type: 'VAT', tax_period: '2026-06', due_date: '2026-07-20', amount: 84500, status: 'Paid', payment_date: '2026-07-18', reference_number: 'BIR-VAT-0720', remarks: 'Filed via eFPS', created_by: 1, is_archived: false, archived_at: null, archived_by: null, created_at: '2026-07-01T09:00:00', updated_at: '2026-07-18T10:15:00' },
-  { tax_id: 2, tax_type: 'Withholding Tax', tax_period: '2026-07', due_date: '2026-08-10', amount: 32750, status: 'Pending', payment_date: null, reference_number: '', remarks: '', created_by: 2, is_archived: false, archived_at: null, archived_by: null, created_at: '2026-07-25T09:00:00', updated_at: '2026-07-25T09:00:00' },
-  { tax_id: 3, tax_type: 'Income Tax', tax_period: '2026-Q2', due_date: '2026-08-15', amount: 210000, status: 'Pending', payment_date: null, reference_number: '', remarks: 'Quarterly ITR', created_by: 1, is_archived: false, archived_at: null, archived_by: null, created_at: '2026-07-01T09:00:00', updated_at: '2026-07-01T09:00:00' },
-  { tax_id: 4, tax_type: 'Percentage Tax', tax_period: '2026-06', due_date: '2026-07-20', amount: 15600, status: 'Pending', payment_date: null, reference_number: '', remarks: 'Awaiting fund transfer', created_by: 3, is_archived: false, archived_at: null, archived_by: null, created_at: '2026-07-01T09:00:00', updated_at: '2026-07-01T09:00:00' },
-  { tax_id: 5, tax_type: 'Local Business Tax', tax_period: '2026-Q3', due_date: '2026-07-20', amount: 48000, status: 'Pending', payment_date: null, reference_number: '', remarks: '', created_by: 2, is_archived: false, archived_at: null, archived_by: null, created_at: '2026-07-15T09:00:00', updated_at: '2026-07-15T09:00:00' },
-  { tax_id: 6, tax_type: 'Documentary Stamp Tax', tax_period: '2026-05', due_date: '2026-06-05', amount: 9200, status: 'Paid', payment_date: '2026-06-03', reference_number: 'BIR-DST-0605', remarks: '', created_by: 1, is_archived: true, archived_at: '2026-07-20T11:00:00', archived_by: 1, created_at: '2026-05-15T09:00:00', updated_at: '2026-07-20T11:00:00' },
-]
-
 const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
 const PANEL_PAD = 'p-4'
-
-// bg-surface + !text-ink (Tailwind important) instead of bg-bg/text-ink, so this
-// can't lose a specificity fight against a parent panel's own background/text
-// tinting. INPUT_TEXT_STYLE + outline:'none' are the belt-and-suspenders layer.
 const INPUT = `w-full h-9 px-3 rounded-lg border border-border bg-surface !text-ink
   placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary
   transition-all duration-150`
 const INPUT_TEXT_STYLE = { color: 'var(--color-ink, #0f172a)', caretColor: 'var(--color-ink, #0f172a)', outline: 'none' }
-
-// Search field — same rounded-lg box/height as the filter dropdowns (not a pill),
-// just with left padding for the icon.
 const SEARCH_INPUT = `w-full h-9 pl-9 pr-3 rounded-lg border border-border bg-surface !text-ink
   placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary
   transition-all duration-150`
-
 const LABEL = 'block text-xs font-medium text-muted mb-1.5'
 
 const STATUS_STYLES = {
@@ -138,13 +113,13 @@ function daysUntil(dueDate) {
   return Math.round((due - today) / 86400000)
 }
 
-// AUTOMATION: derived status. "Overdue" is never stored on the record — it is
-// calculated every render from today's date vs. due_date, so a Pending item
-// automatically flips to Overdue the moment it passes its deadline with no
-// manual step required. Paid records are never reclassified.
-function deriveStatus(record) {
-  if (record.status === 'Paid') return 'Paid'
-  return daysUntil(record.due_date) < 0 ? 'Overdue' : 'Pending'
+// Masks a formatted currency string down to just the peso sign + dots,
+// e.g. "₱84,500.00" -> "₱••••••". Same masking philosophy as the
+// contact-number/account-number masking on Collectors/CashAccounts,
+// applied here to money instead of digits-you-could-dial.
+function maskCurrency(formatted) {
+  if (!formatted) return formatted
+  return formatted.replace(/[0-9.,]/g, '•')
 }
 
 function DetailRow({ label, value }) {
@@ -157,10 +132,14 @@ function DetailRow({ label, value }) {
 }
 
 export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['Compliance', 'Tax Obligations'] }) {
-  const [obligations, setObligations] = useState(initialTaxObligations)
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [showArchived, setShowArchived] = useState(false)
+  const {
+    obligations, meta, loading, saving, error,
+    search, setSearch,
+    statusFilter, setStatusFilter,
+    showArchived, setShowArchived,
+    page, setPage,
+    createObligation, updateObligation, archiveObligation, restoreObligation,
+  } = useTaxObligations()
 
   const [modalMode, setModalMode] = useState(null)
   const [form, setForm] = useState(buildEmptyForm)
@@ -168,43 +147,25 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
   const [detailRecord, setDetailRecord] = useState(null)
   const [refTouched, setRefTouched] = useState(false)
 
-  // Every obligation carries its live, automatically-derived status alongside the raw record
-  const withDerivedStatus = useMemo(
-    () => obligations.map((o) => ({ ...o, derivedStatus: deriveStatus(o) })),
-    [obligations]
-  )
-
-  const filtered = useMemo(() => {
-    return withDerivedStatus.filter((o) => {
-      if (!showArchived && o.is_archived) return false
-      if (showArchived && !o.is_archived) return false
-      if (statusFilter !== 'all' && o.derivedStatus !== statusFilter) return false
-      const q = search.toLowerCase()
-      if (search && !o.tax_type.toLowerCase().includes(q) && !o.tax_period.toLowerCase().includes(q) && !(o.reference_number || '').toLowerCase().includes(q)) {
-        return false
-      }
-      return true
+  // Per-row "reveal amount" toggle — masked by default everywhere a
+  // money figure shows (table + detail modal), same pattern as the
+  // phone/account-number masking on Collectors/CashAccounts.
+  const [revealedIds, setRevealedIds] = useState(new Set())
+  const toggleReveal = (id) => {
+    setRevealedIds((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
     })
-  }, [withDerivedStatus, search, statusFilter, showArchived])
-
-  const stats = useMemo(() => {
-    const active = withDerivedStatus.filter((o) => !o.is_archived)
-    return {
-      total: active.length,
-      paid: active.filter((o) => o.derivedStatus === 'Paid').length,
-      overdue: active.filter((o) => o.derivedStatus === 'Overdue').length,
-      dueAmount: active.filter((o) => o.derivedStatus !== 'Paid').reduce((sum, o) => sum + o.amount, 0),
-      archived: withDerivedStatus.filter((o) => o.is_archived).length,
-    }
-  }, [withDerivedStatus])
-
-  const toggleArchive = (id) => {
-    setObligations((prev) => prev.map((o) => {
-      if (o.tax_id !== id) return o
-      const nextArchived = !o.is_archived
-      return { ...o, is_archived: nextArchived, archived_at: nextArchived ? new Date().toISOString() : null, archived_by: nextArchived ? 1 : null, updated_at: new Date().toISOString() }
-    }))
   }
+
+  // Page-scoped — meta.total (Total Obligations card) is the one
+  // accurate global number; see Collectors.jsx for the same caveat.
+  const pageStats = useMemo(() => ({
+    paid: obligations.filter((o) => o.status === 'Paid').length,
+    overdue: obligations.filter((o) => o.status === 'Overdue').length,
+    dueAmount: obligations.filter((o) => o.status !== 'Paid').reduce((sum, o) => sum + o.amount, 0),
+  }), [obligations])
 
   // AUTOMATION: changing tax type or period recomputes tax_period + due_date
   // together — the person never types either one directly.
@@ -213,7 +174,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
       const next = { ...f, ...patch }
       const { tax_period, due_date } = computePeriodAndDue(next.tax_type, next.period_year, next.period_month, next.period_quarter)
       const nextForm = { ...next, tax_period, due_date }
-      // Keep the reference-number suggestion in sync until the person edits it themselves
+      if (patch.tax_type) nextForm.tax_rate = TAX_TYPE_CONFIG[patch.tax_type].defaultRate
       if (nextForm.is_paid && !refTouched) nextForm.reference_number = suggestReference(nextForm.tax_type, nextForm.due_date)
       return nextForm
     })
@@ -224,7 +185,8 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
     const { period_year, period_month, period_quarter } = parsePeriod(o.tax_type, o.tax_period)
     setForm({
       tax_type: o.tax_type, period_year, period_month, period_quarter,
-      tax_period: o.tax_period, due_date: o.due_date, amount: o.amount,
+      tax_period: o.tax_period, due_date: o.due_date,
+      tax_rate: o.tax_rate, taxable_amount: o.taxable_amount,
       is_paid: o.status === 'Paid', payment_date: o.payment_date || '', reference_number: o.reference_number || '', remarks: o.remarks || '',
     })
     setFormError('')
@@ -246,10 +208,15 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
     })
   }
 
-  const handleSubmit = (e) => {
+  // Live-computed preview only — the authoritative tax_amount is always
+  // recalculated server-side in TaxObligationService from the same two
+  // inputs, so this can never drift from what actually gets saved.
+  const computedTaxAmount = (Number(form.taxable_amount) || 0) * (Number(form.tax_rate) || 0) / 100
+
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!form.amount) {
-      setFormError('Amount is required.')
+    if (!form.taxable_amount) {
+      setFormError('Taxable amount is required.')
       return
     }
     if (form.is_paid && !form.payment_date) {
@@ -260,19 +227,21 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
       tax_type: form.tax_type,
       tax_period: form.tax_period,
       due_date: form.due_date,
-      amount: Number(form.amount) || 0,
-      status: form.is_paid ? 'Paid' : 'Pending',
+      tax_rate: Number(form.tax_rate) || 0,
+      taxable_amount: Number(form.taxable_amount) || 0,
+      is_paid: form.is_paid,
       payment_date: form.is_paid ? form.payment_date : null,
-      reference_number: form.is_paid ? form.reference_number : '',
+      reference_number: form.is_paid ? form.reference_number : null,
       remarks: form.remarks,
     }
-    const now = new Date().toISOString()
-    if (modalMode === 'add') {
-      const nextId = Math.max(0, ...obligations.map((o) => o.tax_id)) + 1
-      setObligations((prev) => [...prev, { tax_id: nextId, ...payload, created_by: 1, is_archived: false, archived_at: null, archived_by: null, created_at: now, updated_at: now }])
-    } else if (modalMode) {
-      const editingId = modalMode.tax_id
-      setObligations((prev) => prev.map((o) => (o.tax_id === editingId ? { ...o, ...payload, updated_at: now } : o)))
+
+    const result = modalMode === 'add'
+      ? await createObligation(payload)
+      : await updateObligation(modalMode.tax_id, payload)
+
+    if (!result.success) {
+      setFormError(result.message)
+      return
     }
     closeModal()
   }
@@ -280,13 +249,14 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
   const handlePrint = (o) => {
     const win = window.open('', '_blank', 'width=800,height=900')
     if (!win) return
-    const status = deriveStatus(o)
     const rows = [
       ['Tax Type', o.tax_type],
       ['Tax Period', o.tax_period],
       ['Due Date', formatDate(o.due_date)],
+      ['Taxable Amount', formatCurrency(o.taxable_amount)],
+      ['Tax Rate', `${o.tax_rate}%`],
       ['Amount', formatCurrency(o.amount)],
-      ['Status', status],
+      ['Status', o.status],
       ...(o.payment_date ? [['Payment Date', formatDate(o.payment_date)]] : []),
       ...(o.reference_number ? [['Reference No.', o.reference_number]] : []),
       ...(o.remarks ? [['Remarks', o.remarks]] : []),
@@ -313,7 +283,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
         <body>
           <div class="header">
             <div><h1>${o.tax_type}</h1><p>Period: ${o.tax_period}</p></div>
-            <span class="status">${status}</span>
+            <span class="status">${o.status}</span>
           </div>
           <table>${rows.map(([label, value]) => `<tr><td>${label}</td><td>${value}</td></tr>`).join('')}</table>
           <div class="footer">Printed on ${formatDateTime(new Date().toISOString())}</div>
@@ -326,10 +296,10 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
   }
 
   const statCards = [
-    { key: 'total', label: 'Total Obligations', value: stats.total, icon: Receipt, iconBg: 'bg-primary/15', iconColor: 'text-primary-dark', isActive: statusFilter === 'all' && !showArchived, onClick: () => { setStatusFilter('all'); setShowArchived(false) } },
-    { key: 'paid', label: 'Paid', value: stats.paid, icon: CheckCircle2, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: statusFilter === 'Paid' && !showArchived, onClick: () => { setStatusFilter('Paid'); setShowArchived(false) } },
-    { key: 'overdue', label: 'Overdue', value: stats.overdue, icon: AlertTriangle, iconBg: 'bg-red-50 dark:bg-red-500/10', iconColor: 'text-red-600 dark:text-red-400', isActive: statusFilter === 'Overdue' && !showArchived, onClick: () => { setStatusFilter('Overdue'); setShowArchived(false) } },
-    { key: 'due', label: 'Total Amount Due', value: formatCurrency(stats.dueAmount), icon: Clock3, iconBg: 'bg-amber-50 dark:bg-amber-500/10', iconColor: 'text-amber-600 dark:text-amber-400', isActive: false, onClick: () => {} },
+    { key: 'total', label: 'Total Obligations', value: meta.total, icon: Receipt, iconBg: 'bg-primary/15', iconColor: 'text-primary-dark', isActive: statusFilter === 'all' && !showArchived, onClick: () => { setStatusFilter('all'); setShowArchived(false) } },
+    { key: 'paid', label: 'Paid (this page)', value: pageStats.paid, icon: CheckCircle2, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: statusFilter === 'Paid' && !showArchived, onClick: () => { setStatusFilter('Paid'); setShowArchived(false) } },
+    { key: 'overdue', label: 'Overdue (this page)', value: pageStats.overdue, icon: AlertTriangle, iconBg: 'bg-red-50 dark:bg-red-500/10', iconColor: 'text-red-600 dark:text-red-400', isActive: statusFilter === 'Overdue' && !showArchived, onClick: () => { setStatusFilter('Overdue'); setShowArchived(false) } },
+    { key: 'due', label: 'Amount Due (this page)', value: formatCurrency(pageStats.dueAmount), icon: Clock3, iconBg: 'bg-amber-50 dark:bg-amber-500/10', iconColor: 'text-amber-600 dark:text-amber-400', isActive: false, onClick: () => {} },
   ]
 
   const isModalOpen = modalMode !== null
@@ -350,6 +320,10 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
         </div>
         <Button variant="primary" size="sm" icon={Plus} onClick={openAdd}>Add Obligation</Button>
       </div>
+
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{error}</div>
+      )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {statCards.map((card) => {
@@ -413,8 +387,15 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
               </tr>
             </thead>
             <tbody>
-              {filtered.map((o) => {
+              {loading && (
+                <tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-muted">
+                  <Loader2 size={16} className="inline animate-spin mr-2" /> Loading tax obligations…
+                </td></tr>
+              )}
+              {!loading && obligations.map((o) => {
                 const remaining = daysUntil(o.due_date)
+                const revealed = revealedIds.has(o.tax_id)
+                const formattedAmount = formatCurrency(o.amount)
                 return (
                   <tr key={o.tax_id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
                     <td className="px-4 py-3.5">
@@ -423,15 +404,27 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
                       <p className="text-ink">{formatDate(o.due_date)}</p>
-                      {o.derivedStatus !== 'Paid' && (
+                      {o.status !== 'Paid' && (
                         <p className={`text-xs ${remaining < 0 ? 'text-red-500' : 'text-muted'}`}>
                           {remaining < 0 ? `${Math.abs(remaining)} day${Math.abs(remaining) === 1 ? '' : 's'} overdue` : remaining === 0 ? 'Due today' : `Due in ${remaining} day${remaining === 1 ? '' : 's'}`}
                         </p>
                       )}
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap font-medium tabular-nums text-ink">{formatCurrency(o.amount)}</td>
+                    <td className="px-4 py-3.5 whitespace-nowrap font-medium tabular-nums text-ink">
+                      <span className="inline-flex items-center gap-1.5">
+                        {revealed ? formattedAmount : maskCurrency(formattedAmount)}
+                        <button
+                          type="button"
+                          onClick={() => toggleReveal(o.tax_id)}
+                          aria-label={revealed ? 'Hide amount' : 'Show amount'}
+                          className="shrink-0 text-muted hover:text-ink transition-colors duration-150"
+                        >
+                          {revealed ? <EyeOff size={13} /> : <Eye size={13} />}
+                        </button>
+                      </span>
+                    </td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[o.derivedStatus]}`}>{o.derivedStatus}</span>
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[o.status]}`}>{o.status}</span>
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap text-right">
                       <div className="flex items-center justify-end gap-1">
@@ -450,9 +443,13 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                             <Pencil size={15} />
                           </button>
                         </Tooltip>
-                        <Tooltip label={o.is_archived ? 'Restore obligation' : 'Archive obligation'} align="end">
-                          <button type="button" onClick={() => toggleArchive(o.tax_id)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                            {o.is_archived ? <RotateCcw size={15} /> : <Archive size={15} />}
+                        <Tooltip label={showArchived ? 'Restore obligation' : 'Archive obligation'} align="end">
+                          <button
+                            type="button"
+                            onClick={() => (showArchived ? restoreObligation(o.tax_id) : archiveObligation(o.tax_id))}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
+                          >
+                            {showArchived ? <RotateCcw size={15} /> : <Archive size={15} />}
                           </button>
                         </Tooltip>
                       </div>
@@ -460,12 +457,26 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                   </tr>
                 )
               })}
-              {filtered.length === 0 && (
+              {!loading && obligations.length === 0 && (
                 <tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-muted">No tax obligations match your filters.</td></tr>
               )}
             </tbody>
           </table>
         </div>
+
+        {meta.last_page > 1 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-border text-xs text-muted">
+            <span>Page {meta.current_page} of {meta.last_page} &middot; {meta.total} total</span>
+            <div className="flex items-center gap-1">
+              <button type="button" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-bg disabled:opacity-40 disabled:pointer-events-none transition-colors duration-150">
+                <ChevronLeft size={14} />
+              </button>
+              <button type="button" disabled={page >= meta.last_page} onClick={() => setPage((p) => p + 1)} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-bg disabled:opacity-40 disabled:pointer-events-none transition-colors duration-150">
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <Modal
@@ -475,7 +486,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
         footer={
           <>
             <Button variant="secondary" size="md" onClick={closeModal}>Cancel</Button>
-            <Button variant="primary" size="md" onClick={handleSubmit}>{isEditing ? 'Save Changes' : 'Add Obligation'}</Button>
+            <Button variant="primary" size="md" onClick={handleSubmit} disabled={saving}>{saving ? 'Saving…' : isEditing ? 'Save Changes' : 'Add Obligation'}</Button>
           </>
         }
       >
@@ -491,7 +502,6 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
             </select>
           </div>
 
-          {/* AUTOMATION: pick a period, not a period string — tax_period and due_date are derived */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={LABEL}>Year</label>
@@ -535,9 +545,23 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
             </div>
           </div>
 
-          <div>
-            <label className={LABEL}>Amount</label>
-            <input type="number" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="0.00" />
+          {/* Taxable amount + rate are the real ERD inputs — tax_amount
+              (shown as "Amount" elsewhere) is always derived from these
+              two, both here for preview and again server-side as the
+              value of record. */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={LABEL}>Taxable Amount</label>
+              <input type="number" value={form.taxable_amount} onChange={(e) => setForm((f) => ({ ...f, taxable_amount: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="0.00" />
+            </div>
+            <div>
+              <label className={LABEL}>Tax Rate (%)</label>
+              <input type="number" step="0.01" value={form.tax_rate} onChange={(e) => setForm((f) => ({ ...f, tax_rate: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="12" />
+            </div>
+          </div>
+          <div className="rounded-lg border border-border bg-bg px-3 py-2 flex items-center justify-between">
+            <span className="text-xs text-muted">Computed tax amount</span>
+            <span className="text-sm font-semibold text-ink tabular-nums">{formatCurrency(computedTaxAmount)}</span>
           </div>
 
           <label className="flex items-center gap-2 text-sm text-ink cursor-pointer">
@@ -574,12 +598,12 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
           {isEditing && (
             <div className="rounded-lg border border-border bg-bg px-3 py-2.5">
               <p className="text-xs font-medium text-muted mb-1">Record Info (read-only)</p>
-              <DetailRow label="Created by" value={userName(modalMode.created_by)} />
+              <DetailRow label="Created by" value={modalMode.created_by_name || '—'} />
               <DetailRow label="Created at" value={formatDateTime(modalMode.created_at)} />
               <DetailRow label="Last updated" value={formatDateTime(modalMode.updated_at)} />
               {modalMode.is_archived && (
                 <>
-                  <DetailRow label="Archived by" value={userName(modalMode.archived_by)} />
+                  <DetailRow label="Archived by" value={modalMode.archived_by_name || '—'} />
                   <DetailRow label="Archived at" value={formatDateTime(modalMode.archived_at)} />
                 </>
               )}
@@ -606,12 +630,22 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                 <p className="text-sm font-semibold text-ink">{detailRecord.tax_type}</p>
                 <p className="text-xs text-muted">{detailRecord.tax_period}</p>
               </div>
-              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[deriveStatus(detailRecord)]}`}>{deriveStatus(detailRecord)}</span>
+              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[detailRecord.status]}`}>{detailRecord.status}</span>
             </div>
             <div className="rounded-lg border border-border divide-y divide-border">
               <div className="px-3 py-2">
                 <DetailRow label="Due Date" value={formatDate(detailRecord.due_date)} />
-                <DetailRow label="Amount" value={formatCurrency(detailRecord.amount)} />
+                <DetailRow label="Taxable Amount" value={revealedIds.has(detailRecord.tax_id) ? formatCurrency(detailRecord.taxable_amount) : maskCurrency(formatCurrency(detailRecord.taxable_amount))} />
+                <DetailRow label="Tax Rate" value={`${detailRecord.tax_rate}%`} />
+                <DetailRow
+                  label="Amount"
+                  value={
+                    <button type="button" onClick={() => toggleReveal(detailRecord.tax_id)} className="inline-flex items-center gap-1.5 hover:text-primary-dark transition-colors duration-150">
+                      {revealedIds.has(detailRecord.tax_id) ? formatCurrency(detailRecord.amount) : maskCurrency(formatCurrency(detailRecord.amount))}
+                      {revealedIds.has(detailRecord.tax_id) ? <EyeOff size={12} /> : <Eye size={12} />}
+                    </button>
+                  }
+                />
               </div>
               <div className="px-3 py-2">
                 <DetailRow label="Payment Date" value={formatDate(detailRecord.payment_date)} />
@@ -621,13 +655,13 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                 <DetailRow label="Remarks" value={detailRecord.remarks || '—'} />
               </div>
               <div className="px-3 py-2">
-                <DetailRow label="Created by" value={userName(detailRecord.created_by)} />
+                <DetailRow label="Created by" value={detailRecord.created_by_name || '—'} />
                 <DetailRow label="Created at" value={formatDateTime(detailRecord.created_at)} />
                 <DetailRow label="Updated at" value={formatDateTime(detailRecord.updated_at)} />
                 <DetailRow label="Archived" value={detailRecord.is_archived ? 'Yes' : 'No'} />
                 {detailRecord.is_archived && (
                   <>
-                    <DetailRow label="Archived by" value={userName(detailRecord.archived_by)} />
+                    <DetailRow label="Archived by" value={detailRecord.archived_by_name || '—'} />
                     <DetailRow label="Archived at" value={formatDateTime(detailRecord.archived_at)} />
                   </>
                 )}

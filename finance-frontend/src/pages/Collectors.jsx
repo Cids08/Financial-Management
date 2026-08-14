@@ -1,13 +1,14 @@
-import { useState } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, UserCheck, UserX, Phone, Mail, MapPin, Target, Eye, EyeOff, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Search, Plus, Pencil, Archive, RotateCcw, UserCheck, UserX, Phone, Mail, MapPin, Target, Eye, EyeOff, ChevronLeft, ChevronRight, Loader2, BarChart3 } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
 import { formatCurrency } from '../utils/formatters'
-import { useCollectors } from '../hooks/UseCollectors'
+import { apiFetch } from '../utils/api'
+import { useCollectors } from '../hooks/useCollectors'
 
-const EMPTY_FORM = { employee_no: '', first_name: '', last_name: '', email: '', contact_no: '', assigned_area: '', monthly_target: '', commission_rate: '', is_active: true }
+const EMPTY_FORM = { employee_no: '', first_name: '', last_name: '', email: '', contact_no: '', assigned_area: '', service_area_id: '', monthly_target: '', commission_rate: '', is_active: true }
 
 const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
 const PANEL_PAD = 'p-4'
@@ -21,25 +22,129 @@ const STATUS_STYLES = {
   false: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
 }
 
+const PERIODS = [
+  { key: 'day', label: 'Day' },
+  { key: 'week', label: 'Week' },
+  { key: 'month', label: 'Month' },
+  { key: 'year', label: 'Year' },
+]
+
 function initials(first, last) {
   return `${first?.[0] ?? ''}${last?.[0] ?? ''}`.toUpperCase()
 }
 
-// Keeps dashes/spacing but replaces all but the last 4 characters with dots
+// Full mask, not partial — keeps dashes/spaces as visual separators but
+// replaces every other character, and email is a fixed-length placeholder
+// regardless of the real address. A partial mask (last 4 digits visible)
+// leaks information on a short list; this doesn't.
 function maskValue(value) {
   if (!value) return ''
-  const visibleCount = 4
-  const chars = value.split('')
-  let visibleLeft = visibleCount
-  for (let i = chars.length - 1; i >= 0; i--) {
-    if (chars[i] === '-' || chars[i] === ' ') continue
-    if (visibleLeft > 0) {
-      visibleLeft--
-    } else {
-      chars[i] = '•'
-    }
-  }
-  return chars.join('')
+  return value
+    .split('')
+    .map((ch) => (ch === '-' || ch === ' ' ? ch : '•'))
+    .join('')
+}
+
+function maskEmail(value) {
+  if (!value) return ''
+  return '•'.repeat(10)
+}
+
+/**
+ * /api/service-areas doesn't have its own hook yet — this is a plain
+ * fetch-on-mount, same lightweight pattern used for the budget/category
+ * lookups on the Expenses page.
+ */
+function useServiceAreas() {
+  const [areas, setAreas] = useState([])
+
+  useEffect(() => {
+    let cancelled = false
+    apiFetch('/api/service-areas')
+      .then((res) => res.json())
+      .then((json) => { if (!cancelled && json.success) setAreas(json.data) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+
+  return areas
+}
+
+function EfficiencyModal({ collector, onClose, getEfficiency }) {
+  const [period, setPeriod] = useState('month')
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!collector) return
+    let cancelled = false
+    setLoading(true)
+    setError('')
+    getEfficiency(collector.collector_id, period).then((result) => {
+      if (cancelled) return
+      if (result.success) setRows(result.data)
+      else setError(result.message)
+      setLoading(false)
+    })
+    return () => { cancelled = true }
+  }, [collector, period, getEfficiency])
+
+  return (
+    <Modal
+      open={!!collector}
+      onClose={onClose}
+      title={collector ? `Efficiency — ${collector.first_name} ${collector.last_name}` : 'Efficiency'}
+      footer={<Button variant="secondary" size="md" onClick={onClose}>Close</Button>}
+    >
+      <div className="space-y-4">
+        <div className="flex gap-1.5">
+          {PERIODS.map((p) => (
+            <button
+              key={p.key}
+              type="button"
+              onClick={() => setPeriod(p.key)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors duration-150
+                ${period === p.key ? 'bg-primary text-white' : 'bg-bg text-muted hover:text-ink'}`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+
+        {error && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{error}</div>
+        )}
+
+        {loading ? (
+          <p className="text-xs text-muted py-6 text-center">Loading…</p>
+        ) : rows.length === 0 ? (
+          <p className="text-xs text-muted py-6 text-center">No confirmed collections in this range yet.</p>
+        ) : (
+          <div className="rounded-lg border border-border divide-y divide-border max-h-80 overflow-y-auto">
+            {rows.map((r) => (
+              <div key={r.period} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                <div>
+                  <p className="text-xs font-medium text-ink">{r.period}</p>
+                  <p className="text-[11px] text-muted">{formatCurrency(r.collected)} of {formatCurrency(r.target)} target</p>
+                </div>
+                <span
+                  className={`shrink-0 inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold
+                    ${r.efficiency >= 100
+                      ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400'
+                      : r.efficiency >= 70
+                        ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400'
+                        : 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400'}`}
+                >
+                  {r.efficiency}%
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Modal>
+  )
 }
 
 export default function Collectors({ title = 'Collectors', crumbs = ['Master Data', 'Collectors'] }) {
@@ -50,12 +155,19 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
     showArchived, setShowArchived,
     page, setPage,
     createCollector, updateCollector, archiveCollector, restoreCollector,
+    getEfficiency,
   } = useCollectors()
+
+  const serviceAreas = useServiceAreas()
 
   const [modalMode, setModalMode] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [formError, setFormError] = useState('')
+  const [efficiencyTarget, setEfficiencyTarget] = useState(null)
 
+  // Controls visibility of email + employee no. + contact no. together
+  // per row — masked by default, revealed only when the eye icon is
+  // clicked, same pattern as Customers/Suppliers/Users.
   const [revealedIds, setRevealedIds] = useState(new Set())
   const toggleReveal = (id) => {
     setRevealedIds((prev) => {
@@ -83,6 +195,7 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
       email: c.email || '',
       contact_no: c.contact_no || '',
       assigned_area: c.assigned_area || '',
+      service_area_id: c.service_area_id || '',
       monthly_target: c.monthly_target,
       commission_rate: c.commission_rate,
       is_active: c.is_active,
@@ -106,6 +219,7 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
       email: form.email || null,
       phone_number: form.contact_no || null, // frontend "contact_no" -> backend "phone_number"
       assigned_area: form.assigned_area || null,
+      service_area_id: form.service_area_id ? Number(form.service_area_id) : null,
       monthly_target: Number(form.monthly_target) || 0,
       commission_rate: Number(form.commission_rate) || 0,
       is_active: form.is_active === true || form.is_active === 'true',
@@ -220,27 +334,29 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
                             initials(c.first_name, c.last_name)
                           )}
                         </div>
-                        <div className="min-w-0">
-                          <p className="truncate font-medium text-ink">{c.first_name} {c.last_name}</p>
-                          <p className="truncate text-xs text-muted font-mono">{c.employee_no}</p>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <p className="truncate font-medium text-ink">{c.first_name} {c.last_name}</p>
+                            <button
+                              type="button"
+                              onClick={() => toggleReveal(c.collector_id)}
+                              aria-label={revealed ? 'Hide contact details' : 'Show contact details'}
+                              className="shrink-0 text-muted hover:text-ink transition-colors duration-150"
+                            >
+                              {revealed ? <EyeOff size={13} /> : <Eye size={13} />}
+                            </button>
+                          </div>
+                          <p className="truncate text-xs text-muted font-mono">{revealed ? c.employee_no : maskValue(c.employee_no)}</p>
                           {c.email && (
-                            <p className="truncate text-xs text-muted flex items-center gap-1"><Mail size={11} /> {c.email}</p>
+                            <p className="truncate text-xs text-muted flex items-center gap-1"><Mail size={11} /> {revealed ? c.email : maskEmail(c.email)}</p>
                           )}
                         </div>
                       </div>
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
-                      <span className="flex items-center gap-1.5 text-xs text-ink"><MapPin size={12} className="text-muted" /> {c.assigned_area}</span>
+                      <span className="flex items-center gap-1.5 text-xs text-ink"><MapPin size={12} className="text-muted" /> {c.service_area_name || c.assigned_area || '—'}</span>
                       <span className="mt-0.5 flex items-center gap-1.5 text-xs text-muted font-mono">
                         <Phone size={11} className="shrink-0" /> {revealed ? c.contact_no : maskValue(c.contact_no)}
-                        <button
-                          type="button"
-                          onClick={() => toggleReveal(c.collector_id)}
-                          aria-label={revealed ? 'Hide contact number' : 'Show contact number'}
-                          className="shrink-0 text-muted hover:text-ink transition-colors duration-150"
-                        >
-                          {revealed ? <EyeOff size={12} /> : <Eye size={12} />}
-                        </button>
                       </span>
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap font-medium tabular-nums text-ink">{formatCurrency(c.monthly_target)}</td>
@@ -254,6 +370,11 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap text-right">
                       <div className="flex items-center justify-end gap-1">
+                        <Tooltip label="View efficiency" align="start">
+                          <button type="button" onClick={() => setEfficiencyTarget(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                            <BarChart3 size={15} />
+                          </button>
+                        </Tooltip>
                         <Tooltip label="Edit collector" align="start">
                           <button type="button" onClick={() => openEdit(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                             <Pencil size={15} />
@@ -334,9 +455,18 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
             <label className={LABEL}>Email</label>
             <input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className={INPUT} placeholder="ramon.torres@alibaton.test" />
           </div>
-          <div>
-            <label className={LABEL}>Assigned Area</label>
-            <input type="text" value={form.assigned_area} onChange={(e) => setForm((f) => ({ ...f, assigned_area: e.target.value }))} className={INPUT} placeholder="Quezon City" />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={LABEL}>Service Area</label>
+              <select value={form.service_area_id} onChange={(e) => setForm((f) => ({ ...f, service_area_id: e.target.value }))} className={INPUT}>
+                <option value="">Unassigned</option>
+                {serviceAreas.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={LABEL}>Assigned Area (legacy label)</label>
+              <input type="text" value={form.assigned_area} onChange={(e) => setForm((f) => ({ ...f, assigned_area: e.target.value }))} className={INPUT} placeholder="Quezon City" />
+            </div>
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
@@ -357,6 +487,8 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
           </div>
         </form>
       </Modal>
+
+      <EfficiencyModal collector={efficiencyTarget} onClose={() => setEfficiencyTarget(null)} getEfficiency={getEfficiency} />
     </div>
   )
 }

@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\UserService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class UserController extends Controller
 {
@@ -32,7 +33,11 @@ class UserController extends Controller
 
     public function store(StoreUserRequest $request): JsonResponse
     {
-        $user = $this->userService->create($request->user(), $request->validated());
+        try {
+            $user = $this->userService->create($request->user(), $request->validated());
+        } catch (ValidationException $e) {
+            return $this->guardFailureResponse($e);
+        }
 
         return response()->json([
             'success' => true,
@@ -43,7 +48,11 @@ class UserController extends Controller
 
     public function update(UpdateUserRequest $request, User $user): JsonResponse
     {
-        $user = $this->userService->update($request->user(), $user, $request->validated());
+        try {
+            $user = $this->userService->update($request->user(), $user, $request->validated());
+        } catch (ValidationException $e) {
+            return $this->guardFailureResponse($e);
+        }
 
         return response()->json([
             'success' => true,
@@ -54,7 +63,11 @@ class UserController extends Controller
 
     public function archive(Request $request, User $user): JsonResponse
     {
-        $this->userService->archive($request->user(), $user);
+        try {
+            $this->userService->archive($request->user(), $user);
+        } catch (ValidationException $e) {
+            return $this->guardFailureResponse($e);
+        }
 
         return response()->json([
             'success' => true,
@@ -72,5 +85,21 @@ class UserController extends Controller
             'success' => true,
             'message' => 'User restored successfully.',
         ]);
+    }
+
+    /**
+     * Account-safety guard failures (last-super-admin, self-lockout) are
+     * business-rule violations, not malformed input — still surfaced as
+     * 422 with the standard {success,message,data} shape so the frontend's
+     * existing formError handling in useUsers/Users.jsx picks them up
+     * without any special-casing.
+     */
+    protected function guardFailureResponse(ValidationException $e): JsonResponse
+    {
+        return response()->json([
+            'success' => false,
+            'message' => collect($e->errors())->flatten()->first(),
+            'data'    => null,
+        ], 422);
     }
 }

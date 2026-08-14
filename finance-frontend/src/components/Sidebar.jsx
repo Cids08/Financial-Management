@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Landmark, ChevronsLeft, ChevronsRight, ChevronUp, ChevronDown } from 'lucide-react'
 import { menuData } from '../utils/menuData'
+import { filterMenuByPermissions } from '../utils/permissions'
 import { useCompany } from '../context/CompanyContext'
+import { usePermissions } from '../context/PermissionsContext'
 import SidebarItem from './SidebarItem'
 
 // Account-level actions live in a pinned footer, not the scrollable work nav
@@ -13,8 +15,17 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
   const [canScrollDown, setCanScrollDown] = useState(false)
   const { name, tagline, logoUrl } = useCompany()
 
-  const mainItems = menuData.filter((item) => !FOOTER_IDS.includes(item.id))
-  const footerItems = menuData.filter((item) => FOOTER_IDS.includes(item.id))
+  // THE FIX: filterMenuByPermissions() expects a flat array of
+  // permission_name strings (e.g. ['users.view', 'ap.manage']) — exactly
+  // what GET /api/me/permissions returns via usePermissions(). The
+  // previous version passed useAuth()'s `user` object here instead, which
+  // has no .includes() method, so every gated item's hasPermission() check
+  // failed and only ungated items (Dashboard, Settings, Logout) survived.
+  const { permissions } = usePermissions()
+
+  const visibleMenuData = filterMenuByPermissions(menuData, permissions)
+  const mainItems = visibleMenuData.filter((item) => !FOOTER_IDS.includes(item.id))
+  const footerItems = visibleMenuData.filter((item) => FOOTER_IDS.includes(item.id))
 
   const updateScrollState = () => {
     const el = navRef.current

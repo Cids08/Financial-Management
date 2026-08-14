@@ -10,10 +10,8 @@ import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
 import { formatCurrency } from '../utils/formatters'
+import { useForecasts } from '../hooks/useForecasts'
 
-// Mirrors the `financial_forecasts` table in the schema:
-// forecast_id, forecast_type, forecast_period, historical_period, predicted_amount,
-// confidence_level, arima_model, mape, generated_by, generated_at
 const FORECAST_TYPES = ['Cash Flow', 'Revenue', 'Collections', 'Expenses', 'Accounts Receivable']
 
 const TYPE_STYLES = {
@@ -24,84 +22,33 @@ const TYPE_STYLES = {
   'Accounts Receivable': 'bg-purple-50 text-purple-600 dark:bg-purple-500/10 dark:text-purple-400',
 }
 
-const GENERATORS = { 101: 'Maria Santos', 102: 'Ramon Torres', 103: 'System (Scheduled)' }
-
 const HIGH_CONFIDENCE_THRESHOLD = 80
 const LOW_ERROR_THRESHOLD = 8
-
-function buildSeries(base, months, growth, volatility, predictedMonths, predictedAmount) {
-  const series = []
-  let value = base
-  for (let i = 0; i < months; i++) {
-    value = value * (1 + growth) + (Math.sin(i * 1.3) * volatility)
-    series.push({ label: `H${i + 1}`, historical: Math.round(value), predicted: null })
-  }
-  const lastHistorical = series[series.length - 1].historical
-  series[series.length - 1].predicted = lastHistorical
-  const step = (predictedAmount - lastHistorical) / predictedMonths
-  for (let i = 1; i <= predictedMonths; i++) {
-    series.push({ label: `P${i}`, historical: null, predicted: Math.round(lastHistorical + step * i) })
-  }
-  return series
-}
-
-const initialForecasts = [
-  {
-    forecast_id: 1, forecast_type: 'Cash Flow', forecast_period: 'Q4 2026', historical_period: 'Jan 2025 – Jun 2026',
-    predicted_amount: 1850000, confidence_level: 87, arima_model: 'ARIMA(2,1,2)', mape: 6.4,
-    generated_by: 101, generated_at: '2026-07-21T08:15:00',
-    series: buildSeries(1420000, 8, 0.018, 12000, 3, 1850000),
-  },
-  {
-    forecast_id: 2, forecast_type: 'Revenue', forecast_period: 'Q4 2026', historical_period: 'Jan 2025 – Jun 2026',
-    predicted_amount: 2360000, confidence_level: 91, arima_model: 'ARIMA(1,1,1)', mape: 4.9,
-    generated_by: 101, generated_at: '2026-07-21T08:20:00',
-    series: buildSeries(1980000, 8, 0.021, 15000, 3, 2360000),
-  },
-  {
-    forecast_id: 3, forecast_type: 'Collections', forecast_period: 'August 2026', historical_period: 'Feb 2026 – Jul 2026',
-    predicted_amount: 495000, confidence_level: 78, arima_model: 'ARIMA(1,0,1)', mape: 9.2,
-    generated_by: 102, generated_at: '2026-07-25T13:05:00',
-    series: buildSeries(410000, 6, 0.012, 9000, 1, 495000),
-  },
-  {
-    forecast_id: 4, forecast_type: 'Expenses', forecast_period: 'August 2026', historical_period: 'Feb 2026 – Jul 2026',
-    predicted_amount: 612000, confidence_level: 82, arima_model: 'ARIMA(1,1,0)', mape: 7.8,
-    generated_by: 103, generated_at: '2026-07-25T13:10:00',
-    series: buildSeries(560000, 6, 0.014, 8000, 1, 612000),
-  },
-  {
-    forecast_id: 5, forecast_type: 'Accounts Receivable', forecast_period: 'Q4 2026', historical_period: 'Jan 2025 – Jun 2026',
-    predicted_amount: 980000, confidence_level: 73, arima_model: 'ARIMA(2,1,0)', mape: 11.3,
-    generated_by: 102, generated_at: '2026-07-28T09:40:00',
-    series: buildSeries(860000, 8, 0.009, 14000, 3, 980000),
-  },
-  {
-    forecast_id: 6, forecast_type: 'Cash Flow', forecast_period: 'FY 2027', historical_period: 'Jan 2024 – Jun 2026',
-    predicted_amount: 8400000, confidence_level: 69, arima_model: 'ARIMA(3,1,2)', mape: 13.5,
-    generated_by: 103, generated_at: '2026-07-29T17:00:00',
-    series: buildSeries(6200000, 10, 0.02, 60000, 4, 8400000),
-  },
-]
 
 const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
 const PANEL_PAD = 'p-4'
 
-// bg-surface + !text-ink (Tailwind important) instead of bg-bg/text-ink, so this
-// can't lose a specificity fight against a parent panel's own background/text
-// tinting. INPUT_TEXT_STYLE + outline:'none' are the belt-and-suspenders layer.
 const INPUT = `w-full h-9 px-3 rounded-lg border border-border bg-surface !text-ink
   placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary
   transition-all duration-150`
 const INPUT_TEXT_STYLE = { color: 'var(--color-ink, #0f172a)', caretColor: 'var(--color-ink, #0f172a)', outline: 'none' }
 
-// Search field — same rounded-lg box/height as the filter dropdowns (not a pill),
-// just with left padding for the icon.
 const SEARCH_INPUT = `w-full h-9 pl-9 pr-3 rounded-lg border border-border bg-surface !text-ink
   placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary
   transition-all duration-150`
 
 const LABEL = 'block text-xs font-medium text-muted mb-1.5'
+
+// Matches FinancialForecastService::HORIZON_LABELS on the backend — the
+// integer `months` per key must line up exactly, since the server derives
+// forecast_period from it.
+const HORIZONS = [
+  { key: 'next_month', label: 'Next Month' },
+  { key: 'next_quarter', label: 'Next Quarter' },
+  { key: 'next_fiscal_year', label: 'Next Fiscal Year' },
+]
+
+const LOADING_STEPS = ['Pulling historical actuals...', 'Fitting ARIMA model...', 'Computing confidence & error margin...']
 
 function formatDateTime(value) {
   if (!value) return '—'
@@ -112,70 +59,6 @@ function confidenceColor(pct) {
   if (pct >= 85) return 'text-emerald-600 dark:text-emerald-400'
   if (pct >= 70) return 'text-amber-600 dark:text-amber-400'
   return 'text-red-600 dark:text-red-400'
-}
-
-const AUTO_ENGINE_PARAMS = {
-  'Cash Flow': { base: 1650000, growth: 0.019, volatility: 14000 },
-  Revenue: { base: 2150000, growth: 0.021, volatility: 15000 },
-  Collections: { base: 460000, growth: 0.013, volatility: 9000 },
-  Expenses: { base: 590000, growth: 0.014, volatility: 8000 },
-  'Accounts Receivable': { base: 900000, growth: 0.010, volatility: 13000 },
-}
-
-function nextMonthLabel(today = new Date()) {
-  const d = new Date(today.getFullYear(), today.getMonth() + 1, 1)
-  return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-}
-function nextQuarterLabel(today = new Date()) {
-  const currentQ = Math.floor(today.getMonth() / 3) + 1
-  let nextQ = currentQ + 1
-  let year = today.getFullYear()
-  if (nextQ > 4) { nextQ = 1; year += 1 }
-  return `Q${nextQ} ${year}`
-}
-function nextFiscalYearLabel(today = new Date()) {
-  return `FY ${today.getFullYear() + 1}`
-}
-function historicalRangeLabel(monthsBack, today = new Date()) {
-  const start = new Date(today.getFullYear(), today.getMonth() - monthsBack + 1, 1)
-  const fmt = (d) => d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
-  return `${fmt(start)} – ${fmt(today)}`
-}
-
-const HORIZONS = [
-  { key: 'next_month', label: 'Next Month', months: 1, lookbackMonths: 6, predictedPoints: 1, periodLabel: nextMonthLabel },
-  { key: 'next_quarter', label: 'Next Quarter', months: 3, lookbackMonths: 8, predictedPoints: 3, periodLabel: nextQuarterLabel },
-  { key: 'next_fiscal_year', label: 'Next Fiscal Year', months: 12, lookbackMonths: 24, predictedPoints: 4, periodLabel: nextFiscalYearLabel },
-]
-
-const LOADING_STEPS = ['Pulling historical actuals...', 'Fitting ARIMA model...', 'Computing confidence & error margin...']
-
-function pickArimaOrder() {
-  const p = Math.floor(Math.random() * 3)
-  const d = Math.floor(Math.random() * 2) + 1
-  const q = Math.floor(Math.random() * 3)
-  return `ARIMA(${p},${d},${q})`
-}
-
-function runAutoForecast(type, horizonKey) {
-  const params = AUTO_ENGINE_PARAMS[type]
-  const horizon = HORIZONS.find((h) => h.key === horizonKey)
-  const noise = 1 + (Math.random() - 0.5) * 0.12
-  const growthFactor = Math.pow(1 + params.growth, horizon.lookbackMonths)
-  const predicted_amount = Math.round(params.base * growthFactor * noise)
-  const horizonPenalty = horizon.months <= 1 ? 0 : horizon.months <= 3 ? 6 : 16
-  const confidence_level = Math.max(60, Math.min(97, Math.round(92 - horizonPenalty - Math.random() * 6)))
-  const mape = Math.max(2, Math.round((3 + horizonPenalty * 0.6 + Math.random() * 3) * 10) / 10)
-  return {
-    forecast_type: type,
-    forecast_period: horizon.periodLabel(),
-    historical_period: historicalRangeLabel(horizon.lookbackMonths),
-    predicted_amount,
-    confidence_level,
-    mape,
-    arima_model: pickArimaOrder(),
-    series: buildSeries(params.base, Math.min(horizon.lookbackMonths, 10), params.growth, params.volatility, horizon.predictedPoints, predicted_amount),
-  }
 }
 
 const StatCard = memo(function StatCard({ label, value, icon: Icon, iconBg, iconColor, isActive, onClick }) {
@@ -205,13 +88,13 @@ const ForecastRow = memo(function ForecastRow({ forecast: f, onViewDetail }) {
       className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150 cursor-pointer"
     >
       <td className="px-4 py-3.5 whitespace-nowrap">
-        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${TYPE_STYLES[f.forecast_type]}`}>{f.forecast_type}</span>
+        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${TYPE_STYLES[f.forecast_type] || 'bg-gray-100 text-muted'}`}>{f.forecast_type}</span>
       </td>
       <td className="px-4 py-3.5 whitespace-nowrap text-ink font-medium">{f.forecast_period}</td>
       <td className="px-4 py-3.5 whitespace-nowrap text-muted">{f.historical_period}</td>
       <td className="px-4 py-3.5 whitespace-nowrap text-right tabular-nums text-ink">{formatCurrency(f.predicted_amount)}</td>
       <td className={`px-4 py-3.5 whitespace-nowrap text-right tabular-nums font-medium ${confidenceColor(f.confidence_level)}`}>{f.confidence_level}%</td>
-      <td className="px-4 py-3.5 whitespace-nowrap text-right tabular-nums text-muted">{f.mape}%</td>
+      <td className="px-4 py-3.5 whitespace-nowrap text-right tabular-nums text-muted">{f.mape != null ? `${f.mape}%` : '—'}</td>
       <td className="px-4 py-3.5 whitespace-nowrap text-muted">{f.arima_model}</td>
       <td className="px-4 py-3.5 whitespace-nowrap text-right">
         <Tooltip label="View forecast trend" align="end">
@@ -229,11 +112,22 @@ const ForecastRow = memo(function ForecastRow({ forecast: f, onViewDetail }) {
   )
 })
 
-const GenerateForecastModal = memo(function GenerateForecastModal({ open, onClose, onGenerate }) {
+/**
+ * Backend note: POST /api/forecasts generates AND persists in one call —
+ * there's no preview-then-save step server-side (unlike the old
+ * client-only version). So here: "Run Auto-Forecast" already saves a real
+ * record. "Regenerate" calls the API again, creating a genuinely NEW
+ * forecast row (not a redo of a draft) — the previous attempt stays in
+ * the list. There's no "Save Forecast" button anymore since there's
+ * nothing left to save; "Done" just closes and the list already reflects
+ * it (the hook refetches after a successful generate).
+ */
+const GenerateForecastModal = memo(function GenerateForecastModal({ open, onClose, generateForecast, generating }) {
   const [phase, setPhase] = useState('setup')
   const [forecastType, setForecastType] = useState(FORECAST_TYPES[0])
   const [horizonKey, setHorizonKey] = useState(HORIZONS[0].key)
   const [result, setResult] = useState(null)
+  const [error, setError] = useState('')
   const [loadingStep, setLoadingStep] = useState(0)
   const timerRef = useRef(null)
 
@@ -243,51 +137,52 @@ const GenerateForecastModal = memo(function GenerateForecastModal({ open, onClos
       setForecastType(FORECAST_TYPES[0])
       setHorizonKey(HORIZONS[0].key)
       setResult(null)
+      setError('')
       setLoadingStep(0)
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
   }, [open])
 
-  const selectedHorizon = HORIZONS.find((h) => h.key === horizonKey)
-  const previewForecastPeriod = useMemo(() => selectedHorizon.periodLabel(), [selectedHorizon])
-  const previewHistoricalPeriod = useMemo(() => historicalRangeLabel(selectedHorizon.lookbackMonths), [selectedHorizon])
-
-  const runEngine = useCallback(() => {
+  const runEngine = useCallback(async () => {
     setPhase('running')
+    setError('')
     setLoadingStep(0)
-    let step = 0
+    // Cycles the same three steps while the request is in flight — this is
+    // cosmetic pacing, not tied to real backend progress (the mock engine
+    // responds near-instantly; keeping this makes room for when the real
+    // ARIMA service is slower and genuinely takes a few seconds).
     timerRef.current = setInterval(() => {
-      step += 1
-      if (step < LOADING_STEPS.length) {
-        setLoadingStep(step)
-        return
-      }
-      clearInterval(timerRef.current)
-      setResult(runAutoForecast(forecastType, horizonKey))
-      setPhase('result')
+      setLoadingStep((s) => (s + 1) % LOADING_STEPS.length)
     }, 550)
-  }, [forecastType, horizonKey])
+
+    const outcome = await generateForecast(forecastType, horizonKey)
+
+    clearInterval(timerRef.current)
+    if (outcome.success) {
+      setResult(outcome.forecast)
+      setPhase('result')
+    } else {
+      setError(outcome.message || 'Failed to generate forecast.')
+      setPhase('setup')
+    }
+  }, [forecastType, horizonKey, generateForecast])
 
   const handleEditInputs = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current)
+    setResult(null)
     setPhase('setup')
   }, [])
-
-  const handleSave = useCallback(() => {
-    if (!result) return
-    onGenerate({ ...result, generated_by: 101, generated_at: new Date().toISOString() })
-  }, [result, onGenerate])
 
   const footer = phase === 'result' ? (
     <>
       <Button variant="secondary" size="md" onClick={handleEditInputs}>Edit Inputs</Button>
-      <Button variant="secondary" size="md" onClick={runEngine}>Regenerate</Button>
-      <Button variant="primary" size="md" onClick={handleSave}>Save Forecast</Button>
+      <Button variant="secondary" size="md" onClick={runEngine} loading={generating}>Regenerate</Button>
+      <Button variant="primary" size="md" onClick={onClose}>Done</Button>
     </>
   ) : (
     <>
       <Button variant="secondary" size="md" onClick={onClose}>Cancel</Button>
-      <Button variant="primary" size="md" onClick={runEngine} disabled={phase === 'running'}>
+      <Button variant="primary" size="md" onClick={runEngine} disabled={phase === 'running'} loading={phase === 'running'}>
         {phase === 'running' ? 'Running…' : 'Run Auto-Forecast'}
       </Button>
     </>
@@ -296,6 +191,10 @@ const GenerateForecastModal = memo(function GenerateForecastModal({ open, onClos
   return (
     <Modal open={open} onClose={onClose} title="Generate New Forecast" footer={footer}>
       <div className="space-y-4">
+        {error && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{error}</div>
+        )}
+
         {phase !== 'result' && (
           <>
             <p className="text-xs text-muted">
@@ -325,11 +224,6 @@ const GenerateForecastModal = memo(function GenerateForecastModal({ open, onClos
               </div>
             </div>
 
-            <div className="rounded-lg border border-border bg-bg px-3 py-2.5 text-xs text-ink space-y-1">
-              <p><span className="text-muted">Forecasting:</span> <span className="font-medium">{previewForecastPeriod}</span></p>
-              <p><span className="text-muted">Training window:</span> <span className="font-medium">{previewHistoricalPeriod}</span></p>
-            </div>
-
             {phase === 'running' && (
               <div className="rounded-lg border border-dashed border-primary/40 bg-primary/5 p-3">
                 <p className="flex items-center gap-2 text-xs font-medium text-ink">
@@ -352,7 +246,7 @@ const GenerateForecastModal = memo(function GenerateForecastModal({ open, onClos
                 <p className="text-sm font-semibold text-ink">{result.forecast_type} — {result.forecast_period}</p>
                 <p className="text-xs text-muted flex items-center gap-1 mt-0.5"><CalendarRange size={12} /> Trained on {result.historical_period}</p>
               </div>
-              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${TYPE_STYLES[result.forecast_type]}`}>{result.arima_model}</span>
+              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${TYPE_STYLES[result.forecast_type] || 'bg-gray-100 text-muted'}`}>{result.arima_model}</span>
             </div>
 
             <div className="h-52 w-full rounded-lg border border-border bg-bg p-2">
@@ -380,11 +274,11 @@ const GenerateForecastModal = memo(function GenerateForecastModal({ open, onClos
               </div>
               <div className="rounded-lg border border-border px-3 py-2">
                 <p className="text-xs text-muted">MAPE</p>
-                <p className="text-sm font-semibold text-ink mt-0.5">{result.mape}%</p>
+                <p className="text-sm font-semibold text-ink mt-0.5">{result.mape != null ? `${result.mape}%` : '—'}</p>
               </div>
             </div>
 
-            <p className="text-xs text-muted">Not what you expected? Regenerate re-runs the model, or Edit Inputs to change the type/horizon.</p>
+            <p className="text-xs text-muted">This forecast has been saved. Regenerate runs a fresh forecast (saved separately), or Edit Inputs to change the type/horizon.</p>
           </div>
         )}
       </div>
@@ -392,17 +286,43 @@ const GenerateForecastModal = memo(function GenerateForecastModal({ open, onClos
   )
 })
 
-const ForecastDetailModal = memo(function ForecastDetailModal({ forecast, onClose }) {
+/**
+ * Receives just the forecast_id from the row click and fetches the full
+ * detail (including `series`, which the list endpoint omits) on open.
+ */
+const ForecastDetailModal = memo(function ForecastDetailModal({ forecastId, onClose, fetchForecastDetail }) {
+  const [forecast, setForecast] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!forecastId) {
+      setForecast(null)
+      return
+    }
+    setLoading(true)
+    setError('')
+    fetchForecastDetail(forecastId).then((result) => {
+      if (result.success) setForecast(result.forecast)
+      else setError(result.message)
+      setLoading(false)
+    })
+  }, [forecastId, fetchForecastDetail])
+
   return (
-    <Modal open={!!forecast} onClose={onClose} title="Forecast Trend" footer={<Button variant="secondary" size="md" onClick={onClose}>Close</Button>}>
-      {forecast && (
+    <Modal open={!!forecastId} onClose={onClose} title="Forecast Trend" footer={<Button variant="secondary" size="md" onClick={onClose}>Close</Button>}>
+      {loading && <p className="text-sm text-muted py-6 text-center">Loading forecast…</p>}
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{error}</div>
+      )}
+      {!loading && forecast && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-semibold text-ink">{forecast.forecast_type} — {forecast.forecast_period}</p>
               <p className="text-xs text-muted flex items-center gap-1 mt-0.5"><CalendarRange size={12} /> Trained on {forecast.historical_period}</p>
             </div>
-            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${TYPE_STYLES[forecast.forecast_type]}`}>{forecast.arima_model}</span>
+            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${TYPE_STYLES[forecast.forecast_type] || 'bg-gray-100 text-muted'}`}>{forecast.arima_model}</span>
           </div>
 
           <div className="h-56 w-full rounded-lg border border-border bg-bg p-2">
@@ -430,11 +350,11 @@ const ForecastDetailModal = memo(function ForecastDetailModal({ forecast, onClos
             </div>
             <div className="rounded-lg border border-border px-3 py-2">
               <p className="text-xs text-muted">MAPE</p>
-              <p className="text-sm font-semibold text-ink mt-0.5">{forecast.mape}%</p>
+              <p className="text-sm font-semibold text-ink mt-0.5">{forecast.mape != null ? `${forecast.mape}%` : '—'}</p>
             </div>
           </div>
 
-          <p className="text-xs text-muted">Generated by {GENERATORS[forecast.generated_by] || `User #${forecast.generated_by}`} on {formatDateTime(forecast.generated_at)}</p>
+          <p className="text-xs text-muted">Generated by {forecast.generated_by_name || `User #${forecast.generated_by}`} on {formatDateTime(forecast.generated_at)}</p>
         </div>
       )}
     </Modal>
@@ -442,7 +362,15 @@ const ForecastDetailModal = memo(function ForecastDetailModal({ forecast, onClos
 })
 
 export default function FinancialForecasting({ title = 'Financial Forecasting', crumbs = ['Analytics', 'Financial Forecasting'] }) {
-  const [forecasts, setForecasts] = useState(initialForecasts)
+  const {
+    forecasts,
+    forecastsLoading,
+    forecastsError,
+    generating,
+    generateForecast,
+    fetchForecastDetail,
+  } = useForecasts()
+
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
   const [dateFrom, setDateFrom] = useState('')
@@ -455,30 +383,31 @@ export default function FinancialForecasting({ title = 'Financial Forecasting', 
   const toggleStat = (key) => setActiveStat((prev) => (prev === key ? 'all' : key))
 
   const [modalOpen, setModalOpen] = useState(false)
-  const [detail, setDetail] = useState(null)
+  const [detailId, setDetailId] = useState(null)
 
   const filtered = useMemo(() => {
     const rows = forecasts.filter((f) => {
       if (typeFilter !== 'all' && f.forecast_type !== typeFilter) return false
       if (quickFilter === 'highConfidence' && f.confidence_level < HIGH_CONFIDENCE_THRESHOLD) return false
-      if (quickFilter === 'lowError' && f.mape > LOW_ERROR_THRESHOLD) return false
-      const day = f.generated_at.slice(0, 10)
+      if (quickFilter === 'lowError' && (f.mape ?? Infinity) > LOW_ERROR_THRESHOLD) return false
+      const day = (f.generated_at || '').slice(0, 10)
       if (dateFrom && day < dateFrom) return false
       if (dateTo && day > dateTo) return false
       const q = search.toLowerCase()
-      if (search && !f.forecast_period.toLowerCase().includes(q) && !f.forecast_type.toLowerCase().includes(q) && !f.arima_model.toLowerCase().includes(q)) {
+      if (search && !f.forecast_period.toLowerCase().includes(q) && !f.forecast_type.toLowerCase().includes(q) && !(f.arima_model || '').toLowerCase().includes(q)) {
         return false
       }
       return true
     })
     return sortBy === 'predicted'
-      ? rows.sort((a, b) => b.predicted_amount - a.predicted_amount)
-      : rows.sort((a, b) => b.generated_at.localeCompare(a.generated_at))
+      ? [...rows].sort((a, b) => b.predicted_amount - a.predicted_amount)
+      : [...rows].sort((a, b) => (b.generated_at || '').localeCompare(a.generated_at || ''))
   }, [forecasts, search, typeFilter, dateFrom, dateTo, quickFilter, sortBy])
 
   const statCards = useMemo(() => {
-    const avgConfidence = forecasts.reduce((s, f) => s + f.confidence_level, 0) / forecasts.length
-    const avgMape = forecasts.reduce((s, f) => s + f.mape, 0) / forecasts.length
+    const count = forecasts.length || 1
+    const avgConfidence = forecasts.reduce((s, f) => s + f.confidence_level, 0) / count
+    const avgMape = forecasts.reduce((s, f) => s + (f.mape ?? 0), 0) / count
     const totalPredicted = forecasts.reduce((s, f) => s + f.predicted_amount, 0)
     return [
       {
@@ -510,16 +439,8 @@ export default function FinancialForecasting({ title = 'Financial Forecasting', 
 
   const openGenerate = useCallback(() => setModalOpen(true), [])
   const closeGenerateModal = useCallback(() => setModalOpen(false), [])
-  const closeDetail = useCallback(() => setDetail(null), [])
-  const handleViewDetail = useCallback((f) => setDetail(f), [])
-
-  const handleGenerate = useCallback((entry) => {
-    setForecasts((prev) => {
-      const nextId = Math.max(0, ...prev.map((f) => f.forecast_id)) + 1
-      return [{ forecast_id: nextId, ...entry }, ...prev]
-    })
-    setModalOpen(false)
-  }, [])
+  const closeDetail = useCallback(() => setDetailId(null), [])
+  const handleViewDetail = useCallback((f) => setDetailId(f.forecast_id), [])
 
   return (
     <div className="space-y-5 animate-fadeIn">
@@ -535,8 +456,14 @@ export default function FinancialForecasting({ title = 'Financial Forecasting', 
         <Button variant="primary" size="sm" icon={Plus} onClick={openGenerate}>Generate Forecast</Button>
       </div>
 
+      {forecastsError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+          {forecastsError}
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {statCards.map((card) => <StatCard key={card.key} {...card} />)}
+        {statCards.map(({ key, ...card }) => <StatCard key={key} {...card} />)}
       </div>
 
       {activeStat !== 'all' && (
@@ -607,10 +534,13 @@ export default function FinancialForecasting({ title = 'Financial Forecasting', 
               </tr>
             </thead>
             <tbody>
-              {filtered.map((f) => (
+              {forecastsLoading && (
+                <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-muted">Loading forecasts…</td></tr>
+              )}
+              {!forecastsLoading && filtered.map((f) => (
                 <ForecastRow key={f.forecast_id} forecast={f} onViewDetail={handleViewDetail} />
               ))}
-              {filtered.length === 0 && (
+              {!forecastsLoading && filtered.length === 0 && (
                 <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-muted">No forecasts match your filters.</td></tr>
               )}
             </tbody>
@@ -618,8 +548,13 @@ export default function FinancialForecasting({ title = 'Financial Forecasting', 
         </div>
       </div>
 
-      <GenerateForecastModal open={modalOpen} onClose={closeGenerateModal} onGenerate={handleGenerate} />
-      <ForecastDetailModal forecast={detail} onClose={closeDetail} />
+      <GenerateForecastModal
+        open={modalOpen}
+        onClose={closeGenerateModal}
+        generateForecast={generateForecast}
+        generating={generating}
+      />
+      <ForecastDetailModal forecastId={detailId} onClose={closeDetail} fetchForecastDetail={fetchForecastDetail} />
     </div>
   )
 }

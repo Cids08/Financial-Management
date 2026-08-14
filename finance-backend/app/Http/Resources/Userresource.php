@@ -26,6 +26,11 @@ class UserResource extends JsonResource
             // separate is_archived column in the DB.
             'is_archived' => $this->deleted_at !== null,
             'last_login' => $this->last_login?->toIso8601String(),
+            // Only present immediately after UserService::create() sets
+            // this transient, non-persisted attribute on the model
+            // instance — index/update/restore never set it, so this is
+            // null everywhere except that one response.
+            'initial_password' => $this->initial_password ?? null,
         ];
     }
 }
