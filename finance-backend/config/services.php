@@ -47,6 +47,10 @@ return [
     // silently hitting an empty URL if this is missing.
     'forecast_service' => [
         'base_url' => env('FORECAST_SERVICE_URL'),
+        ],
+
+        'tesseract' => [
+        'executable' => env('TESSERACT_PATH'),
     ],
 
 ];

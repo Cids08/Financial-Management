@@ -13,9 +13,13 @@ use thiagoalessio\TesseractOCR\TesseractOCR;
  * images the way a vision model would. "Is this actually a receipt?" is
  * decided by keyword/pattern heuristics on the extracted text below, not
  * true image understanding. It reliably rejects images with no relevant
- * text (random photos, blank images) but isn't as robust as a real vision
- * API would be. If accuracy needs to improve later, swapping this service
- * for a Claude/Google Vision call is the upgrade path — at a per-call cost.
+ * text (random photos, blank images), and this version also rejects most
+ * bank/e-wallet transfer confirmations (GCash, bank apps, etc.) — those
+ * share vocabulary with real invoices ("total", "amount", "reference
+ * number"), so they used to slip through as false positives. It is still
+ * not as robust as a real vision API would be at telling document TYPES
+ * apart. If accuracy needs to improve further, swapping this service for
+ * a Claude/Google Vision call is the upgrade path — at a per-call cost.
  */
 class InvoiceOcrService
 {
@@ -33,6 +37,20 @@ class InvoiceOcrService
     protected const MIN_KEYWORD_MATCHES = 2;
 
     /**
+     * Phrases strongly associated with bank/e-wallet transfer confirmation
+     * screens rather than vendor invoices or receipts. These share a lot
+     * of vocabulary with real invoices (total, amount, reference number),
+     * so a keyword-only check can't tell them apart — this list catches
+     * the transfer-specific wording those screens almost always carry.
+     */
+    protected const TRANSFER_EXCLUSION_KEYWORDS = [
+        'transfer successful', 'transfer result', 'transfer fee',
+        'transfer amount', 'sent to', 'send money', 'you sent',
+        'gcash', 'maya', 'mariBank', 'bpi', 'bdo', 'unionbank', 'grabpay',
+        'account no', 'acct. no', 'acct no',
+    ];
+
+    /**
      * Returns:
      *   [
      *     'is_receipt' => bool,
@@ -46,9 +64,29 @@ class InvoiceOcrService
      */
     public function scan(UploadedFile $image): array
     {
-        $text = (new TesseractOCR($image->getRealPath()))
-            ->lang('eng')
-            ->run();
+        $ocr = new TesseractOCR($image->getRealPath());
+
+        // On Windows dev machines, tesseract is often not resolvable from
+        // the PATH the web server process actually runs under (Apache/
+        // XAMPP loads its env at service start, not from later PATH edits).
+        // Setting TESSERACT_PATH in .env sidesteps that entirely. On
+        // Linux/prod this env var is typically unset, so the package falls
+        // back to plain `tesseract`, resolved via the system PATH as usual.
+        if ($executable = config('services.tesseract.executable')) {
+            $ocr->executable($executable);
+        }
+
+        try {
+            $text = $ocr->lang('eng')->run();
+        } catch (\Exception $e) {
+            // The tesseract_ocr package throws rather than returning ""
+            // when it finds no text at all (e.g. a photo with no text in
+            // it, like a cat pic). That's not a real error for our
+            // purposes — it just means the image isn't a receipt/invoice,
+            // so treat it as such instead of letting the exception bubble
+            // up as a 500.
+            $text = '';
+        }
 
         $normalized = strtolower($text);
 
@@ -59,15 +97,35 @@ class InvoiceOcrService
             }
         }
 
-        $isReceipt = $matches >= self::MIN_KEYWORD_MATCHES;
+        $looksLikeTransfer = false;
+        foreach (self::TRANSFER_EXCLUSION_KEYWORDS as $keyword) {
+            if (str_contains($normalized, strtolower($keyword))) {
+                $looksLikeTransfer = true;
+                break;
+            }
+        }
+
+        $invoiceNumber = $this->extractInvoiceNumber($text);
+        $date = $this->extractDate($text);
+        $amount = $this->extractAmount($text);
+
+        // Keyword count alone is too easy to satisfy by accident — bank
+        // transfer confirmations and payment receipts use the same
+        // "total"/"amount"/"reference number" vocabulary as real invoices.
+        // Require an actual invoice number to be extracted (the one field
+        // transfer/payment screens essentially never have), AND reject
+        // outright if transfer-specific wording is present.
+        $isReceipt = $matches >= self::MIN_KEYWORD_MATCHES
+            && $invoiceNumber !== null
+            && ! $looksLikeTransfer;
 
         return [
             'is_receipt' => $isReceipt,
             'raw_text' => $text,
-            'invoice_number' => $isReceipt ? $this->extractInvoiceNumber($text) : null,
-            'date' => $isReceipt ? $this->extractDate($text) : null,
+            'invoice_number' => $isReceipt ? $invoiceNumber : null,
+            'date' => $isReceipt ? $date : null,
             'due_date' => null, // rarely distinguishable from issue date via OCR alone
-            'amount' => $isReceipt ? $this->extractAmount($text) : null,
+            'amount' => $isReceipt ? $amount : null,
             'reference_no' => $isReceipt ? $this->extractReferenceNumber($text) : null,
         ];
     }
