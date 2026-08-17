@@ -8,6 +8,7 @@ import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
 import { formatCurrency } from '../utils/formatters'
 import { useAiRecommendations } from '../hooks/useAiRecommendations'
+import { useAiAdvisor } from '../hooks/useAiAdvisor'
 
 // Mirrors the `ai_recommendations` table (category -> recommendation_type,
 // mapped server-side by AiRecommendationResource). Kept as a display list —
@@ -55,51 +56,9 @@ const SUGGESTED_PROMPTS = [
   'What should we do about collections?',
 ]
 
-// Lightweight, fully client-side response engine grounded in the recommendations
-// already on screen — this stands in for a real assistant backend. Swap this
-// function out for an actual API call (e.g. POST /api/ai-advisor) when ready.
-function generateAIReply(question, recs, forecastLabel) {
-  const q = question.toLowerCase()
-
-  const matchType = RECOMMENDATION_TYPES.find((t) => q.includes(t.toLowerCase().split(' ')[0]))
-  if (q.includes('risk') || q.includes('alert')) {
-    const risk = recs.filter((r) => r.recommendation_type === 'Risk Alert')
-    if (risk.length === 0) return "There are no open Risk Alert recommendations right now — nothing flagged."
-    return `There ${risk.length === 1 ? 'is' : 'are'} ${risk.length} Risk Alert recommendation${risk.length === 1 ? '' : 's'} right now. The most recent: "${risk[0].summary}" (linked to ${forecastLabel(risk[0])}).`
-  }
-  if (q.includes('confidence') || q.includes('lowest') || q.includes('uncertain')) {
-    const weakest = recs.find((r) => r.recommendation_type === 'Budget Adjustment') || recs[0]
-    if (!weakest) return "There isn't enough data yet to answer that."
-    return `${forecastLabel(weakest)} currently carries the most uncertainty among active models. Related guidance: "${weakest.summary}"`
-  }
-  if (q.includes('expense') || q.includes('cost') || q.includes('reduce') || q.includes('cut')) {
-    const cost = recs.filter((r) => r.recommendation_type === 'Cost Reduction')
-    if (cost.length === 0) return "No Cost Reduction recommendations are open at the moment."
-    return cost.map((r) => `• ${r.summary}`).join('\n')
-  }
-  if (q.includes('collect')) {
-    const collections = recs.filter((r) => r.recommendation_type === 'Cash Flow Management')
-    if (collections.length === 0) return "No collections-related guidance is open right now."
-    return collections.map((r) => `• ${r.summary}`).join('\n')
-  }
-  if (q.includes('revenue')) {
-    const rev = recs.filter((r) => r.recommendation_type === 'Revenue Optimization')
-    if (rev.length === 0) return "No Revenue Optimization recommendations are open at the moment."
-    return rev.map((r) => `• ${r.summary}`).join('\n')
-  }
-  if (matchType) {
-    const matches = recs.filter((r) => r.recommendation_type === matchType)
-    if (matches.length === 0) return `There are no open ${matchType} recommendations right now.`
-    return matches.map((r) => `• ${r.summary} (${forecastLabel(r)})`).join('\n')
-  }
-  if (q.includes('summar')) {
-    return recs.slice(0, 4).map((r) => `• [${r.recommendation_type}] ${r.summary}`).join('\n')
-  }
-  return "I can help with cash flow, cost reduction, revenue, collections, budget, or risk questions — try asking about one of those, or pick a suggestion below."
-}
-
 export default function AIRecommendations({ title = 'AI Financial Recommendations', crumbs = ['Analytics', 'AI Financial Recommendations'] }) {
   const { recommendations, loading, error, fetchRecommendations } = useAiRecommendations()
+  const { sendMessage: sendToAdvisor, error: advisorError } = useAiAdvisor()
 
   useEffect(() => {
     fetchRecommendations()
@@ -198,18 +157,29 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
     },
   ]
 
-  const sendMessage = (text) => {
+  // Now calls the real backend (AiAdvisorController → AiAdvisorService →
+  // AdvisorEngine) instead of the client-side generateAIReply mock. The
+  // conversation id and message history live server-side — this component
+  // only keeps the display copy of the transcript.
+  const sendMessage = async (text) => {
     const trimmed = text.trim()
     if (!trimmed) return
     const userMsg = { role: 'user', text: trimmed, at: new Date().toISOString() }
     setMessages((prev) => [...prev, userMsg])
     setChatInput('')
     setIsThinking(true)
-    setTimeout(() => {
-      const reply = generateAIReply(trimmed, recommendations, forecastLabel)
+    try {
+      const reply = await sendToAdvisor(trimmed)
       setMessages((prev) => [...prev, { role: 'assistant', text: reply, at: new Date().toISOString() }])
+    } catch {
+      setMessages((prev) => [...prev, {
+        role: 'assistant',
+        text: 'Sorry, the AI advisor is unavailable right now. Please try again in a moment.',
+        at: new Date().toISOString(),
+      }])
+    } finally {
       setIsThinking(false)
-    }, 550)
+    }
   }
 
   const handleChatSubmit = (e) => {

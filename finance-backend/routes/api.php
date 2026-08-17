@@ -24,6 +24,7 @@ use App\Http\Controllers\Api\GeneralLedgerController;
 use App\Http\Controllers\Api\TaxObligationController;
 use App\Http\Controllers\Api\InvoiceScanController;
 use App\Http\Controllers\Api\AiRecommendationController;
+use App\Http\Controllers\Api\AiAdvisorController;
 use App\Http\Controllers\Api\FinancialForecastController;
 use App\Http\Controllers\Api\ServiceAreaController;
 use App\Http\Controllers\Api\CollectionController;
@@ -268,6 +269,21 @@ Route::middleware('auth:sanctum')->group(function () {
     // hierarchy) — Admin only. Permission slug is 'ai.view', not
     // 'ai_decision_support.view'.
     Route::middleware('permission:ai.view')->get('ai-recommendations', [AiRecommendationController::class, 'index']);
+
+    // Analytics — AI Advisor chat (the "Ask the AI Advisor" panel on the
+    // AI Recommendations page) — gated the same as ai-recommendations
+    // itself (ai.view), since it's only ever reached from that screen and
+    // reads the same underlying data. {conversation} route-model-binds to
+    // AiAdvisorConversation; ownership is enforced in the controller via
+    // AiAdvisorConversationPolicy (view/update), not by permission alone —
+    // ai.view only gets you into the module, the policy stops you from
+    // reading or posting to another user's conversation.
+    Route::middleware('permission:ai.view')->prefix('ai-advisor')->group(function () {
+        Route::get('/conversations', [AiAdvisorController::class, 'index']);
+        Route::post('/conversations', [AiAdvisorController::class, 'start']);
+        Route::get('/conversations/{conversation}', [AiAdvisorController::class, 'show']);
+        Route::post('/conversations/{conversation}/messages', [AiAdvisorController::class, 'chat']);
+    });
 
     // Analytics — Financial Forecasting (matches "Forecasting") — already
     // had this pattern applied; kept as-is (slug was already correct).

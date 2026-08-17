@@ -35,4 +35,18 @@ return [
         ],
     ],
 
+    'openai' => [
+        'key' => env('OPENAI_API_KEY'),
+        'advisor_model' => env('OPENAI_ADVISOR_MODEL', 'gpt-5-mini'),
+        'recommendation_model' => env('OPENAI_RECOMMENDATION_MODEL', 'gpt-5-mini'),
+    ],
+
+    // Base URL of the Python ARIMA/FastAPI service (finance-forecasting/).
+    // NOT currently in your .env — add it there. No default fallback on
+    // purpose: PythonArimaForecastEngine throws a clear error instead of
+    // silently hitting an empty URL if this is missing.
+    'forecast_service' => [
+        'base_url' => env('FORECAST_SERVICE_URL'),
+    ],
+
 ];

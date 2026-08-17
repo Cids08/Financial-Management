@@ -27,6 +27,10 @@ class FinancialForecast extends Model
         'rmse',
         'algorithm',
         'model_version',
+        // Added so FinancialForecastService::generate()'s
+        // 'series' => $series actually persists — without this in
+        // $fillable, create() silently drops the key rather than erroring.
+        'series',
         'status',
         'generated_by',
         'updated_by',
@@ -46,6 +50,11 @@ class FinancialForecast extends Model
         'mape' => 'decimal:2',
         'rmse' => 'decimal:2',
         'generated_at' => 'datetime',
+        // Added to match the new jsonb series column — without this,
+        // $forecast->series is a raw JSON string, not a PHP array, and
+        // FinancialForecastDetailResource's 'series' => $this->series
+        // would serialize it as a double-encoded JSON string to the frontend.
+        'series' => 'array',
     ];
 
     public function generator(): BelongsTo
