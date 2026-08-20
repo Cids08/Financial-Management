@@ -9,15 +9,11 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Real OpenAI-backed implementation. Not bound by default — see
- * AppServiceProvider, which currently binds RecommendationEngine to
- * MockRecommendationEngine (free, no API key required).
- *
- * Asks for STRICT JSON so the response can be parsed straight into
- * ai_recommendations rows without free-text parsing. Per the ai-forecasting
- * skill's "GPT Restrictions": never invents financial values — the prompt
- * only ever hands the model figures already computed by ARIMA, and asks it
- * to explain/contextualize them, not calculate new ones.
+ * Chat-completions-backed implementation. Now asks for priority and
+ * confidence_score in addition to type/summary/recommendation — both are
+ * NOT NULL columns on ai_recommendations that earlier prompts never
+ * requested, which caused every successful API call to still fail at the
+ * database insert step (see GenerateAiRecommendations).
  */
 class OpenAiRecommendationEngine implements RecommendationEngine
 {
@@ -27,7 +23,7 @@ class OpenAiRecommendationEngine implements RecommendationEngine
             'forecast_type' => $forecast->forecast_type,
             'forecast_period' => $forecast->forecast_period,
             'predicted_amount' => $forecast->predicted_amount,
-            'confidence_score' => $forecast->confidence_score ?? null,
+            'confidence_level' => $forecast->confidence_level ?? null,
         ];
 
         $messages = [
@@ -35,11 +31,17 @@ class OpenAiRecommendationEngine implements RecommendationEngine
             ['role' => 'user', 'content' => json_encode($payload)],
         ];
 
+        $baseUrl = rtrim(config('services.openai.base_url'), '/');
+
         try {
             $response = Http::withToken(config('services.openai.key'))
+                ->withHeaders([
+                    'HTTP-Referer' => config('services.openai.referer'),
+                    'X-Title' => config('services.openai.title'),
+                ])
                 ->timeout(30)
-                ->post('https://api.openai.com/v1/chat/completions', [
-                    'model' => config('services.openai.recommendation_model', 'gpt-4o-mini'),
+                ->post($baseUrl . '/chat/completions', [
+                    'model' => config('services.openai.recommendation_model', 'openai/gpt-4o-mini'),
                     'messages' => $messages,
                     'max_tokens' => 600,
                     'temperature' => 0.2,
@@ -49,6 +51,7 @@ class OpenAiRecommendationEngine implements RecommendationEngine
             if ($response->failed()) {
                 Log::error('OpenAI recommendation request failed', [
                     'forecast_id' => $forecast->getKey(),
+                    'base_url' => $baseUrl,
                     'status' => $response->status(),
                     'body' => $response->body(),
                 ]);
@@ -69,7 +72,14 @@ class OpenAiRecommendationEngine implements RecommendationEngine
             }
 
             return collect($decoded['recommendations'])
-                ->filter(fn ($r) => isset($r['type'], $r['summary'], $r['recommendation']))
+                ->filter(fn ($r) => isset($r['type'], $r['priority'], $r['confidence_score'], $r['summary'], $r['recommendation']))
+                ->map(fn ($r) => [
+                    'type' => $r['type'],
+                    'priority' => $r['priority'],
+                    'confidence_score' => (float) $r['confidence_score'],
+                    'summary' => $r['summary'],
+                    'recommendation' => $r['recommendation'],
+                ])
                 ->values();
         } catch (\Throwable $e) {
             Log::error('OpenAI recommendation request exception', [
@@ -91,7 +101,12 @@ class OpenAiRecommendationEngine implements RecommendationEngine
             . "(e.g. never say 'you should invest more') — explain why, highlight supporting data, "
             . "and discuss possible risks instead.\n\n"
             . "Respond with STRICT JSON only, no markdown, no prose outside the JSON, in this exact shape:\n"
-            . '{"recommendations": [{"type": "Cash Flow Management|Cost Reduction|Revenue Optimization|Risk Alert|Budget Adjustment", '
-            . '"summary": "one sentence, under 200 chars", "recommendation": "2-4 sentences, full explanation"}]}';
+            . '{"recommendations": [{'
+            . '"type": "Cash Flow Management|Cost Reduction|Revenue Optimization|Risk Alert|Budget Adjustment", '
+            . '"priority": "High|Medium|Low", '
+            . '"confidence_score": 0-100 (your own confidence in this specific recommendation, as a number), '
+            . '"summary": "one sentence, under 200 chars", '
+            . '"recommendation": "2-4 sentences, full explanation"'
+            . '}]}';
     }
 }

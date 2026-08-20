@@ -8,17 +8,15 @@ use Illuminate\Support\Collection;
 
 /**
  * Zero-cost stand-in for a real LLM backend. Turns a completed forecast into
- * one or two recommendations using simple threshold rules instead of an
- * OpenAI call, so "generate recommendations after a forecast" stays fully
- * functional (and free) without a paid key.
+ * one or two recommendations using simple threshold rules instead of an API
+ * call. Now includes priority and confidence_score — both NOT NULL columns
+ * on ai_recommendations that earlier versions of this engine omitted,
+ * which caused every insert to fail (see GenerateAiRecommendations).
  *
- * NOTE: reads $forecast->confidence_score, ->forecast_type, ->predicted_amount,
- * and ->forecast_period. Adjust the property names below if they differ from
- * your actual FinancialForecast schema — this mirrors what
- * AiRecommendationResource already flattens onto ai_recommendations rows.
- *
- * Swap the binding in AppServiceProvider to OpenAiRecommendationEngine once a
- * paid OpenAI key is available — nothing else in the app needs to change.
+ * NOTE: reads $forecast->confidence_level (a float, assumed 0-1 like 0.87;
+ * normalized below in case it's actually stored 0-100), ->forecast_type,
+ * ->predicted_amount, and ->forecast_period. Adjust if any of these differ
+ * from your actual FinancialForecast schema.
  */
 class MockRecommendationEngine implements RecommendationEngine
 {
@@ -26,17 +24,19 @@ class MockRecommendationEngine implements RecommendationEngine
     {
         $recommendations = collect();
 
-        $confidence = $forecast->confidence_score ?? null; // expected 0-100
+        $rawConfidence = $forecast->confidence_level ?? null;
+        $confidence = $rawConfidence !== null
+            ? ($rawConfidence <= 1 ? $rawConfidence * 100 : $rawConfidence)
+            : null;
         $type = $forecast->forecast_type ?? 'Forecast';
         $period = $forecast->forecast_period ?? 'the upcoming period';
         $amount = $forecast->predicted_amount ?? null;
 
-        // Low-confidence forecasts always get a Budget Adjustment flag —
-        // this mirrors the "Always communicate uncertainty" rule from the
-        // AI philosophy in the ai-forecasting skill.
         if ($confidence !== null && $confidence < 60) {
             $recommendations->push([
                 'type' => 'Budget Adjustment',
+                'priority' => 'High',
+                'confidence_score' => 70.0,
                 'summary' => "The {$type} forecast for {$period} carries below-average confidence "
                     . "(" . round($confidence) . "%). Treat the projected figure as directional "
                     . "rather than exact when setting budgets.",
@@ -67,6 +67,8 @@ class MockRecommendationEngine implements RecommendationEngine
         return match ($normalized) {
             'expense' => collect([[
                 'type' => 'Cost Reduction',
+                'priority' => 'Medium',
+                'confidence_score' => 75.0,
                 'summary' => "Projected {$type} for {$period} is {$amountText}. Review recurring "
                     . "expense categories for potential reductions ahead of this period.",
                 'recommendation' => "The ARIMA model projects {$type} of approximately {$amountText} "
@@ -77,6 +79,8 @@ class MockRecommendationEngine implements RecommendationEngine
             ]]),
             'revenue' => collect([[
                 'type' => 'Revenue Optimization',
+                'priority' => 'Medium',
+                'confidence_score' => 75.0,
                 'summary' => "Projected {$type} for {$period} is {$amountText}. Review collection "
                     . "and invoicing timelines to help realize this projection.",
                 'recommendation' => "The ARIMA model projects {$type} of approximately {$amountText} "
@@ -86,6 +90,8 @@ class MockRecommendationEngine implements RecommendationEngine
             ]]),
             default => collect([[
                 'type' => 'Cash Flow Management',
+                'priority' => 'Low',
+                'confidence_score' => 70.0,
                 'summary' => "New {$type} forecast available for {$period} ({$amountText}). "
                     . "Review alongside current cash position.",
                 'recommendation' => "A new {$type} forecast of {$amountText} is available for "

@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Search, Plus, Pencil, Archive, RotateCcw, UserCheck, UserX, Phone, Mail, MapPin, Target, Eye, EyeOff, ChevronLeft, ChevronRight, Loader2, BarChart3 } from 'lucide-react'
+import {
+  ResponsiveContainer, ComposedChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Bar, Line, ReferenceLine,
+} from 'recharts'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
-import Tooltip from '../components/Tooltip'
+import Tooltip2 from '../components/Tooltip'
 import { formatCurrency } from '../utils/formatters'
 import { apiFetch } from '../utils/api'
 import { useCollectors } from '../hooks/useCollectors'
@@ -28,6 +31,19 @@ const PERIODS = [
   { key: 'month', label: 'Month' },
   { key: 'year', label: 'Year' },
 ]
+
+// Chart colors sourced from the app's CSS variables (with hardcoded
+// fallbacks) rather than new hex values, so the chart stays in sync with
+// whatever the theme's primary/muted/accent colors actually are, light or
+// dark mode — same pattern already used for chart-adjacent inline styles
+// elsewhere in this codebase (see AIRecommendations.jsx's INPUT_TEXT_STYLE).
+const CHART_COLORS = {
+  collected: 'var(--color-primary, #f59e0b)',
+  target: 'var(--color-muted, #94a3b8)',
+  efficiency: 'var(--color-emerald-400, #34d399)',
+  grid: 'var(--color-border, #334155)',
+  axisText: 'var(--color-muted, #94a3b8)',
+}
 
 function initials(first, last) {
   return `${first?.[0] ?? ''}${last?.[0] ?? ''}`.toUpperCase()
@@ -70,6 +86,25 @@ function useServiceAreas() {
   return areas
 }
 
+// Custom tooltip so amounts render through formatCurrency and the
+// efficiency line shows a % suffix, instead of recharts' raw numbers.
+function EfficiencyTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="rounded-lg border border-border bg-surface px-3 py-2 shadow-lg text-xs">
+      <p className="font-semibold text-ink mb-1">{label}</p>
+      {payload.map((entry) => (
+        <p key={entry.dataKey} style={{ color: entry.color }} className="flex items-center justify-between gap-3">
+          <span>{entry.name}</span>
+          <span className="font-medium tabular-nums">
+            {entry.dataKey === 'efficiency' ? `${entry.value}%` : formatCurrency(entry.value)}
+          </span>
+        </p>
+      ))}
+    </div>
+  )
+}
+
 function EfficiencyModal({ collector, onClose, getEfficiency }) {
   const [period, setPeriod] = useState('month')
   const [rows, setRows] = useState([])
@@ -95,6 +130,7 @@ function EfficiencyModal({ collector, onClose, getEfficiency }) {
       open={!!collector}
       onClose={onClose}
       title={collector ? `Efficiency — ${collector.first_name} ${collector.last_name}` : 'Efficiency'}
+      maxWidth="max-w-xl"
       footer={<Button variant="secondary" size="md" onClick={onClose}>Close</Button>}
     >
       <div className="space-y-4">
@@ -117,30 +153,86 @@ function EfficiencyModal({ collector, onClose, getEfficiency }) {
         )}
 
         {loading ? (
-          <p className="text-xs text-muted py-6 text-center">Loading…</p>
-        ) : rows.length === 0 ? (
-          <p className="text-xs text-muted py-6 text-center">No confirmed collections in this range yet.</p>
-        ) : (
-          <div className="rounded-lg border border-border divide-y divide-border max-h-80 overflow-y-auto">
-            {rows.map((r) => (
-              <div key={r.period} className="flex items-center justify-between gap-3 px-3 py-2.5">
-                <div>
-                  <p className="text-xs font-medium text-ink">{r.period}</p>
-                  <p className="text-[11px] text-muted">{formatCurrency(r.collected)} of {formatCurrency(r.target)} target</p>
-                </div>
-                <span
-                  className={`shrink-0 inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold
-                    ${r.efficiency >= 100
-                      ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400'
-                      : r.efficiency >= 70
-                        ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400'
-                        : 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400'}`}
-                >
-                  {r.efficiency}%
-                </span>
-              </div>
-            ))}
+          <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted">
+            <Loader2 size={16} className="animate-spin" /> Loading…
           </div>
+        ) : rows.length === 0 ? (
+          <p className="text-xs text-muted py-16 text-center">No confirmed collections in this range yet.</p>
+        ) : (
+          <>
+            {rows.every((r) => r.collected === 0) && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+                No confirmed collections recorded in this period yet. The dashed line below shows the target for reference.
+              </div>
+            )}
+
+            <div className="rounded-lg border border-border bg-bg p-2">
+              <ResponsiveContainer width="100%" height={260}>
+                <ComposedChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barCategoryGap="28%">
+                  <CartesianGrid strokeDasharray="3 3" stroke={CHART_COLORS.grid} vertical={false} />
+                  <XAxis
+                    dataKey="period"
+                    tick={{ fontSize: 11, fill: CHART_COLORS.axisText }}
+                    axisLine={{ stroke: CHART_COLORS.grid }}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    yAxisId="amount"
+                    tick={{ fontSize: 11, fill: CHART_COLORS.axisText }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={36}
+                    tickFormatter={(v) => (v >= 1000 ? `${Math.round(v / 1000)}k` : v)}
+                  />
+                  <YAxis
+                    yAxisId="pct"
+                    orientation="right"
+                    domain={[0, 100]}
+                    tick={{ fontSize: 11, fill: CHART_COLORS.axisText }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={36}
+                    tickFormatter={(v) => `${v}%`}
+                  />
+                  <Tooltip content={<EfficiencyTooltip />} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  {/* Faint 100%-efficiency reference so the efficiency line
+                      has a visible baseline to read against, even when the
+                      line itself sits at 0. */}
+                  <ReferenceLine yAxisId="pct" y={100} stroke={CHART_COLORS.grid} strokeDasharray="2 4" />
+                  <Bar yAxisId="amount" dataKey="collected" name="Collected" fill={CHART_COLORS.collected} radius={[3, 3, 0, 0]} maxBarSize={40} />
+                  {/* Target as a dashed goal line, not a second bar — bar-vs-bar
+                      makes an empty ("no data yet") period look like two
+                      competing values instead of "actual against a goal." */}
+                  <Line yAxisId="amount" type="stepAfter" dataKey="target" name="Target" stroke={CHART_COLORS.target} strokeWidth={1.5} strokeDasharray="5 4" dot={false} />
+                  <Line yAxisId="pct" type="monotone" dataKey="efficiency" name="Efficiency %" stroke={CHART_COLORS.efficiency} strokeWidth={2} dot={{ r: 3 }} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Exact figures below the chart, for anyone who wants the
+                precise numbers rather than reading them off the chart. */}
+            <div className="rounded-lg border border-border divide-y divide-border max-h-56 overflow-y-auto">
+              {rows.map((r) => (
+                <div key={r.period} className="flex items-center justify-between gap-3 px-3 py-2">
+                  <div>
+                    <p className="text-xs font-medium text-ink">{r.period}</p>
+                    <p className="text-[11px] text-muted">{formatCurrency(r.collected)} of {formatCurrency(r.target)} target</p>
+                  </div>
+                  <span
+                    className={`shrink-0 inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold
+                      ${r.efficiency >= 100
+                        ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400'
+                        : r.efficiency >= 70
+                          ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400'
+                          : 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400'}`}
+                  >
+                    {r.efficiency}%
+                  </span>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
     </Modal>
@@ -296,10 +388,15 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
         </select>
-        <label className="flex items-center gap-2 text-sm text-muted cursor-pointer whitespace-nowrap">
-          <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} className="rounded border-border accent-primary" />
-          Show archived
-        </label>
+        <Button
+          variant={showArchived ? 'primary' : 'secondary'}
+          size="sm"
+          icon={Archive}
+          onClick={() => setShowArchived((prev) => !prev)}
+          className="shrink-0 whitespace-nowrap"
+        >
+          Show Archived
+        </Button>
       </div>
 
       <div className={PANEL}>
@@ -370,17 +467,17 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <Tooltip label="View efficiency" align="start">
+                        <Tooltip2 label="View efficiency" align="start">
                           <button type="button" onClick={() => setEfficiencyTarget(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                             <BarChart3 size={15} />
                           </button>
-                        </Tooltip>
-                        <Tooltip label="Edit collector" align="start">
+                        </Tooltip2>
+                        <Tooltip2 label="Edit collector" align="start">
                           <button type="button" onClick={() => openEdit(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                             <Pencil size={15} />
                           </button>
-                        </Tooltip>
-                        <Tooltip label={showArchived ? 'Restore collector' : 'Archive collector'} align="end">
+                        </Tooltip2>
+                        <Tooltip2 label={showArchived ? 'Restore collector' : 'Archive collector'} align="end">
                           <button
                             type="button"
                             onClick={() => (showArchived ? restoreCollector(c.collector_id) : archiveCollector(c.collector_id))}
@@ -388,7 +485,7 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
                           >
                             {showArchived ? <RotateCcw size={15} /> : <Archive size={15} />}
                           </button>
-                        </Tooltip>
+                        </Tooltip2>
                       </div>
                     </td>
                   </tr>

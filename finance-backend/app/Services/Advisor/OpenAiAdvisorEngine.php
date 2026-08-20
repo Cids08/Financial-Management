@@ -9,13 +9,12 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Real OpenAI-backed implementation. Not bound by default — see
- * AppServiceProvider, which currently binds AdvisorEngine to
- * MockAdvisorEngine (free, no API key required) for development/defense.
- *
- * Once billing is set up, flip the binding to this class. The model name
- * is configurable via OPENAI_ADVISOR_MODEL so it can be changed without a
- * code deploy — e.g. to whichever tier is actually available on the key.
+ * Chat-completions-backed implementation, bound by default in
+ * AppServiceProvider. Points at whatever config('services.openai.base_url')
+ * resolves to — currently OpenRouter (funded), not api.openai.com directly
+ * (out of credits) — see the comment block in config/services.php for how
+ * to switch back. Both expose the same /chat/completions request/response
+ * shape, so this class needed zero changes to make that swap, only config.
  */
 class OpenAiAdvisorEngine implements AdvisorEngine
 {
@@ -55,11 +54,19 @@ class OpenAiAdvisorEngine implements AdvisorEngine
 
     private function complete(array $messages, int $maxTokens, float $temperature): ?string
     {
+        $baseUrl = rtrim(config('services.openai.base_url'), '/');
+
         try {
             $response = Http::withToken(config('services.openai.key'))
+                ->withHeaders([
+                    // Harmless no-ops on real OpenAI; OpenRouter uses these
+                    // for attribution/rankings on their dashboard.
+                    'HTTP-Referer' => config('services.openai.referer'),
+                    'X-Title' => config('services.openai.title'),
+                ])
                 ->timeout(30)
-                ->post('https://api.openai.com/v1/chat/completions', [
-                    'model' => config('services.openai.advisor_model', 'gpt-4o-mini'),
+                ->post($baseUrl . '/chat/completions', [
+                    'model' => config('services.openai.advisor_model', 'openai/gpt-4o-mini'),
                     'messages' => $messages,
                     'max_tokens' => $maxTokens,
                     'temperature' => $temperature,
@@ -67,6 +74,7 @@ class OpenAiAdvisorEngine implements AdvisorEngine
 
             if ($response->failed()) {
                 Log::error('OpenAI advisor request failed', [
+                    'base_url' => $baseUrl,
                     'status' => $response->status(),
                     'body' => $response->body(),
                 ]);

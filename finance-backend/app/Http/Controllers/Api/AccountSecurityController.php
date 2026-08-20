@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ChangePasswordRequest;
+use App\Http\Requests\ConfirmPasswordRequest;
 use App\Http\Requests\VerifyTwoFactorRequest;
 use App\Http\Resources\ActivityLogResource;
 use App\Http\Resources\SessionResource;
@@ -47,7 +48,10 @@ class AccountSecurityController extends Controller
         ]);
     }
 
-    public function disableTwoFactor(Request $request): JsonResponse
+    // Disabling 2FA lowers account security. Require the current password
+    // so a hijacked session (stolen cookie, unattended device) can't
+    // silently strip the second factor — validated in ConfirmPasswordRequest.
+    public function disableTwoFactor(ConfirmPasswordRequest $request): JsonResponse
     {
         $this->security->disableTwoFactor($request->user());
 
@@ -94,7 +98,10 @@ class AccountSecurityController extends Controller
         ]);
     }
 
-    public function deactivate(Request $request): JsonResponse
+    // Deactivation is irreversible-by-the-user and signs them out
+    // everywhere. Require the current password rather than trusting the
+    // frontend's "type DEACTIVATE" text field, which the API never sees.
+    public function deactivate(ConfirmPasswordRequest $request): JsonResponse
     {
         $this->security->deactivate($request->user());
 

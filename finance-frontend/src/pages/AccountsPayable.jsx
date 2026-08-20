@@ -423,23 +423,31 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
           <option value="all">All Statuses</option>
           {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
-        <label className="flex items-center gap-2 text-sm text-muted cursor-pointer whitespace-nowrap">
-          <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} className="rounded border-border accent-primary" />
-          Show archived
-        </label>
+        <Button
+          variant={showArchived ? 'primary' : 'secondary'}
+          size="sm"
+          icon={Archive}
+          onClick={() => setShowArchived((prev) => !prev)}
+          className="shrink-0 whitespace-nowrap"
+        >
+          Show Archived
+        </Button>
       </div>
 
+      {/* max-h + overflow-y-auto gives the sticky header a scroll container
+          to stick within — without this, "sticky" has nothing to pin
+          against once the whole page (not just the table) is what scrolls. */}
       <div className={PANEL}>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto overflow-y-auto max-h-[70vh]">
           <table className="w-full text-sm">
-            <thead>
+            <thead className="sticky top-0 z-10 bg-surface">
               <tr className="border-b border-border">
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Bill</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Supplier</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Due Date</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Original → Balance</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Status</th>
-                <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Actions</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Bill</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Supplier</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Due Date</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Original → Balance</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Status</th>
+                <th className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -589,7 +597,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
               type="checkbox"
               checked={form.has_attachment}
               onChange={(e) => setForm((f) => ({ ...f, has_attachment: e.target.checked }))}
-              className="rounded border-border accent-primary"
+              className="h-4 w-4 rounded border-2 border-border bg-bg accent-primary cursor-pointer dark:border-slate-500 focus:outline-none focus:ring-2 focus:ring-primary/50"
             />
             Has a supporting document attached
           </label>

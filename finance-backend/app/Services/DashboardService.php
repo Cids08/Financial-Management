@@ -324,24 +324,32 @@ class DashboardService
     }
 
     /**
-     * Latest forecast per distinct forecast_target (e.g. "Revenue",
-     * "Expenses", "Cash Flow" — whatever strings your forecasting
-     * service actually writes to that column; I haven't seen a seeder
-     * for financial_forecasts so these are returned generically rather
-     * than hard-coded to 3 specific labels the frontend expects).
+     * Latest forecast per forecast_type (Cash Flow / Revenue / Collections /
+     * Expenses / Accounts Receivable — see FinancialForecastService::FORECAST_TYPES).
+     *
+     * NOTE: grouping is on forecast_type, not forecast_target.
+     * forecast_target is a shared financial-statement category (DB CHECK
+     * constrains it to Revenue/Expense/Cash Flow/Budget), and
+     * FinancialForecastService::FORECAST_TARGET_MAP deliberately collapses
+     * Collections + Accounts Receivable into 'Cash Flow' there — grouping
+     * by forecast_target would merge those distinct forecast types into a
+     * single row instead of showing each one. forecast_type is the
+     * granular value the user actually picks when generating a forecast,
+     * and is what the Financial Forecasting page's TYPE column displays,
+     * so that's what the dashboard groups and labels by too.
      */
     public function getForecastSummary(): array
     {
-        $latestIdsPerTarget = FinancialForecast::query()
+        $latestIdsPerType = FinancialForecast::query()
             ->selectRaw('MAX(id) as id')
-            ->groupBy('forecast_target')
+            ->groupBy('forecast_type')
             ->pluck('id');
 
-        return FinancialForecast::whereIn('id', $latestIdsPerTarget)
+        return FinancialForecast::whereIn('id', $latestIdsPerType)
             ->orderByDesc('generated_at')
             ->get()
             ->map(fn ($f) => [
-                'forecast_target' => $f->forecast_target,
+                'forecast_target' => $f->forecast_type, // frontend label — see note above
                 'forecast_type' => $f->forecast_type,
                 'predicted_amount' => (float) $f->predicted_amount,
                 'actual_amount' => $f->actual_amount !== null ? (float) $f->actual_amount : null,

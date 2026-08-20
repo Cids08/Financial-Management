@@ -14,6 +14,7 @@ import {
   HandCoins,
   FileMinus,
   Send,
+  PiggyBank,
   Receipt,
   Landmark,
   BookOpen,
@@ -46,12 +47,9 @@ export const menuData = [
     label: 'Dashboard',
     icon: LayoutDashboard,
     path: '/dashboard',
-    permission: 'dashboard.view',
-    // Every role (including staff/collector) has dashboard.view — this
-    // just keeps the sidebar item consistent with routes/api.php's gate
-    // on GET /dashboard, not a role restriction. The CONTENT shown at
-    // /dashboard differs by role — that's DashboardController's job on
-    // the backend, not something this menu entry controls.
+    // No `permission` field — every role has its own dashboard, rendered
+    // per-role by DashboardController. Not module-gated, same reasoning
+    // as the Settings entry below.
   },
   {
     id: 'user-management',
@@ -83,10 +81,14 @@ export const menuData = [
       { id: 'ar', label: 'Accounts Receivable', icon: FileText, path: '/transactions/receivable', permission: 'ar.view' },
       { id: 'collections', label: 'Collections', icon: HandCoins, path: '/transactions/collections', permission: 'collections.view' },
       { id: 'ap', label: 'Accounts Payable', icon: FileMinus, path: '/transactions/payable', permission: 'ap.view' },
-      // Disbursements covers Budgets too (one combined module, permission
-      // = disbursements.view — reverted from a brief split back to
-      // combined). Route group itself isn't built yet.
+      // Split back out from Disbursements — Disbursements is payments
+      // against AP only now; Budgets is its own module with its own
+      // permission group (budgets.view/manage/approve — see
+      // database/seeders/budgets-permission-addition.php), not
+      // disbursements.*, so Staff/Admin access to one is independent of
+      // the other.
       { id: 'disbursements', label: 'Disbursements', icon: Send, path: '/transactions/disbursements', permission: 'disbursements.view' },
+      { id: 'budgets', label: 'Budgets', icon: PiggyBank, path: '/transactions/budgets', permission: 'budgets.view' },
       { id: 'expenses', label: 'Expenses', icon: Receipt, path: '/transactions/expenses', permission: 'expenses.view' },
       { id: 'tax', label: 'Tax Obligations', icon: Landmark, path: '/transactions/tax-obligations', permission: 'tax.view' },
     ],
@@ -123,11 +125,9 @@ export const menuData = [
     // No `permission` field, on purpose — Settings is "my account"
     // (password, 2FA, sessions, activity, deactivate), not a module.
     // It needs to be visible to every authenticated user the same way
-    // Logout is, regardless of what's actually seeded for settings.view
-    // in the DB for any given role. The only thing genuinely gated is
-    // the Company Branding EDIT form *inside* the page, which checks
+    // Logout is. Company Branding EDIT inside the page checks
     // settings.manage directly in Settings.jsx — that's the correct
-    // place for that restriction, not this sidebar entry.
+    // place for that narrower restriction.
   },
   {
     id: 'logout',

@@ -1,10 +1,12 @@
-import { useMemo, useState } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, HandCoins, CheckCircle2, Clock3, Wallet, Info, Printer } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Search, Plus, Pencil, Archive, RotateCcw, HandCoins, CheckCircle2, Clock3, Wallet, Info, Printer, TrendingUp } from 'lucide-react'
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip } from 'recharts'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
 import { formatCurrency } from '../utils/formatters'
+import { apiFetch } from '../utils/api'
 
 // Lookups
 const AR_RECORDS = [
@@ -67,6 +69,15 @@ const STATUS_STYLES = {
   Voided: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
 }
 
+// Matches CollectionService::efficiency()'s $granularity allow-list —
+// day/week/month/year, no quarter.
+const EFFICIENCY_PERIODS = [
+  { key: 'day', label: 'Daily' },
+  { key: 'week', label: 'Weekly' },
+  { key: 'month', label: 'Monthly' },
+  { key: 'year', label: 'Yearly' },
+]
+
 function formatDate(value) {
   if (!value) return '—'
   return new Date(value).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })
@@ -81,6 +92,137 @@ function DetailRow({ label, value }) {
     <div className="flex items-center justify-between gap-3 py-1.5">
       <span className="text-xs text-muted">{label}</span>
       <span className="text-xs font-medium text-ink text-right">{value ?? '—'}</span>
+    </div>
+  )
+}
+
+/**
+ * Collection Efficiency panel — per collector, fetches
+ * GET /api/collectors/{collectorId}/efficiency?period=X&limit=12.
+ * Matches CollectionService::efficiency(): efficiency% = collected ÷
+ * the collector's monthly_target (prorated to the bucket length), NOT
+ * AR due amounts. Response is ordered most-recent-bucket-first; reversed
+ * here for a chronological left-to-right chart.
+ *
+ * ASSUMPTION: GET /api/collectors returns objects shaped like
+ * { id, first_name, last_name, ... }, matching the 'collector:id,
+ * first_name,last_name' eager-load already used in DashboardService.php.
+ * If the real shape differs, adjust the .map() below.
+ */
+function CollectionEfficiencyPanel() {
+  const [period, setPeriod] = useState('month')
+  const [collectorId, setCollectorId] = useState(null)
+  const [collectors, setCollectors] = useState([])
+  const [collectorsLoading, setCollectorsLoading] = useState(true)
+  const [buckets, setBuckets] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    apiFetch('/api/collectors')
+      .then((res) => res.json())
+      .then((json) => {
+        if (!json.success) throw new Error(json.message || 'Failed to load collectors.')
+        setCollectors(json.data)
+        if (json.data.length > 0) setCollectorId(json.data[0].id)
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setCollectorsLoading(false))
+  }, [])
+
+  useEffect(() => {
+    if (!collectorId) return
+    let cancelled = false
+    setLoading(true)
+    setError('')
+    apiFetch(`/api/collectors/${collectorId}/efficiency?period=${period}&limit=12`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (cancelled) return
+        if (!json.success) throw new Error(json.message || 'Failed to load efficiency data.')
+        // Backend returns most-recent-first; reverse for a chronological chart.
+        setBuckets([...json.data].reverse())
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [collectorId, period])
+
+  const avgEfficiency = useMemo(() => {
+    if (buckets.length === 0) return null
+    return Math.round((buckets.reduce((sum, b) => sum + b.efficiency, 0) / buckets.length) * 10) / 10
+  }, [buckets])
+
+  return (
+    <div className={`${PANEL} ${PANEL_PAD} space-y-3`}>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary-dark">
+            <TrendingUp size={17} />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-ink">Collection Efficiency</p>
+            <p className="text-xs text-muted">
+              Collected vs. target{avgEfficiency !== null && <> · avg <span className="font-medium text-ink">{avgEfficiency}%</span></>}
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <select
+            value={collectorId ?? ''}
+            onChange={(e) => setCollectorId(Number(e.target.value))}
+            disabled={collectorsLoading || collectors.length === 0}
+            className={`${INPUT} sm:w-56`}
+          >
+            {collectors.map((c) => (
+              <option key={c.id} value={c.id}>{c.first_name} {c.last_name}</option>
+            ))}
+          </select>
+          <div className="flex gap-1">
+            {EFFICIENCY_PERIODS.map((p) => (
+              <button
+                key={p.key}
+                type="button"
+                onClick={() => setPeriod(p.key)}
+                className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors duration-150
+                  ${period === p.key ? 'border-primary bg-primary/10 text-primary-dark' : 'border-border text-muted hover:border-primary/40'}`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{error}</div>
+      )}
+
+      {collectorsLoading || loading ? (
+        <p className="text-sm text-muted py-8 text-center">Loading efficiency data…</p>
+      ) : collectors.length === 0 ? (
+        <p className="text-sm text-muted py-8 text-center">No collectors found.</p>
+      ) : buckets.length === 0 ? (
+        <p className="text-sm text-muted py-8 text-center">No data for this period yet.</p>
+      ) : (
+        <div className="h-56 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={buckets} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+              <XAxis dataKey="period" tick={{ fontSize: 10 }} />
+              <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `${v}%`} width={40} domain={[0, 'dataMax + 10']} />
+              <RechartsTooltip
+                formatter={(value, name) => (name === 'efficiency' ? [`${value}%`, 'Efficiency'] : [formatCurrency(value), name === 'collected' ? 'Collected' : 'Target'])}
+              />
+              <Bar dataKey="efficiency" fill="#2563eb" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
     </div>
   )
 }
@@ -252,6 +394,8 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
         })}
       </div>
 
+      <CollectionEfficiencyPanel />
+
       <div className={`${PANEL} ${PANEL_PAD} flex flex-col gap-3 lg:flex-row lg:items-center`}>
         <div className="relative flex-1">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
@@ -261,10 +405,15 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
           <option value="all">All Statuses</option>
           {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
-        <label className="flex items-center gap-2 text-sm text-muted cursor-pointer whitespace-nowrap">
-          <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} className="rounded border-border accent-primary" />
-          Show archived
-        </label>
+        <Button
+          variant={showArchived ? 'primary' : 'secondary'}
+          size="sm"
+          icon={Archive}
+          onClick={() => setShowArchived((prev) => !prev)}
+          className="shrink-0 whitespace-nowrap"
+        >
+          Show Archived
+        </Button>
       </div>
 
       <div className={PANEL}>

@@ -226,15 +226,15 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
             className={`${INPUT} pl-9`}
           />
         </div>
-        <label className="flex items-center gap-2 text-sm text-muted cursor-pointer whitespace-nowrap">
-          <input
-            type="checkbox"
-            checked={showArchived}
-            onChange={(e) => setShowArchived(e.target.checked)}
-            className="rounded border-border accent-primary"
-          />
-          Show archived
-        </label>
+        <Button
+          variant={showArchived ? 'primary' : 'secondary'}
+          size="sm"
+          icon={Archive}
+          onClick={() => setShowArchived((prev) => !prev)}
+          className="shrink-0 whitespace-nowrap"
+        >
+          Show Archived
+        </Button>
       </div>
 
       {rolesError && (

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, Receipt, Wallet, AlertTriangle, Info, Printer, Upload, ScanLine, X, CheckCircle2 } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, Receipt, Wallet, AlertTriangle, Info, Printer, Upload, ScanLine, X, CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
@@ -7,11 +7,13 @@ import Tooltip from '../components/Tooltip'
 import { formatCurrency } from '../utils/formatters'
 import { useAccountsReceivable } from '../hooks/useAccountsReceivable'
 import { apiFetch } from '../utils/api'
+import { usePermissions } from '../context/PermissionsContext'
 
 const PAYMENT_METHODS = ['Bank Transfer', 'Check', 'Cash', 'Credit Card', 'GCash']
 const STATUS_OPTIONS = ['Pending', 'Partially Paid', 'Paid', 'Overdue', 'Cancelled']
 const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const MAX_IMAGE_MB = 8
+const PAGE_SIZE = 10
 
 const EMPTY_FORM = { customer_id: '', collector_id: '', invoice_number: '', invoice_date: '', due_date: '', original_amount: '', balance: '', payment_method: 'Bank Transfer', payment_terms: 'Net 30', purchase_order_no: '', reference_no: '', penalty_rate: '', remarks: '', status: 'Pending' }
 
@@ -48,14 +50,7 @@ function addDaysISO(days) {
 
 /**
  * Lightweight fetch-on-mount lookups for the form's dropdowns — same
- * pattern used for collectors/budgets/categories elsewhere. All three
- * assume their resource matches the shape the old mock data used
- * (customer_id/customer_name, user_id/first_name/last_name,
- * collector_id/first_name/last_name) since that's the established
- * "resource mirrors the mock 1:1" convention in this codebase
- * (CollectorResource, ExpenseResource, etc). If your actual
- * CustomerResource/UserResource use different keys, adjust the
- * `json.data` mapping below rather than the rest of this file.
+ * pattern used for collectors/budgets/categories elsewhere.
  */
 function useLookup(path) {
   const [options, setOptions] = useState([])
@@ -123,8 +118,6 @@ function InvoiceScanUpload({ onScanned }) {
       const json = await res.json()
 
       if (!res.ok || !json.success) {
-        // Real rejection from the OCR service — e.g. it couldn't find any
-        // receipt-like text in the image — not a random guess.
         setError(json.message || "Couldn't read this image. Please fill in the details manually.")
         setStatus('idle')
         setPreview(null)
@@ -210,6 +203,11 @@ function InvoiceScanUpload({ onScanned }) {
 
 export default function AccountsReceivable({ title = 'Accounts Receivable', crumbs = ['Financial Transactions', 'Accounts Receivable'] }) {
   const { records, loading, saving, error, fetchRecords, createRecord, updateRecord, toggleArchive } = useAccountsReceivable()
+  const { hasPermission } = usePermissions()
+  // Backend gates POST/PUT/toggle-archive on accounts-receivable behind
+  // ar.manage — Collector only has ar.view (see RolesAndPermissionsSeeder),
+  // so Add/Edit/Archive buttons are hidden rather than shown-then-403ing.
+  const canManage = hasPermission('ar.manage')
   const customers = useLookup('/api/customers')
   const users = useLookup('/api/users')
   const collectors = useLookup('/api/collectors?archived=0&per_page=200')
@@ -259,6 +257,22 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
       return true
     })
   }, [records, search, statusFilter, showArchived])
+
+  // Pagination is purely client-side over `filtered` — consistent with the
+  // rest of this page's filtering, which already runs entirely in-browser
+  // against the full `records` array (no server-side paging exists here).
+  const [page, setPage] = useState(1)
+  useEffect(() => {
+    setPage(1)
+  }, [search, statusFilter, showArchived])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const paginated = useMemo(
+    () => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [filtered, page]
+  )
+  const rangeStart = filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
+  const rangeEnd = Math.min(page * PAGE_SIZE, filtered.length)
 
   const stats = useMemo(() => {
     const active = records.filter((r) => !r.is_archived)
@@ -416,7 +430,9 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
           <h1 className="text-xl font-bold tracking-tight text-ink">{title}</h1>
           <p className="mt-1 text-xs text-muted">Track customer invoices, balances, and aging.</p>
         </div>
-        <Button variant="primary" size="sm" icon={Plus} onClick={openAdd}>Add Invoice</Button>
+        {/* Add Invoice hidden entirely for view-only roles (Collector) —
+            the backend POST route requires ar.manage, which they don't have. */}
+        {canManage && <Button variant="primary" size="sm" icon={Plus} onClick={openAdd}>Add Invoice</Button>}
       </div>
 
       {error && (
@@ -458,32 +474,40 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
           <option value="all">All Statuses</option>
           {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
-        <label className="flex items-center gap-2 text-sm text-muted cursor-pointer whitespace-nowrap">
-          <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} className="rounded border-border accent-primary" />
-          Show archived
-        </label>
+        <Button
+          variant={showArchived ? 'primary' : 'secondary'}
+          size="sm"
+          icon={Archive}
+          onClick={() => setShowArchived((prev) => !prev)}
+          className="shrink-0 whitespace-nowrap"
+        >
+          Show Archived
+        </Button>
       </div>
 
+      {/* max-h + overflow-y-auto gives the sticky header a scroll container
+          to stick within — without this, "sticky" has nothing to pin
+          against once the whole page (not just the table) is what scrolls. */}
       <div className={PANEL}>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto overflow-y-auto max-h-[70vh]">
           <table className="w-full text-sm">
-            <thead>
+            <thead className="sticky top-0 z-10 bg-surface">
               <tr className="border-b border-border">
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Invoice</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Customer / Collector</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Terms / PO</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Due Date</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Original / Balance</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Penalty</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Status</th>
-                <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Actions</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Invoice</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Customer / Collector</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Terms / PO</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Due Date</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Original / Balance</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Penalty</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Status</th>
+                <th className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
                 <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-muted">Loading invoices…</td></tr>
               )}
-              {!loading && filtered.map((r) => (
+              {!loading && paginated.map((r) => (
                 <tr key={r.ar_id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
                   <td className="px-4 py-3.5">
                     <p className="font-medium text-ink">{r.invoice_number}</p>
@@ -528,16 +552,22 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                           <Printer size={15} />
                         </button>
                       </Tooltip>
-                      <Tooltip label="Edit invoice" align="start">
-                        <button type="button" onClick={() => openEdit(r)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                          <Pencil size={15} />
-                        </button>
-                      </Tooltip>
-                      <Tooltip label={r.is_archived ? 'Restore invoice' : 'Archive invoice'} align="end">
-                        <button type="button" onClick={() => handleToggleArchive(r.ar_id)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                          {r.is_archived ? <RotateCcw size={15} /> : <Archive size={15} />}
-                        </button>
-                      </Tooltip>
+                      {/* Edit and Archive/Restore both hit ar.manage-gated
+                          routes — hidden for view-only roles like Collector. */}
+                      {canManage && (
+                        <Tooltip label="Edit invoice" align="start">
+                          <button type="button" onClick={() => openEdit(r)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                            <Pencil size={15} />
+                          </button>
+                        </Tooltip>
+                      )}
+                      {canManage && (
+                        <Tooltip label={r.is_archived ? 'Restore invoice' : 'Archive invoice'} align="end">
+                          <button type="button" onClick={() => handleToggleArchive(r.ar_id)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                            {r.is_archived ? <RotateCcw size={15} /> : <Archive size={15} />}
+                          </button>
+                        </Tooltip>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -548,9 +578,43 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
             </tbody>
           </table>
         </div>
+
+        {!loading && filtered.length > 0 && (
+          <div className="flex flex-col gap-2 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-muted">
+              Showing {rangeStart}–{rangeEnd} of {filtered.length} invoices
+            </p>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label="Previous page"
+              >
+                <ChevronLeft size={15} />
+              </button>
+              <span className="px-2 text-xs font-medium text-ink whitespace-nowrap">
+                Page {page} of {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label="Next page"
+              >
+                <ChevronRight size={15} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Add / Edit modal — editable business fields only */}
+      {/* Add / Edit modal — editable business fields only. Only ever
+          reachable via openAdd/openEdit, both of which are now behind
+          canManage-gated buttons — kept unconditionally rendered here
+          since Modal's own `open` prop already controls visibility. */}
       <Modal
         open={isModalOpen}
         onClose={closeModal}

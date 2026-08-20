@@ -1,7 +1,8 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import ProtectedRoute from './components/ProtectedRoute'
+import RequirePermission from './components/RequirePermission'
 import DashboardLayout from './layouts/DashboardLayout'
-import Dashboard from './pages/Dashboard'
+import DashboardRouter from './pages/DashboardRouter'
 import PlaceholderPage from './pages/PlaceholderPage'
 import Profile from './pages/Profile'
 import Users from './pages/Users'
@@ -39,38 +40,130 @@ export default function App() {
       {/* Everything below requires an authenticated session */}
       <Route element={<ProtectedRoute />}>
         <Route element={<DashboardLayout />}>
-          <Route path="/dashboard" element={<Dashboard />} />
+          {/* Open to every authenticated user — DashboardRouter picks the
+              right component per role (Collector/Staff get their own
+              simplified view, Admin/Super Admin get the full dashboard).
+              No permission gate here, matching that the module isn't
+              "Admin-only", it's "role-aware". */}
+          <Route path="/dashboard" element={<DashboardRouter />} />
 
           {/* User Management */}
-          <Route path="/user-management/users" element={<Users crumbs={['User Management', 'Users']} />} />
-          <Route path="/user-management/roles" element={<Roles crumbs={['User Management', 'Roles']} />} />
+          <Route path="/user-management/users" element={
+            <RequirePermission permission="users.view">
+              <Users crumbs={['User Management', 'Users']} />
+            </RequirePermission>
+          } />
+          <Route path="/user-management/roles" element={
+            <RequirePermission permission="roles.view">
+              <Roles crumbs={['User Management', 'Roles']} />
+            </RequirePermission>
+          } />
 
           {/* Master Data */}
-          <Route path="/master-data/customers" element={<Customers crumbs={['Master Data', 'Customers']} />} />
-          <Route path="/master-data/suppliers" element={<Suppliers crumbs={['Master Data', 'Suppliers']} />} />
-          <Route path="/master-data/collectors" element={<Collectors crumbs={['Master Data', 'Collectors']} />} />
-          <Route path="/master-data/departments" element={<Departments crumbs={['Master Data', 'Departments']} />} />
-          <Route path="/master-data/cash-accounts" element={<CashAccounts crumbs={['Master Data', 'Cash Accounts']} />} />
-          <Route path="/master-data/fixed-assets" element={<FixedAssets crumbs={['Master Data', 'Fixed Assets']} />} />
+          <Route path="/master-data/customers" element={
+            <RequirePermission permission="customers.view">
+              <Customers crumbs={['Master Data', 'Customers']} />
+            </RequirePermission>
+          } />
+          <Route path="/master-data/suppliers" element={
+            <RequirePermission permission="suppliers.view">
+              <Suppliers crumbs={['Master Data', 'Suppliers']} />
+            </RequirePermission>
+          } />
+          <Route path="/master-data/collectors" element={
+            <RequirePermission permission="collectors.view">
+              <Collectors crumbs={['Master Data', 'Collectors']} />
+            </RequirePermission>
+          } />
+          <Route path="/master-data/departments" element={
+            <RequirePermission permission="departments.view">
+              <Departments crumbs={['Master Data', 'Departments']} />
+            </RequirePermission>
+          } />
+          <Route path="/master-data/cash-accounts" element={
+            <RequirePermission permission="cash-accounts.view">
+              <CashAccounts crumbs={['Master Data', 'Cash Accounts']} />
+            </RequirePermission>
+          } />
+          <Route path="/master-data/fixed-assets" element={
+            <RequirePermission permission="fixed-assets.view">
+              <FixedAssets crumbs={['Master Data', 'Fixed Assets']} />
+            </RequirePermission>
+          } />
 
           {/* Financial Transactions */}
-          <Route path="/transactions/receivable" element={<AccountsReceivable crumbs={['Financial Transactions', 'Accounts Receivable']} />} />
-          <Route path="/transactions/collections" element={<Collections crumbs={['Financial Transactions', 'Collections']} />} />
-          <Route path="/transactions/payable" element={<AccountsPayable crumbs={['Financial Transactions', 'Accounts Payable']} />} />
-          <Route path="/transactions/disbursements" element={<Disbursements crumbs={['Financial Transactions', 'Disbursements']} />} />
+          <Route path="/transactions/receivable" element={
+            <RequirePermission permission="ar.view">
+              <AccountsReceivable crumbs={['Financial Transactions', 'Accounts Receivable']} />
+            </RequirePermission>
+          } />
+          <Route path="/transactions/collections" element={
+            <RequirePermission permission="collections.view">
+              <Collections crumbs={['Financial Transactions', 'Collections']} />
+            </RequirePermission>
+          } />
+          <Route path="/transactions/payable" element={
+            <RequirePermission permission="ap.view">
+              <AccountsPayable crumbs={['Financial Transactions', 'Accounts Payable']} />
+            </RequirePermission>
+          } />
+          <Route path="/transactions/disbursements" element={
+            <RequirePermission permission="disbursements.view">
+              <Disbursements crumbs={['Financial Transactions', 'Disbursements']} />
+            </RequirePermission>
+          } />
+          {/* /transactions/budgets has no entry in menuData.js (no sidebar
+              link, and its comment there says Budgets was folded into the
+              combined Disbursements module/permission) — left UNGATED
+              since there's no confirmed permission slug for it. If this
+              route is still meant to be reachable, decide whether it
+              should share disbursements.view or get its own budgets.view
+              (the routes/api.php comment mentions budgets.* permissions
+              already exist in RoleSeeder even though no route uses them
+              yet) and I'll wire it the same way as the others. */}
           <Route path="/transactions/budgets" element={<Budgets crumbs={['Financial Transactions', 'Budgets']} />} />
-          <Route path="/transactions/expenses" element={<Expenses crumbs={['Financial Transactions', 'Expenses']} />} />
-          <Route path="/transactions/tax-obligations" element={<TaxObligations crumbs={['Financial Transactions', 'Tax Obligations']} />} />
+          <Route path="/transactions/expenses" element={
+            <RequirePermission permission="expenses.view">
+              <Expenses crumbs={['Financial Transactions', 'Expenses']} />
+            </RequirePermission>
+          } />
+          <Route path="/transactions/tax-obligations" element={
+            <RequirePermission permission="tax.view">
+              <TaxObligations crumbs={['Financial Transactions', 'Tax Obligations']} />
+            </RequirePermission>
+          } />
 
           {/* Accounting */}
-          <Route path="/accounting/general-ledger" element={<Generalledger crumbs={['Accounting', 'General Ledger']} />} />
+          <Route path="/accounting/general-ledger" element={
+            <RequirePermission permission="general-ledger.view">
+              <Generalledger crumbs={['Accounting', 'General Ledger']} />
+            </RequirePermission>
+          } />
 
           {/* Analytics */}
-          <Route path="/analytics/forecasting" element={<FinancialForecasting crumbs={['Analytics', 'Financial Forecasting']} />} />
-          <Route path="/analytics/ai-recommendations" element={<AIRecommendations crumbs={['Analytics', 'AI Financial Recommendations']} />} />
+          <Route path="/analytics/forecasting" element={
+            <RequirePermission permission="forecasting.view">
+              <FinancialForecasting crumbs={['Analytics', 'Financial Forecasting']} />
+            </RequirePermission>
+          } />
+          <Route path="/analytics/ai-recommendations" element={
+            <RequirePermission permission="ai.view">
+              <AIRecommendations crumbs={['Analytics', 'AI Financial Recommendations']} />
+            </RequirePermission>
+          } />
 
           {/* Standalone */}
-          <Route path="/reports" element={<Reports crumbs={['Reports']} />} />
+          <Route path="/reports" element={
+            <RequirePermission permission="reports.view">
+              <Reports crumbs={['Reports']} />
+            </RequirePermission>
+          } />
+          {/* Settings and Profile are intentionally NOT wrapped in
+              RequirePermission — both are "my own account" pages, open to
+              every authenticated user regardless of role, matching the
+              comment already in menuData.js. The Company Branding EDIT
+              form inside Settings.jsx checks settings.manage itself,
+              which is the correct place for that narrower restriction. */}
           <Route path="/settings" element={<Settings crumbs={['Settings']} />} />
           <Route path="/profile" element={<Profile />} />
         </Route>

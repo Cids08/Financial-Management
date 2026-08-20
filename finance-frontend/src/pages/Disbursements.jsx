@@ -652,10 +652,15 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
               <option value="all">All Statuses</option>
               {DISBURSEMENT_STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
-            <label className="flex items-center gap-2 text-sm text-muted cursor-pointer whitespace-nowrap">
-              <input type="checkbox" checked={dShowArchived} onChange={(e) => setDShowArchived(e.target.checked)} className="rounded border-border accent-primary" />
-              Show archived
-            </label>
+        <Button
+          variant={showArchived ? 'primary' : 'secondary'}
+          size="sm"
+          icon={Archive}
+          onClick={() => setShowArchived((prev) => !prev)}
+          className="shrink-0 whitespace-nowrap"
+        >
+          Show Archived
+        </Button>
           </div>
 
           <div className={PANEL}>

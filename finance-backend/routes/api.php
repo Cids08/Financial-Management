@@ -80,7 +80,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/activity', [AccountSecurityController::class, 'activity']);
 
         Route::post('/2fa/initiate', [AccountSecurityController::class, 'initiateTwoFactor']);
-        Route::post('/2fa/confirm', [AccountSecurityController::class, 'confirmTwoFactor']);
+
+        // 6-digit TOTP code = 1,000,000 possible values. This route used to
+        // sit outside every throttle group, making the code brute-forceable
+        // with no rate limit. Throttled tighter than the general settings
+        // actions below since this is a guessing attack surface.
+        Route::post('/2fa/confirm', [AccountSecurityController::class, 'confirmTwoFactor'])
+            ->middleware('throttle:5,1');
 
         Route::middleware('throttle:10,1')->group(function () {
             Route::put('/password', [AccountSecurityController::class, 'updatePassword']);
@@ -228,14 +234,15 @@ Route::middleware('auth:sanctum')->group(function () {
             ->withTrashed();
     });
 
-    // Dashboard — Admin + Super Admin only, via a dedicated dashboard.view
-    // permission (not a raw role check, to stay consistent with every other
-    // gated route in this file). Requires seeding 'dashboard.view' and
-    // assigning it to the Super Admin and Admin roles only — see note below.
-    Route::middleware('permission:dashboard.view')->group(function () {
-        Route::get('/dashboard', [DashboardController::class, 'index']);
-        Route::get('/dashboard/charts', [DashboardController::class, 'charts']);
-    });
+    // Dashboard — open to any authenticated user; DashboardController
+    // itself renders different content per role (Admin/Super Admin see
+    // one view, Staff/Collector see their own), so this route needs no
+    // module permission gate — every role has its own dashboard, this
+    // isn't an "Admin-only" module. Previously gated behind
+    // permission:dashboard.view, which incorrectly 403'd every non-Admin
+    // role out of their own dashboard.
+    Route::get('/dashboard', [DashboardController::class, 'index']);
+    Route::get('/dashboard/charts', [DashboardController::class, 'charts']);
 
     // Invoice OCR scan — shared utility used by both the AR and AP "Add"
     // forms. Left ungated by module permission (just auth:sanctum); anyone
@@ -285,8 +292,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/conversations/{conversation}/messages', [AiAdvisorController::class, 'chat']);
     });
 
-    // Analytics — Financial Forecasting (matches "Forecasting") — already
-    // had this pattern applied; kept as-is (slug was already correct).
+    // Analytics — Financial Forecasting (matches "Forecasting") — archive
+    // and restore added, following the same pattern as collections below
+    // (patch .../archive gated by .manage, patch .../restore gated by
+    // .manage AND ->withTrashed() so the route-model-binding can resolve
+    // an already-soft-deleted forecast).
     Route::prefix('forecasts')->group(function () {
         Route::get('/', [FinancialForecastController::class, 'index'])
             ->middleware('permission:forecasting.view');
@@ -294,6 +304,11 @@ Route::middleware('auth:sanctum')->group(function () {
             ->middleware('permission:forecasting.view');
         Route::post('/', [FinancialForecastController::class, 'store'])
             ->middleware('permission:forecasting.manage');
+        Route::patch('/{financialForecast}/archive', [FinancialForecastController::class, 'archive'])
+            ->middleware('permission:forecasting.manage');
+        Route::patch('/{financialForecast}/restore', [FinancialForecastController::class, 'restore'])
+            ->middleware('permission:forecasting.manage')
+            ->withTrashed();
     });
 
     // Master Data — Service Areas — not in the hierarchy, Admin-only.
@@ -314,9 +329,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('/{collection}/confirm', [CollectionController::class, 'confirm'])->middleware('permission:collections.confirm');
         Route::patch('/{collection}/cancel', [CollectionController::class, 'cancel'])->middleware('permission:collections.confirm');
         Route::patch('/{collection}/archive', [CollectionController::class, 'archive'])->middleware('permission:collections.manage');
-        Route::patch('/{collection}/restore', [CollectionController::class, 'restore'])
-            ->middleware('permission:collections.manage')
-            ->withTrashed();
+        Route::patch('/{collection}/restore', [CollectionController::class, 'restore'])->middleware('permission:collections.manage')->withTrashed();
+        Route::get('/{collector}/efficiency', [CollectorController::class, 'efficiency'])->middleware('permission:collectors.view');
     });
 
     // Reports (Financial Reports in the hierarchy) — Admin only.

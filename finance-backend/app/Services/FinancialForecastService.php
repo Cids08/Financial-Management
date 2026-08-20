@@ -44,9 +44,21 @@ class FinancialForecastService
     {
     }
 
-    public function list(): Collection
+    /**
+     * @param string $status 'active' (default — excludes archived, via
+     *   FinancialForecast's normal SoftDeletes global scope), 'archived'
+     *   (only archived), or 'all' (both). Same convention as every other
+     *   archive/restore module in this app.
+     */
+    public function list(string $status = 'active'): Collection
     {
-        return FinancialForecast::query()
+        $query = match ($status) {
+            'archived' => FinancialForecast::onlyTrashed(),
+            'all' => FinancialForecast::withTrashed(),
+            default => FinancialForecast::query(),
+        };
+
+        return $query
             ->with('generator')
             ->orderByDesc('generated_at')
             ->get();
@@ -134,6 +146,57 @@ class FinancialForecastService
 
             return $forecast->load('generator');
         });
+    }
+
+    /**
+     * Soft-deletes the forecast (archive, not destroy) — the historical
+     * prediction stays in the DB for audit purposes, it just drops out of
+     * the default active listing. Relies on FinancialForecast using the
+     * SoftDeletes trait (inferred from generateForecastNo()'s use of
+     * withTrashed() above) — verify that trait is actually present on the
+     * model before relying on this in production; if it's missing,
+     * ->delete() here would hard-delete the row instead of archiving it.
+     */
+    public function archive(User $actor, FinancialForecast $forecast): FinancialForecast
+    {
+        $forecast->delete();
+
+        AuditLog::create([
+            'user_id' => $actor->id,
+            'module' => 'Financial Forecasting',
+            'action' => 'archive',
+            'record_id' => $forecast->id,
+            'activity_description' => "Archived {$forecast->forecast_type} forecast ({$forecast->forecast_no}).",
+            'new_values' => null,
+            'ip_address' => request()->ip(),
+            'user_agent' => request()->userAgent(),
+        ]);
+
+        return $forecast;
+    }
+
+    /**
+     * Restores a previously archived forecast. $forecast must have been
+     * resolved via a route/query that includes trashed rows (see
+     * FinancialForecastController::restore() and its ->withTrashed()
+     * route binding) — a normal lookup would 404 before this is reached.
+     */
+    public function restore(User $actor, FinancialForecast $forecast): FinancialForecast
+    {
+        $forecast->restore();
+
+        AuditLog::create([
+            'user_id' => $actor->id,
+            'module' => 'Financial Forecasting',
+            'action' => 'restore',
+            'record_id' => $forecast->id,
+            'activity_description' => "Restored {$forecast->forecast_type} forecast ({$forecast->forecast_no}).",
+            'new_values' => null,
+            'ip_address' => request()->ip(),
+            'user_agent' => request()->userAgent(),
+        ]);
+
+        return $forecast;
     }
 
     protected function generateForecastNo(): string

@@ -168,10 +168,15 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
           <option value="all">All Types</option>
           {ACCOUNT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
-        <label className="flex items-center gap-2 text-sm text-muted cursor-pointer whitespace-nowrap">
-          <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} className="rounded border-border accent-primary" />
-          Show archived
-        </label>
+        <Button
+          variant={showArchived ? 'primary' : 'secondary'}
+          size="sm"
+          icon={Archive}
+          onClick={() => setShowArchived((prev) => !prev)}
+          className="shrink-0 whitespace-nowrap"
+        >
+          Show Archived
+        </Button>
       </div>
 
       <div className={PANEL}>

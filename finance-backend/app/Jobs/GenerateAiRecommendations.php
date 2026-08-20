@@ -15,18 +15,22 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * Turns a completed FinancialForecast into one or more ai_recommendations
- * rows — this is the "??? " step between forecast generation and the
- * AI Recommendations feed on the frontend. Runs on the queue since forecast
- * generation must never block on it (per "Forecast generation can be
- * computationally expensive... do not block user requests unnecessarily").
+ * rows. Runs on the queue since forecast generation must never block on it.
  *
- * Delegates the actual content generation to whichever RecommendationEngine
- * is bound in AppServiceProvider (MockRecommendationEngine by default, or
- * OpenAiRecommendationEngine once billing is set up) — this job only
- * handles orchestration and persistence.
+ * IMPORTANT: ai_recommendations' real DB column is `category`, NOT
+ * `recommendation_type` — confirmed against the actual schema via the
+ * project's ERD. Earlier versions of this job used `recommendation_type`,
+ * which doesn't exist as a column, causing every insert to throw a
+ * QueryException regardless of whether the RecommendationEngine call
+ * itself succeeded. `priority` and `confidence_score` are also NOT NULL
+ * on this table and are now populated by both engines.
  *
- * Per "Never regenerate existing recommendations unless requested" (backend
- * skill): skips forecasts that already have recommendations attached.
+ * Delegates content generation to whichever RecommendationEngine is bound
+ * in AppServiceProvider — this job only handles orchestration and
+ * persistence, using the engine's 'type' key mapped onto the `category`
+ * column.
+ *
+ * Skips forecasts that already have recommendations attached.
  */
 class GenerateAiRecommendations implements ShouldQueue
 {
@@ -62,7 +66,9 @@ class GenerateAiRecommendations implements ShouldQueue
             foreach ($recommendations as $r) {
                 AiRecommendation::create([
                     'forecast_id' => $this->forecast->getKey(),
-                    'recommendation_type' => $r['type'],
+                    'category' => $r['type'],
+                    'priority' => $r['priority'],
+                    'confidence_score' => $r['confidence_score'],
                     'summary' => $r['summary'],
                     'recommendation' => $r['recommendation'],
                     // Null = system-generated; AiRecommendationResource should

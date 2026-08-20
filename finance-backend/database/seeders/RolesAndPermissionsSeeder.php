@@ -41,9 +41,19 @@ use Illuminate\Support\Facades\DB;
  * full re-seed of super-admin/admin, which are unaffected by this gate
  * anyway).
  *
- * disbursements.* covers BOTH disbursements and budgets — one combined
- * permission set, not two separate modules (routes for it don't exist
- * yet in routes/api.php — seeded ahead of time so it's ready once built).
+ * Same caveat applies to budgets.view/budgets.manage below — added to
+ * staff's default list, but only takes effect for a staff role created
+ * AFTER this addition. An already-existing staff role needs the same
+ * manual grant (or role_permissions truncation) described above.
+ *
+ * disbursements.* and budgets.* are now SEPARATE permission groups
+ * (both under the "Budget Management" DB module, since the CHECK
+ * constraint only allows that one module name for this area — but
+ * distinct permission_name values, independently assignable). This was
+ * previously one combined disbursements.* set covering both; split back
+ * out per clarification so Budgets access doesn't imply Disbursements
+ * access or vice versa. Routes for both don't exist yet in
+ * routes/api.php — seeded ahead of time so it's ready once built.
  *
  * PRUNING: permission_name values not in the canonical list below are
  * deleted (pivot rows first) — this cleans up orphaned rows from prior
@@ -104,13 +114,16 @@ class RolesAndPermissionsSeeder extends Seeder
         'ap.manage' => ['Manage Accounts Payable', 'Accounts Payable'],
         'ap.approve' => ['Approve Accounts Payable', 'Accounts Payable'],
 
-        // Budget Management — Disbursements and Budgets are ONE combined
-        // module (not two separate permission sets — reverted per
-        // clarification). Routes for this don't exist yet; seeded ahead
-        // of time so it's ready once built.
-        'disbursements.view' => ['View Disbursements & Budgets', 'Budget Management'],
-        'disbursements.manage' => ['Manage Disbursements & Budgets', 'Budget Management'],
-        'disbursements.approve' => ['Approve Disbursements & Budgets', 'Budget Management'],
+        // Budget Management — Disbursements and Budgets are now SEPARATE
+        // permission sets (split back out — see class docblock). Routes
+        // for both don't exist yet; seeded ahead of time so it's ready
+        // once built.
+        'disbursements.view' => ['View Disbursements', 'Budget Management'],
+        'disbursements.manage' => ['Manage Disbursements', 'Budget Management'],
+        'disbursements.approve' => ['Approve Disbursements', 'Budget Management'],
+        'budgets.view' => ['View Budgets', 'Budget Management'],
+        'budgets.manage' => ['Manage Budgets', 'Budget Management'],
+        'budgets.approve' => ['Approve Budgets', 'Budget Management'],
 
         // Accounting
         'expenses.view' => ['View Expenses', 'Accounting'],
@@ -142,7 +155,8 @@ class RolesAndPermissionsSeeder extends Seeder
             'ar.view', 'ar.manage',
             'ap.view', 'ap.manage', // NOT ap.approve
             'expenses.view', 'expenses.manage', // NOT expenses.approve
-            'disbursements.view', 'disbursements.manage', // NOT disbursements.approve — covers Budgets too, combined module
+            'disbursements.view', 'disbursements.manage', // NOT disbursements.approve
+            'budgets.view', 'budgets.manage', // NOT budgets.approve — final approval is Admin/CEO-only
             'expense-categories.view', // read-only dropdown source
         ],
         'collector' => [
@@ -203,8 +217,8 @@ class RolesAndPermissionsSeeder extends Seeder
 
         // staff, collector: explicit restricted lists — but ONLY on the
         // run that actually creates the role. See class docblock for what
-        // to do if these roles already existed before settings.view was
-        // added to their default list.
+        // to do if these roles already existed before settings.view/
+        // budgets.* were added to their default list.
         foreach (['staff', 'collector'] as $roleName) {
             if (! $roleWasCreated[$roleName]) {
                 $this->command->info("Skipped default permissions for '{$roleName}' — role already exists, leaving its current permissions as-is.");

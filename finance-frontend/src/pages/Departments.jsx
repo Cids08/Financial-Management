@@ -220,15 +220,15 @@ export default function Departments({ title = 'Departments', crumbs = ['Master D
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
           <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search departments..." className={`${INPUT} pl-9`} />
         </div>
-        <label className="flex items-center gap-2 text-sm text-muted cursor-pointer whitespace-nowrap">
-          <input
-            type="checkbox"
-            checked={showArchived}
-            onChange={(e) => toggleShowArchived(e.target.checked)}
-            className="rounded border-border accent-primary"
-          />
-          Show archived
-        </label>
+        <Button
+          variant={showArchived ? 'primary' : 'secondary'}
+          size="sm"
+          icon={Archive}
+          onClick={() => setShowArchived((prev) => !prev)}
+          className="shrink-0 whitespace-nowrap"
+        >
+          Show Archived
+        </Button>
       </div>
 
       {loadError && (

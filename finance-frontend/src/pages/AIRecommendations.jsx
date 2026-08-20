@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, useEffect } from 'react'
 import {
   Search, Sparkles, AlertTriangle, PiggyBank, Wallet, TrendingUp, ShieldAlert, Info, Bot, Send, User,
+  Archive, RotateCcw, ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
@@ -27,6 +28,7 @@ const DEFAULT_TYPE_META = { icon: Sparkles, style: 'bg-gray-100 text-muted' }
 
 const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
 const PANEL_PAD = 'p-4'
+const PAGE_SIZE = 8
 
 // NOTE: text color is forced with `!text-ink` (Tailwind important) rather than
 // relying on inheritance, and duplicated as an inline style below. The bug this
@@ -57,7 +59,15 @@ const SUGGESTED_PROMPTS = [
 ]
 
 export default function AIRecommendations({ title = 'AI Financial Recommendations', crumbs = ['Analytics', 'AI Financial Recommendations'] }) {
-  const { recommendations, loading, error, fetchRecommendations } = useAiRecommendations()
+  // archiveRecommendation/restoreRecommendation are NEW — this component
+  // assumes useAiRecommendations exposes them (same shape as
+  // useAccountsReceivable's toggleArchive) and that each recommendation
+  // record carries `is_archived`. Neither exists in the hook/backend yet as
+  // of the routes file we've seen (only a bare `ai-recommendations` GET
+  // behind `ai.view` — no manage/archive route or column). Wire up a
+  // migration + route + controller method + hook update to make the
+  // archive/restore buttons below actually persist anything.
+  const { recommendations, loading, error, fetchRecommendations, archiveRecommendation, restoreRecommendation } = useAiRecommendations()
   const { sendMessage: sendToAdvisor, error: advisorError } = useAiAdvisor()
 
   useEffect(() => {
@@ -67,7 +77,9 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
   const [forecastFilter, setForecastFilter] = useState('all')
+  const [showArchived, setShowArchived] = useState(false)
   const [detail, setDetail] = useState(null)
+  const [archivingId, setArchivingId] = useState(null)
 
   // Each recommendation already carries its forecast's type/period/predicted
   // amount flattened in (see AiRecommendationResource) — this label helper
@@ -117,6 +129,8 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
 
   const filtered = useMemo(() => {
     const rows = recommendations.filter((r) => {
+      if (showArchived && !r.is_archived) return false
+      if (!showArchived && r.is_archived) return false
       if (typeFilter !== 'all' && r.recommendation_type !== typeFilter) return false
       if (forecastFilter !== 'all' && r.forecast_id !== Number(forecastFilter)) return false
       const q = search.toLowerCase()
@@ -128,32 +142,55 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
     return activeStat === 'forecasts'
       ? [...rows].sort((a, b) => forecastLabel(a).localeCompare(forecastLabel(b)))
       : [...rows].sort((a, b) => (b.generated_at || '').localeCompare(a.generated_at || ''))
-  }, [recommendations, search, typeFilter, forecastFilter, activeStat])
+  }, [recommendations, search, typeFilter, forecastFilter, activeStat, showArchived])
+
+  // Pagination is purely client-side over `filtered`, same pattern as
+  // AccountsReceivable — this page has no server-side paging either.
+  const [page, setPage] = useState(1)
+  useEffect(() => {
+    setPage(1)
+  }, [search, typeFilter, forecastFilter, activeStat, showArchived])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const paginated = useMemo(
+    () => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [filtered, page]
+  )
+  const rangeStart = filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
+  const rangeEnd = Math.min(page * PAGE_SIZE, filtered.length)
 
   const stats = useMemo(() => {
-    const riskAlerts = recommendations.filter((r) => r.recommendation_type === 'Risk Alert').length
-    const distinctForecastCount = new Set(recommendations.map((r) => r.forecast_id)).size
-    return { total: recommendations.length, riskAlerts, distinctForecasts: distinctForecastCount }
+    const active = recommendations.filter((r) => !r.is_archived)
+    const riskAlerts = active.filter((r) => r.recommendation_type === 'Risk Alert').length
+    const distinctForecastCount = new Set(active.map((r) => r.forecast_id)).size
+    const archivedCount = recommendations.filter((r) => r.is_archived).length
+    return { total: active.length, riskAlerts, distinctForecasts: distinctForecastCount, archived: archivedCount }
   }, [recommendations])
 
   const statCards = [
     {
       key: 'total', label: 'Total Recommendations', value: loading ? '—' : stats.total, icon: Sparkles,
       iconBg: 'bg-primary/15', iconColor: 'text-primary-dark',
-      isActive: activeStat === 'all',
-      onClick: () => setActiveStat('all'),
+      isActive: activeStat === 'all' && !showArchived,
+      onClick: () => { setActiveStat('all'); setShowArchived(false) },
     },
     {
       key: 'risk', label: 'Risk Alerts', value: loading ? '—' : stats.riskAlerts, icon: ShieldAlert,
       iconBg: 'bg-red-50 dark:bg-red-500/10', iconColor: 'text-red-600 dark:text-red-400',
-      isActive: activeStat === 'risk',
-      onClick: () => toggleStat('risk'),
+      isActive: activeStat === 'risk' && !showArchived,
+      onClick: () => { setShowArchived(false); toggleStat('risk') },
     },
     {
       key: 'forecasts', label: 'Forecasts Covered', value: loading ? '—' : stats.distinctForecasts, icon: Bot,
       iconBg: 'bg-blue-50 dark:bg-blue-500/10', iconColor: 'text-blue-600 dark:text-blue-400',
-      isActive: activeStat === 'forecasts',
-      onClick: () => toggleStat('forecasts'),
+      isActive: activeStat === 'forecasts' && !showArchived,
+      onClick: () => { setShowArchived(false); toggleStat('forecasts') },
+    },
+    {
+      key: 'archived', label: 'Archived', value: loading ? '—' : stats.archived, icon: Archive,
+      iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-500 dark:text-slate-400',
+      isActive: showArchived,
+      onClick: () => setShowArchived(true),
     },
   ]
 
@@ -187,6 +224,20 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
     sendMessage(chatInput)
   }
 
+  const handleToggleArchive = async (r) => {
+    if (!archiveRecommendation || !restoreRecommendation) return
+    setArchivingId(r.recommendation_id)
+    try {
+      if (r.is_archived) {
+        await restoreRecommendation(r.recommendation_id)
+      } else {
+        await archiveRecommendation(r.recommendation_id)
+      }
+    } finally {
+      setArchivingId(null)
+    }
+  }
+
   return (
     <div className="space-y-5 animate-fadeIn">
       <Breadcrumb items={crumbs} />
@@ -206,7 +257,7 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {statCards.map((card) => {
           const Icon = card.icon
           return (
@@ -230,15 +281,20 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
         })}
       </div>
 
-      {activeStat !== 'all' && (
+      {(activeStat !== 'all' || showArchived) && (
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
           <span>Showing:</span>
-          {activeStat === 'risk' && (
+          {showArchived && (
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+              Archived only
+            </span>
+          )}
+          {!showArchived && activeStat === 'risk' && (
             <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400">
               Risk Alerts only
             </span>
           )}
-          {activeStat === 'forecasts' && (
+          {!showArchived && activeStat === 'forecasts' && (
             <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400">
               Grouped by linked forecast
             </span>
@@ -270,6 +326,15 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
               <option value="all">All Linked Forecasts</option>
               {distinctForecasts.map((r) => <option key={r.forecast_id} value={r.forecast_id}>{forecastLabel(r)}</option>)}
             </select>
+        <Button
+          variant={showArchived ? 'primary' : 'secondary'}
+          size="sm"
+          icon={Archive}
+          onClick={() => setShowArchived((prev) => !prev)}
+          className="shrink-0 whitespace-nowrap"
+        >
+          Show Archived
+        </Button>
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -278,7 +343,7 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
                 Loading recommendations…
               </div>
             )}
-            {!loading && filtered.map((r) => {
+            {!loading && paginated.map((r) => {
               const meta = TYPE_META[r.recommendation_type] || DEFAULT_TYPE_META
               const Icon = meta.icon
               return (
@@ -287,11 +352,23 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${meta.style}`}>
                       <Icon size={13} /> {r.recommendation_type || 'Uncategorized'}
                     </span>
-                    <Tooltip label="View full recommendation" align="end">
-                      <button type="button" onClick={() => setDetail(r)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                        <Info size={15} />
-                      </button>
-                    </Tooltip>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Tooltip label="View full recommendation" align="end">
+                        <button type="button" onClick={() => setDetail(r)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                          <Info size={15} />
+                        </button>
+                      </Tooltip>
+                      <Tooltip label={r.is_archived ? 'Restore recommendation' : 'Archive recommendation'} align="end">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleArchive(r)}
+                          disabled={archivingId === r.recommendation_id}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-50"
+                        >
+                          {r.is_archived ? <RotateCcw size={15} /> : <Archive size={15} />}
+                        </button>
+                      </Tooltip>
+                    </div>
                   </div>
                   <p className="text-sm text-ink leading-relaxed">{r.summary}</p>
                   <div className="mt-auto flex items-center justify-between text-xs text-muted pt-2 border-t border-border">
@@ -303,10 +380,41 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
             })}
             {!loading && filtered.length === 0 && (
               <div className={`${PANEL} ${PANEL_PAD} col-span-full text-center text-sm text-muted py-10`}>
-                No recommendations match your filters.
+                {showArchived ? 'No archived recommendations.' : 'No recommendations match your filters.'}
               </div>
             )}
           </div>
+
+          {!loading && filtered.length > 0 && (
+            <div className={`${PANEL} flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between`}>
+              <p className="text-xs text-muted">
+                Showing {rangeStart}–{rangeEnd} of {filtered.length} recommendations
+              </p>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                  aria-label="Previous page"
+                >
+                  <ChevronLeft size={15} />
+                </button>
+                <span className="px-2 text-xs font-medium text-ink whitespace-nowrap">
+                  Page {page} of {totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                  aria-label="Next page"
+                >
+                  <ChevronRight size={15} />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* AI chat panel — deliberately louder than the surrounding panels so

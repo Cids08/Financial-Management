@@ -6,17 +6,26 @@ export function useForecasts() {
   const [forecastsLoading, setForecastsLoading] = useState(true)
   const [forecastsError, setForecastsError] = useState(null)
 
+  // Toggles between the active list (default) and the archived list —
+  // drives the `status` query param the backend uses to switch between
+  // FinancialForecast::query() and ::onlyTrashed(). Kept in the hook
+  // (not the page) since it's API-fetch state, not UI-only state.
+  const [showArchived, setShowArchived] = useState(false)
+
   const [generating, setGenerating] = useState(false)
   const [generateError, setGenerateError] = useState(null)
 
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState(null)
 
-  const fetchForecasts = useCallback(async () => {
+  const [archiving, setArchiving] = useState(false)
+  const [archiveError, setArchiveError] = useState(null)
+
+  const fetchForecasts = useCallback(async (archived = showArchived) => {
     setForecastsLoading(true)
     setForecastsError(null)
     try {
-      const res = await apiFetch('/api/forecasts')
+      const res = await apiFetch(`/api/forecasts${archived ? '?status=archived' : ''}`)
       const json = await res.json()
       if (!res.ok || !json.success) throw new Error(json.message || 'Failed to load forecasts.')
       setForecasts(json.data)
@@ -25,11 +34,13 @@ export function useForecasts() {
     } finally {
       setForecastsLoading(false)
     }
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showArchived])
 
   useEffect(() => {
-    fetchForecasts()
-  }, [fetchForecasts])
+    fetchForecasts(showArchived)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showArchived])
 
   /**
    * Generates AND persists in one call — the backend has no separate
@@ -81,16 +92,58 @@ export function useForecasts() {
     }
   }, [])
 
+  /** Soft-deletes (archives) a forecast, then refreshes the current view. */
+  const archiveForecast = useCallback(async (forecastId) => {
+    setArchiving(true)
+    setArchiveError(null)
+    try {
+      const res = await apiFetch(`/api/forecasts/${forecastId}/archive`, { method: 'PATCH' })
+      const json = await res.json()
+      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to archive forecast.')
+      await fetchForecasts()
+      return { success: true }
+    } catch (err) {
+      setArchiveError(err.message)
+      return { success: false, message: err.message }
+    } finally {
+      setArchiving(false)
+    }
+  }, [fetchForecasts])
+
+  /** Restores a previously archived forecast, then refreshes the current view. */
+  const restoreForecast = useCallback(async (forecastId) => {
+    setArchiving(true)
+    setArchiveError(null)
+    try {
+      const res = await apiFetch(`/api/forecasts/${forecastId}/restore`, { method: 'PATCH' })
+      const json = await res.json()
+      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to restore forecast.')
+      await fetchForecasts()
+      return { success: true }
+    } catch (err) {
+      setArchiveError(err.message)
+      return { success: false, message: err.message }
+    } finally {
+      setArchiving(false)
+    }
+  }, [fetchForecasts])
+
   return {
     forecasts,
     forecastsLoading,
     forecastsError,
+    showArchived,
+    setShowArchived,
     generating,
     generateError,
     detailLoading,
     detailError,
+    archiving,
+    archiveError,
     generateForecast,
     fetchForecastDetail,
+    archiveForecast,
+    restoreForecast,
     refetch: fetchForecasts,
   }
 }

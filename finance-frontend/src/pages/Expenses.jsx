@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, Receipt, Wallet, Tag, Info, Printer, CheckCircle2, XCircle } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, Receipt, Wallet, Tag, Info, Printer, CheckCircle2, XCircle, ChevronLeft, ChevronRight } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
@@ -35,6 +35,7 @@ const STATUS_STYLES = {
 }
 
 const CURRENT_MONTH_LABEL = new Date().toLocaleDateString('en-US', { month: 'short' })
+const PAGE_SIZE = 10
 
 function formatDate(value) {
   if (!value) return '—'
@@ -103,6 +104,23 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search])
+
+  // Client-side pagination over the currently-loaded/filtered expense list.
+  // NOTE: this paginates whatever `expenses` already holds. If useExpenses /
+  // the backend end up paginating server-side (Laravel's default paginator),
+  // swap this for real page/meta state from the hook instead of slicing here.
+  const [page, setPage] = useState(1)
+  useEffect(() => {
+    setPage(1)
+  }, [filters.status, filters.expense_category_id, filters.trashed, filters.search])
+
+  const totalPages = Math.max(1, Math.ceil(expenses.length / PAGE_SIZE))
+  const paginatedExpenses = useMemo(
+    () => expenses.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [expenses, page]
+  )
+  const rangeStart = expenses.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
+  const rangeEnd = Math.min(page * PAGE_SIZE, expenses.length)
 
   const [modalMode, setModalMode] = useState(null) // 'add' | expense object | null
   const [form, setForm] = useState(EMPTY_FORM)
@@ -270,10 +288,15 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
           <option value="">All Categories</option>
           {categories.map((c) => <option key={c.id} value={c.id}>{c.category_name}</option>)}
         </select>
-        <label className="flex items-center gap-2 text-sm text-muted cursor-pointer whitespace-nowrap">
-          <input type="checkbox" checked={filters.trashed} onChange={(e) => setFilter({ trashed: e.target.checked })} className="rounded border-border accent-primary" />
-          Show archived
-        </label>
+        <Button
+          variant={showArchived ? 'primary' : 'secondary'}
+          size="sm"
+          icon={Archive}
+          onClick={() => setShowArchived((prev) => !prev)}
+          className="shrink-0 whitespace-nowrap"
+        >
+          Show Archived
+        </Button>
       </div>
 
       {listError && (
@@ -283,18 +306,21 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{mutateError}</div>
       )}
 
+      {/* max-h + overflow-y-auto gives the sticky header a scroll container
+          to stick within — without this, "sticky" has nothing to pin
+          against once the whole page (not just the table) is what scrolls. */}
       <div className={PANEL}>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto overflow-y-auto max-h-[70vh]">
           <table className="w-full text-sm">
-            <thead>
+            <thead className="sticky top-0 z-10 bg-surface">
               <tr className="border-b border-border">
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Expense</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Budget</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Category</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Date</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Amount</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Status</th>
-                <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Actions</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Expense</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Budget</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Category</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Date</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Amount</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Status</th>
+                <th className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -302,7 +328,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                 <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-muted">Loading expenses…</td></tr>
               ) : expenses.length === 0 ? (
                 <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-muted">No expenses match your filters.</td></tr>
-              ) : expenses.map((x) => (
+              ) : paginatedExpenses.map((x) => (
                 <tr key={x.id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
                   <td className="px-4 py-3.5">
                     <p className="font-medium text-ink">{x.description}</p>
@@ -367,6 +393,37 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
             </tbody>
           </table>
         </div>
+
+        {!listLoading && expenses.length > 0 && (
+          <div className="flex flex-col gap-2 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-muted">
+              Showing {rangeStart}–{rangeEnd} of {expenses.length} expenses
+            </p>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label="Previous page"
+              >
+                <ChevronLeft size={15} />
+              </button>
+              <span className="px-2 text-xs font-medium text-ink whitespace-nowrap">
+                Page {page} of {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label="Next page"
+              >
+                <ChevronRight size={15} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <Modal

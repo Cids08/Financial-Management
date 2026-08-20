@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Search, Plus, TrendingUp, Target, Percent, Info, Activity, CalendarRange,
+  Search, Plus, TrendingUp, Target, Percent, Info, Activity, CalendarRange, Archive, ArchiveRestore,
 } from 'lucide-react'
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend,
@@ -28,14 +28,29 @@ const LOW_ERROR_THRESHOLD = 8
 const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
 const PANEL_PAD = 'p-4'
 
-const INPUT = `w-full h-9 px-3 rounded-lg border border-border bg-surface !text-ink
+// `[color-scheme:light] dark:[color-scheme:dark]` is the part that
+// actually fixes dark mode here: <select> popups and the <input
+// type="date"> calendar widget are rendered by the browser itself, not
+// by our CSS, so Tailwind's dark: classes on the element's box never
+// reach them. Without an explicit color-scheme the browser always paints
+// those natively as light (white dropdown list, dark calendar glyph),
+// which is invisible/mismatched against a dark page. This keys off the
+// same `.dark` class toggle already used everywhere else in the app.
+const INPUT = `w-full h-9 px-3 rounded-lg border border-border bg-surface !text-ink caret-primary
   placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary
+  [color-scheme:light] dark:[color-scheme:dark]
   transition-all duration-150`
-const INPUT_TEXT_STYLE = { color: 'var(--color-ink, #0f172a)', caretColor: 'var(--color-ink, #0f172a)', outline: 'none' }
 
-const SEARCH_INPUT = `w-full h-9 pl-9 pr-3 rounded-lg border border-border bg-surface !text-ink
+const SEARCH_INPUT = `w-full h-9 pl-9 pr-3 rounded-lg border border-border bg-surface !text-ink caret-primary
   placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary
   transition-all duration-150`
+
+// Native <option> elements ignore most CSS from their parent <select> in
+// several browsers, but DO respect an explicit background/text color set
+// directly on the <option> itself — this is what actually themes the
+// dropdown list's rows in dark mode (color-scheme alone gets the popup
+// chrome right, but not necessarily our custom surface color).
+const OPTION = 'bg-surface text-ink'
 
 const LABEL = 'block text-xs font-medium text-muted mb-1.5'
 
@@ -81,7 +96,7 @@ const StatCard = memo(function StatCard({ label, value, icon: Icon, iconBg, icon
   )
 })
 
-const ForecastRow = memo(function ForecastRow({ forecast: f, onViewDetail }) {
+const ForecastRow = memo(function ForecastRow({ forecast: f, showArchived, onViewDetail, onArchive, onRestore }) {
   return (
     <tr
       onClick={() => onViewDetail(f)}
@@ -97,16 +112,41 @@ const ForecastRow = memo(function ForecastRow({ forecast: f, onViewDetail }) {
       <td className="px-4 py-3.5 whitespace-nowrap text-right tabular-nums text-muted">{f.mape != null ? `${f.mape}%` : '—'}</td>
       <td className="px-4 py-3.5 whitespace-nowrap text-muted">{f.arima_model}</td>
       <td className="px-4 py-3.5 whitespace-nowrap text-right">
-        <Tooltip label="View forecast trend" align="end">
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onViewDetail(f) }}
-            aria-label={`View forecast trend for ${f.forecast_type}, ${f.forecast_period}`}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 ml-auto"
-          >
-            <Info size={15} />
-          </button>
-        </Tooltip>
+        <div className="flex items-center justify-end gap-1">
+          <Tooltip label="View forecast trend" align="end">
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onViewDetail(f) }}
+              aria-label={`View forecast trend for ${f.forecast_type}, ${f.forecast_period}`}
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
+            >
+              <Info size={15} />
+            </button>
+          </Tooltip>
+          {showArchived ? (
+            <Tooltip label="Restore forecast" align="end">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onRestore(f) }}
+                aria-label={`Restore forecast for ${f.forecast_type}, ${f.forecast_period}`}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors duration-150"
+              >
+                <ArchiveRestore size={15} />
+              </button>
+            </Tooltip>
+          ) : (
+            <Tooltip label="Archive forecast" align="end">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onArchive(f) }}
+                aria-label={`Archive forecast for ${f.forecast_type}, ${f.forecast_period}`}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-red-600 dark:hover:text-red-400 transition-colors duration-150"
+              >
+                <Archive size={15} />
+              </button>
+            </Tooltip>
+          )}
+        </div>
       </td>
     </tr>
   )
@@ -202,8 +242,8 @@ const GenerateForecastModal = memo(function GenerateForecastModal({ open, onClos
             </p>
             <div>
               <label className={LABEL}>Forecast Type</label>
-              <select value={forecastType} onChange={(e) => setForecastType(e.target.value)} disabled={phase === 'running'} className={INPUT} style={INPUT_TEXT_STYLE}>
-                {FORECAST_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+              <select value={forecastType} onChange={(e) => setForecastType(e.target.value)} disabled={phase === 'running'} className={INPUT}>
+                {FORECAST_TYPES.map((t) => <option key={t} value={t} className={OPTION}>{t}</option>)}
               </select>
             </div>
             <div>
@@ -366,9 +406,14 @@ export default function FinancialForecasting({ title = 'Financial Forecasting', 
     forecasts,
     forecastsLoading,
     forecastsError,
+    showArchived,
+    setShowArchived,
     generating,
     generateForecast,
     fetchForecastDetail,
+    archiving,
+    archiveForecast,
+    restoreForecast,
   } = useForecasts()
 
   const [search, setSearch] = useState('')
@@ -384,6 +429,7 @@ export default function FinancialForecasting({ title = 'Financial Forecasting', 
 
   const [modalOpen, setModalOpen] = useState(false)
   const [detailId, setDetailId] = useState(null)
+  const [archiveTarget, setArchiveTarget] = useState(null)
 
   const filtered = useMemo(() => {
     const rows = forecasts.filter((f) => {
@@ -442,6 +488,14 @@ export default function FinancialForecasting({ title = 'Financial Forecasting', 
   const closeDetail = useCallback(() => setDetailId(null), [])
   const handleViewDetail = useCallback((f) => setDetailId(f.forecast_id), [])
 
+  const closeArchiveConfirm = useCallback(() => setArchiveTarget(null), [])
+  const confirmArchive = useCallback(async () => {
+    if (!archiveTarget) return
+    const outcome = await archiveForecast(archiveTarget.forecast_id)
+    if (outcome.success) setArchiveTarget(null)
+  }, [archiveTarget, archiveForecast])
+  const handleRestore = useCallback((f) => { restoreForecast(f.forecast_id) }, [restoreForecast])
+
   return (
     <div className="space-y-5 animate-fadeIn">
       <Breadcrumb items={crumbs} />
@@ -497,24 +551,34 @@ export default function FinancialForecasting({ title = 'Financial Forecasting', 
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by period, type, or model..."
               className={SEARCH_INPUT}
-              style={{ ...INPUT_TEXT_STYLE, width: '100%', minWidth: 0 }}
+              style={{ width: '100%', minWidth: 0 }}
               autoComplete="off"
             />
           </div>
-          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className={INPUT} style={INPUT_TEXT_STYLE}>
-            <option value="all">All Forecast Types</option>
-            {FORECAST_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className={INPUT}>
+            <option value="all" className={OPTION}>All Forecast Types</option>
+            {FORECAST_TYPES.map((t) => <option key={t} value={t} className={OPTION}>{t}</option>)}
           </select>
         </div>
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-muted whitespace-nowrap">Generated From</label>
-            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className={INPUT} style={INPUT_TEXT_STYLE} />
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-muted whitespace-nowrap">Generated From</label>
+              <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className={INPUT} />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-muted whitespace-nowrap">To</label>
+              <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className={INPUT} />
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-muted whitespace-nowrap">To</label>
-            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className={INPUT} style={INPUT_TEXT_STYLE} />
-          </div>
+          <Button
+            variant={showArchived ? 'primary' : 'secondary'}
+            size="sm"
+            icon={showArchived ? ArchiveRestore : Archive}
+            onClick={() => setShowArchived((prev) => !prev)}
+          >
+            {showArchived ? 'Showing Archived' : 'Show Archived'}
+          </Button>
         </div>
       </div>
 
@@ -538,10 +602,21 @@ export default function FinancialForecasting({ title = 'Financial Forecasting', 
                 <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-muted">Loading forecasts…</td></tr>
               )}
               {!forecastsLoading && filtered.map((f) => (
-                <ForecastRow key={f.forecast_id} forecast={f} onViewDetail={handleViewDetail} />
+                <ForecastRow
+                  key={f.forecast_id}
+                  forecast={f}
+                  showArchived={showArchived}
+                  onViewDetail={handleViewDetail}
+                  onArchive={setArchiveTarget}
+                  onRestore={handleRestore}
+                />
               ))}
               {!forecastsLoading && filtered.length === 0 && (
-                <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-muted">No forecasts match your filters.</td></tr>
+                <tr>
+                  <td colSpan={8} className="px-4 py-10 text-center text-sm text-muted">
+                    {showArchived ? 'No archived forecasts.' : 'No forecasts match your filters.'}
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
@@ -555,6 +630,26 @@ export default function FinancialForecasting({ title = 'Financial Forecasting', 
         generating={generating}
       />
       <ForecastDetailModal forecastId={detailId} onClose={closeDetail} fetchForecastDetail={fetchForecastDetail} />
+
+      <Modal
+        open={!!archiveTarget}
+        onClose={closeArchiveConfirm}
+        title="Archive Forecast?"
+        footer={
+          <>
+            <Button variant="secondary" size="md" onClick={closeArchiveConfirm}>Cancel</Button>
+            <Button variant="primary" size="md" onClick={confirmArchive} loading={archiving}>Archive</Button>
+          </>
+        }
+      >
+        {archiveTarget && (
+          <p className="text-sm text-ink">
+            This will archive the <span className="font-semibold">{archiveTarget.forecast_type}</span> forecast
+            for <span className="font-semibold">{archiveTarget.forecast_period}</span>. It's removed from the
+            active list but not deleted. You can restore it later from "Show Archived".
+          </p>
+        )}
+      </Modal>
     </div>
   )
 }

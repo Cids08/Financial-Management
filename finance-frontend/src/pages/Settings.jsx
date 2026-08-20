@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { QRCodeSVG } from 'qrcode.react'
 import {
   Lock,
   ShieldCheck,
@@ -738,8 +739,14 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
             <p className="text-sm text-ink">Scan this code with your authenticator app (Google Authenticator, Authy, etc.):</p>
             <div className="flex justify-center">
               {setupData?.qrCodeUrl ? (
-                <div className="flex h-36 w-36 items-center justify-center rounded-lg border border-border bg-bg p-3 text-center text-[10px] text-muted break-all">
-                  {setupData.qrCodeUrl}
+                <div className="flex h-36 w-36 items-center justify-center rounded-lg border border-border bg-white p-3">
+                  <QRCodeSVG
+                    value={setupData.qrCodeUrl}
+                    size={128}
+                    bgColor="#ffffff"
+                    fgColor="#111827"
+                    level="M"
+                  />
                 </div>
               ) : (
                 <div className="flex h-36 w-36 items-center justify-center rounded-lg border border-dashed border-border bg-bg text-xs text-muted text-center px-2">
