@@ -35,6 +35,18 @@ use App\Http\Controllers\Api\ReportController;
 Route::post('/login', [AuthController::class, 'login'])
     ->middleware('throttle:5,1'); // 5 attempts per minute per IP
 
+// Public — step 2 of a 2FA login. Same reasoning as /login above: the
+// pending-login ticket proves the password was already verified, but no
+// Sanctum token exists yet at this point, so these can't sit inside the
+// auth:sanctum group. Throttled for the same guessing-attack reason as
+// /settings/2fa/confirm below — a 6-digit code is only ~1,000,000
+// possibilities, so this must never be left unthrottled.
+Route::post('/login/verify-two-factor', [AuthController::class, 'verifyTwoFactor'])
+    ->middleware('throttle:5,1');
+
+Route::post('/login/resend-two-factor', [AuthController::class, 'resendTwoFactor'])
+    ->middleware('throttle:5,1');
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
 
@@ -92,6 +104,7 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::put('/password', [AccountSecurityController::class, 'updatePassword']);
             Route::delete('/2fa', [AccountSecurityController::class, 'disableTwoFactor']);
             Route::post('/deactivate', [AccountSecurityController::class, 'deactivate']);
+            Route::get('/2fa', [AccountSecurityController::class, 'status']);
         });
     });
 

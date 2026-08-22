@@ -1,6 +1,8 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import ProtectedRoute from './components/ProtectedRoute'
 import RequirePermission from './components/RequirePermission'
+import AuthExpiredListener from './components/AuthExpiredListener'
+import { CompanyProvider } from './context/CompanyContext'
 import DashboardLayout from './layouts/DashboardLayout'
 import DashboardRouter from './pages/DashboardRouter'
 import PlaceholderPage from './pages/PlaceholderPage'
@@ -30,16 +32,27 @@ import Login from './pages/Login'
 
 export default function App() {
   return (
-    <Routes>
+    <>
+      <AuthExpiredListener />
+      <Routes>
       {/* Standalone — no sidebar/header/footer chrome */}
       {/* Login is the landing page */}
       <Route path="/" element={<Login />} />
       <Route path="/login" element={<Login />} />
       <Route path="/logout" element={<Logout />} />
 
-      {/* Everything below requires an authenticated session */}
+      {/* Everything below requires an authenticated session.
+          CompanyProvider is scoped here — inside ProtectedRoute — rather
+          than around the whole app, because it fetches GET /api/settings
+          on mount, which requires auth:sanctum. Wrapping the whole router
+          meant that fetch fired on the public /login screen too, before
+          any token existed, producing a 401 on page load every time. */}
       <Route element={<ProtectedRoute />}>
-        <Route element={<DashboardLayout />}>
+        <Route element={
+          <CompanyProvider>
+            <DashboardLayout />
+          </CompanyProvider>
+        }>
           {/* Open to every authenticated user — DashboardRouter picks the
               right component per role (Collector/Staff get their own
               simplified view, Admin/Super Admin get the full dashboard).
@@ -172,5 +185,6 @@ export default function App() {
       {/* Fallback: unknown routes go to login */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   )
 }

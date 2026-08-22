@@ -12,6 +12,7 @@ import { apiFetch } from '../utils/api'
  *
  * Backed by:
  *   PUT    /api/settings/password
+ *   GET    /api/settings/2fa
  *   POST   /api/settings/2fa/initiate
  *   POST   /api/settings/2fa/confirm
  *   DELETE /api/settings/2fa
@@ -55,6 +56,22 @@ export function useAccountSecurity() {
   const [twoFABusy, setTwoFABusy] = useState(false)
   const [twoFAError, setTwoFAError] = useState('')
 
+  // Reads the real 2FA status from the backend on mount. Without this,
+  // twoFAEnabled just stays at its useState(false) default on every fresh
+  // page load, regardless of what's actually stored on the user — the bug
+  // where the toggle appeared to reset to "off" after a refresh.
+  const fetchTwoFAStatus = useCallback(async () => {
+    try {
+      const res = await apiFetch('/api/settings/2fa')
+      const json = await res.json()
+      if (res.ok && json.success) {
+        setTwoFAEnabled(json.data.twoFactorEnabled)
+      }
+    } catch {
+      // Non-fatal — toggle just falls back to its default state.
+    }
+  }, [])
+
   const initiateTwoFactor = useCallback(async () => {
     setTwoFABusy(true)
     setTwoFAError('')
@@ -96,13 +113,23 @@ export function useAccountSecurity() {
     }
   }, [])
 
-  const disableTwoFactor = useCallback(async () => {
+  // Requires the current password — ConfirmPasswordRequest on the backend
+  // validates it server-side so a hijacked session can't silently strip
+  // 2FA. Field name assumed to be "password"; adjust if the backend
+  // validates a different key.
+  const disableTwoFactor = useCallback(async (password) => {
     setTwoFABusy(true)
     setTwoFAError('')
     try {
-      const res = await apiFetch('/api/settings/2fa', { method: 'DELETE' })
+      const res = await apiFetch('/api/settings/2fa', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      })
       const json = await res.json()
-      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to disable 2FA.')
+      if (!res.ok || !json.success) {
+        throw new Error(json.errors?.password?.[0] || json.message || 'Failed to disable 2FA.')
+      }
       setTwoFAEnabled(false)
       return { success: true }
     } catch (err) {
@@ -204,7 +231,8 @@ export function useAccountSecurity() {
   useEffect(() => {
     fetchSessions()
     fetchActivity()
-  }, [fetchSessions, fetchActivity])
+    fetchTwoFAStatus()
+  }, [fetchSessions, fetchActivity, fetchTwoFAStatus])
 
   return {
     // password

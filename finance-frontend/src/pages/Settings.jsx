@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { QRCodeSVG } from 'qrcode.react'
 import {
   Lock,
   ShieldCheck,
@@ -123,6 +122,53 @@ function PasswordInput({ label, value, onChange, placeholder }) {
   )
 }
 
+// A single Active Sessions row — extracted so it can be rendered once for
+// "This Device" and again (mapped) for "Other Sessions" below, instead of
+// duplicating the JSX in both spots.
+function SessionRow({ session, isCurrent, onRevoke }) {
+  const deviceLabel = session.device || 'Unknown device'
+  const isMobile = deviceLabel.toLowerCase().includes('iphone') || deviceLabel.toLowerCase().includes('android')
+  const DeviceIcon = isMobile ? Smartphone : Monitor
+
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-bg text-muted">
+          <DeviceIcon size={16} />
+        </div>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="truncate text-sm font-medium text-ink">{deviceLabel}</p>
+            {isCurrent && (
+              <span className="shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold text-primary-dark">
+                This device
+              </span>
+            )}
+          </div>
+          <p className="flex items-center gap-1 truncate text-xs text-muted">
+            <MapPin size={11} /> {session.location || 'Unknown location'} · {session.ip || 'Unknown IP'}
+          </p>
+          <p className="flex items-center gap-1 truncate text-[11px] text-muted mt-0.5">
+            <Clock size={11} /> Active {timeAgo(session.lastActive)}
+          </p>
+        </div>
+      </div>
+
+      {!isCurrent && (
+        <Tooltip label="Sign out this device">
+          <button
+            type="button"
+            onClick={() => onRevoke(session.id)}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 transition-colors duration-150"
+          >
+            <LogOut size={15} />
+          </button>
+        </Tooltip>
+      )}
+    </div>
+  )
+}
+
 export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) {
   // Company Branding + Regional/Financial Defaults are admin-only on the
   // backend — routes/api.php gates PUT/logo endpoints with settings.manage
@@ -224,7 +270,8 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
   /* Two-factor authentication */
   const [twoFAModalOpen, setTwoFAModalOpen] = useState(false)
   const [disable2FAModalOpen, setDisable2FAModalOpen] = useState(false)
-  const [setupData, setSetupData] = useState(null) // { secret, qrCodeUrl }
+  const [disable2FAPassword, setDisable2FAPassword] = useState('')
+  const [setupData, setSetupData] = useState(null) // { maskedEmail }
   const [verifyCode, setVerifyCode] = useState('')
   const [recoveryCodes, setRecoveryCodes] = useState(null)
 
@@ -249,6 +296,12 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
     }
   }
 
+  const resendCode = async () => {
+    setVerifyCode('')
+    const result = await security.initiateTwoFactor()
+    if (result.success) setSetupData(result)
+  }
+
   const closeTwoFAModal = () => {
     setTwoFAModalOpen(false)
     setSetupData(null)
@@ -256,9 +309,14 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
     setVerifyCode('')
   }
 
+  const closeDisable2FAModal = () => {
+    setDisable2FAModalOpen(false)
+    setDisable2FAPassword('')
+  }
+
   const confirmDisable2FA = async () => {
-    const result = await security.disableTwoFactor()
-    if (result.success) setDisable2FAModalOpen(false)
+    const result = await security.disableTwoFactor(disable2FAPassword)
+    if (result.success) closeDisable2FAModal()
   }
 
   /* Active sessions */
@@ -268,6 +326,15 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
     const result = await security.revokeOtherSessions()
     if (result.success) setSignOutAllModalOpen(false)
   }
+
+  // Split the flat session list into "this device" vs everything else, so
+  // the current session gets its own visually distinct group instead of
+  // being one row lost in a long undifferentiated stack.
+  const { currentSession, otherSessions } = useMemo(() => {
+    const current = security.sessions.find((s) => s.id === security.currentTokenId) || null
+    const others = security.sessions.filter((s) => s.id !== security.currentTokenId)
+    return { currentSession: current, otherSessions: others }
+  }, [security.sessions, security.currentTokenId])
 
   /* Danger zone */
   const [deactivateModalOpen, setDeactivateModalOpen] = useState(false)
@@ -552,12 +619,12 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
             disabled={security.twoFABusy}
             role="switch"
             aria-checked={security.twoFAEnabled}
-            className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 disabled:opacity-60
-              ${security.twoFAEnabled ? 'bg-primary' : 'bg-border'}`}
+            className={`relative h-6 w-11 shrink-0 rounded-full border transition-colors duration-200 disabled:opacity-60
+              ${security.twoFAEnabled ? 'bg-primary border-primary' : 'bg-transparent border-border'}`}
           >
             <span
-              className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200
-                ${security.twoFAEnabled ? 'translate-x-5.5' : 'translate-x-0.5'}`}
+              className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full shadow-sm transition-transform duration-200
+                ${security.twoFAEnabled ? 'translate-x-5 bg-white' : 'translate-x-0 bg-muted'}`}
             />
           </button>
         </div>
@@ -570,7 +637,8 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
         )}
       </div>
 
-      {/* Active Sessions */}
+      {/* Active Sessions — grouped: "This Device" pinned on top, then
+          "Other Sessions" below, instead of one flat undifferentiated list. */}
       <div className={`${PANEL} ${PANEL_PAD}`}>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2.5">
@@ -596,53 +664,28 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
         ) : security.sessions.length === 0 ? (
           <p className="text-xs text-muted py-2">No active sessions found.</p>
         ) : (
-          <div className="space-y-2 mt-2">
-            {security.sessions.map((s) => {
-              const deviceLabel = s.device || 'Unknown device'
-              const isMobile = deviceLabel.toLowerCase().includes('iphone') || deviceLabel.toLowerCase().includes('android')
-              const DeviceIcon = isMobile ? Smartphone : Monitor
-              const isCurrent = s.id === security.currentTokenId
-              return (
-                <div
-                  key={s.id}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-border p-3"
-                >
-                  <div className="flex min-w-0 items-center gap-3">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-bg text-muted">
-                      <DeviceIcon size={16} />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="truncate text-sm font-medium text-ink">{deviceLabel}</p>
-                        {isCurrent && (
-                          <span className="shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold text-primary-dark">
-                            This device
-                          </span>
-                        )}
-                      </div>
-                      <p className="flex items-center gap-1 truncate text-xs text-muted">
-                        <MapPin size={11} /> {s.location || 'Unknown location'} · {s.ip || 'Unknown IP'}
-                      </p>
-                      <p className="flex items-center gap-1 truncate text-[11px] text-muted mt-0.5">
-                        <Clock size={11} /> Active {timeAgo(s.lastActive)}
-                      </p>
-                    </div>
-                  </div>
+          <div className="space-y-5 mt-2">
+            {currentSession && (
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted mb-2">
+                  This Device
+                </p>
+                <SessionRow session={currentSession} isCurrent onRevoke={security.revokeSession} />
+              </div>
+            )}
 
-                  {!isCurrent && (
-                    <Tooltip label="Sign out this device">
-                      <button
-                        type="button"
-                        onClick={() => security.revokeSession(s.id)}
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 transition-colors duration-150"
-                      >
-                        <LogOut size={15} />
-                      </button>
-                    </Tooltip>
-                  )}
+            {otherSessions.length > 0 && (
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted mb-2">
+                  Other Sessions ({otherSessions.length})
+                </p>
+                <div className="space-y-2">
+                  {otherSessions.map((s) => (
+                    <SessionRow key={s.id} session={s} onRevoke={security.revokeSession} />
+                  ))}
                 </div>
-              )
-            })}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -736,29 +779,11 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
           </div>
         ) : (
           <div className="space-y-4">
-            <p className="text-sm text-ink">Scan this code with your authenticator app (Google Authenticator, Authy, etc.):</p>
-            <div className="flex justify-center">
-              {setupData?.qrCodeUrl ? (
-                <div className="flex h-36 w-36 items-center justify-center rounded-lg border border-border bg-white p-3">
-                  <QRCodeSVG
-                    value={setupData.qrCodeUrl}
-                    size={128}
-                    bgColor="#ffffff"
-                    fgColor="#111827"
-                    level="M"
-                  />
-                </div>
-              ) : (
-                <div className="flex h-36 w-36 items-center justify-center rounded-lg border border-dashed border-border bg-bg text-xs text-muted text-center px-2">
-                  Generating code…
-                </div>
-              )}
-            </div>
-            {setupData?.secret && (
-              <p className="text-center text-[11px] text-muted">
-                Can't scan it? Enter this key manually: <span className="font-mono text-ink">{setupData.secret}</span>
-              </p>
-            )}
+            <p className="text-sm text-ink">
+              We've sent a 6-digit verification code to{' '}
+              <span className="font-medium text-ink">{setupData?.maskedEmail || 'your email address'}</span>.
+              Enter it below to confirm.
+            </p>
             <InlineError message={security.twoFAError} />
             <div>
               <label className={LABEL}>6-digit verification code</label>
@@ -769,31 +794,55 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
                 value={verifyCode}
                 onChange={(e) => setVerifyCode(e.target.value.replace(/\D/g, ''))}
                 placeholder="000000"
+                autoFocus
                 className={`${INPUT} tracking-[0.4em] text-center font-mono`}
               />
             </div>
+            <button
+              type="button"
+              onClick={resendCode}
+              disabled={security.twoFABusy}
+              className="text-xs font-medium text-primary-dark hover:underline disabled:opacity-50 disabled:pointer-events-none"
+            >
+              Didn't get a code? Resend
+            </button>
           </div>
         )}
       </Modal>
 
-      {/* Disable 2FA confirm modal */}
+      {/* Disable 2FA confirm modal — requires the current password, since
+          the backend's ConfirmPasswordRequest validates one (stolen-session
+          protection against silently stripping 2FA). */}
       <Modal
         open={disable2FAModalOpen}
-        onClose={() => setDisable2FAModalOpen(false)}
+        onClose={closeDisable2FAModal}
         title="Disable Two-Factor Authentication"
         maxWidth="max-w-sm"
         footer={
           <>
-            <Button variant="secondary" size="md" onClick={() => setDisable2FAModalOpen(false)}>Cancel</Button>
-            <Button variant="danger" size="md" onClick={confirmDisable2FA} loading={security.twoFABusy}>Disable</Button>
+            <Button variant="secondary" size="md" onClick={closeDisable2FAModal}>Cancel</Button>
+            <Button
+              variant="danger"
+              size="md"
+              onClick={confirmDisable2FA}
+              loading={security.twoFABusy}
+              disabled={!disable2FAPassword}
+            >
+              Disable
+            </Button>
           </>
         }
       >
         <div className="space-y-3">
           <p className="text-sm text-ink">
-            This will make your account less secure. Are you sure you want to disable two-factor authentication?
+            This will make your account less secure. Enter your password to confirm.
           </p>
           <InlineError message={security.twoFAError} />
+          <PasswordInput
+            label="Current Password"
+            value={disable2FAPassword}
+            onChange={(e) => setDisable2FAPassword(e.target.value)}
+          />
         </div>
       </Modal>
 

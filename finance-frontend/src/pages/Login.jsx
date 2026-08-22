@@ -1,15 +1,20 @@
 import { useState } from 'react'
-import { LogIn, Mail, Lock, Eye, EyeOff, AlertCircle, Sun, Moon } from 'lucide-react'
+import { LogIn, Mail, Lock, Eye, EyeOff, AlertCircle, Sun, Moon, ShieldCheck, ArrowLeft } from 'lucide-react'
 import Button from '../components/Button'
 import { useAuth } from '../hooks/useAuth'
 import { useTheme } from '../context/ThemeContext'
 import logo from '../assets/logo.svg'
 
 export default function Login() {
-  const { login, loading, error } = useAuth()
+  const {
+    login, loading, error,
+    twoFactorPending, verifyTwoFactor, resendTwoFactor, cancelTwoFactor,
+  } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const [form, setForm] = useState({ email: '', password: '', remember: false })
   const [showPassword, setShowPassword] = useState(false)
+  const [code, setCode] = useState('')
+  const [resendMessage, setResendMessage] = useState('')
 
   const handleChange = (field) => (e) =>
     setForm((f) => ({
@@ -22,11 +27,29 @@ export default function Login() {
     login(form)
   }
 
+  const handleVerify = (e) => {
+    e.preventDefault()
+    verifyTwoFactor(code)
+  }
+
+  const handleResend = async () => {
+    setResendMessage('')
+    setCode('')
+    const result = await resendTwoFactor()
+    if (result.success) {
+      setResendMessage('A new code has been sent.')
+      setTimeout(() => setResendMessage(''), 3000)
+    }
+  }
+
+  const handleBack = () => {
+    setCode('')
+    setResendMessage('')
+    cancelTwoFactor()
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden">
-      {/* Decorative blurred blobs — glassmorphism needs something behind
-          the glass to actually blur, otherwise backdrop-blur is invisible
-          against a flat background. */}
       <div className="pointer-events-none absolute -top-24 -left-24 w-96 h-96 rounded-full bg-primary/40 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-32 -right-16 w-md h-112 rounded-full bg-primary-dark/30 blur-3xl" />
       <div className="pointer-events-none absolute top-1/3 right-1/4 w-72 h-72 rounded-full bg-amber-300/20 dark:bg-amber-500/10 blur-3xl" />
@@ -48,75 +71,148 @@ export default function Login() {
           <img src={logo} alt="Alibaton Construction Incorporated" className="h-full w-full object-cover" />
         </div>
 
-        <h1 className="text-lg font-bold text-ink text-center">Sign in to your account</h1>
-        <p className="mt-1.5 text-sm text-muted text-center">
-          Enter your credentials to access the Financial Management System.
-        </p>
+        {!twoFactorPending ? (
+          <>
+            <h1 className="text-lg font-bold text-ink text-center">Sign in to your account</h1>
+            <p className="mt-1.5 text-sm text-muted text-center">
+              Enter your credentials to access the Financial Management System.
+            </p>
 
-        {error && (
-          <div className="flex items-center gap-2 mt-5 px-3 py-2 rounded-lg bg-red-50/70 border border-red-200/70 text-xs text-red-600 backdrop-blur-sm dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
-            <AlertCircle size={14} className="shrink-0" />
-            {error}
-          </div>
-        )}
+            {error && (
+              <div className="flex items-center gap-2 mt-5 px-3 py-2 rounded-lg bg-red-50/70 border border-red-200/70 text-xs text-red-600 backdrop-blur-sm dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+                <AlertCircle size={14} className="shrink-0" />
+                {error}
+              </div>
+            )}
 
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-          <label className="block">
-            <span className="text-xs font-medium text-muted mb-1 block">Email</span>
-            <div className="flex items-center gap-2 rounded-lg border border-white/50 dark:border-white/10
-              px-3 py-2 bg-white/30 dark:bg-white/5 backdrop-blur-sm
-              focus-within:border-primary focus-within:bg-white/60 dark:focus-within:bg-white/10
-              transition-colors duration-150">
-              <Mail size={15} className="text-muted shrink-0" />
-              <input
-                type="email"
-                required
-                autoComplete="email"
-                value={form.email}
-                onChange={handleChange('email')}
-                placeholder="you@company.com"
-                className="w-full text-sm text-ink bg-transparent outline-none border-0 appearance-none focus:outline-none focus:ring-0 focus:shadow-none focus:border-0"
-              />
-            </div>
-          </label>
+            <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+              <label className="block">
+                <span className="text-xs font-medium text-muted mb-1 block">Email</span>
+                <div className="flex items-center gap-2 rounded-lg border border-white/50 dark:border-white/10
+                  px-3 py-2 bg-white/30 dark:bg-white/5 backdrop-blur-sm
+                  focus-within:border-primary focus-within:bg-white/60 dark:focus-within:bg-white/10
+                  transition-colors duration-150">
+                  <Mail size={15} className="text-muted shrink-0" />
+                  <input
+                    type="email"
+                    required
+                    autoComplete="email"
+                    value={form.email}
+                    onChange={handleChange('email')}
+                    placeholder="you@company.com"
+                    className="w-full text-sm text-ink bg-transparent outline-none border-0 appearance-none focus:outline-none focus:ring-0 focus:shadow-none focus:border-0"
+                  />
+                </div>
+              </label>
 
-          <label className="block">
-            <span className="text-xs font-medium text-muted mb-1 block">Password</span>
-            <div className="flex items-center gap-2 rounded-lg border border-white/50 dark:border-white/10
-              px-3 py-2 bg-white/30 dark:bg-white/5 backdrop-blur-sm
-              focus-within:border-primary focus-within:bg-white/60 dark:focus-within:bg-white/10
-              transition-colors duration-150">
-              <Lock size={15} className="text-muted shrink-0" />
-              <input
-                type={showPassword ? 'text' : 'password'}
-                required
-                autoComplete="current-password"
-                value={form.password}
-                onChange={handleChange('password')}
-                placeholder="••••••••"
-                className="w-full text-sm text-ink bg-transparent outline-none border-0 appearance-none focus:outline-none focus:ring-0 focus:shadow-none focus:border-0"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((v) => !v)}
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-                className="text-muted hover:text-ink transition-colors duration-150"
+              <label className="block">
+                <span className="text-xs font-medium text-muted mb-1 block">Password</span>
+                <div className="flex items-center gap-2 rounded-lg border border-white/50 dark:border-white/10
+                  px-3 py-2 bg-white/30 dark:bg-white/5 backdrop-blur-sm
+                  focus-within:border-primary focus-within:bg-white/60 dark:focus-within:bg-white/10
+                  transition-colors duration-150">
+                  <Lock size={15} className="text-muted shrink-0" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    autoComplete="current-password"
+                    value={form.password}
+                    onChange={handleChange('password')}
+                    placeholder="••••••••"
+                    className="w-full text-sm text-ink bg-transparent outline-none border-0 appearance-none focus:outline-none focus:ring-0 focus:shadow-none focus:border-0"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    className="text-muted hover:text-ink transition-colors duration-150"
+                  >
+                    {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+              </label>
+
+              <Button
+                type="submit"
+                variant="primary"
+                size="md"
+                icon={LogIn}
+                className="w-full"
+                disabled={loading}
               >
-                {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-              </button>
+                {loading ? 'Signing in…' : 'Sign In'}
+              </Button>
+            </form>
+          </>
+        ) : (
+          <>
+            <div className="mx-auto mb-1 flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary-dark">
+              <ShieldCheck size={17} />
             </div>
-          </label>
-          <Button
-            type="submit"
-            variant="primary"
-            size="md"
-            icon={LogIn}
-            className="w-full"
-            disabled={loading}
-          >
-            {loading ? 'Signing in…' : 'Sign In'}
-          </Button>
-        </form>
+            <h1 className="text-lg font-bold text-ink text-center">Enter verification code</h1>
+            <p className="mt-1.5 text-sm text-muted text-center">
+              We've sent a 6-digit code to{' '}
+              <span className="font-medium text-ink">{twoFactorPending.maskedEmail}</span>.
+            </p>
+
+            {error && (
+              <div className="flex items-center gap-2 mt-5 px-3 py-2 rounded-lg bg-red-50/70 border border-red-200/70 text-xs text-red-600 backdrop-blur-sm dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+                <AlertCircle size={14} className="shrink-0" />
+                {error}
+              </div>
+            )}
+            {resendMessage && (
+              <div className="mt-5 px-3 py-2 rounded-lg bg-emerald-50/70 border border-emerald-200/70 text-xs text-emerald-700 backdrop-blur-sm dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400">
+                {resendMessage}
+              </div>
+            )}
+
+            <form onSubmit={handleVerify} className="mt-6 space-y-4">
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                autoFocus
+                required
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+                placeholder="000000"
+                className="w-full h-11 rounded-lg border border-white/50 dark:border-white/10
+                  bg-white/30 dark:bg-white/5 backdrop-blur-sm text-center font-mono text-lg tracking-[0.4em]
+                  text-ink focus:outline-none focus:border-primary focus:bg-white/60 dark:focus:bg-white/10
+                  transition-colors duration-150"
+              />
+
+              <Button
+                type="submit"
+                variant="primary"
+                size="md"
+                className="w-full"
+                disabled={loading || code.length !== 6}
+              >
+                {loading ? 'Verifying…' : 'Verify & Sign In'}
+              </Button>
+
+              <div className="flex items-center justify-between pt-1">
+                <button
+                  type="button"
+                  onClick={handleBack}
+                  className="flex items-center gap-1 text-xs font-medium text-muted hover:text-ink transition-colors duration-150"
+                >
+                  <ArrowLeft size={12} /> Back
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResend}
+                  disabled={loading}
+                  className="text-xs font-medium text-primary-dark hover:underline disabled:opacity-50 disabled:pointer-events-none"
+                >
+                  Didn't get a code? Resend
+                </button>
+              </div>
+            </form>
+          </>
+        )}
       </div>
     </div>
   )

@@ -5,6 +5,8 @@ import Sidebar from '../components/Sidebar'
 import Footer from '../components/Footer'
 import LogoutConfirmModal from '../components/LogoutConfirmModal'
 import { useLocalStorage } from '../hooks/useLocalStorage'
+import { useAuth } from '../hooks/useAuth'
+import { useIdleLogout } from '../hooks/useIdleLogout'
 import { ProfileProvider } from '../context/ProfileContext'
 import { PermissionsProvider } from '../context/PermissionsContext'
 
@@ -12,6 +14,15 @@ export default function DashboardLayout() {
   const [collapsed, setCollapsed] = useLocalStorage('fms-sidebar-collapsed', false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [logoutModalOpen, setLogoutModalOpen] = useState(false)
+
+  const { logout } = useAuth()
+
+  // DashboardLayout only ever renders behind ProtectedRoute, so there's
+  // always a session here — no need to gate this on an auth-state check.
+  // Idle logout is silent (no LogoutConfirmModal) since by definition
+  // nobody's present to confirm it; that modal is only for the manual
+  // "Log out" button in Header/Sidebar.
+  useIdleLogout({ onIdle: logout, timeoutMinutes: 1 })
 
   // On desktop the hamburger toggles collapse; on mobile it opens the drawer.
   const handleHeaderToggle = () => {
@@ -23,16 +34,6 @@ export default function DashboardLayout() {
   }
 
   return (
-    // Wrapping here (rather than higher up in App.jsx) means Header and
-    // every page rendered through <Outlet /> — including Profile —
-    // share the exact same profile fetch and state. Update the avatar
-    // from the Profile page and the Header updates in the same render,
-    // no separate re-fetch, no drift.
-    //
-    // PermissionsProvider added alongside it, same reasoning: Sidebar
-    // needs the logged-in user's permission list to decide what to show,
-    // and any future page/route guard that needs a permission check reads
-    // from this same fetched list instead of re-fetching.
     <ProfileProvider>
       <PermissionsProvider>
         <div className="min-h-screen bg-bg">
@@ -66,4 +67,4 @@ export default function DashboardLayout() {
       </PermissionsProvider>
     </ProfileProvider>
   )
-}
+} 

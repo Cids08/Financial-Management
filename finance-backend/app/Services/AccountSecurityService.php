@@ -7,12 +7,17 @@ use App\Models\AuditLog;
 use App\Models\User;
 use App\Support\TwoFactor\TotpService;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class AccountSecurityService
 {
+    // How long an emailed setup code stays valid.
+    protected const SETUP_CODE_TTL_MINUTES = 10;
+
     public function __construct(protected TotpService $totp)
     {
     }
@@ -38,30 +43,42 @@ class AccountSecurityService
         $this->log($user, 'Password Change', 'Settings', 'Password was changed.');
     }
 
+    // 2FA setup is email-code based, not an authenticator app: generate a
+    // one-time code, cache its hash against the user, and email it. Nothing
+    // is written to the user record until the code is confirmed.
     public function initiateTwoFactor(User $user): array
     {
-        $secret = $this->totp->generateSecret();
+        $code = (string) random_int(100000, 999999);
 
-        $user->update([
-            'two_factor_secret' => encrypt($secret),
-            'two_factor_confirmed_at' => null,
-        ]);
+        Cache::put(
+            $this->setupCacheKey($user),
+            Hash::make($code),
+            now()->addMinutes(self::SETUP_CODE_TTL_MINUTES)
+        );
+
+        Mail::raw(
+            "Your verification code is: {$code}\n\n"
+                . 'This code expires in ' . self::SETUP_CODE_TTL_MINUTES . " minutes.\n"
+                . "If you didn't request this, you can safely ignore this email.",
+            fn ($message) => $message->to($user->email)->subject('Your verification code')
+        );
 
         return [
-            'secret' => $secret,
-            'qrCodeUrl' => $this->totp->getQrCodeUrl($secret, $user->email),
+            'maskedEmail' => $this->maskEmail($user->email),
         ];
     }
 
     public function confirmTwoFactor(User $user, string $code): array
     {
-        if (! $user->two_factor_secret) {
-            throw ValidationException::withMessages(['code' => ['Start setup again before verifying.']]);
+        $hashed = Cache::get($this->setupCacheKey($user));
+
+        if (! $hashed || ! Hash::check($code, $hashed)) {
+            throw ValidationException::withMessages([
+                'code' => ['That code is incorrect or has expired. Request a new one.'],
+            ]);
         }
 
-        if (! $this->totp->verify(decrypt($user->two_factor_secret), $code)) {
-            throw ValidationException::withMessages(['code' => ['Enter the 6-digit code from your authenticator app.']]);
-        }
+        Cache::forget($this->setupCacheKey($user));
 
         $recoveryCodes = collect(range(1, 8))->map(fn () => Str::upper(Str::random(10)));
 
@@ -84,6 +101,8 @@ class AccountSecurityService
             'two_factor_recovery_codes' => null,
             'two_factor_confirmed_at' => null,
         ]);
+
+        Cache::forget($this->setupCacheKey($user));
 
         $this->log($user, '2FA Disabled', 'Settings', 'Two-factor authentication turned off.');
     }
@@ -126,6 +145,19 @@ class AccountSecurityService
         $this->log($user, 'Account Deactivated', 'Settings', 'Account was deactivated by the user.');
     }
 
+    protected function setupCacheKey(User $user): string
+    {
+        return "2fa-setup:{$user->id}";
+    }
+
+    protected function maskEmail(string $email): string
+    {
+        [$local, $domain] = array_pad(explode('@', $email, 2), 2, '');
+        $visible = min(2, strlen($local));
+
+        return substr($local, 0, $visible) . str_repeat('*', max(strlen($local) - $visible, 3)) . '@' . $domain;
+    }
+
     protected function log(User $user, string $activity, string $module, string $description): void
     {
         ActivityLog::record($user->id, $activity, $module, request()->ip());
@@ -139,5 +171,11 @@ class AccountSecurityService
             'ip_address' => request()->ip(),
             'user_agent' => request()->userAgent(),
         ]);
+    }
+    public function status(User $user): array
+    {
+        return [
+            'twoFactorEnabled' => (bool) $user->two_factor_confirmed_at,
+        ];
     }
 }

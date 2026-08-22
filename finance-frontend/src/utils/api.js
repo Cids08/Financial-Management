@@ -6,15 +6,23 @@ import { getToken, clearToken } from './authToken'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
-// Module-level guard so multiple concurrent 401s (e.g. several hooks
-// firing requests on mount) only trigger a single redirect, and so
-// we never redirect again once we're already on the login page.
-let redirectingToLogin = false
-
 // Both '/' and '/login' render the Login page, so either counts as
-// "already there" — no need to force a reload from either one.
+// "already there" — no need to redirect from either one.
 function isOnLoginPage() {
   return window.location.pathname === '/' || window.location.pathname === '/login'
+}
+
+// apiFetch() is plain JS with no component/hook context, so it can't call
+// react-router's navigate() directly. Instead it broadcasts this event;
+// <AuthExpiredListener /> (mounted inside <BrowserRouter> in App.jsx)
+// listens for it and performs a real client-side redirect.
+//
+// This replaces a previous window.location.href = '/' hard navigation,
+// which could paint the outgoing authenticated layout and the incoming
+// Login page in the same frame during the transition — visible as a
+// jarring flash where the sidebar and the login card briefly overlapped.
+function notifyAuthExpired() {
+  window.dispatchEvent(new Event('auth:expired'))
 }
 
 /**
@@ -51,9 +59,8 @@ export async function apiFetch(path, options = {}) {
   if (response.status === 401 && !skipAuthRedirect) {
     clearToken()
 
-    if (!isOnLoginPage() && !redirectingToLogin) {
-      redirectingToLogin = true
-      window.location.href = '/'
+    if (!isOnLoginPage()) {
+      notifyAuthExpired()
     }
 
     throw new Error('Session expired. Please log in again.')

@@ -3,17 +3,14 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App.jsx'
 import { ThemeProvider } from './context/ThemeContext'
-import { CompanyProvider } from './context/CompanyContext'
 import './index.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ThemeProvider>
-      <CompanyProvider>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
-      </CompanyProvider>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
     </ThemeProvider>
   </React.StrictMode>
 )

@@ -107,4 +107,16 @@ class AccountSecurityController extends Controller
 
         return response()->json(['success' => true, 'message' => 'Account deactivated.']);
     }
+
+    /**
+ * GET /api/settings/2fa
+ */
+    public function status(Request $request): JsonResponse
+    {
+        return response()->json([
+            'success' => true,
+            'message' => '',
+            'data'    => $this->security->status($request->user()),
+        ]);
+    }
 }
