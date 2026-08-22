@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Mail\TwoFactorCodeMail;
 use App\Models\ActivityLog;
 use App\Models\AuditLog;
 use App\Models\User;
@@ -56,12 +57,13 @@ class AccountSecurityService
             now()->addMinutes(self::SETUP_CODE_TTL_MINUTES)
         );
 
-        Mail::raw(
-            "Your verification code is: {$code}\n\n"
-                . 'This code expires in ' . self::SETUP_CODE_TTL_MINUTES . " minutes.\n"
-                . "If you didn't request this, you can safely ignore this email.",
-            fn ($message) => $message->to($user->email)->subject('Your verification code')
-        );
+        Mail::to($user->email)->send(new TwoFactorCodeMail(
+            code: $code,
+            expiresInMinutes: self::SETUP_CODE_TTL_MINUTES,
+            mailSubject: 'Your verification code',
+            heading: 'Confirm your identity',
+            subtext: 'Enter this code to enable two-factor authentication on your account.',
+        ));
 
         return [
             'maskedEmail' => $this->maskEmail($user->email),
@@ -172,6 +174,7 @@ class AccountSecurityService
             'user_agent' => request()->userAgent(),
         ]);
     }
+
     public function status(User $user): array
     {
         return [

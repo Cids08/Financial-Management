@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, Receipt, Wallet, Tag, Info, Printer, CheckCircle2, XCircle, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, Receipt, Wallet, Tag, Info, Printer, CheckCircle2, XCircle, ChevronLeft, ChevronRight, CalendarRange, X } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
@@ -105,6 +105,12 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search])
 
+  // Expense-date range filter — sent to the backend the same way as
+  // search/status/category (see useExpenses.buildQuery), so it applies
+  // across every page, not just what's currently loaded.
+  const hasDateFilter = Boolean(filters.expense_date_from || filters.expense_date_to)
+  const clearDateFilter = () => setFilter({ expense_date_from: '', expense_date_to: '' })
+
   // Client-side pagination over the currently-loaded/filtered expense list.
   // NOTE: this paginates whatever `expenses` already holds. If useExpenses /
   // the backend end up paginating server-side (Laravel's default paginator),
@@ -112,7 +118,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
   const [page, setPage] = useState(1)
   useEffect(() => {
     setPage(1)
-  }, [filters.status, filters.expense_category_id, filters.trashed, filters.search])
+  }, [filters.status, filters.expense_category_id, filters.trashed, filters.search, filters.expense_date_from, filters.expense_date_to])
 
   const totalPages = Math.max(1, Math.ceil(expenses.length / PAGE_SIZE))
   const paginatedExpenses = useMemo(
@@ -288,11 +294,45 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
           <option value="">All Categories</option>
           {categories.map((c) => <option key={c.id} value={c.id}>{c.category_name}</option>)}
         </select>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <CalendarRange size={15} className="text-muted shrink-0" />
+          <input
+            type="date"
+            value={filters.expense_date_from}
+            onChange={(e) => setFilter({ expense_date_from: e.target.value })}
+            max={filters.expense_date_to || undefined}
+            aria-label="Expense date from"
+            className={`${INPUT} scheme-light dark:scheme-dark`}
+            style={{ width: '9.5rem' }}
+          />
+          <span className="text-xs text-muted">to</span>
+          <input
+            type="date"
+            value={filters.expense_date_to}
+            onChange={(e) => setFilter({ expense_date_to: e.target.value })}
+            min={filters.expense_date_from || undefined}
+            aria-label="Expense date to"
+            className={`${INPUT} scheme-light dark:scheme-dark`}
+            style={{ width: '9.5rem' }}
+          />
+          {hasDateFilter && (
+            <Tooltip label="Clear date filter" align="end">
+              <button
+                type="button"
+                onClick={clearDateFilter}
+                aria-label="Clear date filter"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
+              >
+                <X size={15} />
+              </button>
+            </Tooltip>
+          )}
+        </div>
         <Button
-          variant={showArchived ? 'primary' : 'secondary'}
+          variant={filters.trashed ? 'primary' : 'secondary'}
           size="sm"
           icon={Archive}
-          onClick={() => setShowArchived((prev) => !prev)}
+          onClick={() => setFilter({ trashed: !filters.trashed })}
           className="shrink-0 whitespace-nowrap"
         >
           Show Archived
@@ -327,7 +367,9 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
               {listLoading ? (
                 <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-muted">Loading expenses…</td></tr>
               ) : expenses.length === 0 ? (
-                <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-muted">No expenses match your filters.</td></tr>
+                <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-muted">
+                  {hasDateFilter ? 'No expenses fall within the selected date range.' : 'No expenses match your filters.'}
+                </td></tr>
               ) : paginatedExpenses.map((x) => (
                 <tr key={x.id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
                   <td className="px-4 py-3.5">

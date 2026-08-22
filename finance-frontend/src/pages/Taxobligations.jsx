@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, Receipt, CheckCircle2, Clock3, AlertTriangle, Info, Printer, Sparkles, Eye, EyeOff, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, Receipt, CheckCircle2, Clock3, AlertTriangle, Info, Printer, Sparkles, Eye, EyeOff, ChevronLeft, ChevronRight, Loader2, CalendarRange, X } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
@@ -137,6 +137,8 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
     search, setSearch,
     statusFilter, setStatusFilter,
     showArchived, setShowArchived,
+    dateFrom, setDateFrom,
+    dateTo, setDateTo,
     page, setPage,
     createObligation, updateObligation, archiveObligation, restoreObligation,
   } = useTaxObligations()
@@ -146,6 +148,11 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
   const [formError, setFormError] = useState('')
   const [detailRecord, setDetailRecord] = useState(null)
   const [refTouched, setRefTouched] = useState(false)
+
+  // Due-date range filter now lives in useTaxObligations and is sent to the
+  // backend alongside search/status, so it applies across every page.
+  const hasDateFilter = Boolean(dateFrom || dateTo)
+  const clearDateFilter = () => { setDateFrom(''); setDateTo('') }
 
   // Per-row "reveal amount" toggle — masked by default everywhere a
   // money figure shows (table + detail modal), same pattern as the
@@ -307,6 +314,13 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
   const periodType = TAX_TYPE_CONFIG[form.tax_type].periodType
   const yearOptions = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 1 + i)
 
+  // meta doesn't carry per_page from the backend, so derive it from the
+  // current page's row count (falls back to 1 to avoid a divide-by-zero
+  // on an empty last page) — same "Showing X–Y of Z" shape as Expenses.
+  const perPage = obligations.length || 1
+  const rangeStart = meta.total === 0 ? 0 : (meta.current_page - 1) * perPage + 1
+  const rangeEnd = Math.min((meta.current_page - 1) * perPage + obligations.length, meta.total)
+
   return (
     <div className="space-y-5 animate-fadeIn">
       <Breadcrumb items={crumbs} />
@@ -362,12 +376,46 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
             autoComplete="off"
           />
         </div>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={INPUT} style={INPUT_TEXT_STYLE}>
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={INPUT} style={{ ...INPUT_TEXT_STYLE, width: 'auto', minWidth: '9rem' }}>
           <option value="all">All Statuses</option>
           <option value="Pending">Pending</option>
           <option value="Overdue">Overdue</option>
           <option value="Paid">Paid</option>
         </select>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <CalendarRange size={15} className="text-muted shrink-0" />
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            max={dateTo || undefined}
+            aria-label="Due date from"
+            className={`${INPUT} scheme-light dark:scheme-dark`}
+            style={{ ...INPUT_TEXT_STYLE, width: '9.5rem' }}
+          />
+          <span className="text-xs text-muted">to</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            min={dateFrom || undefined}
+            aria-label="Due date to"
+            className={`${INPUT} scheme-light dark:scheme-dark`}
+            style={{ ...INPUT_TEXT_STYLE, width: '9.5rem' }}
+          />
+          {hasDateFilter && (
+            <Tooltip label="Clear date filter" align="end">
+              <button
+                type="button"
+                onClick={clearDateFilter}
+                aria-label="Clear date filter"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
+              >
+                <X size={15} />
+              </button>
+            </Tooltip>
+          )}
+        </div>
         <Button
           variant={showArchived ? 'primary' : 'secondary'}
           size="sm"
@@ -382,7 +430,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
       <div className={PANEL}>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead>
+            <thead className="sticky top-0 z-10 bg-surface shadow-[0_1px_0_0_var(--color-border)]">
               <tr className="border-b border-border">
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Tax Type / Period</th>
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Due Date</th>
@@ -463,21 +511,40 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                 )
               })}
               {!loading && obligations.length === 0 && (
-                <tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-muted">No tax obligations match your filters.</td></tr>
+                <tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-muted">
+                  {hasDateFilter ? 'No tax obligations fall within the selected date range.' : 'No tax obligations match your filters.'}
+                </td></tr>
               )}
             </tbody>
           </table>
         </div>
 
-        {meta.last_page > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-border text-xs text-muted">
-            <span>Page {meta.current_page} of {meta.last_page} &middot; {meta.total} total</span>
+        {!loading && obligations.length > 0 && (
+          <div className="flex flex-col gap-2 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-muted">
+              Showing {rangeStart}–{rangeEnd} of {meta.total} tax obligations
+            </p>
             <div className="flex items-center gap-1">
-              <button type="button" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-bg disabled:opacity-40 disabled:pointer-events-none transition-colors duration-150">
-                <ChevronLeft size={14} />
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label="Previous page"
+              >
+                <ChevronLeft size={15} />
               </button>
-              <button type="button" disabled={page >= meta.last_page} onClick={() => setPage((p) => p + 1)} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-bg disabled:opacity-40 disabled:pointer-events-none transition-colors duration-150">
-                <ChevronRight size={14} />
+              <span className="px-2 text-xs font-medium text-ink whitespace-nowrap">
+                Page {meta.current_page} of {meta.last_page}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.min(meta.last_page, p + 1))}
+                disabled={page >= meta.last_page}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label="Next page"
+              >
+                <ChevronRight size={15} />
               </button>
             </div>
           </div>

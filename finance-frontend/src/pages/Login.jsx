@@ -7,14 +7,18 @@ import logo from '../assets/logo.svg'
 
 export default function Login() {
   const {
-    login, loading, error,
+    login, loading, error, retryAfter,
     twoFactorPending, verifyTwoFactor, resendTwoFactor, cancelTwoFactor,
   } = useAuth()
   const { theme, toggleTheme } = useTheme()
-  const [form, setForm] = useState({ email: '', password: '', remember: false })
+  const [form, setForm] = useState({ email: '', password: '', remember: false, website: '' })
   const [showPassword, setShowPassword] = useState(false)
   const [code, setCode] = useState('')
   const [resendMessage, setResendMessage] = useState('')
+  // Timestamp when the login form mounted — sent alongside the submit so
+  // the backend honeypot middleware can reject submissions that arrive
+  // faster than a human could realistically fill the form.
+  const [formRenderedAt] = useState(() => Math.floor(Date.now() / 1000))
 
   const handleChange = (field) => (e) =>
     setForm((f) => ({
@@ -24,7 +28,7 @@ export default function Login() {
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    login(form)
+    login({ ...form, form_rendered_at: formRenderedAt })
   }
 
   const handleVerify = (e) => {
@@ -81,11 +85,37 @@ export default function Login() {
             {error && (
               <div className="flex items-center gap-2 mt-5 px-3 py-2 rounded-lg bg-red-50/70 border border-red-200/70 text-xs text-red-600 backdrop-blur-sm dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
                 <AlertCircle size={14} className="shrink-0" />
-                {error}
+                <span>
+                  {retryAfter > 0
+                    ? `Too many attempts. Try again in ${retryAfter}s.`
+                    : error}
+                </span>
               </div>
             )}
 
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+              {/*
+                Honeypot field. Deliberately NOT type="hidden" — some bots
+                skip those. Hidden via off-screen positioning instead, and
+                excluded from tab order / screen readers so real users and
+                assistive tech never encounter it.
+              */}
+              <div
+                className="absolute left-[-9999px] w-px h-px overflow-hidden"
+                aria-hidden="true"
+              >
+                <label htmlFor="website">Website</label>
+                <input
+                  type="text"
+                  id="website"
+                  name="website"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  value={form.website}
+                  onChange={handleChange('website')}
+                />
+              </div>
+
               <label className="block">
                 <span className="text-xs font-medium text-muted mb-1 block">Email</span>
                 <div className="flex items-center gap-2 rounded-lg border border-white/50 dark:border-white/10
@@ -138,9 +168,13 @@ export default function Login() {
                 size="md"
                 icon={LogIn}
                 className="w-full"
-                disabled={loading}
+                disabled={loading || retryAfter > 0}
               >
-                {loading ? 'Signing in…' : 'Sign In'}
+                {retryAfter > 0
+                  ? `Try again in ${retryAfter}s`
+                  : loading
+                    ? 'Signing in…'
+                    : 'Sign In'}
               </Button>
             </form>
           </>

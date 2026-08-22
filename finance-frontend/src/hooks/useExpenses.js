@@ -3,7 +3,7 @@ import { apiFetch } from '../utils/api'
 
 /**
  * Backed by:
- *   GET    /api/expenses            (filters: search, status, budget_id, expense_category_id, trashed, per_page, page)
+ *   GET    /api/expenses            (filters: search, status, budget_id, expense_category_id, expense_date_from, expense_date_to, trashed, per_page, page)
  *   GET    /api/expenses/stats
  *   GET    /api/expenses/{id}
  *   POST   /api/expenses
@@ -18,7 +18,7 @@ export function useExpenses() {
   const [meta, setMeta] = useState({ current_page: 1, last_page: 1, per_page: 15, total: 0 })
   const [listLoading, setListLoading] = useState(true)
   const [listError, setListError] = useState('')
-  const [filters, setFilters] = useState({ search: '', status: '', budget_id: '', expense_category_id: '', trashed: false, page: 1 })
+  const [filters, setFilters] = useState({ search: '', status: '', budget_id: '', expense_category_id: '', expense_date_from: '', expense_date_to: '', trashed: false, page: 1 })
 
   const [stats, setStats] = useState({ total: 0, total_amount: 0, this_month_amount: 0, archived: 0 })
   const [statsLoading, setStatsLoading] = useState(true)
@@ -32,6 +32,8 @@ export function useExpenses() {
     if (f.status) params.set('status', f.status)
     if (f.budget_id) params.set('budget_id', f.budget_id)
     if (f.expense_category_id) params.set('expense_category_id', f.expense_category_id)
+    if (f.expense_date_from) params.set('expense_date_from', f.expense_date_from)
+    if (f.expense_date_to) params.set('expense_date_to', f.expense_date_to)
     if (f.trashed) params.set('trashed', '1')
     params.set('page', f.page || 1)
     return params.toString()

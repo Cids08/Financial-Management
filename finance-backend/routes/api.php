@@ -29,11 +29,13 @@ use App\Http\Controllers\Api\FinancialForecastController;
 use App\Http\Controllers\Api\ServiceAreaController;
 use App\Http\Controllers\Api\CollectionController;
 use App\Http\Controllers\Api\ReportController;
+use App\Http\Controllers\Api\BudgetController;
+use App\Http\Controllers\Api\DisbursementController;
 
 // Public — no token exists yet at this point, so this cannot sit inside
 // the auth:sanctum group. Throttled to slow down brute-force attempts.
 Route::post('/login', [AuthController::class, 'login'])
-    ->middleware('throttle:5,1'); // 5 attempts per minute per IP
+    ->middleware('throttle:5,1' , 'honeypot'); // 5 attempts per minute per IP
 
 // Public — step 2 of a 2FA login. Same reasoning as /login above: the
 // pending-login ticket proves the password was already verified, but no
@@ -42,7 +44,7 @@ Route::post('/login', [AuthController::class, 'login'])
 // /settings/2fa/confirm below — a 6-digit code is only ~1,000,000
 // possibilities, so this must never be left unthrottled.
 Route::post('/login/verify-two-factor', [AuthController::class, 'verifyTwoFactor'])
-    ->middleware('throttle:5,1');
+    ->middleware('throttle:5,1' , 'honeypot');
 
 Route::post('/login/resend-two-factor', [AuthController::class, 'resendTwoFactor'])
     ->middleware('throttle:5,1');
@@ -90,7 +92,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/sessions', [AccountSecurityController::class, 'revokeOtherSessions']);
 
         Route::get('/activity', [AccountSecurityController::class, 'activity']);
-
         Route::post('/2fa/initiate', [AccountSecurityController::class, 'initiateTwoFactor']);
 
         // 6-digit TOTP code = 1,000,000 possible values. This route used to
@@ -98,7 +99,7 @@ Route::middleware('auth:sanctum')->group(function () {
         // with no rate limit. Throttled tighter than the general settings
         // actions below since this is a guessing attack surface.
         Route::post('/2fa/confirm', [AccountSecurityController::class, 'confirmTwoFactor'])
-            ->middleware('throttle:5,1');
+            ->middleware('throttle:5,1' , 'honeypot');
 
         Route::middleware('throttle:10,1')->group(function () {
             Route::put('/password', [AccountSecurityController::class, 'updatePassword']);
@@ -355,13 +356,55 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/budget-vs-actual', [ReportController::class, 'budgetVsActual']);
     });
 
-    // Disbursements (covers Budgets too, per clarification — one combined
-    // module, not two): permissions are seeded and ready
-    // (disbursements.view/manage/approve, plus separate budgets.* — see
-    // RoleSeeder), but the routes/controller for this module don't exist
-    // yet. Add its Route::prefix('disbursements') group here once built,
-    // following the exact ap./expenses. pattern above (manage for Staff,
-    // approve Admin-only via its own permission).
+    // Financial Transactions — Budgets. Separate module from Disbursements
+    // (see below) — budgets.* permissions were seeded distinct from
+    // disbursements.*. Same shape as Accounts Payable / Expenses: manage
+    // covers create/edit, approve/reject is its OWN permission so Staff
+    // with budgets.manage can create/edit but never self-approve.
+    Route::prefix('budgets')->group(function () {
+        Route::get('/stats', [BudgetController::class, 'stats'])->middleware('permission:budgets.view');
+        Route::get('/', [BudgetController::class, 'index'])->middleware('permission:budgets.view');
+        Route::get('/{budget}', [BudgetController::class, 'show'])->middleware('permission:budgets.view');
+        Route::post('/', [BudgetController::class, 'store'])->middleware('permission:budgets.manage');
+        Route::put('/{budget}', [BudgetController::class, 'update'])->middleware('permission:budgets.manage');
+
+        // Attaching the plan is an edit-type action (budgets.manage), not an
+        // approval action — this is the document that approve() checks for.
+        Route::post('/{budget}/plan', [BudgetController::class, 'uploadPlan'])->middleware('permission:budgets.manage');
+
+        Route::patch('/{budget}/approve', [BudgetController::class, 'approve'])->middleware('permission:budgets.approve');
+        Route::patch('/{budget}/reject', [BudgetController::class, 'reject'])->middleware('permission:budgets.approve');
+        Route::patch('/{budget}/archive', [BudgetController::class, 'archive'])->middleware('permission:budgets.manage');
+
+        Route::patch('/{budget}/restore', [BudgetController::class, 'restore'])
+            ->middleware('permission:budgets.manage')
+            ->withTrashed();
+    });
+
+    // Disbursements — separate module from Budgets above. Same shape as
+    // Accounts Payable: manage covers create/edit, approve is its own
+    // permission. Release is gated under the SAME disbursements.approve
+    // permission as approve — no separate "release" permission exists in
+    // the seeder, and releasing funds is at least as sensitive as
+    // approving them.
+    Route::prefix('disbursements')->group(function () {
+        Route::get('/stats', [DisbursementController::class, 'stats'])->middleware('permission:disbursements.view');
+        Route::get('/', [DisbursementController::class, 'index'])->middleware('permission:disbursements.view');
+        Route::get('/{disbursement}', [DisbursementController::class, 'show'])->middleware('permission:disbursements.view');
+        Route::post('/', [DisbursementController::class, 'store'])->middleware('permission:disbursements.manage');
+        Route::put('/{disbursement}', [DisbursementController::class, 'update'])->middleware('permission:disbursements.manage');
+        Route::post('/{disbursement}/proof', [DisbursementController::class, 'uploadProof'])->middleware('permission:disbursements.manage');
+
+        Route::patch('/{disbursement}/approve', [DisbursementController::class, 'approve'])->middleware('permission:disbursements.approve');
+        Route::patch('/{disbursement}/reject', [DisbursementController::class, 'reject'])->middleware('permission:disbursements.approve');
+        Route::patch('/{disbursement}/release', [DisbursementController::class, 'release'])->middleware('permission:disbursements.approve');
+
+        Route::patch('/{disbursement}/archive', [DisbursementController::class, 'archive'])->middleware('permission:disbursements.manage');
+        Route::patch('/{disbursement}/restore', [DisbursementController::class, 'restore'])
+            ->middleware('permission:disbursements.manage')
+            ->withTrashed();
+    });
 
     // Future modules get their own Route::prefix(...) groups here.
 });
+

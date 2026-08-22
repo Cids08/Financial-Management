@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, PiggyBank, TrendingDown, Building2, Info, Printer, CheckCircle2, XCircle, Clock, AlertTriangle } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Search, Plus, Pencil, Archive, RotateCcw, PiggyBank, TrendingDown, Building2, Info, Printer, CheckCircle2, XCircle, Clock, AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
@@ -27,16 +27,21 @@ const userName = (id) => {
 // instead of asking for it on every form.
 const CURRENT_USER_ID = 1
 
+// A budget cannot be approved until the department's budget plan is attached.
+// This keeps a stray "plan_reference: '   '" from counting as attached.
+const hasBudgetPlan = (b) => !!(b && b.plan_reference && b.plan_reference.trim())
+
 const initialBudgets = [
-  { budget_id: 1, department_id: 2, fiscal_year: 2026, allocated_amount: 1500000, remaining_amount: 620000, status: 'Active', approval_status: 'Approved', remarks: 'Includes logistics contingency', created_by: 1, approved_by: 3, approved_at: '2026-01-05T09:00:00', is_archived: false, archived_at: null, archived_by: null, created_at: '2026-01-02T09:00:00', updated_at: '2026-07-20T10:00:00' },
-  { budget_id: 2, department_id: 3, fiscal_year: 2026, allocated_amount: 800000, remaining_amount: 145000, status: 'Active', approval_status: 'Approved', remarks: 'Q3 campaign heavy spend', created_by: 1, approved_by: 3, approved_at: '2026-01-06T09:00:00', is_archived: false, archived_at: null, archived_by: null, created_at: '2026-01-02T09:30:00', updated_at: '2026-07-18T14:00:00' },
-  { budget_id: 3, department_id: 4, fiscal_year: 2026, allocated_amount: 650000, remaining_amount: 650000, status: 'Active', approval_status: 'Pending', remarks: '', created_by: 2, approved_by: null, approved_at: null, is_archived: false, archived_at: null, archived_by: null, created_at: '2026-07-28T10:00:00', updated_at: '2026-07-28T10:00:00' },
-  { budget_id: 4, department_id: 5, fiscal_year: 2026, allocated_amount: 300000, remaining_amount: 90000, status: 'Active', approval_status: 'Approved', remarks: 'Recruitment drive ongoing', created_by: 2, approved_by: 3, approved_at: '2026-01-08T09:00:00', is_archived: false, archived_at: null, archived_by: null, created_at: '2026-01-03T11:00:00', updated_at: '2026-07-05T13:00:00' },
-  { budget_id: 5, department_id: 1, fiscal_year: 2025, allocated_amount: 500000, remaining_amount: 0, status: 'Closed', approval_status: 'Approved', remarks: 'FY2025 closed out', created_by: 1, approved_by: 3, approved_at: '2025-01-05T09:00:00', is_archived: true, archived_at: '2026-01-15T09:00:00', archived_by: 1, created_at: '2025-01-02T09:00:00', updated_at: '2026-01-15T09:00:00' },
+  { budget_id: 1, department_id: 2, fiscal_year: 2026, allocated_amount: 1500000, remaining_amount: 620000, status: 'Active', approval_status: 'Approved', remarks: 'Includes logistics contingency', plan_reference: 'FY2026-Operations-Budget-Plan.pdf', created_by: 1, approved_by: 3, approved_at: '2026-01-05T09:00:00', is_archived: false, archived_at: null, archived_by: null, created_at: '2026-01-02T09:00:00', updated_at: '2026-07-20T10:00:00' },
+  { budget_id: 2, department_id: 3, fiscal_year: 2026, allocated_amount: 800000, remaining_amount: 145000, status: 'Active', approval_status: 'Approved', remarks: 'Q3 campaign heavy spend', plan_reference: 'FY2026-SalesMarketing-Budget-Plan.pdf', created_by: 1, approved_by: 3, approved_at: '2026-01-06T09:00:00', is_archived: false, archived_at: null, archived_by: null, created_at: '2026-01-02T09:30:00', updated_at: '2026-07-18T14:00:00' },
+  { budget_id: 3, department_id: 4, fiscal_year: 2026, allocated_amount: 650000, remaining_amount: 650000, status: 'Active', approval_status: 'Pending', remarks: '', plan_reference: '', created_by: 2, approved_by: null, approved_at: null, is_archived: false, archived_at: null, archived_by: null, created_at: '2026-07-28T10:00:00', updated_at: '2026-07-28T10:00:00' },
+  { budget_id: 4, department_id: 5, fiscal_year: 2026, allocated_amount: 300000, remaining_amount: 90000, status: 'Active', approval_status: 'Approved', remarks: 'Recruitment drive ongoing', plan_reference: 'FY2026-HR-Budget-Plan.pdf', created_by: 2, approved_by: 3, approved_at: '2026-01-08T09:00:00', is_archived: false, archived_at: null, archived_by: null, created_at: '2026-01-03T11:00:00', updated_at: '2026-07-05T13:00:00' },
+  { budget_id: 5, department_id: 1, fiscal_year: 2025, allocated_amount: 500000, remaining_amount: 0, status: 'Closed', approval_status: 'Approved', remarks: 'FY2025 closed out', plan_reference: 'FY2025-Finance-Budget-Plan.pdf', created_by: 1, approved_by: 3, approved_at: '2025-01-05T09:00:00', is_archived: true, archived_at: '2026-01-15T09:00:00', archived_by: 1, created_at: '2025-01-02T09:00:00', updated_at: '2026-01-15T09:00:00' },
 ]
 
 const STATUS_OPTIONS = ['Active', 'Closed']
-const EMPTY_FORM = { department_id: DEPARTMENTS[0].department_id, fiscal_year: new Date().getFullYear(), allocated_amount: '', remarks: '' }
+const EMPTY_FORM = { department_id: DEPARTMENTS[0].department_id, fiscal_year: new Date().getFullYear(), allocated_amount: '', remarks: '', plan_reference: '' }
+const PAGE_SIZE = 10
 
 const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
 const PANEL_PAD = 'p-4'
@@ -112,6 +117,22 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
     })
   }, [budgets, search, statusFilter, approvalFilter, showArchived])
 
+  // Client-side pagination over the filtered list — same pattern as
+  // Expenses.jsx (PAGE_SIZE-based slicing with a "Showing X–Y of Z" footer),
+  // kept consistent here since this page has no backend of its own yet.
+  const [page, setPage] = useState(1)
+  useEffect(() => {
+    setPage(1)
+  }, [search, statusFilter, approvalFilter, showArchived])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const paginatedBudgets = useMemo(
+    () => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [filtered, page]
+  )
+  const rangeStart = filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
+  const rangeEnd = Math.min(page * PAGE_SIZE, filtered.length)
+
   const stats = useMemo(() => {
     const active = budgets.filter((b) => !b.is_archived)
     return {
@@ -133,6 +154,13 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
   }
 
   const setApproval = (id, decision) => {
+    // Guard against approving a budget that has no plan attached yet — the Approve
+    // controls are disabled in the UI for this case, but this keeps the rule enforced
+    // even if setApproval is ever called from somewhere else.
+    if (decision === 'Approved') {
+      const target = budgets.find((b) => b.budget_id === id)
+      if (!hasBudgetPlan(target)) return
+    }
     const now = new Date().toISOString()
     setBudgets((prev) => prev.map((b) => (
       b.budget_id === id
@@ -145,10 +173,11 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
   const openAdd = () => { setForm(EMPTY_FORM); setFormError(''); setModalMode('add') }
   const openEdit = (b) => {
     // Once a budget is Approved it's locked from editing entirely — that decision is final
-    // and belongs to the CEO. Before approval, only the allocated amount and remarks can
-    // change; department, fiscal year, remaining amount, and status stay locked either way.
+    // and belongs to the CEO. Before approval, only the allocated amount, remarks, and
+    // budget plan reference can change; department, fiscal year, remaining amount, and
+    // status stay locked either way.
     if (b.approval_status === 'Approved') return
-    setForm({ department_id: b.department_id, fiscal_year: b.fiscal_year, allocated_amount: b.allocated_amount, remarks: b.remarks })
+    setForm({ department_id: b.department_id, fiscal_year: b.fiscal_year, allocated_amount: b.allocated_amount, remarks: b.remarks, plan_reference: b.plan_reference || '' })
     setFormError('')
     setModalMode(b)
   }
@@ -165,6 +194,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
       ['Allocated Amount', formatCurrency(b.allocated_amount)],
       ['Remaining Amount', formatCurrency(b.remaining_amount)],
       ['Utilization', `${usedPct(b.allocated_amount, b.remaining_amount)}%`],
+      ['Budget Plan', b.plan_reference || 'Not attached'],
       ['Approval Status', b.approval_status],
       ['Approved By', userName(b.approved_by)],
       ['Status', b.status],
@@ -214,10 +244,11 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
     const now = new Date().toISOString()
 
     if (modalMode === 'add') {
-      // Minimal input on create: department, fiscal year, allocated amount, optional remarks.
-      // Remaining amount always starts equal to the allocation, status defaults to Active,
-      // and every new budget starts Pending until someone approves it — none of this needs
-      // to be typed in by hand.
+      // Minimal input on create: department, fiscal year, allocated amount, optional remarks,
+      // and an optional budget plan reference. Remaining amount always starts equal to the
+      // allocation, status defaults to Active, and every new budget starts Pending until
+      // someone approves it — none of this needs to be typed in by hand. The plan reference
+      // can be attached later, but approval stays blocked until it is.
       const nextId = Math.max(0, ...budgets.map((b) => b.budget_id)) + 1
       setBudgets((prev) => [...prev, {
         budget_id: nextId,
@@ -228,6 +259,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
         status: 'Active',
         approval_status: 'Pending',
         remarks: form.remarks,
+        plan_reference: form.plan_reference,
         created_by: CURRENT_USER_ID,
         approved_by: null,
         approved_at: null,
@@ -238,13 +270,14 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
         updated_at: now,
       }])
     } else if (modalMode) {
-      // Editing an existing budget only ever changes the allocated amount and remarks.
-      // Department, fiscal year, remaining amount, and status stay exactly as they were —
-      // approval/rejection is the CEO's call via the Approve/Reject actions, not this form.
+      // Editing an existing budget only ever changes the allocated amount, remarks, and
+      // budget plan reference. Department, fiscal year, remaining amount, and status stay
+      // exactly as they were — approval/rejection is the CEO's call via the Approve/Reject
+      // actions, not this form.
       const editingId = modalMode.budget_id
       setBudgets((prev) => prev.map((b) => (
         b.budget_id === editingId
-          ? { ...b, allocated_amount: allocated, remarks: form.remarks, updated_at: now }
+          ? { ...b, allocated_amount: allocated, remarks: form.remarks, plan_reference: form.plan_reference, updated_at: now }
           : b
       )))
     }
@@ -342,14 +375,23 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
               </tr>
             </thead>
             <tbody>
-              {filtered.map((b) => {
+              {filtered.length === 0 ? (
+                <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-muted">No budgets match your filters.</td></tr>
+              ) : paginatedBudgets.map((b) => {
                 const pct = usedPct(b.allocated_amount, b.remaining_amount)
                 const isPending = b.approval_status === 'Pending'
+                const planAttached = hasBudgetPlan(b)
                 return (
                   <tr key={b.budget_id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
                     <td className="px-4 py-3.5">
                       <p className="font-medium text-ink">{deptName(b.department_id)}</p>
                       {b.remarks && <p className="text-xs text-muted truncate max-w-55">{b.remarks}</p>}
+                      {isPending && !planAttached && (
+                        <p className="mt-0.5 flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
+                          <AlertTriangle size={11} />
+                          No budget plan attached
+                        </p>
+                      )}
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap text-ink">{b.fiscal_year}</td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
@@ -373,8 +415,18 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                       <div className="flex items-center justify-end gap-1">
                         {isPending && (
                           <>
-                            <Tooltip label="Approve budget" align="start">
-                              <button type="button" onClick={() => setApproval(b.budget_id, 'Approved')} className="flex h-8 w-8 items-center justify-center rounded-lg text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors duration-150">
+                            <Tooltip label={planAttached ? 'Approve budget' : 'Attach a budget plan before approving'} align="start">
+                              <button
+                                type="button"
+                                onClick={() => setApproval(b.budget_id, 'Approved')}
+                                disabled={!planAttached}
+                                aria-disabled={!planAttached}
+                                className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors duration-150 ${
+                                  planAttached
+                                    ? 'text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10'
+                                    : 'text-muted/40 cursor-not-allowed'
+                                }`}
+                              >
                                 <CheckCircle2 size={15} />
                               </button>
                             </Tooltip>
@@ -416,12 +468,40 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                   </tr>
                 )
               })}
-              {filtered.length === 0 && (
-                <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-muted">No budgets match your filters.</td></tr>
-              )}
             </tbody>
           </table>
         </div>
+
+        {filtered.length > 0 && (
+          <div className="flex flex-col gap-2 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-muted">
+              Showing {rangeStart}–{rangeEnd} of {filtered.length} budgets
+            </p>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label="Previous page"
+              >
+                <ChevronLeft size={15} />
+              </button>
+              <span className="px-2 text-xs font-medium text-ink whitespace-nowrap">
+                Page {page} of {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label="Next page"
+              >
+                <ChevronRight size={15} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <Modal
@@ -474,6 +554,24 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
             <input type="text" value={form.remarks} onChange={(e) => setForm((f) => ({ ...f, remarks: e.target.value }))} className={INPUT} placeholder="Optional notes" />
           </div>
 
+          <div>
+            <label className={LABEL}>Budget Plan Reference</label>
+            <input
+              type="text"
+              value={form.plan_reference}
+              onChange={(e) => setForm((f) => ({ ...f, plan_reference: e.target.value }))}
+              className={INPUT}
+              placeholder="e.g. FY2026-Operations-Budget-Plan.pdf"
+            />
+            <p className="mt-1 flex items-center gap-1 text-xs text-muted">
+              {form.plan_reference.trim() ? (
+                <>The department's budget plan will be attached to this budget.</>
+              ) : (
+                <><AlertTriangle size={11} className="text-amber-500 shrink-0" /> Required before this budget can be approved.</>
+              )}
+            </p>
+          </div>
+
           {!isEditing && (
             <p className="text-xs text-muted">New budgets start as <span className="font-medium text-ink">Pending</span> approval and become spendable once approved.</p>
           )}
@@ -509,7 +607,17 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
             {detailRecord && detailRecord.approval_status === 'Pending' && (
               <>
                 <Button variant="secondary" size="md" icon={XCircle} onClick={() => setApproval(detailRecord.budget_id, 'Rejected')}>Reject</Button>
-                <Button variant="primary" size="md" icon={CheckCircle2} onClick={() => setApproval(detailRecord.budget_id, 'Approved')}>Approve</Button>
+                <Tooltip label={hasBudgetPlan(detailRecord) ? 'Approve budget' : 'Attach a budget plan before approving'}>
+                  <Button
+                    variant="primary"
+                    size="md"
+                    icon={CheckCircle2}
+                    disabled={!hasBudgetPlan(detailRecord)}
+                    onClick={() => setApproval(detailRecord.budget_id, 'Approved')}
+                  >
+                    Approve
+                  </Button>
+                </Tooltip>
               </>
             )}
             {detailRecord && detailRecord.approval_status !== 'Pending' && <Button variant="primary" size="md" icon={Printer} onClick={() => handlePrint(detailRecord)}>Print Report</Button>}
@@ -528,6 +636,14 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                 <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[detailRecord.status]}`}>{detailRecord.status}</span>
               </div>
             </div>
+
+            {detailRecord.approval_status === 'Pending' && !hasBudgetPlan(detailRecord) && (
+              <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+                <AlertTriangle size={14} className="shrink-0" />
+                This budget needs an attached budget plan before it can be approved.
+              </div>
+            )}
+
             <div className="rounded-lg border border-border divide-y divide-border">
               <div className="px-3 py-2">
                 <DetailRow label="Allocated Amount" value={formatCurrency(detailRecord.allocated_amount)} />
@@ -535,6 +651,14 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                 <DetailRow label="Utilization" value={`${usedPct(detailRecord.allocated_amount, detailRecord.remaining_amount)}%`} />
               </div>
               <div className="px-3 py-2">
+                <DetailRow
+                  label="Budget Plan"
+                  value={
+                    hasBudgetPlan(detailRecord)
+                      ? detailRecord.plan_reference
+                      : <span className="text-amber-600 dark:text-amber-400">Not attached</span>
+                  }
+                />
                 <DetailRow label="Remarks" value={detailRecord.remarks || '—'} />
               </div>
               <div className="px-3 py-2">

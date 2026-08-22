@@ -23,19 +23,17 @@ export function useAuth() {
   // company settings on that mount, so there's nothing left for login()
   // to trigger here.
 
-  const login = useCallback(async ({ email, password, remember }) => {
+  const login = useCallback(async ({ email, password, remember, website, form_rendered_at }) => {
     setLoading(true)
     setError(null)
     try {
       const res = await apiFetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, remember }),
-        // A 401 here means "invalid credentials," not "session expired" —
-        // there's no session yet. Let it fall through to the res.ok check
-        // below instead of being intercepted as an auth-expiry redirect.
+        body: JSON.stringify({ email, password, remember, website, form_rendered_at }),
         skipAuthRedirect: true,
       })
+
       const json = await res.json()
 
       if (!res.ok || !json.success) {

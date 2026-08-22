@@ -2,18 +2,27 @@
 
 return [
 
+    'name' => env('APP_NAME', 'Laravel'),
+
     /*
     |--------------------------------------------------------------------------
-    | Application Name
+    | Company Name
     |--------------------------------------------------------------------------
     |
-    | This value is the name of your application, which will be used when the
-    | framework needs to place the application's name in a notification or
-    | other UI elements where an application name needs to be displayed.
+    | Distinct from APP_NAME above (which identifies the Laravel app itself,
+    | e.g. for the browser tab title). This is the client's business name,
+    | used in outward-facing content like transactional emails — branded
+    | headers, footers, "From" display names — where "Financial Management
+    | System" alone wouldn't mean anything to the recipient.
     |
     */
 
-    'name' => env('APP_NAME', 'Laravel'),
+    'company_name' => env('APP_COMPANY_NAME', 'Alibaton Construction Inc.'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Application Environment
+    |--------------------------------------------------------------------------
 
     /*
     |--------------------------------------------------------------------------

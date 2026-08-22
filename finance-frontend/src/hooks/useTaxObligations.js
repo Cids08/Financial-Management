@@ -13,6 +13,12 @@ export function useTaxObligations() {
   const [showArchived, setShowArchived] = useState(false)
   const [page, setPage] = useState(1)
 
+  // Due-date range filter — sent to the backend the same way as
+  // search/status, so it applies across every page, not just the one
+  // currently loaded.
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+
   const debounceRef = useRef(null)
   const [debouncedSearch, setDebouncedSearch] = useState('')
 
@@ -24,7 +30,7 @@ export function useTaxObligations() {
 
   useEffect(() => {
     setPage(1)
-  }, [debouncedSearch, statusFilter, showArchived])
+  }, [debouncedSearch, statusFilter, showArchived, dateFrom, dateTo])
 
   const fetchObligations = useCallback(async () => {
     setLoading(true)
@@ -36,6 +42,8 @@ export function useTaxObligations() {
       })
       if (debouncedSearch) params.set('search', debouncedSearch)
       if (statusFilter !== 'all') params.set('status', statusFilter)
+      if (dateFrom) params.set('due_date_from', dateFrom)
+      if (dateTo) params.set('due_date_to', dateTo)
 
       const res = await apiFetch(`/api/tax-obligations?${params}`)
       const json = await res.json()
@@ -48,7 +56,7 @@ export function useTaxObligations() {
     } finally {
       setLoading(false)
     }
-  }, [page, debouncedSearch, statusFilter, showArchived])
+  }, [page, debouncedSearch, statusFilter, showArchived, dateFrom, dateTo])
 
   useEffect(() => {
     fetchObligations()
@@ -129,6 +137,8 @@ export function useTaxObligations() {
     search, setSearch,
     statusFilter, setStatusFilter,
     showArchived, setShowArchived,
+    dateFrom, setDateFrom,
+    dateTo, setDateTo,
     page, setPage,
     createObligation, updateObligation, archiveObligation, restoreObligation,
   }

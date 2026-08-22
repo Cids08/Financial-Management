@@ -16,6 +16,12 @@ return Application::configure(basePath: dirname(__DIR__))
             'permission' => \App\Http\Middleware\CheckPermission::class,
         ]);
     })
+    ->withMiddleware(function (Middleware $middleware) {
+    $middleware->alias([
+        'honeypot' => \App\Http\Middleware\HoneypotCheck::class,
+        // ...your existing aliases (e.g. 'permission' => ...)
+    ]);
+    })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
     })->create();

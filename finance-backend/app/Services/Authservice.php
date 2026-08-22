@@ -2,6 +2,9 @@
 
 namespace App\Services;
 
+use App\Mail\TwoFactorCodeMail;
+use App\Models\ActivityLog;
+use App\Models\AuditLog;
 use App\Models\User;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
@@ -11,8 +14,17 @@ use Illuminate\Validation\ValidationException;
 
 class AuthService
 {
-    // How long a pending (password-verified, awaiting emailed code) login stays valid.
-    protected const PENDING_LOGIN_TTL_MINUTES = 10;
+    // How long a pending (password-verified, awaiting emailed code) login
+    // stays valid. Public so TwoFactorCodeMail can read it without
+    // duplicating the number in the email template.
+    public const PENDING_LOGIN_TTL_MINUTES = 3;
+
+    // Account-level lockout, separate from the per-IP throttle:5,1 on the
+    // route. The IP throttle stops rapid-fire attempts from one address;
+    // this stops someone from grinding a single account's password across
+    // many IPs/botnet nodes, which the IP limit alone can't catch.
+    protected const MAX_FAILED_ATTEMPTS = 5;
+    protected const LOCKOUT_MINUTES = 15;
 
     /**
      * Verify credentials. If the account has 2FA enabled, this does NOT
@@ -26,7 +38,17 @@ class AuthService
     {
         $user = User::where('email', $email)->first();
 
+        if ($user && $this->isLocked($user)) {
+            throw ValidationException::withMessages([
+                'email' => ['Too many failed attempts. Try again in a few minutes.'],
+            ]);
+        }
+
         if (! $user || ! Hash::check($password, $user->password)) {
+            if ($user) {
+                $this->registerFailedAttempt($user);
+            }
+
             throw ValidationException::withMessages([
                 'email' => ['These credentials do not match our records.'],
             ]);
@@ -37,6 +59,8 @@ class AuthService
                 'email' => ['This account is not active. Contact your administrator.'],
             ]);
         }
+
+        $this->clearFailedAttempts($user);
 
         if ($user->two_factor_confirmed_at) {
             return $this->issuePendingLogin($user, $remember);
@@ -151,12 +175,7 @@ class AuthService
             now()->addMinutes(self::PENDING_LOGIN_TTL_MINUTES)
         );
 
-        Mail::raw(
-            "Your login verification code is: {$code}\n\n"
-                . 'This code expires in ' . self::PENDING_LOGIN_TTL_MINUTES . " minutes.\n"
-                . "If this wasn't you, change your password immediately.",
-            fn ($message) => $message->to($user->email)->subject('Your login verification code')
-        );
+        Mail::to($user->email)->send(new TwoFactorCodeMail($code, self::PENDING_LOGIN_TTL_MINUTES));
     }
 
     // Captures a friendly device label + IP/location on the token row
@@ -226,6 +245,56 @@ class AuthService
     protected function codeCacheKey(string $pendingToken): string
     {
         return "login-2fa:{$pendingToken}";
+    }
+
+    protected function isLocked(User $user): bool
+    {
+        return $user->locked_until && $user->locked_until->isFuture();
+    }
+
+    protected function registerFailedAttempt(User $user): void
+    {
+        $attempts = $user->failed_login_attempts + 1;
+
+        $update = ['failed_login_attempts' => $attempts];
+
+        if ($attempts >= self::MAX_FAILED_ATTEMPTS) {
+            $update['locked_until'] = now()->addMinutes(self::LOCKOUT_MINUTES);
+            $update['failed_login_attempts'] = 0; // reset counter, lock takes over
+
+            $this->log($user, 'Account Locked', 'Authentication', sprintf(
+                'Account locked for %d minutes after %d failed login attempts.',
+                self::LOCKOUT_MINUTES,
+                self::MAX_FAILED_ATTEMPTS
+            ));
+        }
+
+        $user->forceFill($update)->save();
+    }
+
+    protected function clearFailedAttempts(User $user): void
+    {
+        if ($user->failed_login_attempts > 0 || $user->locked_until) {
+            $user->forceFill([
+                'failed_login_attempts' => 0,
+                'locked_until' => null,
+            ])->save();
+        }
+    }
+
+    protected function log(User $user, string $activity, string $module, string $description): void
+    {
+        ActivityLog::record($user->id, $activity, $module, request()->ip());
+
+        AuditLog::create([
+            'user_id' => $user->id,
+            'module' => $module,
+            'action' => Str::snake($activity),
+            'record_id' => $user->id,
+            'activity_description' => $description,
+            'ip_address' => request()->ip(),
+            'user_agent' => request()->userAgent(),
+        ]);
     }
 
     protected function maskEmail(string $email): string
