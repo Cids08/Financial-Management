@@ -23,6 +23,7 @@ class TaxObligation extends Model
         'status',
         'remarks',
         'created_by',
+        'expense_id',
     ];
 
     protected function casts(): array
@@ -44,6 +45,11 @@ class TaxObligation extends Model
     public function deletedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'deleted_by');
+    }
+
+    public function expense(): BelongsTo
+    {
+        return $this->belongsTo(Expense::class);
     }
 
     public function scopeSearch($query, ?string $term)

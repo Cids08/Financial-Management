@@ -26,8 +26,15 @@ class AuthController extends Controller
             $result = $this->authService->login(
                 $request->string('email'),
                 $request->string('password'),
-                $request->boolean('remember')
+                $request->boolean('remember'),
+                $request->string('client_session_id')->toString() ?: null
             );
+        } catch (\App\Exceptions\AccountLockedException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Too many failed attempts. Your account is temporarily locked.',
+                'data' => ['locked' => true, 'retryAfter' => $e->secondsRemaining],
+            ], 423);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,

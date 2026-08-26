@@ -10,6 +10,7 @@ use App\Models\TaxObligation;
 use App\Services\TaxObligationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class TaxObligationController extends Controller
 {
@@ -43,18 +44,34 @@ class TaxObligationController extends Controller
 
     public function store(StoreTaxObligationRequest $request): JsonResponse
     {
-        $obligation = $this->taxObligationService->create($request->user(), $request->validated());
+        try {
+            $obligation = $this->taxObligationService->create($request->user(), $request->validated());
+        } catch (ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'errors' => $e->errors(),
+            ], 422);
+        }
 
         return response()->json([
             'success' => true,
             'message' => 'Tax obligation added successfully.',
-            'data'    => new TaxObligationResource($obligation->load(['createdBy', 'deletedBy'])),
+            'data'    => new TaxObligationResource($obligation),
         ], 201);
     }
 
     public function update(UpdateTaxObligationRequest $request, TaxObligation $taxObligation): JsonResponse
     {
-        $taxObligation = $this->taxObligationService->update($request->user(), $taxObligation, $request->validated());
+        try {
+            $taxObligation = $this->taxObligationService->update($request->user(), $taxObligation, $request->validated());
+        } catch (ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'errors' => $e->errors(),
+            ], 422);
+        }
 
         return response()->json([
             'success' => true,
@@ -82,7 +99,7 @@ class TaxObligationController extends Controller
      */
     public function restore(Request $request, int $taxObligation): JsonResponse
     {
-        $obligation = TaxObligation::onlyTrashed()->with(['createdBy', 'deletedBy'])->findOrFail($taxObligation);
+        $obligation = TaxObligation::onlyTrashed()->with(['createdBy', 'deletedBy', 'expense'])->findOrFail($taxObligation);
         $obligation = $this->taxObligationService->restore($request->user(), $obligation);
 
         return response()->json([

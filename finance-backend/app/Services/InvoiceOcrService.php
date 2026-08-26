@@ -76,15 +76,21 @@ class InvoiceOcrService
             $ocr->executable($executable);
         }
 
+        // Guards against a pathological image (or a stuck/misbehaving
+        // Tesseract process) hanging the request indefinitely. 20s is
+        // generous for a single receipt/invoice photo at the 6000px cap
+        // enforced in InvoiceScanController; real scans finish in a
+        // fraction of that.
+        $ocr->timeout(20);
+
         try {
             $text = $ocr->lang('eng')->run();
         } catch (\Exception $e) {
             // The tesseract_ocr package throws rather than returning ""
-            // when it finds no text at all (e.g. a photo with no text in
-            // it, like a cat pic). That's not a real error for our
-            // purposes — it just means the image isn't a receipt/invoice,
-            // so treat it as such instead of letting the exception bubble
-            // up as a 500.
+            // both when it finds no text at all (e.g. a photo with no
+            // text in it, like a cat pic) AND when the timeout above is
+            // hit. Either way, that's not a real error for our purposes —
+            // treat it the same as "not a receipt" rather than a 500.
             $text = '';
         }
 

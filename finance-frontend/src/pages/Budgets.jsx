@@ -1,68 +1,56 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, PiggyBank, TrendingDown, Building2, Info, Printer, CheckCircle2, XCircle, Clock, AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, PiggyBank, TrendingDown, Building2, Info, Printer, CheckCircle2, XCircle, Clock, AlertTriangle, ChevronLeft, ChevronRight, Paperclip, Loader2 } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
 import { formatCurrency } from '../utils/formatters'
+import { useBudgets } from '../hooks/useBudgets'
+import { useDepartments } from '../hooks/useDepartments' // TODO: adjust to your real Departments hook/import if named differently
 
-const DEPARTMENTS = [
-  { department_id: 1, department_name: 'Finance' },
-  { department_id: 2, department_name: 'Operations' },
-  { department_id: 3, department_name: 'Sales & Marketing' },
-  { department_id: 4, department_name: 'IT' },
-  { department_id: 5, department_name: 'Human Resources' },
-]
-const USERS = [
-  { user_id: 1, first_name: 'Ana', last_name: 'Reyes' },
-  { user_id: 2, first_name: 'Marco', last_name: 'Santos' },
-  { user_id: 3, first_name: 'Liza', last_name: 'Fernandez' },
-]
-const deptName = (id) => DEPARTMENTS.find((d) => d.department_id === Number(id))?.department_name || 'Unknown'
-const userName = (id) => {
-  const u = USERS.find((u) => u.user_id === Number(id))
-  return u ? `${u.first_name} ${u.last_name}` : '—'
-}
-// The user currently signed in — used to auto-stamp who created/approved a record
-// instead of asking for it on every form.
-const CURRENT_USER_ID = 1
+/**
+ * NOTE on field names below: BudgetResource.php wasn't in what you shared,
+ * so `department`, `creator`, and `approver` are assumed to be nested
+ * objects (e.g. department: { id, name }) the way BudgetController's
+ * ->load(['department','creator','approver']) implies. If your resource
+ * shapes these differently, adjust deptName()/userName() below — the rest
+ * of the page doesn't care how those two functions resolve a display name.
+ */
+const deptName = (b) => b?.department?.department_name || b?.department?.name || '—'
+const userName = (u) => (u ? `${u.first_name ?? ''} ${u.last_name ?? u.name ?? ''}`.trim() || u.name || '—' : '—')
 
-// A budget cannot be approved until the department's budget plan is attached.
-// This keeps a stray "plan_reference: '   '" from counting as attached.
-const hasBudgetPlan = (b) => !!(b && b.plan_reference && b.plan_reference.trim())
-
-const initialBudgets = [
-  { budget_id: 1, department_id: 2, fiscal_year: 2026, allocated_amount: 1500000, remaining_amount: 620000, status: 'Active', approval_status: 'Approved', remarks: 'Includes logistics contingency', plan_reference: 'FY2026-Operations-Budget-Plan.pdf', created_by: 1, approved_by: 3, approved_at: '2026-01-05T09:00:00', is_archived: false, archived_at: null, archived_by: null, created_at: '2026-01-02T09:00:00', updated_at: '2026-07-20T10:00:00' },
-  { budget_id: 2, department_id: 3, fiscal_year: 2026, allocated_amount: 800000, remaining_amount: 145000, status: 'Active', approval_status: 'Approved', remarks: 'Q3 campaign heavy spend', plan_reference: 'FY2026-SalesMarketing-Budget-Plan.pdf', created_by: 1, approved_by: 3, approved_at: '2026-01-06T09:00:00', is_archived: false, archived_at: null, archived_by: null, created_at: '2026-01-02T09:30:00', updated_at: '2026-07-18T14:00:00' },
-  { budget_id: 3, department_id: 4, fiscal_year: 2026, allocated_amount: 650000, remaining_amount: 650000, status: 'Active', approval_status: 'Pending', remarks: '', plan_reference: '', created_by: 2, approved_by: null, approved_at: null, is_archived: false, archived_at: null, archived_by: null, created_at: '2026-07-28T10:00:00', updated_at: '2026-07-28T10:00:00' },
-  { budget_id: 4, department_id: 5, fiscal_year: 2026, allocated_amount: 300000, remaining_amount: 90000, status: 'Active', approval_status: 'Approved', remarks: 'Recruitment drive ongoing', plan_reference: 'FY2026-HR-Budget-Plan.pdf', created_by: 2, approved_by: 3, approved_at: '2026-01-08T09:00:00', is_archived: false, archived_at: null, archived_by: null, created_at: '2026-01-03T11:00:00', updated_at: '2026-07-05T13:00:00' },
-  { budget_id: 5, department_id: 1, fiscal_year: 2025, allocated_amount: 500000, remaining_amount: 0, status: 'Closed', approval_status: 'Approved', remarks: 'FY2025 closed out', plan_reference: 'FY2025-Finance-Budget-Plan.pdf', created_by: 1, approved_by: 3, approved_at: '2025-01-05T09:00:00', is_archived: true, archived_at: '2026-01-15T09:00:00', archived_by: 1, created_at: '2025-01-02T09:00:00', updated_at: '2026-01-15T09:00:00' },
-]
-
-const STATUS_OPTIONS = ['Active', 'Closed']
-const EMPTY_FORM = { department_id: DEPARTMENTS[0].department_id, fiscal_year: new Date().getFullYear(), allocated_amount: '', remarks: '', plan_reference: '' }
-const PAGE_SIZE = 10
-
-const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
-const PANEL_PAD = 'p-4'
-const INPUT = `w-full h-9 px-3 rounded-lg border border-border bg-bg text-sm text-ink
-  placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary
-  transition-all duration-150`
-const INPUT_LOCKED = `w-full h-9 px-3 rounded-lg border border-border bg-bg/60 text-sm text-muted
-  cursor-not-allowed select-none flex items-center`
-const LABEL = 'block text-xs font-medium text-muted mb-1.5'
-
-const STATUS_STYLES = {
-  Active: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
-  Closed: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
-}
-
+// Budget.status in the backend IS the approval status (Pending/Approved/
+// Rejected) — there's no separate Active/Closed lifecycle field on the
+// model. "Archived" is a soft delete (deleted_at), not a status value.
 const APPROVAL_STYLES = {
   Pending: 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400',
   Approved: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
   Rejected: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
 }
 const APPROVAL_ICONS = { Pending: Clock, Approved: CheckCircle2, Rejected: XCircle }
+
+const EMPTY_FORM = {
+  department_id: '',
+  budget_code: '',
+  budget_name: '',
+  budget_type: '',
+  fiscal_year: new Date().getFullYear(),
+  allocated_amount: '',
+  warning_percentage: '',
+  start_date: '',
+  end_date: '',
+  remarks: '',
+}
+
+const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
+const PANEL_PAD = 'p-4'
+const INPUT = `w-full h-9 px-3 rounded-lg border border-border bg-bg text-sm text-ink
+  placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary
+  transition-all duration-150`
+const INPUT_TEXT_STYLE = { color: 'var(--color-ink, #0f172a)', caretColor: 'var(--color-ink, #0f172a)', outline: 'none' }
+const INPUT_LOCKED = `w-full h-9 px-3 rounded-lg border border-border bg-bg/60 text-sm text-muted
+  cursor-not-allowed select-none flex items-center`
+const LABEL = 'block text-xs font-medium text-muted mb-1.5'
 
 function usedPct(allocated, remaining) {
   if (!allocated) return 0
@@ -84,9 +72,9 @@ function DetailRow({ label, value }) {
 }
 
 function ApprovalBadge({ status }) {
-  const Icon = APPROVAL_ICONS[status]
+  const Icon = APPROVAL_ICONS[status] ?? Clock
   return (
-    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${APPROVAL_STYLES[status]}`}>
+    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${APPROVAL_STYLES[status] ?? APPROVAL_STYLES.Pending}`}>
       <Icon size={12} />
       {status}
     </span>
@@ -94,116 +82,183 @@ function ApprovalBadge({ status }) {
 }
 
 export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transactions', 'Budgets'] }) {
-  const [budgets, setBudgets] = useState(initialBudgets)
+  const {
+    budgets, meta, stats, loading, saving, error,
+    fetchBudgets, fetchStats, createBudget, updateBudget,
+    uploadPlan, approveBudget, rejectBudget, archiveBudget, restoreBudget,
+  } = useBudgets()
+
+  // TODO: replace with however Departments are actually fetched elsewhere
+  // in the app (e.g. a shared useDepartments hook, or a DepartmentContext) —
+  // this page needs the list to populate the "Department" select on Add.
+  const { departments } = useDepartments?.() ?? { departments: [] }
+
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
   const [approvalFilter, setApprovalFilter] = useState('all')
   const [showArchived, setShowArchived] = useState(false)
+  const [page, setPage] = useState(1)
 
-  const [modalMode, setModalMode] = useState(null)
+  const [modalMode, setModalMode] = useState(null) // null | 'add' | budget object being edited
   const [form, setForm] = useState(EMPTY_FORM)
   const [formError, setFormError] = useState('')
   const [detailRecord, setDetailRecord] = useState(null)
+  const [planFileFor, setPlanFileFor] = useState(null) // budget currently attaching a plan
+  const [rejectingId, setRejectingId] = useState(null)
+  const [rejectReason, setRejectReason] = useState('')
 
-  const filtered = useMemo(() => {
-    return budgets.filter((b) => {
-      if (!showArchived && b.is_archived) return false
-      if (showArchived && !b.is_archived) return false
-      if (statusFilter !== 'all' && b.status !== statusFilter) return false
-      if (approvalFilter !== 'all' && b.approval_status !== approvalFilter) return false
-      const q = search.toLowerCase()
-      if (search && !deptName(b.department_id).toLowerCase().includes(q) && !String(b.fiscal_year).includes(q)) return false
-      return true
-    })
-  }, [budgets, search, statusFilter, approvalFilter, showArchived])
+  const load = () => {
+    fetchBudgets(
+      {
+        status: approvalFilter !== 'all' ? approvalFilter : undefined,
+        search: search || undefined,
+        archived: showArchived ? 1 : undefined,
+      },
+      page
+    )
+  }
 
-  // Client-side pagination over the filtered list — same pattern as
-  // Expenses.jsx (PAGE_SIZE-based slicing with a "Showing X–Y of Z" footer),
-  // kept consistent here since this page has no backend of its own yet.
-  const [page, setPage] = useState(1)
+  useEffect(() => { load() }, [approvalFilter, showArchived, page]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchStats() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Debounce free-text search instead of firing a request per keystroke.
   useEffect(() => {
-    setPage(1)
-  }, [search, statusFilter, approvalFilter, showArchived])
+    const t = setTimeout(() => { setPage(1); load() }, 350)
+    return () => clearTimeout(t)
+  }, [search]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-  const paginatedBudgets = useMemo(
-    () => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
-    [filtered, page]
-  )
-  const rangeStart = filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
-  const rangeEnd = Math.min(page * PAGE_SIZE, filtered.length)
-
-  const stats = useMemo(() => {
-    const active = budgets.filter((b) => !b.is_archived)
-    return {
-      total: active.length,
-      allocated: active.reduce((sum, b) => sum + b.allocated_amount, 0),
-      remaining: active.reduce((sum, b) => sum + b.remaining_amount, 0),
-      pending: active.filter((b) => b.approval_status === 'Pending').length,
-      overUtilized: active.filter((b) => b.approval_status === 'Approved' && usedPct(b.allocated_amount, b.remaining_amount) >= 90).length,
-      archived: budgets.filter((b) => b.is_archived).length,
-    }
-  }, [budgets])
-
-  const toggleArchive = (id) => {
-    setBudgets((prev) => prev.map((b) => {
-      if (b.budget_id !== id) return b
-      const nextArchived = !b.is_archived
-      return { ...b, is_archived: nextArchived, archived_at: nextArchived ? new Date().toISOString() : null, archived_by: nextArchived ? CURRENT_USER_ID : null, updated_at: new Date().toISOString() }
-    }))
-  }
-
-  const setApproval = (id, decision) => {
-    // Guard against approving a budget that has no plan attached yet — the Approve
-    // controls are disabled in the UI for this case, but this keeps the rule enforced
-    // even if setApproval is ever called from somewhere else.
-    if (decision === 'Approved') {
-      const target = budgets.find((b) => b.budget_id === id)
-      if (!hasBudgetPlan(target)) return
-    }
-    const now = new Date().toISOString()
-    setBudgets((prev) => prev.map((b) => (
-      b.budget_id === id
-        ? { ...b, approval_status: decision, approved_by: CURRENT_USER_ID, approved_at: now, updated_at: now }
-        : b
-    )))
-    setDetailRecord((prev) => (prev && prev.budget_id === id ? { ...prev, approval_status: decision, approved_by: CURRENT_USER_ID, approved_at: now } : prev))
-  }
+  const statCards = useMemo(() => ([
+    { key: 'total', label: 'Total Budgets', value: stats?.total ?? '—', icon: PiggyBank, iconBg: 'bg-primary/15', iconColor: 'text-primary-dark', isActive: approvalFilter === 'all' && !showArchived, onClick: () => { setShowArchived(false); setApprovalFilter('all') } },
+    { key: 'pending', label: 'Pending Approval', value: stats?.pending ?? '—', icon: Clock, iconBg: 'bg-amber-50 dark:bg-amber-500/10', iconColor: 'text-amber-600 dark:text-amber-400', isActive: approvalFilter === 'Pending', onClick: () => { setShowArchived(false); setApprovalFilter('Pending') } },
+    { key: 'allocated', label: 'Total Allocated', value: stats?.allocated != null ? formatCurrency(stats.allocated) : '—', icon: Building2, iconBg: 'bg-blue-50 dark:bg-blue-500/10', iconColor: 'text-blue-600 dark:text-blue-400', isActive: false, onClick: () => { setShowArchived(false); setApprovalFilter('all') } },
+    { key: 'remaining', label: 'Total Remaining', value: stats?.remaining != null ? formatCurrency(stats.remaining) : '—', icon: TrendingDown, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: false, onClick: () => { setShowArchived(false); setApprovalFilter('all') } },
+    { key: 'archived', label: 'Archived', value: stats?.archived ?? '—', icon: Archive, iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-500 dark:text-slate-400', isActive: showArchived, onClick: () => setShowArchived(true) },
+  ]), [stats, approvalFilter, showArchived])
+  // NOTE: BudgetController::stats() as shared only returns { total }. The
+  // pending/allocated/remaining/archived figures above assume you extend
+  // that endpoint (same as the other totals) — until then those cards will
+  // just show "—".
 
   const openAdd = () => { setForm(EMPTY_FORM); setFormError(''); setModalMode('add') }
   const openEdit = (b) => {
-    // Once a budget is Approved it's locked from editing entirely — that decision is final
-    // and belongs to the CEO. Before approval, only the allocated amount, remarks, and
-    // budget plan reference can change; department, fiscal year, remaining amount, and
-    // status stay locked either way.
-    if (b.approval_status === 'Approved') return
-    setForm({ department_id: b.department_id, fiscal_year: b.fiscal_year, allocated_amount: b.allocated_amount, remarks: b.remarks, plan_reference: b.plan_reference || '' })
+    // An approved budget is locked from editing entirely, per
+    // UpdateBudgetRequest::authorize() ($budget->status !== 'Approved').
+    if (b.status === 'Approved') return
+    setForm({
+      department_id: b.department_id,
+      budget_code: b.budget_code,
+      budget_name: b.budget_name,
+      budget_type: b.budget_type,
+      fiscal_year: b.fiscal_year,
+      allocated_amount: b.allocated_amount,
+      warning_percentage: b.warning_percentage ?? '',
+      start_date: b.start_date?.slice(0, 10) ?? '',
+      end_date: b.end_date?.slice(0, 10) ?? '',
+      remarks: b.remarks ?? '',
+    })
     setFormError('')
     setModalMode(b)
   }
   const closeModal = () => { setModalMode(null); setFormError('') }
   const openDetail = (b) => setDetailRecord(b)
   const closeDetail = () => setDetailRecord(null)
+  const isEditing = modalMode !== null && modalMode !== 'add'
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!form.fiscal_year || !form.allocated_amount || !form.start_date || !form.end_date) {
+      setFormError('Fiscal year, allocated amount, start date, and end date are required.')
+      return
+    }
+
+    let result
+    if (modalMode === 'add') {
+      if (!form.budget_code || !form.budget_name || !form.budget_type || !form.department_id) {
+        setFormError('Department, budget code, name, and type are required.')
+        return
+      }
+      result = await createBudget({
+        department_id: Number(form.department_id),
+        budget_code: form.budget_code,
+        budget_name: form.budget_name,
+        budget_type: form.budget_type,
+        fiscal_year: Number(form.fiscal_year),
+        allocated_amount: Number(form.allocated_amount),
+        warning_percentage: form.warning_percentage === '' ? undefined : Number(form.warning_percentage),
+        start_date: form.start_date,
+        end_date: form.end_date,
+        remarks: form.remarks || undefined,
+      })
+    } else {
+      result = await updateBudget(modalMode.id, {
+        allocated_amount: Number(form.allocated_amount),
+        warning_percentage: form.warning_percentage === '' ? undefined : Number(form.warning_percentage),
+        start_date: form.start_date,
+        end_date: form.end_date,
+        remarks: form.remarks || undefined,
+      })
+    }
+
+    if (!result.success) {
+      setFormError(result.message)
+      return
+    }
+    fetchStats()
+    closeModal()
+  }
+
+  const handleApprove = async (id) => {
+    const result = await approveBudget(id)
+    if (result.success) {
+      fetchStats()
+      setDetailRecord((prev) => (prev && prev.id === id ? result.data : prev))
+    } else {
+      setFormError(result.message)
+    }
+  }
+
+  const openReject = (id) => { setRejectingId(id); setRejectReason('') }
+  const confirmReject = async () => {
+    const result = await rejectBudget(rejectingId, rejectReason || undefined)
+    if (result.success) {
+      fetchStats()
+      setDetailRecord((prev) => (prev && prev.id === rejectingId ? result.data : prev))
+    }
+    setRejectingId(null)
+  }
+
+  const handleArchiveToggle = async (b) => {
+    const result = b.deleted_at ? await restoreBudget(b.id) : await archiveBudget(b.id)
+    if (result.success) fetchStats()
+  }
+
+  const handlePlanFileChange = async (b, file) => {
+    if (!file) return
+    const result = await uploadPlan(b.id, file)
+    setPlanFileFor(null)
+    if (result.success) {
+      setDetailRecord((prev) => (prev && prev.id === b.id ? result.data : prev))
+    }
+  }
 
   const handlePrint = (b) => {
     const win = window.open('', '_blank', 'width=800,height=900')
     if (!win) return
     const rows = [
-      ['Department', deptName(b.department_id)],
+      ['Department', deptName(b)],
+      ['Budget Code', b.budget_code],
       ['Fiscal Year', b.fiscal_year],
       ['Allocated Amount', formatCurrency(b.allocated_amount)],
       ['Remaining Amount', formatCurrency(b.remaining_amount)],
       ['Utilization', `${usedPct(b.allocated_amount, b.remaining_amount)}%`],
-      ['Budget Plan', b.plan_reference || 'Not attached'],
-      ['Approval Status', b.approval_status],
-      ['Approved By', userName(b.approved_by)],
-      ['Status', b.status],
+      ['Budget Plan', b.has_plan ? 'Attached' : 'Not attached'],
+      ['Approval Status', b.status],
+      ['Approved By', userName(b.approver)],
       ...(b.remarks ? [['Remarks', b.remarks]] : []),
     ]
     win.document.write(`
       <html>
         <head>
-          <title>Budget — ${deptName(b.department_id)} FY${b.fiscal_year}</title>
+          <title>Budget — ${deptName(b)} FY${b.fiscal_year}</title>
           <style>
             * { box-sizing: border-box; }
             body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #1a1a1a; padding: 48px; }
@@ -221,7 +276,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
         </head>
         <body>
           <div class="header">
-            <div><h1>Budget Report</h1><p>${deptName(b.department_id)} &middot; FY${b.fiscal_year}</p></div>
+            <div><h1>Budget Report</h1><p>${deptName(b)} &middot; FY${b.fiscal_year}</p></div>
             <span class="status">${b.status}</span>
           </div>
           <table>${rows.map(([label, value]) => `<tr><td>${label}</td><td>${value}</td></tr>`).join('')}</table>
@@ -234,69 +289,9 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
     win.print()
   }
 
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    if (!form.fiscal_year || !form.allocated_amount) {
-      setFormError('Fiscal year and allocated amount are required.')
-      return
-    }
-    const allocated = Number(form.allocated_amount) || 0
-    const now = new Date().toISOString()
-
-    if (modalMode === 'add') {
-      // Minimal input on create: department, fiscal year, allocated amount, optional remarks,
-      // and an optional budget plan reference. Remaining amount always starts equal to the
-      // allocation, status defaults to Active, and every new budget starts Pending until
-      // someone approves it — none of this needs to be typed in by hand. The plan reference
-      // can be attached later, but approval stays blocked until it is.
-      const nextId = Math.max(0, ...budgets.map((b) => b.budget_id)) + 1
-      setBudgets((prev) => [...prev, {
-        budget_id: nextId,
-        department_id: Number(form.department_id),
-        fiscal_year: Number(form.fiscal_year),
-        allocated_amount: allocated,
-        remaining_amount: allocated,
-        status: 'Active',
-        approval_status: 'Pending',
-        remarks: form.remarks,
-        plan_reference: form.plan_reference,
-        created_by: CURRENT_USER_ID,
-        approved_by: null,
-        approved_at: null,
-        is_archived: false,
-        archived_at: null,
-        archived_by: null,
-        created_at: now,
-        updated_at: now,
-      }])
-    } else if (modalMode) {
-      // Editing an existing budget only ever changes the allocated amount, remarks, and
-      // budget plan reference. Department, fiscal year, remaining amount, and status stay
-      // exactly as they were — approval/rejection is the CEO's call via the Approve/Reject
-      // actions, not this form.
-      const editingId = modalMode.budget_id
-      setBudgets((prev) => prev.map((b) => (
-        b.budget_id === editingId
-          ? { ...b, allocated_amount: allocated, remarks: form.remarks, plan_reference: form.plan_reference, updated_at: now }
-          : b
-      )))
-    }
-    closeModal()
-  }
-
-  // Cards ordered so the item needing action (Pending Approval) sits right after the
-  // headline count, then the two money totals, then Archived last as a lower-priority
-  // reference figure. Grid width matches the 5-card count exactly (no dangling gap).
-  const statCards = [
-    { key: 'total', label: 'Total Budgets', value: stats.total, icon: PiggyBank, iconBg: 'bg-primary/15', iconColor: 'text-primary-dark', isActive: statusFilter === 'all' && approvalFilter === 'all' && !showArchived, onClick: () => { setStatusFilter('all'); setApprovalFilter('all'); setShowArchived(false) } },
-    { key: 'pending', label: 'Pending Approval', value: stats.pending, icon: Clock, iconBg: 'bg-amber-50 dark:bg-amber-500/10', iconColor: 'text-amber-600 dark:text-amber-400', isActive: approvalFilter === 'Pending', onClick: () => { setShowArchived(false); setApprovalFilter('Pending') } },
-    { key: 'allocated', label: 'Total Allocated', value: formatCurrency(stats.allocated), icon: Building2, iconBg: 'bg-blue-50 dark:bg-blue-500/10', iconColor: 'text-blue-600 dark:text-blue-400', isActive: false, onClick: () => { setStatusFilter('all'); setApprovalFilter('all'); setShowArchived(false) } },
-    { key: 'remaining', label: 'Total Remaining', value: formatCurrency(stats.remaining), icon: TrendingDown, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: false, onClick: () => { setStatusFilter('all'); setApprovalFilter('all'); setShowArchived(false) } },
-    { key: 'archived', label: 'Archived', value: stats.archived, icon: Archive, iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-500 dark:text-slate-400', isActive: showArchived, onClick: () => setShowArchived(true) },
-  ]
-
-  const isModalOpen = modalMode !== null
-  const isEditing = modalMode !== null && modalMode !== 'add'
+  const totalPages = meta.last_page || 1
+  const rangeStart = meta.total === 0 ? 0 : (meta.current_page - 1) * 20 + 1
+  const rangeEnd = Math.min(meta.current_page * 20, meta.total)
 
   return (
     <div className="space-y-5 animate-fadeIn">
@@ -309,6 +304,10 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
         </div>
         <Button variant="primary" size="sm" icon={Plus} onClick={openAdd}>Add Budget</Button>
       </div>
+
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{error}</div>
+      )}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
         {statCards.map((card) => {
@@ -335,15 +334,11 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
       </div>
 
       <div className={`${PANEL} ${PANEL_PAD} flex flex-col gap-3 lg:flex-row lg:items-center`}>
-        <div className="relative flex-1">
+        <div className="relative flex-1 min-w-0 basis-full">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by department or fiscal year..." className={`${INPUT} pl-9`} />
+          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by budget name or code..." className={`${INPUT} pl-9`} style={{ ...INPUT_TEXT_STYLE, width: '100%', minWidth: 0 }} autoComplete="off" />
         </div>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={INPUT}>
-          <option value="all">All Statuses</option>
-          {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <select value={approvalFilter} onChange={(e) => setApprovalFilter(e.target.value)} className={INPUT}>
+        <select value={approvalFilter} onChange={(e) => { setApprovalFilter(e.target.value); setPage(1) }} className={INPUT} style={INPUT_TEXT_STYLE}>
           <option value="all">All Approval States</option>
           <option value="Pending">Pending</option>
           <option value="Approved">Approved</option>
@@ -353,7 +348,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
           variant={showArchived ? 'primary' : 'secondary'}
           size="sm"
           icon={Archive}
-          onClick={() => setShowArchived((prev) => !prev)}
+          onClick={() => { setShowArchived((prev) => !prev); setPage(1) }}
           className="shrink-0 whitespace-nowrap"
         >
           Show Archived
@@ -361,32 +356,34 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
       </div>
 
       <div className={PANEL}>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto overflow-y-auto max-h-[70vh] border border-border rounded-lg">
           <table className="w-full text-sm">
-            <thead>
+            <thead className="sticky top-0 z-10 bg-surface">
               <tr className="border-b border-border">
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Department</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Fiscal Year</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Allocated / Remaining</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Utilization</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Status</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Approval</th>
-                <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Actions</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Budget</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Fiscal Year</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Allocated / Remaining</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Utilization</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Approval</th>
+                <th className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 ? (
-                <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-muted">No budgets match your filters.</td></tr>
-              ) : paginatedBudgets.map((b) => {
+              {loading ? (
+                <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">
+                  <Loader2 size={16} className="inline animate-spin mr-2" /> Loading budgets...
+                </td></tr>
+              ) : budgets.length === 0 ? (
+                <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">No budgets match your filters.</td></tr>
+              ) : budgets.map((b) => {
                 const pct = usedPct(b.allocated_amount, b.remaining_amount)
-                const isPending = b.approval_status === 'Pending'
-                const planAttached = hasBudgetPlan(b)
+                const isPending = b.status === 'Pending'
                 return (
-                  <tr key={b.budget_id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
+                  <tr key={b.id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
                     <td className="px-4 py-3.5">
-                      <p className="font-medium text-ink">{deptName(b.department_id)}</p>
-                      {b.remarks && <p className="text-xs text-muted truncate max-w-55">{b.remarks}</p>}
-                      {isPending && !planAttached && (
+                      <p className="font-medium text-ink">{b.budget_name}</p>
+                      <p className="text-xs text-muted">{deptName(b)} · {b.budget_code}</p>
+                      {isPending && !b.has_plan && (
                         <p className="mt-0.5 flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
                           <AlertTriangle size={11} />
                           No budget plan attached
@@ -407,34 +404,42 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                         {pct >= 90 && <Tooltip label="Nearing budget limit"><AlertTriangle size={13} className="text-red-500" /></Tooltip>}
                       </div>
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[b.status]}`}>{b.status}</span>
-                    </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap"><ApprovalBadge status={b.approval_status} /></td>
+                    <td className="px-4 py-3.5 whitespace-nowrap"><ApprovalBadge status={b.status} /></td>
                     <td className="px-4 py-3.5 whitespace-nowrap text-right">
                       <div className="flex items-center justify-end gap-1">
                         {isPending && (
                           <>
-                            <Tooltip label={planAttached ? 'Approve budget' : 'Attach a budget plan before approving'} align="start">
+                            <Tooltip label={b.has_plan ? 'Approve budget' : 'Attach a budget plan before approving'} align="start">
                               <button
                                 type="button"
-                                onClick={() => setApproval(b.budget_id, 'Approved')}
-                                disabled={!planAttached}
-                                aria-disabled={!planAttached}
+                                onClick={() => handleApprove(b.id)}
+                                disabled={!b.has_plan || saving}
+                                aria-disabled={!b.has_plan || saving}
                                 className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors duration-150 ${
-                                  planAttached
-                                    ? 'text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10'
-                                    : 'text-muted/40 cursor-not-allowed'
+                                  b.has_plan ? 'text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10' : 'text-muted/40 cursor-not-allowed'
                                 }`}
                               >
                                 <CheckCircle2 size={15} />
                               </button>
                             </Tooltip>
                             <Tooltip label="Reject budget" align="start">
-                              <button type="button" onClick={() => setApproval(b.budget_id, 'Rejected')} className="flex h-8 w-8 items-center justify-center rounded-lg text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors duration-150">
+                              <button type="button" onClick={() => openReject(b.id)} className="flex h-8 w-8 items-center justify-center rounded-lg text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors duration-150">
                                 <XCircle size={15} />
                               </button>
                             </Tooltip>
+                            {!b.has_plan && (
+                              <Tooltip label="Attach budget plan" align="start">
+                                <label className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 cursor-pointer">
+                                  <Paperclip size={15} />
+                                  <input
+                                    type="file"
+                                    accept=".pdf,.doc,.docx,.xls,.xlsx"
+                                    className="hidden"
+                                    onChange={(e) => handlePlanFileChange(b, e.target.files?.[0])}
+                                  />
+                                </label>
+                              </Tooltip>
+                            )}
                           </>
                         )}
                         <Tooltip label="View full record" align="start">
@@ -447,20 +452,16 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                             <Printer size={15} />
                           </button>
                         </Tooltip>
-                        {b.approval_status !== 'Approved' && (
+                        {b.status !== 'Approved' && (
                           <Tooltip label="Edit budget" align="start">
-                            <button
-                              type="button"
-                              onClick={() => openEdit(b)}
-                              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
-                            >
+                            <button type="button" onClick={() => openEdit(b)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                               <Pencil size={15} />
                             </button>
                           </Tooltip>
                         )}
-                        <Tooltip label={b.is_archived ? 'Restore budget' : 'Archive budget'} align="end">
-                          <button type="button" onClick={() => toggleArchive(b.budget_id)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                            {b.is_archived ? <RotateCcw size={15} /> : <Archive size={15} />}
+                        <Tooltip label={b.deleted_at ? 'Restore budget' : 'Archive budget'} align="end">
+                          <button type="button" onClick={() => handleArchiveToggle(b)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                            {b.deleted_at ? <RotateCcw size={15} /> : <Archive size={15} />}
                           </button>
                         </Tooltip>
                       </div>
@@ -472,31 +473,15 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
           </table>
         </div>
 
-        {filtered.length > 0 && (
+        {!loading && meta.total > 0 && (
           <div className="flex flex-col gap-2 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs text-muted">
-              Showing {rangeStart}–{rangeEnd} of {filtered.length} budgets
-            </p>
+            <p className="text-xs text-muted">Showing {rangeStart}–{rangeEnd} of {meta.total} budgets</p>
             <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
-                aria-label="Previous page"
-              >
+              <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed" aria-label="Previous page">
                 <ChevronLeft size={15} />
               </button>
-              <span className="px-2 text-xs font-medium text-ink whitespace-nowrap">
-                Page {page} of {totalPages}
-              </span>
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
-                aria-label="Next page"
-              >
+              <span className="px-2 text-xs font-medium text-ink whitespace-nowrap">Page {page} of {totalPages}</span>
+              <button type="button" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed" aria-label="Next page">
                 <ChevronRight size={15} />
               </button>
             </div>
@@ -504,14 +489,15 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
         )}
       </div>
 
+      {/* Add / Edit modal */}
       <Modal
-        open={isModalOpen}
+        open={modalMode !== null}
         onClose={closeModal}
         title={isEditing ? 'Edit Budget' : 'Add Budget'}
         footer={
           <>
             <Button variant="secondary" size="md" onClick={closeModal}>Cancel</Button>
-            <Button variant="primary" size="md" onClick={handleSubmit}>{isEditing ? 'Save Changes' : 'Add Budget'}</Button>
+            <Button variant="primary" size="md" onClick={handleSubmit} disabled={saving}>{saving ? 'Saving...' : isEditing ? 'Save Changes' : 'Add Budget'}</Button>
           </>
         }
       >
@@ -523,80 +509,112 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
             <div>
               <label className={LABEL}>Department</label>
               {isEditing ? (
-                <div className={INPUT_LOCKED}>
-                  <span className="truncate">{deptName(form.department_id)}</span>
-                </div>
+                <div className={INPUT_LOCKED}><span className="truncate">{deptName(modalMode)}</span></div>
               ) : (
-                <select value={form.department_id} onChange={(e) => setForm((f) => ({ ...f, department_id: e.target.value }))} className={INPUT}>
-                  {DEPARTMENTS.map((d) => <option key={d.department_id} value={d.department_id}>{d.department_name}</option>)}
+                <select value={form.department_id} onChange={(e) => setForm((f) => ({ ...f, department_id: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE}>
+                  <option value="">Select department</option>
+                  {departments.map((d) => <option key={d.id} value={d.id}>{d.department_name || d.name}</option>)}
                 </select>
               )}
             </div>
             <div>
               <label className={LABEL}>Fiscal Year</label>
               {isEditing ? (
-                <div className={INPUT_LOCKED}>
-                  <span>{form.fiscal_year}</span>
-                </div>
+                <div className={INPUT_LOCKED}><span>{form.fiscal_year}</span></div>
               ) : (
-                <input type="number" value={form.fiscal_year} onChange={(e) => setForm((f) => ({ ...f, fiscal_year: e.target.value }))} className={INPUT} placeholder="2026" />
+                <input type="number" value={form.fiscal_year} onChange={(e) => setForm((f) => ({ ...f, fiscal_year: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="2026" />
               )}
             </div>
           </div>
 
-          <div>
-            <label className={LABEL}>Allocated Amount</label>
-            <input type="number" value={form.allocated_amount} onChange={(e) => setForm((f) => ({ ...f, allocated_amount: e.target.value }))} className={INPUT} placeholder="0.00" />
+          {!isEditing && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={LABEL}>Budget Code</label>
+                <input type="text" value={form.budget_code} onChange={(e) => setForm((f) => ({ ...f, budget_code: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="e.g. BUD-2026-IT-01" />
+              </div>
+              <div>
+                <label className={LABEL}>Budget Type</label>
+                <input type="text" value={form.budget_type} onChange={(e) => setForm((f) => ({ ...f, budget_type: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="e.g. Operating" />
+              </div>
+            </div>
+          )}
+
+          {!isEditing && (
+            <div>
+              <label className={LABEL}>Budget Name</label>
+              <input type="text" value={form.budget_name} onChange={(e) => setForm((f) => ({ ...f, budget_name: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="e.g. IT Infrastructure FY2026" />
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={LABEL}>Allocated Amount</label>
+              <input type="number" value={form.allocated_amount} onChange={(e) => setForm((f) => ({ ...f, allocated_amount: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="0.00" />
+            </div>
+            <div>
+              <label className={LABEL}>Warning % (optional)</label>
+              <input type="number" min="1" max="100" value={form.warning_percentage} onChange={(e) => setForm((f) => ({ ...f, warning_percentage: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="e.g. 80" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={LABEL}>Start Date</label>
+              <input type="date" value={form.start_date} onChange={(e) => setForm((f) => ({ ...f, start_date: e.target.value }))} className={`${INPUT} scheme-light dark:scheme-dark`} style={INPUT_TEXT_STYLE} />
+            </div>
+            <div>
+              <label className={LABEL}>End Date</label>
+              <input type="date" value={form.end_date} min={form.start_date || undefined} onChange={(e) => setForm((f) => ({ ...f, end_date: e.target.value }))} className={`${INPUT} scheme-light dark:scheme-dark`} style={INPUT_TEXT_STYLE} />
+            </div>
           </div>
 
           <div>
             <label className={LABEL}>Remarks</label>
-            <input type="text" value={form.remarks} onChange={(e) => setForm((f) => ({ ...f, remarks: e.target.value }))} className={INPUT} placeholder="Optional notes" />
-          </div>
-
-          <div>
-            <label className={LABEL}>Budget Plan Reference</label>
-            <input
-              type="text"
-              value={form.plan_reference}
-              onChange={(e) => setForm((f) => ({ ...f, plan_reference: e.target.value }))}
-              className={INPUT}
-              placeholder="e.g. FY2026-Operations-Budget-Plan.pdf"
-            />
-            <p className="mt-1 flex items-center gap-1 text-xs text-muted">
-              {form.plan_reference.trim() ? (
-                <>The department's budget plan will be attached to this budget.</>
-              ) : (
-                <><AlertTriangle size={11} className="text-amber-500 shrink-0" /> Required before this budget can be approved.</>
-              )}
-            </p>
+            <input type="text" value={form.remarks} onChange={(e) => setForm((f) => ({ ...f, remarks: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="Optional notes" />
           </div>
 
           {!isEditing && (
-            <p className="text-xs text-muted">New budgets start as <span className="font-medium text-ink">Pending</span> approval and become spendable once approved.</p>
+            <p className="text-xs text-muted">New budgets start as <span className="font-medium text-ink">Pending</span> approval. You can attach the budget plan file from the table once it's saved.</p>
           )}
 
           {isEditing && (
             <div className="rounded-lg border border-border bg-bg px-3 py-2.5">
               <DetailRow label="Remaining amount" value={formatCurrency(modalMode.remaining_amount)} />
-              <DetailRow label="Status" value={<span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[modalMode.status]}`}>{modalMode.status}</span>} />
-              <DetailRow label="Approval status" value={<ApprovalBadge status={modalMode.approval_status} />} />
-              <DetailRow label="Created by" value={userName(modalMode.created_by)} />
-              <DetailRow label="Approved by" value={userName(modalMode.approved_by)} />
-              <DetailRow label="Approved at" value={formatDateTime(modalMode.approved_at)} />
+              <DetailRow label="Approval status" value={<ApprovalBadge status={modalMode.status} />} />
+              <DetailRow label="Budget plan" value={modalMode.has_plan ? 'Attached' : 'Not attached'} />
+              <DetailRow label="Created by" value={userName(modalMode.creator)} />
               <DetailRow label="Created at" value={formatDateTime(modalMode.created_at)} />
               <DetailRow label="Last updated" value={formatDateTime(modalMode.updated_at)} />
-              {modalMode.is_archived && (
-                <>
-                  <DetailRow label="Archived by" value={userName(modalMode.archived_by)} />
-                  <DetailRow label="Archived at" value={formatDateTime(modalMode.archived_at)} />
-                </>
-              )}
             </div>
           )}
         </form>
       </Modal>
 
+      {/* Reject reason modal */}
+      <Modal
+        open={rejectingId !== null}
+        onClose={() => setRejectingId(null)}
+        title="Reject Budget"
+        footer={
+          <>
+            <Button variant="secondary" size="md" onClick={() => setRejectingId(null)}>Cancel</Button>
+            <Button variant="primary" size="md" onClick={confirmReject} disabled={saving}>{saving ? 'Rejecting...' : 'Reject Budget'}</Button>
+          </>
+        }
+      >
+        <label className={LABEL}>Reason (optional)</label>
+        <textarea
+          value={rejectReason}
+          onChange={(e) => setRejectReason(e.target.value)}
+          className="w-full min-h-24 px-3 py-2 rounded-lg border border-border bg-bg text-sm text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
+          style={INPUT_TEXT_STYLE}
+          placeholder="Explain why this budget is being rejected..."
+          maxLength={2000}
+        />
+      </Modal>
+
+      {/* Detail modal */}
       <Modal
         open={!!detailRecord}
         onClose={closeDetail}
@@ -604,23 +622,15 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
         footer={
           <>
             <Button variant="secondary" size="md" onClick={closeDetail}>Close</Button>
-            {detailRecord && detailRecord.approval_status === 'Pending' && (
+            {detailRecord && detailRecord.status === 'Pending' && (
               <>
-                <Button variant="secondary" size="md" icon={XCircle} onClick={() => setApproval(detailRecord.budget_id, 'Rejected')}>Reject</Button>
-                <Tooltip label={hasBudgetPlan(detailRecord) ? 'Approve budget' : 'Attach a budget plan before approving'}>
-                  <Button
-                    variant="primary"
-                    size="md"
-                    icon={CheckCircle2}
-                    disabled={!hasBudgetPlan(detailRecord)}
-                    onClick={() => setApproval(detailRecord.budget_id, 'Approved')}
-                  >
-                    Approve
-                  </Button>
+                <Button variant="secondary" size="md" icon={XCircle} onClick={() => openReject(detailRecord.id)}>Reject</Button>
+                <Tooltip label={detailRecord.has_plan ? 'Approve budget' : 'Attach a budget plan before approving'}>
+                  <Button variant="primary" size="md" icon={CheckCircle2} disabled={!detailRecord.has_plan} onClick={() => handleApprove(detailRecord.id)}>Approve</Button>
                 </Tooltip>
               </>
             )}
-            {detailRecord && detailRecord.approval_status !== 'Pending' && <Button variant="primary" size="md" icon={Printer} onClick={() => handlePrint(detailRecord)}>Print Report</Button>}
+            {detailRecord && detailRecord.status !== 'Pending' && <Button variant="primary" size="md" icon={Printer} onClick={() => handlePrint(detailRecord)}>Print Report</Button>}
           </>
         }
       >
@@ -628,19 +638,19 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-semibold text-ink">{deptName(detailRecord.department_id)}</p>
-                <p className="text-xs text-muted">Fiscal Year {detailRecord.fiscal_year}</p>
+                <p className="text-sm font-semibold text-ink">{detailRecord.budget_name}</p>
+                <p className="text-xs text-muted">{deptName(detailRecord)} · FY{detailRecord.fiscal_year} · {detailRecord.budget_code}</p>
               </div>
-              <div className="flex items-center gap-2">
-                <ApprovalBadge status={detailRecord.approval_status} />
-                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[detailRecord.status]}`}>{detailRecord.status}</span>
-              </div>
+              <ApprovalBadge status={detailRecord.status} />
             </div>
 
-            {detailRecord.approval_status === 'Pending' && !hasBudgetPlan(detailRecord) && (
-              <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
-                <AlertTriangle size={14} className="shrink-0" />
-                This budget needs an attached budget plan before it can be approved.
+            {detailRecord.status === 'Pending' && !detailRecord.has_plan && (
+              <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+                <span className="flex items-center gap-2"><AlertTriangle size={14} className="shrink-0" /> No budget plan attached yet.</span>
+                <label className="inline-flex items-center gap-1 font-medium underline cursor-pointer shrink-0">
+                  Attach file
+                  <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx" className="hidden" onChange={(e) => handlePlanFileChange(detailRecord, e.target.files?.[0])} />
+                </label>
               </div>
             )}
 
@@ -651,28 +661,17 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                 <DetailRow label="Utilization" value={`${usedPct(detailRecord.allocated_amount, detailRecord.remaining_amount)}%`} />
               </div>
               <div className="px-3 py-2">
-                <DetailRow
-                  label="Budget Plan"
-                  value={
-                    hasBudgetPlan(detailRecord)
-                      ? detailRecord.plan_reference
-                      : <span className="text-amber-600 dark:text-amber-400">Not attached</span>
-                  }
-                />
+                <DetailRow label="Budget Type" value={detailRecord.budget_type} />
+                <DetailRow label="Budget Plan" value={detailRecord.has_plan ? 'Attached' : <span className="text-amber-600 dark:text-amber-400">Not attached</span>} />
                 <DetailRow label="Remarks" value={detailRecord.remarks || '—'} />
               </div>
               <div className="px-3 py-2">
-                <DetailRow label="Created by" value={userName(detailRecord.created_by)} />
-                <DetailRow label="Approved by" value={userName(detailRecord.approved_by)} />
+                <DetailRow label="Created by" value={userName(detailRecord.creator)} />
+                <DetailRow label="Approved by" value={userName(detailRecord.approver)} />
                 <DetailRow label="Approved at" value={formatDateTime(detailRecord.approved_at)} />
                 <DetailRow label="Created at" value={formatDateTime(detailRecord.created_at)} />
                 <DetailRow label="Updated at" value={formatDateTime(detailRecord.updated_at)} />
-                {detailRecord.is_archived && (
-                  <>
-                    <DetailRow label="Archived by" value={userName(detailRecord.archived_by)} />
-                    <DetailRow label="Archived at" value={formatDateTime(detailRecord.archived_at)} />
-                  </>
-                )}
+                {detailRecord.deleted_at && <DetailRow label="Archived at" value={formatDateTime(detailRecord.deleted_at)} />}
               </div>
             </div>
           </div>

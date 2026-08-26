@@ -25,6 +25,7 @@ const PANEL_PAD = 'p-4'
 const INPUT = `w-full h-9 px-3 rounded-lg border border-border bg-bg text-sm text-ink
   placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary
   transition-all duration-150`
+const INPUT_TEXT_STYLE = { color: 'var(--color-ink, #0f172a)', caretColor: 'var(--color-ink, #0f172a)', outline: 'none' }
 const LABEL = 'block text-xs font-medium text-muted mb-1.5'
 
 const CATEGORY_STYLES = 'bg-primary/10 text-primary-dark dark:bg-primary/15'
@@ -280,17 +281,17 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
       </div>
 
       <div className={`${PANEL} ${PANEL_PAD} flex flex-col gap-3 lg:flex-row lg:items-center`}>
-        <div className="relative flex-1">
+        <div className="relative flex-1 min-w-0 basis-full">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by description, receipt no., or source..." className={`${INPUT} pl-9`} />
+          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by description, receipt no., or source..." className={`${INPUT} pl-9`} style={{ ...INPUT_TEXT_STYLE, width: '100%', minWidth: 0 }} autoComplete="off" />
         </div>
-        <select value={filters.status} onChange={(e) => setFilter({ status: e.target.value })} className={INPUT}>
+        <select value={filters.status} onChange={(e) => setFilter({ status: e.target.value })} className={INPUT} style={INPUT_TEXT_STYLE}>
           <option value="">All Statuses</option>
           <option value="Pending">Pending</option>
           <option value="Approved">Approved</option>
           <option value="Rejected">Rejected</option>
         </select>
-        <select value={filters.expense_category_id} onChange={(e) => setFilter({ expense_category_id: e.target.value })} className={INPUT}>
+        <select value={filters.expense_category_id} onChange={(e) => setFilter({ expense_category_id: e.target.value })} className={INPUT} style={INPUT_TEXT_STYLE}>
           <option value="">All Categories</option>
           {categories.map((c) => <option key={c.id} value={c.id}>{c.category_name}</option>)}
         </select>
@@ -303,7 +304,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
             max={filters.expense_date_to || undefined}
             aria-label="Expense date from"
             className={`${INPUT} scheme-light dark:scheme-dark`}
-            style={{ width: '9.5rem' }}
+            style={{ ...INPUT_TEXT_STYLE, width: '9.5rem' }}
           />
           <span className="text-xs text-muted">to</span>
           <input
@@ -313,7 +314,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
             min={filters.expense_date_from || undefined}
             aria-label="Expense date to"
             className={`${INPUT} scheme-light dark:scheme-dark`}
-            style={{ width: '9.5rem' }}
+            style={{ ...INPUT_TEXT_STYLE, width: '9.5rem' }}
           />
           {hasDateFilter && (
             <Tooltip label="Clear date filter" align="end">
@@ -350,9 +351,9 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
           to stick within — without this, "sticky" has nothing to pin
           against once the whole page (not just the table) is what scrolls. */}
       <div className={PANEL}>
-        <div className="overflow-x-auto overflow-y-auto max-h-[70vh]">
+        <div className="overflow-x-auto overflow-y-auto max-h-[70vh] border border-border rounded-lg">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-surface">
+            <thead className="sticky top-0 z-10 bg-surface" border-border rounded-lg>
               <tr className="border-b border-border">
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Expense</th>
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Budget</th>
@@ -486,14 +487,14 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={LABEL}>Budget</label>
-              <select value={form.budget_id} onChange={(e) => setForm((f) => ({ ...f, budget_id: e.target.value }))} className={INPUT}>
+              <select value={form.budget_id} onChange={(e) => setForm((f) => ({ ...f, budget_id: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE}>
                 <option value="">Select budget</option>
                 {budgets.map((b) => <option key={b.id} value={b.id}>{b.budget_name}</option>)}
               </select>
             </div>
             <div>
               <label className={LABEL}>Category</label>
-              <select value={form.expense_category_id} onChange={(e) => setForm((f) => ({ ...f, expense_category_id: e.target.value }))} className={INPUT}>
+              <select value={form.expense_category_id} onChange={(e) => setForm((f) => ({ ...f, expense_category_id: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE}>
                 <option value="">Select category</option>
                 {categories.map((c) => <option key={c.id} value={c.id}>{c.category_name}</option>)}
               </select>
@@ -501,32 +502,32 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
           </div>
           <div>
             <label className={LABEL}>Description</label>
-            <input type="text" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} className={INPUT} placeholder="What this expense was for" />
+            <input type="text" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="What this expense was for" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={LABEL}>Expense Date</label>
-              <input type="date" value={form.expense_date} onChange={(e) => setForm((f) => ({ ...f, expense_date: e.target.value }))} className={INPUT} />
+              <input type="date" value={form.expense_date} onChange={(e) => setForm((f) => ({ ...f, expense_date: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} />
             </div>
             <div>
               <label className={LABEL}>Amount</label>
-              <input type="number" step="0.01" value={form.expense_amount} onChange={(e) => setForm((f) => ({ ...f, expense_amount: e.target.value }))} className={INPUT} placeholder="0.00" />
+              <input type="number" step="0.01" value={form.expense_amount} onChange={(e) => setForm((f) => ({ ...f, expense_amount: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="0.00" />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={LABEL}>Source</label>
-              <input type="text" value={form.expense_source} onChange={(e) => setForm((f) => ({ ...f, expense_source: e.target.value }))} className={INPUT} placeholder="e.g. Petty Cash, Company Card" />
+              <input type="text" value={form.expense_source} onChange={(e) => setForm((f) => ({ ...f, expense_source: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="e.g. Petty Cash, Company Card" />
             </div>
             <div>
               <label className={LABEL}>Receipt Number</label>
-              <input type="text" value={form.receipt_number} onChange={(e) => setForm((f) => ({ ...f, receipt_number: e.target.value }))} className={INPUT} placeholder="RCPT-4401" />
+              <input type="text" value={form.receipt_number} onChange={(e) => setForm((f) => ({ ...f, receipt_number: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="RCPT-4401" />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={LABEL}>Receipt Status</label>
-              <select value={form.receipt_status} onChange={(e) => setForm((f) => ({ ...f, receipt_status: e.target.value }))} className={INPUT}>
+              <select value={form.receipt_status} onChange={(e) => setForm((f) => ({ ...f, receipt_status: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE}>
                 <option value="Pending">Pending</option>
                 <option value="Verified">Verified</option>
                 <option value="Rejected">Rejected</option>
@@ -534,7 +535,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
             </div>
             <div>
               <label className={LABEL}>Supplier (optional)</label>
-              <select value={form.supplier_id} onChange={(e) => setForm((f) => ({ ...f, supplier_id: e.target.value }))} className={INPUT}>
+              <select value={form.supplier_id} onChange={(e) => setForm((f) => ({ ...f, supplier_id: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE}>
                 <option value="">N/A</option>
                 {suppliers.map((s) => <option key={s.id} value={s.id}>{s.supplier_name}</option>)}
               </select>
@@ -618,7 +619,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
           <p className="text-sm text-ink">This expense will be marked Rejected. No budget or ledger impact will be made.</p>
           <div>
             <label className={LABEL}>Remarks (optional)</label>
-            <input type="text" value={rejectRemarks} onChange={(e) => setRejectRemarks(e.target.value)} className={INPUT} placeholder="Reason for rejection" />
+            <input type="text" value={rejectRemarks} onChange={(e) => setRejectRemarks(e.target.value)} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="Reason for rejection" />
           </div>
         </div>
       </Modal>

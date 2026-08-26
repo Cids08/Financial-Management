@@ -485,13 +485,10 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
         </Button>
       </div>
 
-      {/* max-h + overflow-y-auto gives the sticky header a scroll container
-          to stick within — without this, "sticky" has nothing to pin
-          against once the whole page (not just the table) is what scrolls. */}
       <div className={PANEL}>
-        <div className="overflow-x-auto overflow-y-auto max-h-[70vh]">
+        <div className="overflow-x-auto overflow-y-auto max-h-[70vh] border border-border rounded-lg">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-surface">
+            <thead className="sticky top-0 z-10 bg-surface" border-border rounded-lg>
               <tr className="border-b border-border">
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Invoice</th>
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Customer / Collector</th>

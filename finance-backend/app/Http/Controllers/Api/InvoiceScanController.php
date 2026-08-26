@@ -16,7 +16,18 @@ class InvoiceScanController extends Controller
     public function scan(Request $request): JsonResponse
     {
         $request->validate([
-            'image' => ['required', 'image', 'mimes:jpeg,png,webp', 'max:8192'],
+            'image' => [
+                'required',
+                'image',
+                'mimes:jpeg,png,webp',
+                'max:8192',
+                // File-size limits alone don't cap actual pixel dimensions
+                // — a small, heavily-compressed file can still decode to
+                // an enormous resolution, which is disproportionately
+                // expensive for Tesseract to process. 6000px is generous
+                // for any real photographed receipt/invoice.
+                'dimensions:max_width=6000,max_height=6000',
+            ],
         ]);
 
         $result = $this->ocr->scan($request->file('image'));

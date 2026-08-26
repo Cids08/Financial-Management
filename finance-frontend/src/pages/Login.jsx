@@ -7,7 +7,7 @@ import logo from '../assets/logo.svg'
 
 export default function Login() {
   const {
-    login, loading, error, retryAfter,
+    login, loading, error, retryAfter, accountLockedFor,
     twoFactorPending, verifyTwoFactor, resendTwoFactor, cancelTwoFactor,
   } = useAuth()
   const { theme, toggleTheme } = useTheme()
@@ -28,6 +28,16 @@ export default function Login() {
 
   const handleSubmit = (e) => {
     e.preventDefault()
+    // Guards against double-submission (fast double-click, or hitting
+    // Enter again while a slow/hanging request from a flaky connection
+    // is still in flight). The Button below is visually disabled while
+    // loading too, but that disable only takes effect after a re-render,
+    // which can lag behind a fast repeat click/keypress — this check
+    // closes that gap at the handler level. useAuth's login() also
+    // guards against stale in-flight requests independently, so even if
+    // a duplicate slips through here, an old response can't clobber a
+    // newer one's state.
+    if (loading) return
     login({ ...form, form_rendered_at: formRenderedAt })
   }
 
@@ -50,6 +60,15 @@ export default function Login() {
     setCode('')
     setResendMessage('')
     cancelTwoFactor()
+  }
+
+  // accountLockedFor runs up to 15 minutes — "127s" reads badly at that
+  // length, so format as mm:ss once it's over a minute. The short
+  // retryAfter (IP throttle, ~60s max) stays as plain seconds elsewhere.
+  const formatLockout = (seconds) => {
+    const m = Math.floor(seconds / 60)
+    const s = seconds % 60
+    return `${m}:${String(s).padStart(2, '0')}`
   }
 
   return (
@@ -82,7 +101,17 @@ export default function Login() {
               Enter your credentials to access the Financial Management System.
             </p>
 
-            {error && (
+            {accountLockedFor > 0 && (
+              <div className="flex items-start gap-2 mt-5 px-3 py-2 rounded-lg bg-amber-50/70 border border-amber-200/70 text-xs text-amber-700 backdrop-blur-sm dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+                <Lock size={14} className="shrink-0 mt-0.5" />
+                <span>
+                  Too many failed attempts. Your account is locked for{' '}
+                  <span className="font-semibold tabular-nums">{formatLockout(accountLockedFor)}</span>.
+                </span>
+              </div>
+            )}
+
+            {error && !accountLockedFor && (
               <div className="flex items-center gap-2 mt-5 px-3 py-2 rounded-lg bg-red-50/70 border border-red-200/70 text-xs text-red-600 backdrop-blur-sm dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
                 <AlertCircle size={14} className="shrink-0" />
                 <span>
@@ -168,13 +197,15 @@ export default function Login() {
                 size="md"
                 icon={LogIn}
                 className="w-full"
-                disabled={loading || retryAfter > 0}
+                disabled={loading || retryAfter > 0 || accountLockedFor > 0}
               >
-                {retryAfter > 0
-                  ? `Try again in ${retryAfter}s`
-                  : loading
-                    ? 'Signing in…'
-                    : 'Sign In'}
+                {accountLockedFor > 0
+                  ? `Locked — ${formatLockout(accountLockedFor)}`
+                  : retryAfter > 0
+                    ? `Try again in ${retryAfter}s`
+                    : loading
+                      ? 'Signing in…'
+                      : 'Sign In'}
               </Button>
             </form>
           </>
@@ -192,7 +223,11 @@ export default function Login() {
             {error && (
               <div className="flex items-center gap-2 mt-5 px-3 py-2 rounded-lg bg-red-50/70 border border-red-200/70 text-xs text-red-600 backdrop-blur-sm dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
                 <AlertCircle size={14} className="shrink-0" />
-                {error}
+                <span>
+                  {retryAfter > 0
+                    ? `Too many attempts. Try again in ${retryAfter}s.`
+                    : error}
+                </span>
               </div>
             )}
             {resendMessage && (
@@ -222,9 +257,13 @@ export default function Login() {
                 variant="primary"
                 size="md"
                 className="w-full"
-                disabled={loading || code.length !== 6}
+                disabled={loading || code.length !== 6 || retryAfter > 0}
               >
-                {loading ? 'Verifying…' : 'Verify & Sign In'}
+                {retryAfter > 0
+                  ? `Try again in ${retryAfter}s`
+                  : loading
+                    ? 'Verifying…'
+                    : 'Verify & Sign In'}
               </Button>
 
               <div className="flex items-center justify-between pt-1">

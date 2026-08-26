@@ -33,12 +33,29 @@ class DisbursementService
             ->with(['accountsPayable', 'department', 'cashAccount', 'creator', 'approver', 'releaser'])
             ->withCount(['supportingDocuments as supporting_documents_count']);
 
+        // Archived toggle — mirrors Expenses/Budgets: default excludes
+        // trashed rows, ?archived=1 shows ONLY trashed rows.
+        if (! empty($filters['archived'])) {
+            $query->onlyTrashed();
+        }
+
         if (! empty($filters['status'])) {
             $query->where('status', $filters['status']);
         }
 
         if (! empty($filters['department_id'])) {
             $query->where('department_id', $filters['department_id']);
+        }
+
+        // Payment-date range — a disbursement with a null payment_date
+        // (still awaiting payment) is excluded whenever either bound is
+        // set, matching the frontend's previous client-side behavior.
+        if (! empty($filters['date_from'])) {
+            $query->whereNotNull('payment_date')->where('payment_date', '>=', $filters['date_from']);
+        }
+
+        if (! empty($filters['date_to'])) {
+            $query->whereNotNull('payment_date')->where('payment_date', '<=', $filters['date_to']);
         }
 
         if (! empty($filters['search'])) {

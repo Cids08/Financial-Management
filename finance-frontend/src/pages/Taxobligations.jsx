@@ -428,15 +428,15 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
       </div>
 
       <div className={PANEL}>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto overflow-y-auto max-h-[70vh] rounded-t-xl">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-surface shadow-[0_1px_0_0_var(--color-border)]">
+            <thead className="sticky top-0 z-10 bg-surface">
               <tr className="border-b border-border">
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Tax Type / Period</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Due Date</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Amount</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Status</th>
-                <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Actions</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Tax Type / Period</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Due Date</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Amount</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Status</th>
+                <th className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -673,6 +673,9 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
               <DetailRow label="Created by" value={modalMode.created_by_name || '—'} />
               <DetailRow label="Created at" value={formatDateTime(modalMode.created_at)} />
               <DetailRow label="Last updated" value={formatDateTime(modalMode.updated_at)} />
+              {modalMode.expense_id && (
+                <DetailRow label="Recorded Expense" value={`#${modalMode.expense_id}`} />
+              )}
               {modalMode.is_archived && (
                 <>
                   <DetailRow label="Archived by" value={modalMode.archived_by_name || '—'} />
@@ -722,6 +725,9 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
               <div className="px-3 py-2">
                 <DetailRow label="Payment Date" value={formatDate(detailRecord.payment_date)} />
                 <DetailRow label="Reference No." value={detailRecord.reference_number || '—'} />
+                {detailRecord.expense_id && (
+                  <DetailRow label="Recorded Expense" value={`#${detailRecord.expense_id}`} />
+                )}
               </div>
               <div className="px-3 py-2">
                 <DetailRow label="Remarks" value={detailRecord.remarks || '—'} />
@@ -730,7 +736,6 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                 <DetailRow label="Created by" value={detailRecord.created_by_name || '—'} />
                 <DetailRow label="Created at" value={formatDateTime(detailRecord.created_at)} />
                 <DetailRow label="Updated at" value={formatDateTime(detailRecord.updated_at)} />
-                <DetailRow label="Archived" value={detailRecord.is_archived ? 'Yes' : 'No'} />
                 {detailRecord.is_archived && (
                   <>
                     <DetailRow label="Archived by" value={detailRecord.archived_by_name || '—'} />

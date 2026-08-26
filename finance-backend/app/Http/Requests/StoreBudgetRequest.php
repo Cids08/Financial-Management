@@ -2,13 +2,14 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Budget;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StoreBudgetRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()->can('create', \App\Models\Budget::class);
+        return $this->user()->can('create', Budget::class);
     }
 
     public function rules(): array

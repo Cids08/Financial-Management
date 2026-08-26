@@ -289,9 +289,9 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
       )}
 
       <div className={PANEL}>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto overflow-y-auto max-h-[70vh] border border-border rounded-lg">
           <table className="w-full text-sm">
-            <thead>
+            <thead className="sticky top-0 z-10 bg-surface" border-border rounded-lg>
               <tr className="border-b border-border">
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Customer</th>
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Contact</th>

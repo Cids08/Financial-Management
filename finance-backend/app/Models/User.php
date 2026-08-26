@@ -36,6 +36,12 @@ class User extends Authenticatable
 
     ];
 
+    // failed_login_attempts / locked_until are deliberately NOT in
+    // $fillable — they're only ever written via forceFill() inside
+    // AuthService, never from user-supplied request input. Keeping them
+    // out of $fillable is a second layer of protection against mass
+    // assignment even if a future controller ever did something careless
+    // like User::create($request->all()).
     protected $hidden = [
         'password',
         'remember_token',
@@ -50,6 +56,7 @@ class User extends Authenticatable
             'last_login'        => 'datetime',
             'password'          => 'hashed',
             'two_factor_confirmed_at' => 'datetime',
+            'locked_until'      => 'datetime',
         ];
     }
 

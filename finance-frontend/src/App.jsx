@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import ProtectedRoute from './components/ProtectedRoute'
 import RequirePermission from './components/RequirePermission'
 import AuthExpiredListener from './components/AuthExpiredListener'
+import ForcedLogoutListener from './components/ForcedLogoutListener'
 import { CompanyProvider } from './context/CompanyContext'
 import DashboardLayout from './layouts/DashboardLayout'
 import DashboardRouter from './pages/DashboardRouter'
@@ -50,6 +51,11 @@ export default function App() {
       <Route element={<ProtectedRoute />}>
         <Route element={
           <CompanyProvider>
+            {/* ForcedLogoutListener needs a valid token to subscribe to
+                this user's private channel, so it's mounted here rather
+                than alongside AuthExpiredListener above — that one has to
+                run even on the public /login screen, this one can't. */}
+            <ForcedLogoutListener />
             <DashboardLayout />
           </CompanyProvider>
         }>

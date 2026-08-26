@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Events\ForcedLogout;
+use App\Exceptions\AccountLockedException;
 use App\Mail\TwoFactorCodeMail;
 use App\Models\ActivityLog;
 use App\Models\AuditLog;
@@ -26,27 +28,58 @@ class AuthService
     protected const MAX_FAILED_ATTEMPTS = 5;
     protected const LOCKOUT_MINUTES = 15;
 
+    // Only warn on the last 2 attempts before lockout, not from attempt 1.
+    // Early silence means a bad actor probing the login form for the
+    // first time gets no signal a threshold even exists; the warning
+    // exists for the legitimate case of "I keep mistyping my password,"
+    // where a late heads-up is still genuinely useful before it's too late.
+    protected const WARN_WHEN_REMAINING_ATTEMPTS = 2;
+
     /**
      * Verify credentials. If the account has 2FA enabled, this does NOT
      * issue a token — it emails a code and returns a pending-login ticket
      * instead. The frontend then calls verifyLoginTwoFactor() with that
      * ticket + the code to actually get a token.
      *
+     * @param string|null $clientSessionId Random ID the frontend generates
+     *        once per browser tab. Threaded through to issueToken() so the
+     *        device that's currently logging in can be excluded from its
+     *        own ForcedLogout broadcast — see ForcedLogout's docblock.
+     *
      * @throws ValidationException
      */
-    public function login(string $email, string $password, bool $remember = false): array
+    public function login(string $email, string $password, bool $remember = false, ?string $clientSessionId = null): array
     {
         $user = User::where('email', $email)->first();
 
         if ($user && $this->isLocked($user)) {
-            throw ValidationException::withMessages([
-                'email' => ['Too many failed attempts. Try again in a few minutes.'],
-            ]);
+            throw new AccountLockedException(now()->diffInSeconds($user->locked_until));
         }
 
         if (! $user || ! Hash::check($password, $user->password)) {
             if ($user) {
                 $this->registerFailedAttempt($user);
+
+                // The attempt that just ran may have been the one that
+                // tripped the lock (registerFailedAttempt sets locked_until
+                // on $user in-place). Report that immediately rather than
+                // showing a generic "wrong password" and making them
+                // discover the lockout only on their NEXT try.
+                if ($this->isLocked($user)) {
+                    throw new AccountLockedException(now()->diffInSeconds($user->locked_until));
+                }
+
+                $remaining = self::MAX_FAILED_ATTEMPTS - $user->failed_login_attempts;
+
+                if ($remaining <= self::WARN_WHEN_REMAINING_ATTEMPTS) {
+                    throw ValidationException::withMessages([
+                        'email' => [sprintf(
+                            'These credentials do not match our records. %d attempt%s remaining before this account is temporarily locked.',
+                            $remaining,
+                            $remaining === 1 ? '' : 's'
+                        )],
+                    ]);
+                }
             }
 
             throw ValidationException::withMessages([
@@ -63,7 +96,7 @@ class AuthService
         $this->clearFailedAttempts($user);
 
         if ($user->two_factor_confirmed_at) {
-            return $this->issuePendingLogin($user, $remember);
+            return $this->issuePendingLogin($user, $remember, $clientSessionId);
         }
 
         $user->forceFill(['last_login' => now()])->save();
@@ -71,7 +104,7 @@ class AuthService
         return [
             'requiresTwoFactor' => false,
             'user'  => $user->load(['role', 'department']),
-            'token' => $this->issueToken($user, $remember),
+            'token' => $this->issueToken($user, $remember, $clientSessionId),
         ];
     }
 
@@ -111,7 +144,7 @@ class AuthService
 
         return [
             'user'  => $user->load(['role', 'department']),
-            'token' => $this->issueToken($user, $pending['remember']),
+            'token' => $this->issueToken($user, $pending['remember'], $pending['client_session_id'] ?? null),
         ];
     }
 
@@ -146,13 +179,13 @@ class AuthService
         $user->currentAccessToken()?->delete();
     }
 
-    protected function issuePendingLogin(User $user, bool $remember): array
+    protected function issuePendingLogin(User $user, bool $remember, ?string $clientSessionId): array
     {
         $pendingToken = Str::random(40);
 
         Cache::put(
             $this->pendingCacheKey($pendingToken),
-            ['user_id' => $user->id, 'remember' => $remember],
+            ['user_id' => $user->id, 'remember' => $remember, 'client_session_id' => $clientSessionId],
             now()->addMinutes(self::PENDING_LOGIN_TTL_MINUTES)
         );
 
@@ -181,13 +214,19 @@ class AuthService
     // Captures a friendly device label + IP/location on the token row
     // itself, so Active Sessions can show something better than
     // "auth-token" / Unknown location / Unknown IP.
-    protected function issueToken(User $user, bool $remember): string
+    //
+    // Single active session policy: every successful login revokes every
+    // OTHER token belonging to this user and broadcasts a ForcedLogout
+    // notice, so any other open device/tab signs itself out immediately
+    // instead of waiting for its next API call to fail with a 401.
+    protected function issueToken(User $user, bool $remember, ?string $clientSessionId = null): string
     {
         $expiresAt = $remember ? now()->addDays(30) : now()->addHours(8);
         $ip = request()->ip();
+        $deviceLabel = $this->deviceLabel(request()->userAgent());
 
         $newToken = $user->createToken(
-            name: $this->deviceLabel(request()->userAgent()),
+            name: $deviceLabel,
             expiresAt: $expiresAt
         );
 
@@ -196,6 +235,10 @@ class AuthService
             'user_agent' => request()->userAgent(),
             'location'   => $this->resolveLocation($ip),
         ])->save();
+
+        $user->tokens()->where('id', '!=', $newToken->accessToken->id)->delete();
+
+        broadcast(new ForcedLogout($user->id, $clientSessionId, $deviceLabel));
 
         return $newToken->plainTextToken;
     }

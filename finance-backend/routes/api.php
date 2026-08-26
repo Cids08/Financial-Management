@@ -31,6 +31,10 @@ use App\Http\Controllers\Api\CollectionController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\BudgetController;
 use App\Http\Controllers\Api\DisbursementController;
+use Illuminate\Support\Facades\Broadcast;
+
+Broadcast::routes(['middleware' => ['auth:sanctum']]);
+ 
 
 // Public — no token exists yet at this point, so this cannot sit inside
 // the auth:sanctum group. Throttled to slow down brute-force attempts.
@@ -263,7 +267,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // who can reach an Add Invoice/Bill form can use the scanner that fills
     // it, which mirrors ar.manage/ap.manage access already implied by the
     // page they're on.
-    Route::post('invoices/scan', [InvoiceScanController::class, 'scan']);
+    Route::post('invoices/scan', [InvoiceScanController::class, 'scan'])->middleware('throttle:10,1');
 
     // General Ledger — not in the hierarchy, Admin-only (view only, no
     // manage action exists here — it's a derived/read view over posted

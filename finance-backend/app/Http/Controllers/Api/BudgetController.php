@@ -3,9 +3,9 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Budget\StoreBudgetRequest;
-use App\Http\Requests\Budget\UpdateBudgetRequest;
-use App\Http\Requests\Budget\UploadBudgetPlanRequest;
+use App\Http\Requests\StoreBudgetRequest;
+use App\Http\Requests\UpdateBudgetRequest;
+use App\Http\Requests\UploadBudgetPlanRequest;
 use App\Http\Resources\BudgetResource;
 use App\Models\Budget;
 use App\Services\BudgetService;
@@ -22,7 +22,9 @@ class BudgetController extends Controller
         return response()->json([
             'success' => true,
             'message' => '',
-            'data' => $this->budgets->stats(),
+            'data' => [
+                'total' => Budget::query()->count(),
+            ],
         ]);
     }
 

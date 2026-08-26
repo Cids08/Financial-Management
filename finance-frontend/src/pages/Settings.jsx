@@ -20,6 +20,11 @@ import {
   Phone,
   MapPin,
   Coins,
+  ChevronDown,
+  ChevronUp,
+  CalendarRange,
+  X,
+  Download,
 } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
@@ -45,6 +50,11 @@ const ACTIVITY_COLOR = {
   failed: 'text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-500/10',
 }
 
+// Cap how many entries render before scroll/height becomes an issue —
+// the log only ever grows, so without this the page gets longer with
+// every login/password-change/session event a user rack up over time.
+const ACTIVITY_PREVIEW_COUNT = 6
+
 const CURRENCIES = ['PHP', 'USD', 'EUR', 'JPY', 'GBP', 'AUD', 'SGD']
 
 /* ---------------------------------------------------------------------- */
@@ -57,6 +67,7 @@ const SECTION_SUBTITLE = 'text-xs text-muted mt-0.5'
 const INPUT = `w-full h-9 px-3 rounded-lg border border-border bg-bg text-sm text-ink
   placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary
   transition-all duration-150`
+const INPUT_TEXT_STYLE = { color: 'var(--color-ink, #0f172a)', caretColor: 'var(--color-ink, #0f172a)', outline: 'none' }
 const LABEL = 'block text-xs font-medium text-muted mb-1.5'
 
 function formatDateTime(iso) {
@@ -64,6 +75,25 @@ function formatDateTime(iso) {
   return new Date(iso).toLocaleString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
   })
+}
+
+// Derives a YYYY-MM-DD string from an ISO timestamp using LOCAL calendar
+// fields, not the raw UTC substring. `iso.slice(0, 10)` reads whatever
+// date is embedded in the string, which is the UTC date if the timestamp
+// carries a 'Z'/offset — that can be a different calendar day than what
+// formatDateTime() actually displays to the user (e.g. a UTC evening
+// timestamp lands on the next day in Manila time). Filtering against the
+// UTC slice could silently let a later local-date entry through, or
+// exclude one that visibly belongs in range. This keeps "the date it
+// used" consistent with the date the row is shown under.
+function localDateOnly(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
 }
 
 function timeAgo(iso) {
@@ -76,6 +106,28 @@ function timeAgo(iso) {
   if (hours < 24) return `${hours}h ago`
   const days = Math.floor(hours / 24)
   return `${days}d ago`
+}
+
+// CSV field escaping: wrap in quotes and double up any embedded quotes
+// whenever the value contains a comma, quote, or newline — otherwise a
+// description like "Login, retried" would silently split into two columns.
+function csvField(value) {
+  const str = String(value ?? '')
+  if (/[",\n]/.test(str)) return `"${str.replace(/"/g, '""')}"`
+  return str
+}
+
+function downloadCsv(filename, rows) {
+  const csv = rows.map((row) => row.map(csvField).join(',')).join('\r\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
 }
 
 function InlineError({ message }) {
@@ -335,6 +387,53 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
     const others = security.sessions.filter((s) => s.id !== security.currentTokenId)
     return { currentSession: current, otherSessions: others }
   }, [security.sessions, security.currentTokenId])
+
+  /* Recent Security Activity — date-range filter, then capped preview, expandable */
+  const [activityDateFrom, setActivityDateFrom] = useState('')
+  const [activityDateTo, setActivityDateTo] = useState('')
+  const hasActivityDateFilter = Boolean(activityDateFrom || activityDateTo)
+  const clearActivityDateFilter = () => { setActivityDateFrom(''); setActivityDateTo('') }
+
+  const filteredActivity = useMemo(() => {
+    if (!hasActivityDateFilter) return security.activityLog
+    return security.activityLog.filter((log) => {
+      const logDate = localDateOnly(log.createdAt)
+      if (activityDateFrom && (!logDate || logDate < activityDateFrom)) return false
+      if (activityDateTo && (!logDate || logDate > activityDateTo)) return false
+      return true
+    })
+  }, [security.activityLog, activityDateFrom, activityDateTo, hasActivityDateFilter])
+
+  const [showAllActivity, setShowAllActivity] = useState(false)
+  const visibleActivity = showAllActivity
+    ? filteredActivity
+    : filteredActivity.slice(0, ACTIVITY_PREVIEW_COUNT)
+  const hasMoreActivity = filteredActivity.length > ACTIVITY_PREVIEW_COUNT
+
+  // Exports whatever the date filter currently shows, not the full
+  // unfiltered log — matches what's actually on screen. formatDateTime
+  // is reused so the timestamp column reads the same way it does in the UI.
+  const exportActivity = () => {
+    const rows = [
+      ['Date/Time', 'Event', 'Description', 'IP Address', 'Status'],
+      ...filteredActivity.map((log) => [
+        formatDateTime(log.createdAt),
+        log.action,
+        log.description,
+        log.ip,
+        log.status,
+      ]),
+    ]
+    const today = new Date().toISOString().slice(0, 10)
+    downloadCsv(`security-activity-${today}.csv`, rows)
+  }
+
+  // Collapse back to the preview whenever a fresh (shorter) log loads, or
+  // whenever the date filter narrows the results — otherwise "Show less"
+  // can get stuck expanded against a list that no longer needs it.
+  useEffect(() => {
+    if (filteredActivity.length <= ACTIVITY_PREVIEW_COUNT) setShowAllActivity(false)
+  }, [filteredActivity.length])
 
   /* Danger zone */
   const [deactivateModalOpen, setDeactivateModalOpen] = useState(false)
@@ -690,40 +789,108 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
         )}
       </div>
 
-      {/* Recent Security Activity */}
+      {/* Recent Security Activity — capped to a preview so a long history
+          of logins/2FA toggles/session events doesn't turn the whole
+          Settings page into an ever-growing scroll. "Show all" expands
+          in place; "Show less" collapses back to the preview. */}
       <div className={PANEL}>
-        <div className="flex items-center gap-2.5 px-5 py-4 border-b border-border">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary-dark">
-            <Clock size={17} />
+        <div className="flex flex-col gap-3 px-5 py-4 border-b border-border sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary-dark">
+              <Clock size={17} />
+            </div>
+            <div>
+              <p className={SECTION_TITLE}>Recent Security Activity</p>
+              <p className={SECTION_SUBTITLE}>Logins, password changes, and other account events.</p>
+            </div>
           </div>
-          <div>
-            <p className={SECTION_TITLE}>Recent Security Activity</p>
-            <p className={SECTION_SUBTITLE}>Logins, password changes, and other account events.</p>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <CalendarRange size={15} className="text-muted shrink-0" />
+            <input
+              type="date"
+              value={activityDateFrom}
+              onChange={(e) => setActivityDateFrom(e.target.value)}
+              max={activityDateTo || undefined}
+              aria-label="Activity date from"
+              className={`${INPUT} scheme-light dark:scheme-dark`}
+              style={{ ...INPUT_TEXT_STYLE, width: '9.5rem' }}
+            />
+            <span className="text-xs text-muted">to</span>
+            <input
+              type="date"
+              value={activityDateTo}
+              onChange={(e) => setActivityDateTo(e.target.value)}
+              min={activityDateFrom || undefined}
+              aria-label="Activity date to"
+              className={`${INPUT} scheme-light dark:scheme-dark`}
+              style={{ ...INPUT_TEXT_STYLE, width: '9.5rem' }}
+            />
+            {hasActivityDateFilter && (
+              <Tooltip label="Clear date filter" align="end">
+                <button
+                  type="button"
+                  onClick={clearActivityDateFilter}
+                  aria-label="Clear date filter"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
+                >
+                  <X size={15} />
+                </button>
+              </Tooltip>
+            )}
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={Download}
+              onClick={exportActivity}
+              disabled={filteredActivity.length === 0}
+              className="shrink-0 whitespace-nowrap"
+            >
+              Export
+            </Button>
           </div>
         </div>
 
         {security.activityLoading ? (
           <p className="text-xs text-muted px-5 py-4">Loading activity…</p>
-        ) : security.activityLog.length === 0 ? (
-          <p className="text-xs text-muted px-5 py-4">No recent activity.</p>
+        ) : filteredActivity.length === 0 ? (
+          <p className="text-xs text-muted px-5 py-4">
+            {hasActivityDateFilter ? 'No activity in the selected date range.' : 'No recent activity.'}
+          </p>
         ) : (
-          <div className="divide-y divide-border">
-            {security.activityLog.map((log) => {
-              const Icon = ACTIVITY_ICON[log.action] || Clock
-              return (
-                <div key={log.id} className="flex items-start gap-3 px-5 py-3">
-                  <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${ACTIVITY_COLOR[log.status]}`}>
-                    <Icon size={14} />
+          <>
+            <div className="divide-y divide-border">
+              {visibleActivity.map((log) => {
+                const Icon = ACTIVITY_ICON[log.action] || Clock
+                return (
+                  <div key={log.id} className="flex items-start gap-3 px-5 py-3">
+                    <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${ACTIVITY_COLOR[log.status]}`}>
+                      <Icon size={14} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-ink">{log.action}</p>
+                      <p className="text-xs text-muted">{log.description} · {log.ip}</p>
+                    </div>
+                    <p className="shrink-0 text-[11px] text-muted whitespace-nowrap">{formatDateTime(log.createdAt)}</p>
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-ink">{log.action}</p>
-                    <p className="text-xs text-muted">{log.description} · {log.ip}</p>
-                  </div>
-                  <p className="shrink-0 text-[11px] text-muted whitespace-nowrap">{formatDateTime(log.createdAt)}</p>
-                </div>
-              )
-            })}
-          </div>
+                )
+              })}
+            </div>
+
+            {hasMoreActivity && (
+              <button
+                type="button"
+                onClick={() => setShowAllActivity((s) => !s)}
+                className="flex w-full items-center justify-center gap-1.5 border-t border-border px-5 py-3
+                  text-xs font-medium text-primary-dark hover:bg-bg transition-colors duration-150"
+              >
+                {showAllActivity ? (
+                  <>Show less <ChevronUp size={13} /></>
+                ) : (
+                  <>Show all {filteredActivity.length} events <ChevronDown size={13} /></>
+                )}
+              </button>
+            )}
+          </>
         )}
       </div>
 
