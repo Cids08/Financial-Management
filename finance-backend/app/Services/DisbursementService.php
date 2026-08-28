@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\AccountsPayable;
+use App\Models\AuditLog;
 use App\Models\CashAccount;
 use App\Models\Disbursement;
 use App\Models\JournalEntry;
@@ -82,15 +83,28 @@ class DisbursementService
                 ]);
             }
 
-            return Disbursement::create([
+            $disbursement = Disbursement::create([
                 ...$data,
                 'status' => 'Pending',
                 'created_by' => $userId,
             ]);
+
+            AuditLog::create([
+                'user_id' => $userId,
+                'module' => 'Disbursements',
+                'action' => 'create',
+                'record_id' => $disbursement->id,
+                'activity_description' => "Created disbursement {$disbursement->voucher_number} for {$disbursement->payee}.",
+                'new_values' => $disbursement->only(['ap_id', 'payee', 'amount_paid', 'status']),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
+            return $disbursement;
         });
     }
 
-    public function update(Disbursement $disbursement, array $data): Disbursement
+    public function update(Disbursement $disbursement, array $data, int $userId): Disbursement
     {
         if ($disbursement->status !== 'Pending') {
             throw ValidationException::withMessages([
@@ -98,8 +112,22 @@ class DisbursementService
             ]);
         }
 
-        return DB::transaction(function () use ($disbursement, $data) {
+        return DB::transaction(function () use ($disbursement, $data, $userId) {
+            $original = $disbursement->only(['payee', 'amount_paid', 'cash_account_id']);
+
             $disbursement->update($data);
+
+            AuditLog::create([
+                'user_id' => $userId,
+                'module' => 'Disbursements',
+                'action' => 'update',
+                'record_id' => $disbursement->id,
+                'activity_description' => "Updated disbursement {$disbursement->voucher_number}.",
+                'old_values' => $original,
+                'new_values' => $disbursement->only(['payee', 'amount_paid', 'cash_account_id']),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
 
             return $disbursement->fresh();
         });
@@ -125,6 +153,22 @@ class DisbursementService
                 'approved_at' => now(),
             ]);
 
+            AuditLog::create([
+                'user_id' => $approverId,
+                'module' => 'Disbursements',
+                'action' => 'approve',
+                'record_id' => $disbursement->id,
+                'activity_description' => sprintf(
+                    'Approved disbursement %s for %s (%.2f). Awaiting release.',
+                    $disbursement->voucher_number,
+                    $disbursement->payee,
+                    (float) $disbursement->amount_paid
+                ),
+                'new_values' => ['status' => 'Approved'],
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
             return $disbursement->fresh();
         });
     }
@@ -143,6 +187,18 @@ class DisbursementService
                 'approved_by' => $approverId,
                 'approved_at' => now(),
                 'remarks' => $reason ?? $disbursement->remarks,
+            ]);
+
+            AuditLog::create([
+                'user_id' => $approverId,
+                'module' => 'Disbursements',
+                'action' => 'reject',
+                'record_id' => $disbursement->id,
+                'activity_description' => $reason
+                    ? "Rejected disbursement {$disbursement->voucher_number}. Reason: {$reason}"
+                    : "Rejected disbursement {$disbursement->voucher_number}.",
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
             ]);
 
             return $disbursement->fresh();
@@ -200,6 +256,8 @@ class DisbursementService
                 'status' => $newRemaining <= 0 ? 'Paid' : $ap->status,
             ]);
 
+            $cashBalanceBefore = $cashAccount->current_balance;
+
             $cashAccount->update([
                 'current_balance' => $cashAccount->current_balance - $disbursement->amount_paid,
             ]);
@@ -247,6 +305,41 @@ class DisbursementService
                 'released_by' => $releasedById,
             ]);
 
+            // The single most consequential log entry in this service —
+            // real cash left a real account. Captures the full financial
+            // picture (amounts, accounts, resulting balances, journal
+            // entry reference) directly in the log so this is fully
+            // reconstructable later without joining across four tables.
+            AuditLog::create([
+                'user_id' => $releasedById,
+                'module' => 'Disbursements',
+                'action' => 'release',
+                'record_id' => $disbursement->id,
+                'activity_description' => sprintf(
+                    'Released disbursement %s: %.2f paid to %s from "%s". AP #%d now %.2f remaining%s. Journal entry %s posted.',
+                    $disbursement->voucher_number,
+                    (float) $disbursement->amount_paid,
+                    $disbursement->payee,
+                    $cashAccount->account_name,
+                    $ap->id,
+                    $newRemaining,
+                    $newRemaining <= 0 ? ' — PAID IN FULL' : '',
+                    $journalEntry->transaction_no
+                ),
+                'new_values' => [
+                    'amount_paid' => (float) $disbursement->amount_paid,
+                    'ap_id' => $ap->id,
+                    'ap_remaining_balance' => $newRemaining,
+                    'cash_account_id' => $cashAccount->id,
+                    'cash_balance_before' => (float) $cashBalanceBefore,
+                    'cash_balance_after' => (float) $cashAccount->current_balance,
+                    'journal_entry_id' => $journalEntry->id,
+                    'journal_entry_no' => $journalEntry->transaction_no,
+                ],
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
             return $disbursement->fresh();
         });
     }
@@ -271,6 +364,16 @@ class DisbursementService
         // NOTE on Disbursement::supportingDocuments().
         $disbursement->update(['has_attachment' => true]);
 
+        AuditLog::create([
+            'user_id' => $userId,
+            'module' => 'Disbursements',
+            'action' => 'attach_proof',
+            'record_id' => $disbursement->id,
+            'activity_description' => "Attached proof of payment \"{$file->getClientOriginalName()}\" to {$disbursement->voucher_number}.",
+            'ip_address' => request()->ip(),
+            'user_agent' => request()->userAgent(),
+        ]);
+
         return $document;
     }
 
@@ -280,13 +383,33 @@ class DisbursementService
         $disbursement->save();
         $disbursement->delete();
 
+        AuditLog::create([
+            'user_id' => $userId,
+            'module' => 'Disbursements',
+            'action' => 'archive',
+            'record_id' => $disbursement->id,
+            'activity_description' => "Archived disbursement {$disbursement->voucher_number}.",
+            'ip_address' => request()->ip(),
+            'user_agent' => request()->userAgent(),
+        ]);
+
         return $disbursement;
     }
 
-    public function restore(Disbursement $disbursement): Disbursement
+    public function restore(Disbursement $disbursement, int $userId): Disbursement
     {
         $disbursement->deleted_by = null;
         $disbursement->restore();
+
+        AuditLog::create([
+            'user_id' => $userId,
+            'module' => 'Disbursements',
+            'action' => 'restore',
+            'record_id' => $disbursement->id,
+            'activity_description' => "Restored disbursement {$disbursement->voucher_number}.",
+            'ip_address' => request()->ip(),
+            'user_agent' => request()->userAgent(),
+        ]);
 
         return $disbursement->fresh();
     }

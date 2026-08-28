@@ -69,7 +69,7 @@ class BudgetController extends Controller
 
     public function update(UpdateBudgetRequest $request, Budget $budget)
     {
-        $budget = $this->budgets->update($budget, $request->validated());
+        $budget = $this->budgets->update($budget, $request->validated(), $request->user()->id);
 
         return response()->json([
             'success' => true,
@@ -123,9 +123,9 @@ class BudgetController extends Controller
         return response()->json(['success' => true, 'message' => 'Budget archived.', 'data' => null]);
     }
 
-    public function restore(Budget $budget)
+    public function restore(Request $request, Budget $budget)
     {
-        $budget = $this->budgets->restore($budget);
+        $budget = $this->budgets->restore($budget, $request->user()->id);
 
         return response()->json([
             'success' => true,

@@ -385,7 +385,7 @@ Route::middleware('auth:sanctum')->group(function () {
             ->withTrashed();
     });
 
-    // Disbursements — separate module from Budgets above. Same shape as
+    // Disbursements — separate module from Budgets above. Same shape as'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
     // Accounts Payable: manage covers create/edit, approve is its own
     // permission. Release is gated under the SAME disbursements.approve
     // permission as approve — no separate "release" permission exists in

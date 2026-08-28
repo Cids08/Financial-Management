@@ -69,7 +69,7 @@ class DisbursementController extends Controller
 
     public function update(UpdateDisbursementRequest $request, Disbursement $disbursement)
     {
-        $disbursement = $this->disbursements->update($disbursement, $request->validated());
+        $disbursement = $this->disbursements->update($disbursement, $request->validated(), $request->user()->id);
 
         return response()->json([
             'success' => true,
@@ -137,9 +137,9 @@ class DisbursementController extends Controller
         return response()->json(['success' => true, 'message' => 'Disbursement archived.', 'data' => null]);
     }
 
-    public function restore(Disbursement $disbursement)
+    public function restore(Request $request, Disbursement $disbursement)
     {
-        $disbursement = $this->disbursements->restore($disbursement);
+        $disbursement = $this->disbursements->restore($disbursement, $request->user()->id);
 
         return response()->json([
             'success' => true,

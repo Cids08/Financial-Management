@@ -62,7 +62,7 @@ class CollectionController extends Controller
     public function update(UpdateCollectionRequest $request, Collection $collection): JsonResponse
     {
         try {
-            $collection = $this->collections->update($collection, $request->validated());
+            $collection = $this->collections->update($collection, $request->validated(), $request->user());
         } catch (ValidationException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage(), 'errors' => $e->errors()], 422);
         }
@@ -94,7 +94,7 @@ class CollectionController extends Controller
         $request->validate(['remarks' => ['nullable', 'string', 'max:500']]);
 
         try {
-            $collection = $this->collections->cancel($collection, $request->input('remarks'));
+            $collection = $this->collections->cancel($collection, $request->user(), $request->input('remarks'));
         } catch (ValidationException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage(), 'errors' => $e->errors()], 422);
         }
@@ -106,16 +106,16 @@ class CollectionController extends Controller
         ]);
     }
 
-    public function archive(Collection $collection): JsonResponse
+    public function archive(Request $request, Collection $collection): JsonResponse
     {
-        $this->collections->archive($collection);
+        $this->collections->archive($collection, $request->user());
 
         return response()->json(['success' => true, 'message' => 'Collection archived.', 'data' => null]);
     }
 
-    public function restore(Collection $collection): JsonResponse
+    public function restore(Request $request, Collection $collection): JsonResponse
     {
-        $collection = $this->collections->restore($collection);
+        $collection = $this->collections->restore($collection, $request->user());
 
         return response()->json([
             'success' => true,

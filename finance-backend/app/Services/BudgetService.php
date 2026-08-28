@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\AuditLog;
 use App\Models\Budget;
 use App\Models\SupportingDocument;
 use Illuminate\Support\Facades\DB;
@@ -42,19 +43,34 @@ class BudgetService
     public function create(array $data, int $userId): Budget
     {
         return DB::transaction(function () use ($data, $userId) {
-            return Budget::create([
+            $budget = Budget::create([
                 ...$data,
                 'used_amount' => 0,
                 'remaining_amount' => $data['allocated_amount'],
                 'status' => 'Pending',
                 'created_by' => $userId,
             ]);
+
+            AuditLog::create([
+                'user_id' => $userId,
+                'module' => 'Budgets',
+                'action' => 'create',
+                'record_id' => $budget->id,
+                'activity_description' => "Created budget \"{$budget->budget_name}\" ({$budget->budget_code}).",
+                'new_values' => $budget->only(['budget_name', 'budget_code', 'allocated_amount', 'status']),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
+            return $budget;
         });
     }
 
-    public function update(Budget $budget, array $data): Budget
+    public function update(Budget $budget, array $data, int $userId): Budget
     {
-        return DB::transaction(function () use ($budget, $data) {
+        return DB::transaction(function () use ($budget, $data, $userId) {
+            $original = $budget->only(['allocated_amount', 'warning_percentage', 'start_date', 'end_date']);
+
             // Allocated amount can shrink/grow before approval; remaining_amount
             // tracks the same delta since used_amount is always 0 pre-approval
             // (a budget cannot be spent against until it's approved).
@@ -67,6 +83,18 @@ class BudgetService
                 'remarks' => $data['remarks'] ?? $budget->remarks,
             ]);
 
+            AuditLog::create([
+                'user_id' => $userId,
+                'module' => 'Budgets',
+                'action' => 'update',
+                'record_id' => $budget->id,
+                'activity_description' => "Updated budget \"{$budget->budget_name}\" ({$budget->budget_code}).",
+                'old_values' => $original,
+                'new_values' => $budget->only(['allocated_amount', 'warning_percentage', 'start_date', 'end_date']),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
             return $budget->fresh();
         });
     }
@@ -75,7 +103,7 @@ class BudgetService
     {
         $path = $file->store("budget-plans/{$budget->id}", 'local');
 
-        return SupportingDocument::create([
+        $document = SupportingDocument::create([
             'reference_type' => 'budget',
             'reference_id' => $budget->id,
             'file_name' => basename($path),
@@ -86,6 +114,18 @@ class BudgetService
             'uploaded_by' => $userId,
             'uploaded_at' => now(),
         ]);
+
+        AuditLog::create([
+            'user_id' => $userId,
+            'module' => 'Budgets',
+            'action' => 'attach_plan',
+            'record_id' => $budget->id,
+            'activity_description' => "Attached budget plan \"{$file->getClientOriginalName()}\" to \"{$budget->budget_name}\".",
+            'ip_address' => request()->ip(),
+            'user_agent' => request()->userAgent(),
+        ]);
+
+        return $document;
     }
 
     /**
@@ -115,10 +155,24 @@ class BudgetService
                 'approved_at' => now(),
             ]);
 
-            // TODO: per the project's business rules, budget approval should also
-            // log an audit entry (audit_logs) and may trigger a notification —
-            // wire those through their existing services here if not already
-            // handled by a model observer.
+            AuditLog::create([
+                'user_id' => $approverId,
+                'module' => 'Budgets',
+                'action' => 'approve',
+                'record_id' => $budget->id,
+                'activity_description' => sprintf(
+                    'Approved budget "%s" (%s) — allocated %.2f.',
+                    $budget->budget_name,
+                    $budget->budget_code,
+                    (float) $budget->allocated_amount
+                ),
+                'new_values' => [
+                    'status' => 'Approved',
+                    'allocated_amount' => (float) $budget->allocated_amount,
+                ],
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
 
             return $budget->fresh();
         });
@@ -140,6 +194,18 @@ class BudgetService
                 'remarks' => $reason ?? $budget->remarks,
             ]);
 
+            AuditLog::create([
+                'user_id' => $approverId,
+                'module' => 'Budgets',
+                'action' => 'reject',
+                'record_id' => $budget->id,
+                'activity_description' => $reason
+                    ? "Rejected budget \"{$budget->budget_name}\" ({$budget->budget_code}). Reason: {$reason}"
+                    : "Rejected budget \"{$budget->budget_name}\" ({$budget->budget_code}).",
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
             return $budget->fresh();
         });
     }
@@ -152,13 +218,33 @@ class BudgetService
         $budget->save();
         $budget->delete();
 
+        AuditLog::create([
+            'user_id' => $userId,
+            'module' => 'Budgets',
+            'action' => 'archive',
+            'record_id' => $budget->id,
+            'activity_description' => "Archived budget \"{$budget->budget_name}\" ({$budget->budget_code}).",
+            'ip_address' => request()->ip(),
+            'user_agent' => request()->userAgent(),
+        ]);
+
         return $budget;
     }
 
-    public function restore(Budget $budget): Budget
+    public function restore(Budget $budget, int $userId): Budget
     {
         $budget->deleted_by = null;
         $budget->restore();
+
+        AuditLog::create([
+            'user_id' => $userId,
+            'module' => 'Budgets',
+            'action' => 'restore',
+            'record_id' => $budget->id,
+            'activity_description' => "Restored budget \"{$budget->budget_name}\" ({$budget->budget_code}).",
+            'ip_address' => request()->ip(),
+            'user_agent' => request()->userAgent(),
+        ]);
 
         return $budget->fresh();
     }

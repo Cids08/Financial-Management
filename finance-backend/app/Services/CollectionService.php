@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\AccountsReceivable;
+use App\Models\AuditLog;
 use App\Models\CashAccount;
 use App\Models\Collection;
 use App\Models\Collector;
@@ -67,15 +68,28 @@ class CollectionService
                 ]);
             }
 
-            return Collection::create([
+            $collection = Collection::create([
                 ...$data,
                 'status' => Collection::STATUS_PENDING,
                 'created_by' => $creator->id,
             ]);
+
+            AuditLog::create([
+                'user_id' => $creator->id,
+                'module' => 'Collections',
+                'action' => 'create',
+                'record_id' => $collection->id,
+                'activity_description' => "Recorded collection #{$collection->id} against invoice {$ar->invoice_number}.",
+                'new_values' => $collection->only(['ar_id', 'collector_id', 'amount_received', 'status']),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
+            return $collection;
         });
     }
 
-    public function update(Collection $collection, array $data): Collection
+    public function update(Collection $collection, array $data, User $actor): Collection
     {
         if ($collection->status === Collection::STATUS_CONFIRMED) {
             throw ValidationException::withMessages([
@@ -83,8 +97,22 @@ class CollectionService
             ]);
         }
 
-        DB::transaction(function () use ($collection, $data) {
+        $original = $collection->only(['amount_received', 'collection_date', 'cash_account_id']);
+
+        DB::transaction(function () use ($collection, $data, $actor, $original) {
             $collection->update($data);
+
+            AuditLog::create([
+                'user_id' => $actor->id,
+                'module' => 'Collections',
+                'action' => 'update',
+                'record_id' => $collection->id,
+                'activity_description' => "Updated collection #{$collection->id}.",
+                'old_values' => $original,
+                'new_values' => $collection->only(['amount_received', 'collection_date', 'cash_account_id']),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
         });
 
         return $collection->refresh();
@@ -111,6 +139,7 @@ class CollectionService
 
             $newPaid = bcadd((string) $ar->paid_amount, (string) $collection->amount_received, 2);
             $newRemaining = bcsub((string) $ar->original_amount, $newPaid, 2);
+            $cashBalanceBefore = $cashAccount->current_balance;
 
             $ar->update([
                 'paid_amount' => $newPaid,
@@ -127,11 +156,40 @@ class CollectionService
                 'received_by' => $confirmedBy->id,
             ]);
 
+            // Same reasoning as DisbursementService::release() — this moves
+            // real money (into a cash account this time, not out), so the
+            // log needs the actual financial picture, not just "confirmed".
+            AuditLog::create([
+                'user_id' => $confirmedBy->id,
+                'module' => 'Collections',
+                'action' => 'confirm',
+                'record_id' => $collection->id,
+                'activity_description' => sprintf(
+                    'Confirmed collection #%d: %.2f received against invoice %s into "%s". Invoice now %.2f remaining%s.',
+                    $collection->id,
+                    (float) $collection->amount_received,
+                    $ar->invoice_number,
+                    $cashAccount->account_name,
+                    max(0, (float) $newRemaining),
+                    bccomp($newRemaining, '0', 2) <= 0 ? ' — PAID IN FULL' : ''
+                ),
+                'new_values' => [
+                    'amount_received' => (float) $collection->amount_received,
+                    'ar_id' => $ar->id,
+                    'ar_remaining_balance' => max(0, (float) $newRemaining),
+                    'cash_account_id' => $cashAccount->id,
+                    'cash_balance_before' => (float) $cashBalanceBefore,
+                    'cash_balance_after' => (float) $cashAccount->current_balance,
+                ],
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
             return $collection->refresh();
         });
     }
 
-    public function cancel(Collection $collection, ?string $remarks = null): Collection
+    public function cancel(Collection $collection, User $actor, ?string $remarks = null): Collection
     {
         if ($collection->status !== Collection::STATUS_PENDING) {
             throw ValidationException::withMessages([
@@ -139,26 +197,65 @@ class CollectionService
             ]);
         }
 
-        DB::transaction(function () use ($collection, $remarks) {
+        DB::transaction(function () use ($collection, $actor, $remarks) {
             $collection->update([
                 'status' => Collection::STATUS_CANCELLED,
                 'remarks' => $remarks ? trim(($collection->remarks ?? '') . "\n\n[Cancelled] {$remarks}") : $collection->remarks,
+            ]);
+
+            AuditLog::create([
+                'user_id' => $actor->id,
+                'module' => 'Collections',
+                'action' => 'cancel',
+                'record_id' => $collection->id,
+                'activity_description' => $remarks
+                    ? "Cancelled collection #{$collection->id}. Reason: {$remarks}"
+                    : "Cancelled collection #{$collection->id}.",
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
             ]);
         });
 
         return $collection->refresh();
     }
 
-    public function archive(Collection $collection): void
+    public function archive(Collection $collection, User $actor): void
     {
-        DB::transaction(fn () => $collection->delete());
+        DB::transaction(function () use ($collection, $actor) {
+            // Previously never set — restore() clears this back to null,
+            // but nothing populated it on the way in, so every archived
+            // collection showed no record of who archived it.
+            $collection->deleted_by = $actor->id;
+            $collection->save();
+            $collection->delete();
+
+            AuditLog::create([
+                'user_id' => $actor->id,
+                'module' => 'Collections',
+                'action' => 'archive',
+                'record_id' => $collection->id,
+                'activity_description' => "Archived collection #{$collection->id}.",
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+        });
     }
 
-    public function restore(Collection $collection): Collection
+    public function restore(Collection $collection, User $actor): Collection
     {
-        DB::transaction(function () use ($collection) {
+        DB::transaction(function () use ($collection, $actor) {
             $collection->deleted_by = null;
             $collection->restore();
+
+            AuditLog::create([
+                'user_id' => $actor->id,
+                'module' => 'Collections',
+                'action' => 'restore',
+                'record_id' => $collection->id,
+                'activity_description' => "Restored collection #{$collection->id}.",
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
         });
 
         return $collection->refresh();

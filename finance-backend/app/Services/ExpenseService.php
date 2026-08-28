@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\AuditLog;
 use App\Models\Budget;
 use App\Models\ChartOfAccount;
 use App\Models\Expense;
@@ -62,17 +63,30 @@ class ExpenseService
     public function create(array $data, User $creator): Expense
     {
         return DB::transaction(function () use ($data, $creator) {
-            return Expense::create([
+            $expense = Expense::create([
                 ...$data,
                 'receipt_status' => $data['receipt_status'] ?? Expense::RECEIPT_PENDING,
                 'status' => Expense::STATUS_PENDING,
                 'is_over_budget' => false,
                 'created_by' => $creator->id,
             ]);
+
+            AuditLog::create([
+                'user_id' => $creator->id,
+                'module' => 'Expenses',
+                'action' => 'create',
+                'record_id' => $expense->id,
+                'activity_description' => "Recorded expense #{$expense->id}.",
+                'new_values' => $expense->only(['budget_id', 'expense_category_id', 'expense_amount', 'status']),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
+            return $expense;
         });
     }
 
-    public function update(Expense $expense, array $data): Expense
+    public function update(Expense $expense, array $data, User $actor): Expense
     {
         // Belt-and-suspenders: UpdateExpenseRequest already blocks this,
         // but the service must not trust that it's always called through
@@ -83,8 +97,22 @@ class ExpenseService
             ]);
         }
 
-        DB::transaction(function () use ($expense, $data) {
+        $original = $expense->only(['budget_id', 'expense_category_id', 'expense_amount', 'status']);
+
+        DB::transaction(function () use ($expense, $data, $actor, $original) {
             $expense->update($data);
+
+            AuditLog::create([
+                'user_id' => $actor->id,
+                'module' => 'Expenses',
+                'action' => 'update',
+                'record_id' => $expense->id,
+                'activity_description' => "Updated expense #{$expense->id}.",
+                'old_values' => $original,
+                'new_values' => $expense->only(['budget_id', 'expense_category_id', 'expense_amount', 'status']),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
         });
 
         return $expense->refresh();
@@ -95,14 +123,34 @@ class ExpenseService
         DB::transaction(function () use ($expense) {
             // deleted_by is stamped in Expense::booted() right before this.
             $expense->delete();
+
+            AuditLog::create([
+                'user_id' => auth()->id(),
+                'module' => 'Expenses',
+                'action' => 'archive',
+                'record_id' => $expense->id,
+                'activity_description' => "Archived expense #{$expense->id}.",
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
         });
     }
 
-    public function restore(Expense $expense): Expense
+    public function restore(Expense $expense, User $actor): Expense
     {
-        DB::transaction(function () use ($expense) {
+        DB::transaction(function () use ($expense, $actor) {
             $expense->deleted_by = null;
             $expense->restore();
+
+            AuditLog::create([
+                'user_id' => $actor->id,
+                'module' => 'Expenses',
+                'action' => 'restore',
+                'record_id' => $expense->id,
+                'activity_description' => "Restored expense #{$expense->id}.",
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
         });
 
         return $expense->refresh();
@@ -150,6 +198,37 @@ class ExpenseService
 
             $this->postJournalEntry($expense, $approver);
 
+            // This is the most consequential audit entry in this service —
+            // approval moves real budget numbers AND posts a journal entry
+            // (a real accounting event). Captures the budget impact
+            // directly in the log, not just "approved", since "how much
+            // of the budget did this consume and did it go over" is
+            // exactly what someone auditing this later will need to know
+            // without having to cross-reference the journal separately.
+            AuditLog::create([
+                'user_id' => $approver->id,
+                'module' => 'Expenses',
+                'action' => 'approve',
+                'record_id' => $expense->id,
+                'activity_description' => sprintf(
+                    'Approved expense #%d (%.2f) against budget "%s". Budget now %.2f%% used%s.',
+                    $expense->id,
+                    (float) $expense->expense_amount,
+                    $budget->budget_name,
+                    $usedPercentage,
+                    $isOverBudget ? ' — OVER BUDGET' : ''
+                ),
+                'new_values' => [
+                    'expense_amount' => (float) $expense->expense_amount,
+                    'budget_id' => $budget->id,
+                    'budget_used_amount' => $newUsed,
+                    'budget_remaining_amount' => $newRemaining,
+                    'is_over_budget' => $isOverBudget,
+                ],
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
             return $expense->refresh();
         });
     }
@@ -168,6 +247,18 @@ class ExpenseService
                 'description' => $remarks
                     ? $expense->description . "\n\n[Rejected] {$remarks}"
                     : $expense->description,
+            ]);
+
+            AuditLog::create([
+                'user_id' => auth()->id(),
+                'module' => 'Expenses',
+                'action' => 'reject',
+                'record_id' => $expense->id,
+                'activity_description' => $remarks
+                    ? "Rejected expense #{$expense->id}. Reason: {$remarks}"
+                    : "Rejected expense #{$expense->id}.",
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
             ]);
         });
 
