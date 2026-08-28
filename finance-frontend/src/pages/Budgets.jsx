@@ -4,24 +4,15 @@ import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
+import BudgetPlanUploadModal from '../components/BudgetPlanUploadModal'
 import { formatCurrency } from '../utils/formatters'
 import { useBudgets } from '../hooks/useBudgets'
-import { useDepartments } from '../hooks/useDepartments' // TODO: adjust to your real Departments hook/import if named differently
+import { useDepartments } from '../hooks/useDepartments'
 
-/**
- * NOTE on field names below: BudgetResource.php wasn't in what you shared,
- * so `department`, `creator`, and `approver` are assumed to be nested
- * objects (e.g. department: { id, name }) the way BudgetController's
- * ->load(['department','creator','approver']) implies. If your resource
- * shapes these differently, adjust deptName()/userName() below — the rest
- * of the page doesn't care how those two functions resolve a display name.
- */
-const deptName = (b) => b?.department?.department_name || b?.department?.name || '—'
-const userName = (u) => (u ? `${u.first_name ?? ''} ${u.last_name ?? u.name ?? ''}`.trim() || u.name || '—' : '—')
-
-// Budget.status in the backend IS the approval status (Pending/Approved/
-// Rejected) — there's no separate Active/Closed lifecycle field on the
-// model. "Archived" is a soft delete (deleted_at), not a status value.
+// status is the ONLY approval-workflow field on Budget — see
+// BudgetService::paginate()'s note on UpdateBudgetRequest::authorize()
+// checking $budget->status !== 'Approved'. There is no separate
+// Active/Closed operational field on this model.
 const APPROVAL_STYLES = {
   Pending: 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400',
   Approved: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
@@ -88,37 +79,40 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
     uploadPlan, approveBudget, rejectBudget, archiveBudget, restoreBudget,
   } = useBudgets()
 
-  // TODO: replace with however Departments are actually fetched elsewhere
-  // in the app (e.g. a shared useDepartments hook, or a DepartmentContext) —
-  // this page needs the list to populate the "Department" select on Add.
-  const { departments } = useDepartments?.() ?? { departments: [] }
+  const { departments, fetchDepartments } = useDepartments()
 
   const [search, setSearch] = useState('')
-  const [approvalFilter, setApprovalFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState('all') // Pending / Approved / Rejected / all
   const [showArchived, setShowArchived] = useState(false)
   const [page, setPage] = useState(1)
+  const PER_PAGE = 20
 
   const [modalMode, setModalMode] = useState(null) // null | 'add' | budget object being edited
   const [form, setForm] = useState(EMPTY_FORM)
   const [formError, setFormError] = useState('')
   const [detailRecord, setDetailRecord] = useState(null)
-  const [planFileFor, setPlanFileFor] = useState(null) // budget currently attaching a plan
+  const [uploadTarget, setUploadTarget] = useState(null) // budget currently attaching a plan (from table/detail)
+  const [planFile, setPlanFile] = useState(null) // plan picked inline in the Add Budget modal
+  const [planFileError, setPlanFileError] = useState('')
   const [rejectingId, setRejectingId] = useState(null)
   const [rejectReason, setRejectReason] = useState('')
+  const [pageNotice, setPageNotice] = useState('') // survives modal close, e.g. "budget created but plan failed to attach"
 
   const load = () => {
     fetchBudgets(
       {
-        status: approvalFilter !== 'all' ? approvalFilter : undefined,
+        status: statusFilter !== 'all' ? statusFilter : undefined,
         search: search || undefined,
         archived: showArchived ? 1 : undefined,
       },
-      page
+      page,
+      PER_PAGE
     )
   }
 
-  useEffect(() => { load() }, [approvalFilter, showArchived, page]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load() }, [statusFilter, showArchived, page]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { fetchStats() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchDepartments({}, 1, 100) }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Debounce free-text search instead of firing a request per keystroke.
   useEffect(() => {
@@ -127,22 +121,16 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
   }, [search]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const statCards = useMemo(() => ([
-    { key: 'total', label: 'Total Budgets', value: stats?.total ?? '—', icon: PiggyBank, iconBg: 'bg-primary/15', iconColor: 'text-primary-dark', isActive: approvalFilter === 'all' && !showArchived, onClick: () => { setShowArchived(false); setApprovalFilter('all') } },
-    { key: 'pending', label: 'Pending Approval', value: stats?.pending ?? '—', icon: Clock, iconBg: 'bg-amber-50 dark:bg-amber-500/10', iconColor: 'text-amber-600 dark:text-amber-400', isActive: approvalFilter === 'Pending', onClick: () => { setShowArchived(false); setApprovalFilter('Pending') } },
-    { key: 'allocated', label: 'Total Allocated', value: stats?.allocated != null ? formatCurrency(stats.allocated) : '—', icon: Building2, iconBg: 'bg-blue-50 dark:bg-blue-500/10', iconColor: 'text-blue-600 dark:text-blue-400', isActive: false, onClick: () => { setShowArchived(false); setApprovalFilter('all') } },
-    { key: 'remaining', label: 'Total Remaining', value: stats?.remaining != null ? formatCurrency(stats.remaining) : '—', icon: TrendingDown, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: false, onClick: () => { setShowArchived(false); setApprovalFilter('all') } },
+    { key: 'total', label: 'Total Budgets', value: stats?.total ?? '—', icon: PiggyBank, iconBg: 'bg-primary/15', iconColor: 'text-primary-dark', isActive: statusFilter === 'all' && !showArchived, onClick: () => { setShowArchived(false); setStatusFilter('all') } },
+    { key: 'pending', label: 'Pending Approval', value: stats?.pending ?? '—', icon: Clock, iconBg: 'bg-amber-50 dark:bg-amber-500/10', iconColor: 'text-amber-600 dark:text-amber-400', isActive: statusFilter === 'Pending', onClick: () => { setShowArchived(false); setStatusFilter('Pending') } },
+    { key: 'allocated', label: 'Total Allocated', value: stats?.allocated != null ? formatCurrency(stats.allocated) : '—', icon: Building2, iconBg: 'bg-blue-50 dark:bg-blue-500/10', iconColor: 'text-blue-600 dark:text-blue-400', isActive: false, onClick: () => { setShowArchived(false); setStatusFilter('all') } },
+    { key: 'remaining', label: 'Total Remaining', value: stats?.remaining != null ? formatCurrency(stats.remaining) : '—', icon: TrendingDown, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: false, onClick: () => { setShowArchived(false); setStatusFilter('all') } },
     { key: 'archived', label: 'Archived', value: stats?.archived ?? '—', icon: Archive, iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-500 dark:text-slate-400', isActive: showArchived, onClick: () => setShowArchived(true) },
-  ]), [stats, approvalFilter, showArchived])
-  // NOTE: BudgetController::stats() as shared only returns { total }. The
-  // pending/allocated/remaining/archived figures above assume you extend
-  // that endpoint (same as the other totals) — until then those cards will
-  // just show "—".
+  ]), [stats, statusFilter, showArchived])
 
-  const openAdd = () => { setForm(EMPTY_FORM); setFormError(''); setModalMode('add') }
+  const openAdd = () => { setForm(EMPTY_FORM); setFormError(''); setPlanFile(null); setPlanFileError(''); setModalMode('add') }
   const openEdit = (b) => {
-    // An approved budget is locked from editing entirely, per
-    // UpdateBudgetRequest::authorize() ($budget->status !== 'Approved').
-    if (b.status === 'Approved') return
+    if (b.status === 'Approved') return // locked, per UpdateBudgetRequest::authorize()
     setForm({
       department_id: b.department_id,
       budget_code: b.budget_code,
@@ -169,6 +157,14 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
       setFormError('Fiscal year, allocated amount, start date, and end date are required.')
       return
     }
+    if (modalMode === 'add' && !planFile) {
+      setFormError('A budget plan file is required to create a budget.')
+      return
+    }
+    if (planFileError) {
+      setFormError('Fix the budget plan file issue above before continuing.')
+      return
+    }
 
     let result
     if (modalMode === 'add') {
@@ -188,8 +184,27 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
         end_date: form.end_date,
         remarks: form.remarks || undefined,
       })
+
+      // Budget plan can't be attached until the budget exists (the upload
+      // endpoint is POST /budgets/{budget}/plan) — so this is still two
+      // requests under the hood, just chained automatically instead of
+      // making you come back to the table for the second one.
+      if (result.success && planFile) {
+        const planResult = await uploadPlan(result.data.budget_id, planFile)
+        if (!planResult.success) {
+          // The budget itself was created fine — don't lose that, and don't
+          // leave the modal open in a stale "add" state (resubmitting would
+          // create a second budget). Close normally, surface the plan
+          // failure as a page-level notice instead.
+          fetchStats()
+          load()
+          closeModal()
+          setPageNotice(`Budget created, but the plan failed to attach: ${planResult.message}. You can attach it from the table.`)
+          return
+        }
+      }
     } else {
-      result = await updateBudget(modalMode.id, {
+      result = await updateBudget(modalMode.budget_id, {
         allocated_amount: Number(form.allocated_amount),
         warning_percentage: form.warning_percentage === '' ? undefined : Number(form.warning_percentage),
         start_date: form.start_date,
@@ -203,6 +218,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
       return
     }
     fetchStats()
+    load()
     closeModal()
   }
 
@@ -210,7 +226,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
     const result = await approveBudget(id)
     if (result.success) {
       fetchStats()
-      setDetailRecord((prev) => (prev && prev.id === id ? result.data : prev))
+      setDetailRecord((prev) => (prev && prev.budget_id === id ? result.data : prev))
     } else {
       setFormError(result.message)
     }
@@ -221,22 +237,16 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
     const result = await rejectBudget(rejectingId, rejectReason || undefined)
     if (result.success) {
       fetchStats()
-      setDetailRecord((prev) => (prev && prev.id === rejectingId ? result.data : prev))
+      setDetailRecord((prev) => (prev && prev.budget_id === rejectingId ? result.data : prev))
     }
     setRejectingId(null)
   }
 
   const handleArchiveToggle = async (b) => {
-    const result = b.deleted_at ? await restoreBudget(b.id) : await archiveBudget(b.id)
-    if (result.success) fetchStats()
-  }
-
-  const handlePlanFileChange = async (b, file) => {
-    if (!file) return
-    const result = await uploadPlan(b.id, file)
-    setPlanFileFor(null)
+    const result = b.deleted_at ? await restoreBudget(b.budget_id) : await archiveBudget(b.budget_id)
     if (result.success) {
-      setDetailRecord((prev) => (prev && prev.id === b.id ? result.data : prev))
+      fetchStats()
+      load()
     }
   }
 
@@ -244,7 +254,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
     const win = window.open('', '_blank', 'width=800,height=900')
     if (!win) return
     const rows = [
-      ['Department', deptName(b)],
+      ['Department', b.department_name || '—'],
       ['Budget Code', b.budget_code],
       ['Fiscal Year', b.fiscal_year],
       ['Allocated Amount', formatCurrency(b.allocated_amount)],
@@ -252,13 +262,13 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
       ['Utilization', `${usedPct(b.allocated_amount, b.remaining_amount)}%`],
       ['Budget Plan', b.has_plan ? 'Attached' : 'Not attached'],
       ['Approval Status', b.status],
-      ['Approved By', userName(b.approver)],
+      ['Approved By', b.approved_by_name || '—'],
       ...(b.remarks ? [['Remarks', b.remarks]] : []),
     ]
     win.document.write(`
       <html>
         <head>
-          <title>Budget — ${deptName(b)} FY${b.fiscal_year}</title>
+          <title>Budget — ${b.department_name || ''} FY${b.fiscal_year}</title>
           <style>
             * { box-sizing: border-box; }
             body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #1a1a1a; padding: 48px; }
@@ -276,7 +286,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
         </head>
         <body>
           <div class="header">
-            <div><h1>Budget Report</h1><p>${deptName(b)} &middot; FY${b.fiscal_year}</p></div>
+            <div><h1>Budget Report</h1><p>${b.department_name || ''} &middot; FY${b.fiscal_year}</p></div>
             <span class="status">${b.status}</span>
           </div>
           <table>${rows.map(([label, value]) => `<tr><td>${label}</td><td>${value}</td></tr>`).join('')}</table>
@@ -290,8 +300,8 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
   }
 
   const totalPages = meta.last_page || 1
-  const rangeStart = meta.total === 0 ? 0 : (meta.current_page - 1) * 20 + 1
-  const rangeEnd = Math.min(meta.current_page * 20, meta.total)
+  const rangeStart = meta.total === 0 ? 0 : (meta.current_page - 1) * PER_PAGE + 1
+  const rangeEnd = Math.min(meta.current_page * PER_PAGE, meta.total)
 
   return (
     <div className="space-y-5 animate-fadeIn">
@@ -307,6 +317,13 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{error}</div>
+      )}
+
+      {pageNotice && (
+        <div className="flex items-start justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+          <span>{pageNotice}</span>
+          <button type="button" onClick={() => setPageNotice('')} className="shrink-0 font-medium underline">Dismiss</button>
+        </div>
       )}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
@@ -334,38 +351,40 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
       </div>
 
       <div className={`${PANEL} ${PANEL_PAD} flex flex-col gap-3 lg:flex-row lg:items-center`}>
-        <div className="relative flex-1 min-w-0 basis-full">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by budget name or code..." className={`${INPUT} pl-9`} style={{ ...INPUT_TEXT_STYLE, width: '100%', minWidth: 0 }} autoComplete="off" />
+        <div className="relative flex-1 min-w-0">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" /> 
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by budget name or code..."
+            className={`${INPUT} pl-9`}
+          />
         </div>
-        <select value={approvalFilter} onChange={(e) => { setApprovalFilter(e.target.value); setPage(1) }} className={INPUT} style={INPUT_TEXT_STYLE}>
+        <select
+          value={statusFilter}
+          onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
+          className={`${INPUT} lg:w-56! shrink-0`}
+          style={INPUT_TEXT_STYLE}
+        >
           <option value="all">All Approval States</option>
           <option value="Pending">Pending</option>
           <option value="Approved">Approved</option>
           <option value="Rejected">Rejected</option>
         </select>
-        <Button
-          variant={showArchived ? 'primary' : 'secondary'}
-          size="sm"
-          icon={Archive}
-          onClick={() => { setShowArchived((prev) => !prev); setPage(1) }}
-          className="shrink-0 whitespace-nowrap"
-        >
-          Show Archived
-        </Button>
       </div>
-
+        
       <div className={PANEL}>
-        <div className="overflow-x-auto overflow-y-auto max-h-[70vh] border border-border rounded-lg">
+        <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-surface">
+            <thead>
               <tr className="border-b border-border">
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Budget</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Fiscal Year</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Allocated / Remaining</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Utilization</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Approval</th>
-                <th className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Actions</th>
+                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Budget</th>
+                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Fiscal Year</th>
+                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Allocated / Remaining</th>
+                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Utilization</th>
+                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Approval</th>
+                <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -379,10 +398,10 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                 const pct = usedPct(b.allocated_amount, b.remaining_amount)
                 const isPending = b.status === 'Pending'
                 return (
-                  <tr key={b.id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
+                  <tr key={b.budget_id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
                     <td className="px-4 py-3.5">
                       <p className="font-medium text-ink">{b.budget_name}</p>
-                      <p className="text-xs text-muted">{deptName(b)} · {b.budget_code}</p>
+                      <p className="text-xs text-muted">{b.department_name || '—'} · {b.budget_code}</p>
                       {isPending && !b.has_plan && (
                         <p className="mt-0.5 flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
                           <AlertTriangle size={11} />
@@ -412,7 +431,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                             <Tooltip label={b.has_plan ? 'Approve budget' : 'Attach a budget plan before approving'} align="start">
                               <button
                                 type="button"
-                                onClick={() => handleApprove(b.id)}
+                                onClick={() => handleApprove(b.budget_id)}
                                 disabled={!b.has_plan || saving}
                                 aria-disabled={!b.has_plan || saving}
                                 className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors duration-150 ${
@@ -423,21 +442,15 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                               </button>
                             </Tooltip>
                             <Tooltip label="Reject budget" align="start">
-                              <button type="button" onClick={() => openReject(b.id)} className="flex h-8 w-8 items-center justify-center rounded-lg text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors duration-150">
+                              <button type="button" onClick={() => openReject(b.budget_id)} className="flex h-8 w-8 items-center justify-center rounded-lg text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors duration-150">
                                 <XCircle size={15} />
                               </button>
                             </Tooltip>
                             {!b.has_plan && (
                               <Tooltip label="Attach budget plan" align="start">
-                                <label className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 cursor-pointer">
+                                <button type="button" onClick={() => setUploadTarget(b)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                                   <Paperclip size={15} />
-                                  <input
-                                    type="file"
-                                    accept=".pdf,.doc,.docx,.xls,.xlsx"
-                                    className="hidden"
-                                    onChange={(e) => handlePlanFileChange(b, e.target.files?.[0])}
-                                  />
-                                </label>
+                                </button>
                               </Tooltip>
                             )}
                           </>
@@ -509,11 +522,11 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
             <div>
               <label className={LABEL}>Department</label>
               {isEditing ? (
-                <div className={INPUT_LOCKED}><span className="truncate">{deptName(modalMode)}</span></div>
+                <div className={INPUT_LOCKED}><span className="truncate">{modalMode.department_name || '—'}</span></div>
               ) : (
                 <select value={form.department_id} onChange={(e) => setForm((f) => ({ ...f, department_id: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE}>
                   <option value="">Select department</option>
-                  {departments.map((d) => <option key={d.id} value={d.id}>{d.department_name || d.name}</option>)}
+                  {departments.map((d) => <option key={d.department_id} value={d.department_id}>{d.department_name}</option>)}
                 </select>
               )}
             </div>
@@ -575,7 +588,50 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
           </div>
 
           {!isEditing && (
-            <p className="text-xs text-muted">New budgets start as <span className="font-medium text-ink">Pending</span> approval. You can attach the budget plan file from the table once it's saved.</p>
+            <div>
+              <label className={LABEL}>Budget Plan (optional)</label>
+              {!planFile ? (
+                <label className="flex items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-bg px-3 py-3 text-xs text-muted cursor-pointer hover:border-primary/50 hover:bg-bg/70 transition-colors duration-150">
+                  <Paperclip size={14} />
+                  Attach now (PDF, Word, or Excel — up to 10MB)
+                  <input
+                    type="file"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0]
+                      if (!f) return
+                      const ext = f.name.split('.').pop()?.toLowerCase()
+                      if (!['pdf', 'doc', 'docx', 'xls', 'xlsx'].includes(ext)) {
+                        setPlanFileError(`"${f.name}" isn't a supported file type.`)
+                        return
+                      }
+                      if (f.size > 10 * 1024 * 1024) {
+                        setPlanFileError(`"${f.name}" exceeds the 10MB limit.`)
+                        return
+                      }
+                      setPlanFileError('')
+                      setPlanFile(f)
+                    }}
+                  />
+                </label>
+              ) : (
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-bg px-3 py-2">
+                  <span className="truncate text-xs text-ink" title={planFile.name}>{planFile.name}</span>
+                  <button type="button" onClick={() => setPlanFile(null)} className="shrink-0 text-xs font-medium text-muted hover:text-ink">Remove</button>
+                </div>
+              )}
+              {planFileError && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{planFileError}</p>}
+              <p className="mt-1 text-xs text-muted">
+                {planFile
+                  ? 'This will be attached right after the budget is created.'
+                  : "Skip this and attach it later from the table — either way, approval stays blocked until it's on file."}
+              </p>
+            </div>
+          )}
+
+          {!isEditing && (
+            <p className="text-xs text-muted">New budgets start as <span className="font-medium text-ink">Pending</span> approval.</p>
           )}
 
           {isEditing && (
@@ -583,7 +639,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
               <DetailRow label="Remaining amount" value={formatCurrency(modalMode.remaining_amount)} />
               <DetailRow label="Approval status" value={<ApprovalBadge status={modalMode.status} />} />
               <DetailRow label="Budget plan" value={modalMode.has_plan ? 'Attached' : 'Not attached'} />
-              <DetailRow label="Created by" value={userName(modalMode.creator)} />
+              <DetailRow label="Created by" value={modalMode.created_by_name || '—'} />
               <DetailRow label="Created at" value={formatDateTime(modalMode.created_at)} />
               <DetailRow label="Last updated" value={formatDateTime(modalMode.updated_at)} />
             </div>
@@ -614,6 +670,22 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
         />
       </Modal>
 
+      {/* Attach budget plan modal */}
+      <BudgetPlanUploadModal
+        open={!!uploadTarget}
+        onClose={() => setUploadTarget(null)}
+        budget={uploadTarget}
+        onUpload={async (file) => {
+          const result = await uploadPlan(uploadTarget.budget_id, file)
+          if (result.success) {
+            fetchStats()
+            setDetailRecord((prev) => (prev && prev.budget_id === uploadTarget.budget_id ? result.data : prev))
+            load()
+          }
+          return result
+        }}
+      />
+
       {/* Detail modal */}
       <Modal
         open={!!detailRecord}
@@ -624,9 +696,9 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
             <Button variant="secondary" size="md" onClick={closeDetail}>Close</Button>
             {detailRecord && detailRecord.status === 'Pending' && (
               <>
-                <Button variant="secondary" size="md" icon={XCircle} onClick={() => openReject(detailRecord.id)}>Reject</Button>
+                <Button variant="secondary" size="md" icon={XCircle} onClick={() => openReject(detailRecord.budget_id)}>Reject</Button>
                 <Tooltip label={detailRecord.has_plan ? 'Approve budget' : 'Attach a budget plan before approving'}>
-                  <Button variant="primary" size="md" icon={CheckCircle2} disabled={!detailRecord.has_plan} onClick={() => handleApprove(detailRecord.id)}>Approve</Button>
+                  <Button variant="primary" size="md" icon={CheckCircle2} disabled={!detailRecord.has_plan} onClick={() => handleApprove(detailRecord.budget_id)}>Approve</Button>
                 </Tooltip>
               </>
             )}
@@ -639,7 +711,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-semibold text-ink">{detailRecord.budget_name}</p>
-                <p className="text-xs text-muted">{deptName(detailRecord)} · FY{detailRecord.fiscal_year} · {detailRecord.budget_code}</p>
+                <p className="text-xs text-muted">{detailRecord.department_name || '—'} · FY{detailRecord.fiscal_year} · {detailRecord.budget_code}</p>
               </div>
               <ApprovalBadge status={detailRecord.status} />
             </div>
@@ -647,10 +719,9 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
             {detailRecord.status === 'Pending' && !detailRecord.has_plan && (
               <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
                 <span className="flex items-center gap-2"><AlertTriangle size={14} className="shrink-0" /> No budget plan attached yet.</span>
-                <label className="inline-flex items-center gap-1 font-medium underline cursor-pointer shrink-0">
+                <button type="button" onClick={() => setUploadTarget(detailRecord)} className="inline-flex items-center gap-1 font-medium underline shrink-0">
                   Attach file
-                  <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx" className="hidden" onChange={(e) => handlePlanFileChange(detailRecord, e.target.files?.[0])} />
-                </label>
+                </button>
               </div>
             )}
 
@@ -666,8 +737,8 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                 <DetailRow label="Remarks" value={detailRecord.remarks || '—'} />
               </div>
               <div className="px-3 py-2">
-                <DetailRow label="Created by" value={userName(detailRecord.creator)} />
-                <DetailRow label="Approved by" value={userName(detailRecord.approver)} />
+                <DetailRow label="Created by" value={detailRecord.created_by_name || '—'} />
+                <DetailRow label="Approved by" value={detailRecord.approved_by_name || '—'} />
                 <DetailRow label="Approved at" value={formatDateTime(detailRecord.approved_at)} />
                 <DetailRow label="Created at" value={formatDateTime(detailRecord.created_at)} />
                 <DetailRow label="Updated at" value={formatDateTime(detailRecord.updated_at)} />

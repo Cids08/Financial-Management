@@ -5,11 +5,11 @@ import { apiFetch } from '../utils/api'
  * Owns all network interaction for the Budgets module (Financial
  * Transactions > Budgets). Budgets.jsx should only call these functions and
  * render `budgets` / `meta` / `stats` — no fetch/apiFetch calls belong in
- * the page itself, same convention as useAccountsReceivable.
+ * the page itself, same convention as useDepartments.
  *
  * Maps to routes/api.php:
  *   GET    /budgets/stats
- *   GET    /budgets                 (status, fiscal_year, search, per_page, page)
+ *   GET    /budgets                 (status, approval_status, fiscal_year, search, per_page, page)
  *   GET    /budgets/{budget}
  *   POST   /budgets
  *   PUT    /budgets/{budget}
@@ -19,15 +19,21 @@ import { apiFetch } from '../utils/api'
  *   PATCH  /budgets/{budget}/archive
  *   PATCH  /budgets/{budget}/restore
  *
- * NOTE: BudgetController::index / BudgetService::paginate only accept
- * status, fiscal_year, and search filters today — there is no server-side
- * "archived" filter yet (archive is a soft delete, so a normal index call
- * excludes archived budgets and there's no ?archived=1 equivalent to the
- * withTrashed() pattern used elsewhere, e.g. users/restore). fetchArchived()
- * below is wired to call the same endpoint with an `archived` param in case
- * you add that to BudgetService::paginate — until then it will just return
- * whatever the unfiltered endpoint gives you. Flagging this rather than
- * guessing at server behavior that isn't in the code you shared.
+ * NOTE: field name is `budget_id`, not `id` — BudgetResource keys off
+ * budget_id (confirmed against the actual resource), same as
+ * useDepartments correctly keying off department_id. Every local-state
+ * comparison below uses budget_id — a previous version of this file
+ * compared against `b.id`, which never matches anything (budgets have no
+ * `.id` property), so approve/reject/archive/restore/update/uploadPlan all
+ * silently failed to update the in-memory list even though the API calls
+ * themselves succeeded.
+ *
+ * NOTE: BudgetResource exposes `status` and `approval_status` as two
+ * separate fields. fetchBudgets forwards both as independent filters —
+ * confirm BudgetService::paginate() actually reads `approval_status` from
+ * the filters array server-side; if it currently only reads `status`,
+ * this filter will be silently ignored rather than erroring, since Laravel
+ * won't complain about an unused query param.
  */
 export function useBudgets() {
   const [budgets, setBudgets] = useState([])
@@ -43,6 +49,7 @@ export function useBudgets() {
     try {
       const params = new URLSearchParams()
       if (filters.status) params.set('status', filters.status)
+      if (filters.approval_status) params.set('approval_status', filters.approval_status)
       if (filters.fiscal_year) params.set('fiscal_year', filters.fiscal_year)
       if (filters.search) params.set('search', filters.search)
       if (filters.archived) params.set('archived', filters.archived)
@@ -118,7 +125,7 @@ export function useBudgets() {
       })
       const json = await res.json()
       if (!res.ok || !json.success) throw new Error(json.message || 'Failed to update budget.')
-      setBudgets((prev) => prev.map((b) => (b.id === id ? json.data : b)))
+      setBudgets((prev) => prev.map((b) => (b.budget_id === id ? json.data : b)))
       return { success: true, data: json.data }
     } catch (err) {
       setError(err.message)
@@ -143,7 +150,7 @@ export function useBudgets() {
       })
       const json = await res.json()
       if (!res.ok || !json.success) throw new Error(json.message || 'Failed to attach budget plan.')
-      setBudgets((prev) => prev.map((b) => (b.id === id ? json.data : b)))
+      setBudgets((prev) => prev.map((b) => (b.budget_id === id ? json.data : b)))
       return { success: true, data: json.data }
     } catch (err) {
       setError(err.message)
@@ -159,7 +166,7 @@ export function useBudgets() {
       const res = await apiFetch(`/api/budgets/${id}/approve`, { method: 'PATCH' })
       const json = await res.json()
       if (!res.ok || !json.success) throw new Error(json.message || 'Failed to approve budget.')
-      setBudgets((prev) => prev.map((b) => (b.id === id ? json.data : b)))
+      setBudgets((prev) => prev.map((b) => (b.budget_id === id ? json.data : b)))
       return { success: true, data: json.data }
     } catch (err) {
       setError(err.message)
@@ -177,7 +184,7 @@ export function useBudgets() {
       })
       const json = await res.json()
       if (!res.ok || !json.success) throw new Error(json.message || 'Failed to reject budget.')
-      setBudgets((prev) => prev.map((b) => (b.id === id ? json.data : b)))
+      setBudgets((prev) => prev.map((b) => (b.budget_id === id ? json.data : b)))
       return { success: true, data: json.data }
     } catch (err) {
       setError(err.message)
@@ -191,7 +198,7 @@ export function useBudgets() {
       const res = await apiFetch(`/api/budgets/${id}/archive`, { method: 'PATCH' })
       const json = await res.json()
       if (!res.ok || !json.success) throw new Error(json.message || 'Failed to archive budget.')
-      setBudgets((prev) => prev.filter((b) => b.id !== id))
+      setBudgets((prev) => prev.filter((b) => b.budget_id !== id))
       return { success: true }
     } catch (err) {
       setError(err.message)
@@ -205,7 +212,7 @@ export function useBudgets() {
       const res = await apiFetch(`/api/budgets/${id}/restore`, { method: 'PATCH' })
       const json = await res.json()
       if (!res.ok || !json.success) throw new Error(json.message || 'Failed to restore budget.')
-      setBudgets((prev) => prev.map((b) => (b.id === id ? json.data : b)))
+      setBudgets((prev) => prev.map((b) => (b.budget_id === id ? json.data : b)))
       return { success: true, data: json.data }
     } catch (err) {
       setError(err.message)

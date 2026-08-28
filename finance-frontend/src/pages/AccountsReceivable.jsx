@@ -470,25 +470,20 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
           <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by invoice no., customer, or reference..." className={`${INPUT} pl-9`} />
         </div>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={INPUT}>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className={`${INPUT} lg:w-56! shrink-0`}
+        >
           <option value="all">All Statuses</option>
           {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
-        <Button
-          variant={showArchived ? 'primary' : 'secondary'}
-          size="sm"
-          icon={Archive}
-          onClick={() => setShowArchived((prev) => !prev)}
-          className="shrink-0 whitespace-nowrap"
-        >
-          Show Archived
-        </Button>
       </div>
 
       <div className={PANEL}>
-        <div className="overflow-x-auto overflow-y-auto max-h-[70vh] border border-border rounded-lg">
+        <div className="overflow-x-auto overflow-y-auto max-h-[70vh] rounded-t-xl">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-surface" border-border rounded-lg>
+            <thead className="sticky top-0 z-10 bg-surface">
               <tr className="border-b border-border">
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Invoice</th>
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Customer / Collector</th>

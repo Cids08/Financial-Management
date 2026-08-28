@@ -56,7 +56,7 @@ export default function Profile() {
       <p className="text-sm text-muted mb-6">Manage your personal account information.</p>
 
       {error && (
-        <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-xs text-red-600">
+        <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
           <AlertCircle size={14} />
           {error}
         </div>
@@ -81,8 +81,8 @@ export default function Profile() {
             <button
               type="button"
               onClick={() => setModalOpen(true)}
-              className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-ink text-white
-                flex items-center justify-center hover:bg-ink/80 transition-colors duration-150"
+              className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-slate-800 text-white
+                flex items-center justify-center hover:bg-slate-700 transition-colors duration-150"
               aria-label="Change photo"
             >
               <Camera size={12} />
@@ -202,7 +202,7 @@ function AvatarUploadModal({ currentUrl, onClose, onUpload, onRemove }) {
       aria-label="Update profile photo"
     >
       <div
-        className="w-full max-w-sm bg-white rounded-xl border border-border shadow-dropdown overflow-hidden"
+        className="w-full max-w-sm bg-surface rounded-xl border border-border shadow-dropdown overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -256,7 +256,7 @@ function AvatarUploadModal({ currentUrl, onClose, onUpload, onRemove }) {
             />
           </div>
 
-          {error && <p className="text-xs text-red-600">{error}</p>}
+          {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
         </div>
 
         {/* Footer */}
@@ -265,7 +265,7 @@ function AvatarUploadModal({ currentUrl, onClose, onUpload, onRemove }) {
             type="button"
             onClick={handleRemove}
             disabled={!currentUrl || busy}
-            className="flex items-center gap-1.5 text-xs font-medium text-red-600 hover:text-red-700
+            className="flex items-center gap-1.5 text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300
               disabled:opacity-40 disabled:pointer-events-none transition-colors duration-150"
           >
             <Trash2 size={14} />
@@ -302,7 +302,7 @@ function Field({ label, icon: Icon, disabled, ...inputProps }) {
       <span className="text-xs font-medium text-muted mb-1 block">{label}</span>
       <div
         className={`flex items-center gap-2 rounded-lg border border-border px-3 py-2
-          ${disabled ? 'bg-bg' : 'bg-white focus-within:border-primary'}`}
+          ${disabled ? 'bg-bg' : 'bg-surface focus-within:border-primary'}`}
       >
         <Icon size={15} className="text-muted shrink-0" />
         <input

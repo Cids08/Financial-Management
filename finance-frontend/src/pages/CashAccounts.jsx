@@ -164,23 +164,18 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
           <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by account or bank name..." className={`${INPUT} pl-9`} />
         </div>
-        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className={INPUT}>
+        <select
+          value={typeFilter}
+          onChange={(e) => setTypeFilter(e.target.value)}
+          className={`${INPUT} lg:w-56! shrink-0`}
+        >
           <option value="all">All Types</option>
           {ACCOUNT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
-        <Button
-          variant={showArchived ? 'primary' : 'secondary'}
-          size="sm"
-          icon={Archive}
-          onClick={() => setShowArchived((prev) => !prev)}
-          className="shrink-0 whitespace-nowrap"
-        >
-          Show Archived
-        </Button>
       </div>
 
       <div className={PANEL}>
-        <div className="overflow-x-auto overflow-y-auto max-h-[70vh] border border-border rounded-lg">
+        <div className="overflow-x-auto overflow-y-auto max-h-[70vh] rounded-t-xl">
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10 bg-surface" border-border rounded-lg>
               <tr className="border-b border-border">

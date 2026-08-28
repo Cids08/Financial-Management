@@ -329,9 +329,9 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
       </div>
 
       <div className={PANEL}>
-        <div className="overflow-x-auto overflow-y-auto max-h-[70vh] border border-border rounded-lg">
+        <div className="overflow-x-auto overflow-y-auto max-h-[70vh] rounded-t-xl">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-surface" border-border rounded-lg>
+            <thead className="sticky top-0 z-10 bg-surface">
               <tr className="border-b border-border">
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Payee</th>
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Bill / Department</th>

@@ -290,7 +290,11 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
   }
 
   // Each stat card doubles as a quick filter — clicking it narrows the table
-  // to match, and is highlighted while that filter is the active one.
+  // to match, and is highlighted while that filter is the active one. The
+  // Archived card is the only way to toggle showArchived now (the separate
+  // "Show Archived" button in the filter bar was removed as redundant); every
+  // other card explicitly resets showArchived to false when clicked, so
+  // there's still a one-click way back out of the archived view.
   const statCards = [
     {
       key: 'total',
@@ -330,7 +334,7 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
       iconBg: 'bg-slate-100 dark:bg-slate-800',
       iconColor: 'text-slate-500 dark:text-slate-400',
       isActive: showArchived,
-      onClick: () => setShowArchived(true),
+      onClick: () => setShowArchived((prev) => !prev),
     },
   ]
 
@@ -382,8 +386,6 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
           )
         })}
       </div>
-
-      {/* Filters */}
       <div className={`${PANEL} ${PANEL_PAD} flex flex-col gap-3 lg:flex-row lg:items-center`}>
         <div className="relative flex-1">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
@@ -399,40 +401,20 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
         <select
           value={roleFilter}
           onChange={(e) => setRoleFilter(e.target.value)}
-          className={INPUT}
+          className={`${INPUT} lg:w-56! shrink-0`}
         >
           <option value="all">All Roles</option>
           {roles.map((r) => (
             <option key={r.role_id} value={r.role_id}>{r.role_name}</option>
           ))}
         </select>
-
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className={INPUT}
-        >
-          <option value="all">All Statuses</option>
-          <option value="Active">Active</option>
-          <option value="Inactive">Inactive</option>
-        </select>
-
-        <Button
-          variant={showArchived ? 'primary' : 'secondary'}
-          size="sm"
-          icon={Archive}
-          onClick={() => setShowArchived((prev) => !prev)}
-          className="shrink-0 whitespace-nowrap"
-        >
-          Show Archived
-        </Button>
       </div>
 
       {/* Table */}
       <div className={PANEL}>
-        <div className="overflow-x-auto overflow-y-auto max-h-[70vh] border border-border rounded-lg">
+        <div className="overflow-x-auto overflow-y-auto max-h-[70vh] rounded-t-xl">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-surface" border-border rounded-lg>
+            <thead className="sticky top-0 z-10 bg-surface">
               <tr className="border-b border-border">
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">User</th>
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Role</th>

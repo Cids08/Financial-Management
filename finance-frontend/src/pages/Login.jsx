@@ -4,6 +4,8 @@ import Button from '../components/Button'
 import { useAuth } from '../hooks/useAuth'
 import { useTheme } from '../context/ThemeContext'
 import logo from '../assets/logo.svg'
+import logoDark from '../assets/logo-dark.svg'
+import loginBg from '../assets/login-bg.jpg'
 
 export default function Login() {
   const {
@@ -73,25 +75,47 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden">
-      <div className="pointer-events-none absolute -top-24 -left-24 w-96 h-96 rounded-full bg-primary/40 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-32 -right-16 w-md h-112 rounded-full bg-primary-dark/30 blur-3xl" />
-      <div className="pointer-events-none absolute top-1/3 right-1/4 w-72 h-72 rounded-full bg-amber-300/20 dark:bg-amber-500/10 blur-3xl" />
+      {/* Company cover photo — a wide banner with logo/tagline/contact
+          details baked into the bottom third, so object-position is
+          pushed toward the top to keep the sky + equipment cluster in
+          frame and crop out that dense text band instead of squashing
+          the whole banner in. */}
+      <div
+        className="absolute inset-0 bg-cover bg-no-repeat"
+        style={{ backgroundImage: `url(${loginBg})`, backgroundPosition: 'center 15%' }}
+        aria-hidden="true"
+      />
+      {/* Scrim over the photo so the frosted-glass card keeps enough
+          contrast regardless of theme or how bright the underlying photo
+          is — a hazy sky can wash out light-mode text just as easily as
+          a dark photo can bury dark-mode text, so this needs to be dark
+          enough to hold contrast either way, not tuned to one specific
+          photo's brightness. */}
+      <div className="absolute inset-0 bg-black/55 dark:bg-black/70" aria-hidden="true" />
+
+      <div className="pointer-events-none absolute -top-24 -left-24 w-96 h-96 rounded-full bg-primary/30 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-32 -right-16 w-md h-112 rounded-full bg-primary-dark/25 blur-3xl" />
+      <div className="pointer-events-none absolute top-1/3 right-1/4 w-72 h-72 rounded-full bg-amber-300/15 dark:bg-amber-500/10 blur-3xl" />
 
       <button
         type="button"
         onClick={toggleTheme}
         aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
         className="absolute top-4 right-4 z-10 flex h-9 w-9 items-center justify-center rounded-lg
-          border border-white/40 dark:border-white/10 bg-white/30 dark:bg-white/5 backdrop-blur-md
-          text-muted hover:text-ink transition-colors duration-150"
+          border border-white/40 dark:border-white/10 bg-white/70 dark:bg-white/10 backdrop-blur-md
+          text-ink hover:text-primary-dark transition-colors duration-150"
       >
         {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
       </button>
 
+      {/* Card opacity bumped up from the original /40·/30 — against a
+          photo background (vs. a flat gradient) the card needs to hold
+          its own contrast regardless of what's directly behind it, so
+          it's less see-through than a typical glass card would be. */}
       <div className="relative z-10 w-full max-w-sm rounded-2xl border border-white/40 dark:border-white/10
-        bg-white/40 dark:bg-surface/30 backdrop-blur-xl shadow-2xl shadow-black/10 p-8">
+        bg-white/70 dark:bg-surface/70 backdrop-blur-xl shadow-2xl shadow-black/20 p-8">
         <div className="mx-auto mb-4 w-40 h-40 rounded-2xl overflow-hidden ring-1 ring-white/50 dark:ring-white/10 shadow-lg">
-          <img src={logo} alt="Alibaton Construction Incorporated" className="h-full w-full object-cover" />
+          <img src={theme === 'dark' ? logoDark : logo} alt="Alibaton Construction Incorporated" className="h-full w-full object-cover" />
         </div>
 
         {!twoFactorPending ? (

@@ -438,11 +438,23 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
   /* Danger zone */
   const [deactivateModalOpen, setDeactivateModalOpen] = useState(false)
   const [deactivateConfirmText, setDeactivateConfirmText] = useState('')
+  // The backend's deactivate endpoint validates a current password (same
+  // ConfirmPasswordRequest-style guard as disabling 2FA above) — without
+  // collecting one here, every deactivate attempt failed with "The
+  // password field is required." This mirrors disable2FAPassword's pattern.
+  const [deactivatePassword, setDeactivatePassword] = useState('')
 
-  const canDeactivate = deactivateConfirmText.trim().toUpperCase() === 'DEACTIVATE'
+  const canDeactivate =
+    deactivateConfirmText.trim().toUpperCase() === 'DEACTIVATE' && deactivatePassword.length > 0
+
+  const closeDeactivateModal = () => {
+    setDeactivateModalOpen(false)
+    setDeactivateConfirmText('')
+    setDeactivatePassword('')
+  }
 
   const handleDeactivate = async () => {
-    const result = await security.deactivateAccount()
+    const result = await security.deactivateAccount(deactivatePassword)
     if (result.success) {
       setDeactivateModalOpen(false)
       // Session tokens were revoked server-side; redirect to login.
@@ -1031,15 +1043,17 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
         </p>
       </Modal>
 
-      {/* Deactivate account modal */}
+      {/* Deactivate account modal — now also collects the current password,
+          which the backend requires alongside the DEACTIVATE confirmation
+          text (see deactivatePassword above). */}
       <Modal
         open={deactivateModalOpen}
-        onClose={() => { setDeactivateModalOpen(false); setDeactivateConfirmText('') }}
+        onClose={closeDeactivateModal}
         title="Deactivate Account"
         maxWidth="max-w-sm"
         footer={
           <>
-            <Button variant="secondary" size="md" onClick={() => { setDeactivateModalOpen(false); setDeactivateConfirmText('') }}>
+            <Button variant="secondary" size="md" onClick={closeDeactivateModal}>
               Cancel
             </Button>
             <Button variant="danger" size="md" disabled={!canDeactivate} loading={security.deactivating} onClick={handleDeactivate}>
@@ -1053,6 +1067,11 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
             This will deactivate your account and sign you out everywhere. This action may need an administrator to reverse.
           </p>
           <InlineError message={security.deactivateError} />
+          <PasswordInput
+            label="Current Password"
+            value={deactivatePassword}
+            onChange={(e) => setDeactivatePassword(e.target.value)}
+          />
           <div>
             <label className={LABEL}>Type DEACTIVATE to confirm</label>
             <input

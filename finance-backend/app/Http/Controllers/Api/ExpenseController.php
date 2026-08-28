@@ -68,7 +68,7 @@ class ExpenseController extends Controller
     public function update(UpdateExpenseRequest $request, Expense $expense): JsonResponse
     {
         try {
-            $expense = $this->expenses->update($expense, $request->validated());
+            $expense = $this->expenses->update($expense, $request->validated(), $request->user());
         } catch (ValidationException $e) {
             return response()->json([
                 'success' => false,
@@ -108,9 +108,9 @@ class ExpenseController extends Controller
 
     // Route is registered with ->withTrashed(), so $expense resolves even
     // though it's soft-deleted — same pattern as UserController::restore().
-    public function restore(Expense $expense): JsonResponse
+    public function restore(Request $request, Expense $expense): JsonResponse
     {
-        $expense = $this->expenses->restore($expense);
+        $expense = $this->expenses->restore($expense, $request->user());
 
         return response()->json([
             'success' => true,
