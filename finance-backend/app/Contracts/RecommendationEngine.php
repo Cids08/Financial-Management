@@ -15,12 +15,6 @@ interface RecommendationEngine
     /**
      * Analyze $forecast and return zero or more recommendations to persist.
      *
-     * Field names below use the app-level convention ('type') rather than
-     * the raw DB column name ('category') — GenerateAiRecommendations maps
-     * 'type' -> the `category` column when inserting. This keeps the
-     * engine-facing contract readable while staying decoupled from the
-     * exact DB schema.
-     *
      * @return Collection<int, array{
      *   type: string,
      *   priority: string,
@@ -28,9 +22,14 @@ interface RecommendationEngine
      *   summary: string,
      *   recommendation: string,
      * }>
-     *         'type' must be one of: Cash Flow Management, Cost Reduction,
-     *         Revenue Optimization, Risk Alert, Budget Adjustment.
-     *         'priority' must be one of: High, Medium, Low.
+     *         'type' maps onto the `category` column and is constrained by
+     *         ai_recommendations_category_check to EXACTLY these 4 values
+     *         (confirmed against the real DB constraint — NOT the same
+     *         taxonomy as the frontend's old 5-value RECOMMENDATION_TYPES
+     *         list, which does not match this constraint):
+     *           Revenue, Expense, Cash Flow, Budget
+     *         'priority' is constrained by ai_recommendations_priority_check
+     *         to: Low, Medium, High, Critical.
      *         'confidence_score' is 0-100 (numeric(5,2) in the DB) — the
      *         engine's own confidence in this specific recommendation,
      *         distinct from the forecast's own confidence_level.

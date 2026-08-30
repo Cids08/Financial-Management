@@ -28,8 +28,13 @@ class DisbursementController extends Controller
 
     public function index(Request $request)
     {
+        // Was previously only forwarding ['status', 'department_id',
+        // 'search'] even though the service already supports 'archived',
+        // 'date_from', and 'date_to' — those filters were silently
+        // no-ops from the frontend. 'source_type' added for the AP vs
+        // Payroll filter.
         $disbursements = $this->disbursements->paginate(
-            $request->only(['status', 'department_id', 'search']),
+            $request->only(['status', 'source_type', 'department_id', 'search', 'archived', 'date_from', 'date_to']),
             (int) $request->input('per_page', 20)
         );
 
@@ -90,6 +95,7 @@ class DisbursementController extends Controller
     }
 
     // Gated by permission:disbursements.approve — see routes/api.php.
+    // Applies identically to AP and payroll disbursements.
     public function approve(Request $request, Disbursement $disbursement)
     {
         $disbursement = $this->disbursements->approve($disbursement, $request->user()->id);
@@ -116,7 +122,9 @@ class DisbursementController extends Controller
 
     // Also gated by permission:disbursements.approve — releasing funds is at
     // least as sensitive as approving them, and no separate "release"
-    // permission was seeded (see comment in routes/api.php).
+    // permission was seeded (see comment in routes/api.php). Branches
+    // internally on source_type (AP settlement vs payroll settlement) —
+    // see DisbursementService::release().
     public function release(Request $request, Disbursement $disbursement)
     {
         $disbursement = $this->disbursements->release($disbursement, $request->user()->id);

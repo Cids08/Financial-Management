@@ -9,11 +9,13 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Chat-completions-backed implementation. Now asks for priority and
- * confidence_score in addition to type/summary/recommendation — both are
- * NOT NULL columns on ai_recommendations that earlier prompts never
- * requested, which caused every successful API call to still fail at the
- * database insert step (see GenerateAiRecommendations).
+ * Chat-completions-backed implementation. 'type' is now constrained to the
+ * REAL ai_recommendations_category_check values — Revenue, Expense,
+ * Cash Flow, Budget — confirmed against the actual DB constraint. The
+ * previous prompt asked for a 5-value taxonomy (Cash Flow Management, Cost
+ * Reduction, Revenue Optimization, Risk Alert, Budget Adjustment) that
+ * doesn't exist in the schema at all; every successful API call was still
+ * failing at the database insert step because of this mismatch.
  */
 class OpenAiRecommendationEngine implements RecommendationEngine
 {
@@ -32,6 +34,8 @@ class OpenAiRecommendationEngine implements RecommendationEngine
         ];
 
         $baseUrl = rtrim(config('services.openai.base_url'), '/');
+        $validCategories = ['Revenue', 'Expense', 'Cash Flow', 'Budget'];
+        $validPriorities = ['Low', 'Medium', 'High', 'Critical'];
 
         try {
             $response = Http::withToken(config('services.openai.key'))
@@ -73,6 +77,12 @@ class OpenAiRecommendationEngine implements RecommendationEngine
 
             return collect($decoded['recommendations'])
                 ->filter(fn ($r) => isset($r['type'], $r['priority'], $r['confidence_score'], $r['summary'], $r['recommendation']))
+                // Defensive filter: the model can still occasionally ignore the
+                // prompt's enum constraint, so anything outside the real DB
+                // CHECK constraints is dropped here rather than causing a
+                // failed insert downstream.
+                ->filter(fn ($r) => in_array($r['type'], $validCategories, true))
+                ->filter(fn ($r) => in_array($r['priority'], $validPriorities, true))
                 ->map(fn ($r) => [
                     'type' => $r['type'],
                     'priority' => $r['priority'],
@@ -102,8 +112,8 @@ class OpenAiRecommendationEngine implements RecommendationEngine
             . "and discuss possible risks instead.\n\n"
             . "Respond with STRICT JSON only, no markdown, no prose outside the JSON, in this exact shape:\n"
             . '{"recommendations": [{'
-            . '"type": "Cash Flow Management|Cost Reduction|Revenue Optimization|Risk Alert|Budget Adjustment", '
-            . '"priority": "High|Medium|Low", '
+            . '"type": "Revenue|Expense|Cash Flow|Budget" (use EXACTLY one of these 4 words, nothing else), '
+            . '"priority": "Low|Medium|High|Critical", '
             . '"confidence_score": 0-100 (your own confidence in this specific recommendation, as a number), '
             . '"summary": "one sentence, under 200 chars", '
             . '"recommendation": "2-4 sentences, full explanation"'

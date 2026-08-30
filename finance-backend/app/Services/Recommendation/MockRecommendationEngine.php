@@ -9,14 +9,18 @@ use Illuminate\Support\Collection;
 /**
  * Zero-cost stand-in for a real LLM backend. Turns a completed forecast into
  * one or two recommendations using simple threshold rules instead of an API
- * call. Now includes priority and confidence_score — both NOT NULL columns
- * on ai_recommendations that earlier versions of this engine omitted,
- * which caused every insert to fail (see GenerateAiRecommendations).
+ * call.
+ *
+ * 'type' values are constrained to EXACTLY Revenue/Expense/Cash Flow/Budget
+ * — confirmed against the real ai_recommendations_category_check constraint.
+ * Earlier versions of this engine used a richer 5-value taxonomy (Cash Flow
+ * Management, Cost Reduction, Revenue Optimization, Risk Alert, Budget
+ * Adjustment) that doesn't exist in the DB at all — every one of those
+ * values would fail the CHECK constraint on insert.
  *
  * NOTE: reads $forecast->confidence_level (a float, assumed 0-1 like 0.87;
  * normalized below in case it's actually stored 0-100), ->forecast_type,
- * ->predicted_amount, and ->forecast_period. Adjust if any of these differ
- * from your actual FinancialForecast schema.
+ * ->predicted_amount, and ->forecast_period.
  */
 class MockRecommendationEngine implements RecommendationEngine
 {
@@ -34,7 +38,7 @@ class MockRecommendationEngine implements RecommendationEngine
 
         if ($confidence !== null && $confidence < 60) {
             $recommendations->push([
-                'type' => 'Budget Adjustment',
+                'type' => 'Budget',
                 'priority' => 'High',
                 'confidence_score' => 70.0,
                 'summary' => "The {$type} forecast for {$period} carries below-average confidence "
@@ -66,7 +70,7 @@ class MockRecommendationEngine implements RecommendationEngine
 
         return match ($normalized) {
             'expense' => collect([[
-                'type' => 'Cost Reduction',
+                'type' => 'Expense',
                 'priority' => 'Medium',
                 'confidence_score' => 75.0,
                 'summary' => "Projected {$type} for {$period} is {$amountText}. Review recurring "
@@ -78,7 +82,7 @@ class MockRecommendationEngine implements RecommendationEngine
                     . "against actual budget data before acting.",
             ]]),
             'revenue' => collect([[
-                'type' => 'Revenue Optimization',
+                'type' => 'Revenue',
                 'priority' => 'Medium',
                 'confidence_score' => 75.0,
                 'summary' => "Projected {$type} for {$period} is {$amountText}. Review collection "
@@ -89,7 +93,7 @@ class MockRecommendationEngine implements RecommendationEngine
                     . "system-generated observation, not a guaranteed outcome.",
             ]]),
             default => collect([[
-                'type' => 'Cash Flow Management',
+                'type' => 'Cash Flow',
                 'priority' => 'Low',
                 'confidence_score' => 70.0,
                 'summary' => "New {$type} forecast available for {$period} ({$amountText}). "

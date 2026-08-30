@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, useEffect } from 'react'
 import {
-  Search, Sparkles, AlertTriangle, PiggyBank, Wallet, TrendingUp, ShieldAlert, Info, Bot, Send, User,
+  Search, Sparkles, AlertTriangle, Wallet, TrendingUp, PiggyBank, Info, Bot, Send, User,
   Archive, RotateCcw, ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
@@ -11,18 +11,20 @@ import { formatCurrency } from '../utils/formatters'
 import { useAiRecommendations } from '../hooks/useAiRecommendations'
 import { useAiAdvisor } from '../hooks/useAiAdvisor'
 
-// Mirrors the `ai_recommendations` table (category -> recommendation_type,
-// mapped server-side by AiRecommendationResource). Kept as a display list —
-// if a category comes back from the API that isn't in this map, it still
-// renders with a generic icon/style rather than crashing.
-const RECOMMENDATION_TYPES = ['Cash Flow Management', 'Cost Reduction', 'Revenue Optimization', 'Risk Alert', 'Budget Adjustment']
+// Real ai_recommendations_category_check values — confirmed against the
+// actual DB constraint. NOT the old 5-value taxonomy (Cash Flow Management,
+// Cost Reduction, Revenue Optimization, Risk Alert, Budget Adjustment) —
+// none of those exist in the schema. Colors match FinancialForecasting's
+// TYPE_STYLES where the category overlaps a forecast_type (Cash Flow,
+// Revenue, Expense↔Expenses) — Budget has no analog there, given its own
+// distinct color (amber) so it doesn't collide with the other three.
+const RECOMMENDATION_TYPES = ['Cash Flow', 'Revenue', 'Expense', 'Budget']
 
 const TYPE_META = {
-  'Cash Flow Management': { icon: Wallet, style: 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400' },
-  'Cost Reduction': { icon: PiggyBank, style: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400' },
-  'Revenue Optimization': { icon: TrendingUp, style: 'bg-purple-50 text-purple-600 dark:bg-purple-500/10 dark:text-purple-400' },
-  'Risk Alert': { icon: ShieldAlert, style: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400' },
-  'Budget Adjustment': { icon: AlertTriangle, style: 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400' },
+  'Cash Flow': { icon: Wallet, style: 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400' },
+  Revenue: { icon: TrendingUp, style: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400' },
+  Expense: { icon: PiggyBank, style: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400' },
+  Budget: { icon: AlertTriangle, style: 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400' },
 }
 const DEFAULT_TYPE_META = { icon: Sparkles, style: 'bg-gray-100 text-muted' }
 
@@ -30,18 +32,11 @@ const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
 const PANEL_PAD = 'p-4'
 const PAGE_SIZE = 8
 
-// NOTE: text color is forced with `!text-ink` (Tailwind important) rather than
-// relying on inheritance, and duplicated as an inline style below. The bug this
-// fixes: on the AI panel, the tinted/gradient wrapper background was winning
-// the CSS specificity fight against the input's own text color, so typed
-// characters rendered in a color too close to the input's background to read.
 const INPUT = `w-full h-9 px-3 rounded-lg border border-border bg-surface !text-ink
   placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary
   transition-all duration-150`
 const INPUT_TEXT_STYLE = { color: 'var(--color-ink, #0f172a)', caretColor: 'var(--color-ink, #0f172a)' }
 
-// Search field styled to match the filter dropdowns exactly — same height,
-// same rounded-lg corners, same border — just with left padding for the icon.
 const SEARCH_INPUT = `w-full h-9 pl-9 pr-3 rounded-lg border border-border bg-surface !text-ink
   placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary
   transition-all duration-150`
@@ -49,6 +44,25 @@ const SEARCH_INPUT = `w-full h-9 pl-9 pr-3 rounded-lg border border-border bg-su
 function formatDateTime(value) {
   if (!value) return '—'
   return new Date(value).toLocaleString('en-PH', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+// The advisor's system prompt allows exactly one lightweight markdown-like
+// pattern — **text** — reserved for a single genuinely critical phrase per
+// reply (a hard number, a risk warning, a deadline). This is the only place
+// that syntax is interpreted; everywhere else it would just show literal
+// asterisks, which is why the prompt otherwise forbids markdown entirely.
+function renderMessageText(text) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g)
+  return parts.map((part, idx) => {
+    if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+      return (
+        <strong key={idx} className="font-bold text-ink">
+          {part.slice(2, -2)}
+        </strong>
+      )
+    }
+    return <span key={idx}>{part}</span>
+  })
 }
 
 const SUGGESTED_PROMPTS = [
@@ -59,14 +73,6 @@ const SUGGESTED_PROMPTS = [
 ]
 
 export default function AIRecommendations({ title = 'AI Financial Recommendations', crumbs = ['Analytics', 'AI Financial Recommendations'] }) {
-  // archiveRecommendation/restoreRecommendation are NEW — this component
-  // assumes useAiRecommendations exposes them (same shape as
-  // useAccountsReceivable's toggleArchive) and that each recommendation
-  // record carries `is_archived`. Neither exists in the hook/backend yet as
-  // of the routes file we've seen (only a bare `ai-recommendations` GET
-  // behind `ai.view` — no manage/archive route or column). Wire up a
-  // migration + route + controller method + hook update to make the
-  // archive/restore buttons below actually persist anything.
   const { recommendations, loading, error, fetchRecommendations, archiveRecommendation, restoreRecommendation } = useAiRecommendations()
   const { sendMessage: sendToAdvisor, error: advisorError } = useAiAdvisor()
 
@@ -81,17 +87,12 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
   const [detail, setDetail] = useState(null)
   const [archivingId, setArchivingId] = useState(null)
 
-  // Each recommendation already carries its forecast's type/period/predicted
-  // amount flattened in (see AiRecommendationResource) — this label helper
-  // just formats that, replacing the old hardcoded FORECASTS lookup array.
   const forecastLabel = (r) => {
     if (!r) return 'Unlinked forecast'
     if (r.forecast_type && r.forecast_period) return `${r.forecast_type} — ${r.forecast_period}`
     return `Forecast #${r.forecast_id}`
   }
 
-  // Distinct forecasts derived from whatever recommendations came back, for
-  // the "All Linked Forecasts" filter dropdown — no separate endpoint needed.
   const distinctForecasts = useMemo(() => {
     const seen = new Map()
     for (const r of recommendations) {
@@ -100,13 +101,11 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
     return Array.from(seen.values())
   }, [recommendations])
 
-  // Which stat card is currently engaged — only one at a time, so cards never
-  // highlight simultaneously (matches the pattern on Financial Forecasting).
   const [activeStat, setActiveStat] = useState('all')
   const toggleStat = (key) => setActiveStat((prev) => (prev === key ? 'all' : key))
 
   const [messages, setMessages] = useState([
-    { role: 'assistant', text: "Hi, I'm your AI financial advisor. Ask me about any of the recommendations on this page — cash flow, cost reduction, revenue, collections, or risk.", at: new Date().toISOString() },
+    { role: 'assistant', text: "Hi, I'm your AI financial advisor. Ask me about any of the recommendations on this page — cash flow, expenses, revenue, or budget.", at: new Date().toISOString() },
   ])
   const [chatInput, setChatInput] = useState('')
   const [isThinking, setIsThinking] = useState(false)
@@ -116,12 +115,10 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
   }, [messages, isThinking])
 
-  // The "Risk Alerts" card filters by type; the "Forecasts Covered" card
-  // regroups the feed by linked forecast instead of by recency.
   useEffect(() => {
     if (activeStat === 'risk') {
-      setTypeFilter('Risk Alert')
-    } else if (activeStat === 'all' && typeFilter === 'Risk Alert') {
+      setTypeFilter('Budget')
+    } else if (activeStat === 'all' && typeFilter === 'Budget') {
       setTypeFilter('all')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -144,8 +141,6 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
       : [...rows].sort((a, b) => (b.generated_at || '').localeCompare(a.generated_at || ''))
   }, [recommendations, search, typeFilter, forecastFilter, activeStat, showArchived])
 
-  // Pagination is purely client-side over `filtered`, same pattern as
-  // AccountsReceivable — this page has no server-side paging either.
   const [page, setPage] = useState(1)
   useEffect(() => {
     setPage(1)
@@ -161,10 +156,15 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
 
   const stats = useMemo(() => {
     const active = recommendations.filter((r) => !r.is_archived)
-    const riskAlerts = active.filter((r) => r.recommendation_type === 'Risk Alert').length
+    // "Risk Alerts" no longer maps to a real category (Risk Alert never
+    // existed in the DB) — repurposed to count Budget-flagged items instead,
+    // since those are the ones actually meant to draw attention (see
+    // MockRecommendationEngine/OpenAiRecommendationEngine: Budget is used
+    // specifically for below-60%-confidence flags).
+    const budgetFlags = active.filter((r) => r.recommendation_type === 'Budget').length
     const distinctForecastCount = new Set(active.map((r) => r.forecast_id)).size
     const archivedCount = recommendations.filter((r) => r.is_archived).length
-    return { total: active.length, riskAlerts, distinctForecasts: distinctForecastCount, archived: archivedCount }
+    return { total: active.length, budgetFlags, distinctForecasts: distinctForecastCount, archived: archivedCount }
   }, [recommendations])
 
   const statCards = [
@@ -175,8 +175,8 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
       onClick: () => { setActiveStat('all'); setShowArchived(false) },
     },
     {
-      key: 'risk', label: 'Risk Alerts', value: loading ? '—' : stats.riskAlerts, icon: ShieldAlert,
-      iconBg: 'bg-red-50 dark:bg-red-500/10', iconColor: 'text-red-600 dark:text-red-400',
+      key: 'risk', label: 'Budget Flags', value: loading ? '—' : stats.budgetFlags, icon: AlertTriangle,
+      iconBg: 'bg-amber-50 dark:bg-amber-500/10', iconColor: 'text-amber-600 dark:text-amber-400',
       isActive: activeStat === 'risk' && !showArchived,
       onClick: () => { setShowArchived(false); toggleStat('risk') },
     },
@@ -194,10 +194,6 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
     },
   ]
 
-  // Now calls the real backend (AiAdvisorController → AiAdvisorService →
-  // AdvisorEngine) instead of the client-side generateAIReply mock. The
-  // conversation id and message history live server-side — this component
-  // only keeps the display copy of the transcript.
   const sendMessage = async (text) => {
     const trimmed = text.trim()
     if (!trimmed) return
@@ -290,8 +286,8 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
             </span>
           )}
           {!showArchived && activeStat === 'risk' && (
-            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400">
-              Risk Alerts only
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">
+              Budget flags only
             </span>
           )}
           {!showArchived && activeStat === 'forecasts' && (
@@ -303,7 +299,6 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
       )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        {/* Recommendations feed */}
         <div className="lg:col-span-2 space-y-4">
           <div className={`${PANEL} ${PANEL_PAD} flex flex-col gap-3 lg:flex-row lg:items-center`}>
             <div className="relative flex-1 min-w-0 basis-full">
@@ -312,29 +307,29 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by summary, type, or linked forecast..."
+                placeholder="Search by summary, category, or linked forecast..."
                 className={SEARCH_INPUT}
                 style={{ ...INPUT_TEXT_STYLE, width: '100%', minWidth: 0, outline: 'none' }}
                 autoComplete="off"
               />
             </div>
             <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setActiveStat('all') }} className={INPUT} style={INPUT_TEXT_STYLE}>
-              <option value="all">All Recommendation Types</option>
+              <option value="all">All Categories</option>
               {RECOMMENDATION_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
             <select value={forecastFilter} onChange={(e) => setForecastFilter(e.target.value)} className={INPUT} style={INPUT_TEXT_STYLE}>
               <option value="all">All Linked Forecasts</option>
               {distinctForecasts.map((r) => <option key={r.forecast_id} value={r.forecast_id}>{forecastLabel(r)}</option>)}
             </select>
-        <Button
-          variant={showArchived ? 'primary' : 'secondary'}
-          size="sm"
-          icon={Archive}
-          onClick={() => setShowArchived((prev) => !prev)}
-          className="shrink-0 whitespace-nowrap"
-        >
-          Show Archived
-        </Button>
+            <Button
+              variant={showArchived ? 'primary' : 'secondary'}
+              size="sm"
+              icon={Archive}
+              onClick={() => setShowArchived((prev) => !prev)}
+              className="shrink-0 whitespace-nowrap"
+            >
+              Show Archived
+            </Button>
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -417,8 +412,6 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
           )}
         </div>
 
-        {/* AI chat panel — deliberately louder than the surrounding panels so
-            it reads as the interactive centerpiece of the page, not just another card. */}
         <div className="rounded-xl border-2 border-primary/40 bg-linear-to-b from-primary/10 via-surface to-surface shadow-lg shadow-primary/10 flex flex-col h-160 lg:sticky lg:top-4 overflow-hidden">
           <div className="flex items-center gap-2 border-b border-primary/20 bg-primary/10 px-4 py-3">
             <div className="relative flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-ink shrink-0">
@@ -444,7 +437,7 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
                   {m.role === 'user' ? <User size={13} /> : <Bot size={13} />}
                 </div>
                 <div className={`max-w-[80%] rounded-xl px-3 py-2 text-sm whitespace-pre-line leading-relaxed ${m.role === 'user' ? 'bg-primary text-white rounded-tr-sm' : 'bg-bg text-ink border border-border rounded-tl-sm'}`}>
-                  {m.text}
+                  {m.role === 'assistant' ? renderMessageText(m.text) : m.text}
                 </div>
               </div>
             ))}

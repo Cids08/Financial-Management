@@ -116,3 +116,14 @@ class ForecastResponse(BaseModel):
     rmse: Optional[float]
 
     forecasts: List[ForecastPeriodResult]
+
+    converged: bool = Field(
+        default=True,
+        description=(
+            "Whether the ARIMA optimizer converged during fitting. False "
+            "means the reported order (see arima_order) is the best "
+            "available fit rather than a fully converged solution, and "
+            "callers should present the forecast with that caveat rather "
+            "than as a guaranteed outcome."
+        ),
+    )

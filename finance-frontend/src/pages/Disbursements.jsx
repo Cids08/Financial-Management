@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import {
   Search, Plus, Pencil, Archive, RotateCcw, Send, CheckCircle2, Clock3, Info, Printer,
   Lock, ChevronLeft, ChevronRight, CalendarRange, X, Upload, ThumbsUp, ThumbsDown, Wallet,
+  Users,
 } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
@@ -18,6 +19,16 @@ import { useDisbursements } from '../hooks/useDisbursements'
 /* ---------------------------------------------------------------------- */
 
 const PAYMENT_METHODS = ['Bank Transfer', 'Check', 'Cash', 'GCash']
+
+// A disbursement either originates from Accounts Payable (created and
+// managed here) or from another department's Payroll request (created by
+// the Payroll/HR module and simply routed here for approval). Finance only
+// approves/rejects/releases payroll-sourced records — it never edits,
+// attaches proof to, or archives them from this screen.
+const SOURCE_TYPES = {
+  ap: { label: 'Accounts Payable', short: 'AP' },
+  payroll: { label: 'Payroll', short: 'Payroll' },
+}
 
 const EMPTY_DISBURSEMENT_FORM = {
   ap_id: '', department_id: '', cash_account_id: '',
@@ -38,6 +49,15 @@ const DISBURSEMENT_STATUS_STYLES = {
   Approved: 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400',
   Released: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
   Rejected: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
+}
+
+const SOURCE_BADGE_STYLES = {
+  ap: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+  payroll: 'bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-400',
+}
+
+function getSourceType(d) {
+  return d.source_type === 'payroll' ? 'payroll' : 'ap'
 }
 
 function formatDate(value) {
@@ -98,10 +118,24 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
   const [dDetailRecord, setDDetailRecord] = useState(null)
   const [dSubmitting, setDSubmitting] = useState(false)
   const [dActionError, setDActionError] = useState('')
+  // Source filter is applied client-side over the page the hook already
+  // fetched. If/when useDisbursements grows a server-side `source_type`
+  // param, swap this for a hook-driven filter like the status filter above.
+  const [dSourceFilter, setDSourceFilter] = useState('all') // 'all' | 'ap' | 'payroll'
+
+  const visibleDisbursements = useMemo(() => {
+    if (dSourceFilter === 'all') return disbursements
+    return disbursements.filter((d) => getSourceType(d) === dSourceFilter)
+  }, [disbursements, dSourceFilter])
+
+  const payrollPendingCount = useMemo(
+    () => (stats?.payroll_pending ?? disbursements.filter((d) => getSourceType(d) === 'payroll' && d.status === 'Pending').length),
+    [stats, disbursements]
+  )
 
   const openAddDisbursement = () => { setDForm(EMPTY_DISBURSEMENT_FORM); setDFormError(''); setDModalMode('add') }
   const openEditDisbursement = (d) => {
-    if (!canManagePayments || d.status !== 'Pending') return
+    if (!canManagePayments || d.status !== 'Pending' || getSourceType(d) === 'payroll') return
     setDForm({
       ap_id: d.ap_id, department_id: d.department_id, cash_account_id: d.cash_account_id,
       voucher_number: d.voucher_number, payee: d.payee, payment_date: d.payment_date || '',
@@ -118,22 +152,38 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
   const handlePrintDisbursement = (d) => {
     const win = window.open('', '_blank', 'width=800,height=900')
     if (!win) return
-    const rows = [
-      ['Payee', d.payee],
-      ['Related Bill', d.invoice_number || '—'],
-      ['Department', d.department_name || '—'],
-      ['Payment Date', formatDate(d.payment_date)],
-      ['Amount Paid', formatCurrency(d.amount_paid)],
-      ['Payment Method', d.payment_method],
-      ['Cash Account', d.cash_account_name || '—'],
-      ['Reference No.', d.reference_number || '—'],
-      ['Approved By', d.approved_by_name || '—'],
-      ['Status', d.status],
-    ]
+    const isPayroll = getSourceType(d) === 'payroll'
+    const rows = isPayroll
+      ? [
+          ['Payee', d.payee],
+          ['Payroll Batch No.', d.payroll_batch_number || '—'],
+          ['Requesting Department', d.department_name || '—'],
+          ['Pay Period', d.pay_period_start && d.pay_period_end ? `${formatDate(d.pay_period_start)} – ${formatDate(d.pay_period_end)}` : '—'],
+          ['Employees Covered', d.employee_count ?? '—'],
+          ['Payment Date', formatDate(d.payment_date)],
+          ['Amount Paid', formatCurrency(d.amount_paid)],
+          ['Payment Method', d.payment_method],
+          ['Cash Account', d.cash_account_name || '—'],
+          ['Reference No.', d.reference_number || '—'],
+          ['Approved By', d.approved_by_name || '—'],
+          ['Status', d.status],
+        ]
+      : [
+          ['Payee', d.payee],
+          ['Related Bill', d.invoice_number || '—'],
+          ['Department', d.department_name || '—'],
+          ['Payment Date', formatDate(d.payment_date)],
+          ['Amount Paid', formatCurrency(d.amount_paid)],
+          ['Payment Method', d.payment_method],
+          ['Cash Account', d.cash_account_name || '—'],
+          ['Reference No.', d.reference_number || '—'],
+          ['Approved By', d.approved_by_name || '—'],
+          ['Status', d.status],
+        ]
     win.document.write(`
       <html>
         <head>
-          <title>Disbursement Voucher ${d.voucher_number}</title>
+          <title>${isPayroll ? 'Payroll Disbursement Voucher' : 'Disbursement Voucher'} ${d.voucher_number}</title>
           <style>
             * { box-sizing: border-box; }
             body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #1a1a1a; padding: 48px; }
@@ -151,7 +201,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
         </head>
         <body>
           <div class="header">
-            <div><h1>Disbursement Voucher</h1><p>${d.payee}</p></div>
+            <div><h1>${isPayroll ? 'Payroll Disbursement Voucher' : 'Disbursement Voucher'}</h1><p>${d.payee}</p></div>
             <span class="status">${d.status}</span>
           </div>
           <table>${rows.map(([label, value]) => `<tr><td>${label}</td><td>${value}</td></tr>`).join('')}</table>
@@ -175,6 +225,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
     try {
       const payload = {
         ...dForm,
+        source_type: 'ap',
         ap_id: Number(dForm.ap_id),
         department_id: Number(dForm.department_id),
         cash_account_id: Number(dForm.cash_account_id),
@@ -208,9 +259,10 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
   }
 
   const disbursementStatCards = stats && [
-    { key: 'total', label: 'Total Payments', value: stats.total, icon: Send, iconBg: 'bg-primary/15', iconColor: 'text-primary-dark', isActive: dStatusFilter === 'all' && !dShowArchived, onClick: () => { setDStatusFilter('all'); setDShowArchived(false) } },
+    { key: 'total', label: 'Total Payments', value: stats.total, icon: Send, iconBg: 'bg-primary/15', iconColor: 'text-primary-dark', isActive: dStatusFilter === 'all' && !dShowArchived && dSourceFilter === 'all', onClick: () => { setDStatusFilter('all'); setDShowArchived(false); setDSourceFilter('all') } },
     { key: 'released', label: 'Released Amount', value: formatCurrency(stats.total_paid), icon: CheckCircle2, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: dStatusFilter === 'Released' && !dShowArchived, onClick: () => { setDStatusFilter('Released'); setDShowArchived(false) } },
     { key: 'pending', label: 'Pending', value: stats.pending, icon: Clock3, iconBg: 'bg-amber-50 dark:bg-amber-500/10', iconColor: 'text-amber-600 dark:text-amber-400', isActive: dStatusFilter === 'Pending' && !dShowArchived, onClick: () => { setDStatusFilter('Pending'); setDShowArchived(false) } },
+    { key: 'payroll_pending', label: 'Payroll Pending', value: payrollPendingCount, icon: Users, iconBg: 'bg-violet-50 dark:bg-violet-500/10', iconColor: 'text-violet-600 dark:text-violet-400', isActive: dSourceFilter === 'payroll' && dStatusFilter === 'Pending' && !dShowArchived, onClick: () => { setDStatusFilter('Pending'); setDShowArchived(false); setDSourceFilter('payroll') } },
     { key: 'archived', label: 'Archived', value: stats.archived, icon: Archive, iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-500 dark:text-slate-400', isActive: dShowArchived, onClick: () => setDShowArchived(true) },
   ]
 
@@ -235,7 +287,9 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-ink">{title}</h1>
-          <p className="mt-1 text-xs text-muted">Track outgoing payments released against supplier bills.</p>
+          <p className="mt-1 text-xs text-muted">
+            Track outgoing payments released against supplier bills, plus payroll requests submitted by other departments for approval.
+          </p>
         </div>
         {canManagePayments && (
           <Button variant="primary" size="sm" icon={Plus} onClick={openAddDisbursement}>Add Disbursement</Button>
@@ -249,7 +303,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
       )}
 
       {disbursementStatCards && (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
           {disbursementStatCards.map((card) => {
             const Icon = card.icon
             return (
@@ -279,6 +333,11 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
           <input type="text" value={dSearch} onChange={(e) => setDSearch(e.target.value)} placeholder="Search by voucher, payee, or reference..." className={`${INPUT} pl-9`} style={{ ...INPUT_TEXT_STYLE, width: '100%', minWidth: 0 }} autoComplete="off" />
         </div>
+        <select value={dSourceFilter} onChange={(e) => setDSourceFilter(e.target.value)} className={INPUT} style={INPUT_TEXT_STYLE}>
+          <option value="all">All Sources</option>
+          <option value="ap">Accounts Payable</option>
+          <option value="payroll">Payroll</option>
+        </select>
         <select value={dStatusFilter} onChange={(e) => setDStatusFilter(e.target.value)} className={INPUT} style={INPUT_TEXT_STYLE}>
           <option value="all">All Statuses</option>
           {['Pending', 'Approved', 'Released', 'Rejected'].map((s) => <option key={s} value={s}>{s}</option>)}
@@ -317,15 +376,6 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
             </Tooltip>
           )}
         </div>
-        <Button
-          variant={dShowArchived ? 'primary' : 'secondary'}
-          size="sm"
-          icon={Archive}
-          onClick={() => setDShowArchived((prev) => !prev)}
-          className="shrink-0 whitespace-nowrap"
-        >
-          Show Archived
-        </Button>
       </div>
 
       <div className={PANEL}>
@@ -334,7 +384,8 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
             <thead className="sticky top-0 z-10 bg-surface">
               <tr className="border-b border-border">
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Payee</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Bill / Department</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Source</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Reference / Department</th>
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Payment Date</th>
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Amount</th>
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Status</th>
@@ -343,98 +394,119 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">Loading disbursements…</td></tr>
-              ) : disbursements.length === 0 ? (
-                <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">
+                <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-muted">Loading disbursements…</td></tr>
+              ) : visibleDisbursements.length === 0 ? (
+                <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-muted">
                   {dHasDateFilter ? 'No disbursements fall within the selected payment date range.' : 'No disbursements match your filters.'}
                 </td></tr>
-              ) : disbursements.map((d) => (
-                <tr key={d.disbursement_id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
-                  <td className="px-4 py-3.5">
-                    <p className="font-medium text-ink">{d.payee}</p>
-                    <p className="text-xs text-muted">{d.voucher_number} &middot; {d.cash_account_name}</p>
-                  </td>
-                  <td className="px-4 py-3.5 whitespace-nowrap">
-                    <p className="text-ink">{d.invoice_number}</p>
-                    <p className="text-xs text-muted">{d.department_name}</p>
-                  </td>
-                  <td className="px-4 py-3.5 whitespace-nowrap text-ink">{formatDate(d.payment_date)}</td>
-                  <td className="px-4 py-3.5 whitespace-nowrap font-medium tabular-nums text-ink">{formatCurrency(d.amount_paid)}</td>
-                  <td className="px-4 py-3.5 whitespace-nowrap">
-                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${DISBURSEMENT_STATUS_STYLES[d.status]}`}>{d.status}</span>
-                  </td>
-                  <td className="px-4 py-3.5 whitespace-nowrap text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <Tooltip label="View full record" align="start">
-                        <button type="button" onClick={() => openDisbursementDetail(d)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                          <Info size={15} />
-                        </button>
-                      </Tooltip>
-                      <Tooltip label="Print voucher" align="start">
-                        <button type="button" onClick={() => handlePrintDisbursement(d)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                          <Printer size={15} />
-                        </button>
-                      </Tooltip>
-
-                      {canManagePayments && d.status === 'Pending' && !d.is_archived && (
+              ) : visibleDisbursements.map((d) => {
+                const sourceType = getSourceType(d)
+                const isPayroll = sourceType === 'payroll'
+                return (
+                  <tr key={d.disbursement_id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
+                    <td className="px-4 py-3.5">
+                      <p className="font-medium text-ink">{d.payee}</p>
+                      <p className="text-xs text-muted">{d.voucher_number} &middot; {d.cash_account_name}</p>
+                    </td>
+                    <td className="px-4 py-3.5 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${SOURCE_BADGE_STYLES[sourceType]}`}>
+                        {SOURCE_TYPES[sourceType].short}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3.5 whitespace-nowrap">
+                      {isPayroll ? (
                         <>
-                          <Tooltip label="Edit disbursement" align="start">
-                            <button type="button" onClick={() => openEditDisbursement(d)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                              <Pencil size={15} />
-                            </button>
-                          </Tooltip>
-                          <Tooltip label="Attach proof" align="start">
-                            <label className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 cursor-pointer">
-                              <Upload size={15} />
-                              <input type="file" className="hidden" onChange={(e) => handleProofUpload(d, e.target.files?.[0])} />
-                            </label>
-                          </Tooltip>
+                          <p className="text-ink">{d.payroll_batch_number || '—'}</p>
+                          <p className="text-xs text-muted">{d.department_name} &middot; requested payroll</p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-ink">{d.invoice_number}</p>
+                          <p className="text-xs text-muted">{d.department_name}</p>
                         </>
                       )}
-
-                      {canApprovePayments && d.status === 'Pending' && (
-                        <>
-                          <Tooltip label="Approve" align="start">
-                            <button type="button" onClick={() => runAction(() => approveDisbursement(d.disbursement_id))} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-emerald-600 transition-colors duration-150">
-                              <ThumbsUp size={15} />
-                            </button>
-                          </Tooltip>
-                          <Tooltip label="Reject" align="start">
-                            <button type="button" onClick={() => runAction(() => rejectDisbursement(d.disbursement_id))} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-red-600 transition-colors duration-150">
-                              <ThumbsDown size={15} />
-                            </button>
-                          </Tooltip>
-                        </>
-                      )}
-
-                      {canApprovePayments && d.status === 'Approved' && (
-                        <Tooltip label="Release payment" align="start">
-                          <button type="button" onClick={() => runAction(() => releaseDisbursement(d.disbursement_id))} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-primary transition-colors duration-150">
-                            <Wallet size={15} />
+                    </td>
+                    <td className="px-4 py-3.5 whitespace-nowrap text-ink">{formatDate(d.payment_date)}</td>
+                    <td className="px-4 py-3.5 whitespace-nowrap font-medium tabular-nums text-ink">{formatCurrency(d.amount_paid)}</td>
+                    <td className="px-4 py-3.5 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${DISBURSEMENT_STATUS_STYLES[d.status]}`}>{d.status}</span>
+                    </td>
+                    <td className="px-4 py-3.5 whitespace-nowrap text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <Tooltip label="View full record" align="start">
+                          <button type="button" onClick={() => openDisbursementDetail(d)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                            <Info size={15} />
                           </button>
                         </Tooltip>
-                      )}
-
-                      {canManagePayments && (
-                        <Tooltip label={d.is_archived ? 'Restore disbursement' : 'Archive disbursement'} align="end">
-                          <button
-                            type="button"
-                            onClick={() => runAction(() => (d.is_archived ? restoreDisbursement(d.disbursement_id) : archiveDisbursement(d.disbursement_id)))}
-                            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
-                          >
-                            {d.is_archived ? <RotateCcw size={15} /> : <Archive size={15} />}
+                        <Tooltip label="Print voucher" align="start">
+                          <button type="button" onClick={() => handlePrintDisbursement(d)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                            <Printer size={15} />
                           </button>
                         </Tooltip>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+
+                        {/* Edit / attach proof / archive are AP-only. Payroll
+                            requests are created by the Payroll module and are
+                            approve/reject/release only from this screen. */}
+                        {canManagePayments && !isPayroll && d.status === 'Pending' && !d.is_archived && (
+                          <>
+                            <Tooltip label="Edit disbursement" align="start">
+                              <button type="button" onClick={() => openEditDisbursement(d)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                                <Pencil size={15} />
+                              </button>
+                            </Tooltip>
+                            <Tooltip label="Attach proof" align="start">
+                              <label className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 cursor-pointer">
+                                <Upload size={15} />
+                                <input type="file" className="hidden" onChange={(e) => handleProofUpload(d, e.target.files?.[0])} />
+                              </label>
+                            </Tooltip>
+                          </>
+                        )}
+
+                        {canApprovePayments && d.status === 'Pending' && (
+                          <>
+                            <Tooltip label="Approve" align="start">
+                              <button type="button" onClick={() => runAction(() => approveDisbursement(d.disbursement_id))} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-emerald-600 transition-colors duration-150">
+                                <ThumbsUp size={15} />
+                              </button>
+                            </Tooltip>
+                            <Tooltip label="Reject" align="start">
+                              <button type="button" onClick={() => runAction(() => rejectDisbursement(d.disbursement_id))} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-red-600 transition-colors duration-150">
+                                <ThumbsDown size={15} />
+                              </button>
+                            </Tooltip>
+                          </>
+                        )}
+
+                        {canApprovePayments && d.status === 'Approved' && (
+                          <Tooltip label="Release payment" align="start">
+                            <button type="button" onClick={() => runAction(() => releaseDisbursement(d.disbursement_id))} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-primary transition-colors duration-150">
+                              <Wallet size={15} />
+                            </button>
+                          </Tooltip>
+                        )}
+
+                        {canManagePayments && !isPayroll && (
+                          <Tooltip label={d.is_archived ? 'Restore disbursement' : 'Archive disbursement'} align="end">
+                            <button
+                              type="button"
+                              onClick={() => runAction(() => (d.is_archived ? restoreDisbursement(d.disbursement_id) : archiveDisbursement(d.disbursement_id)))}
+                              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
+                            >
+                              {d.is_archived ? <RotateCcw size={15} /> : <Archive size={15} />}
+                            </button>
+                          </Tooltip>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
 
-        {!loading && disbursements.length > 0 && (
+        {!loading && visibleDisbursements.length > 0 && (
           <div className="flex flex-col gap-2 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-muted">
               Showing page {meta.current_page} of {meta.last_page} &middot; {meta.total} disbursements
@@ -466,7 +538,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
         )}
       </div>
 
-      {/* ---- Disbursement Add/Edit modal ---- */}
+      {/* ---- Disbursement Add/Edit modal (Accounts Payable only) ---- */}
       <Modal
         open={isDisbursementModalOpen}
         onClose={closeDisbursementModal}
@@ -484,6 +556,9 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
           {dFormError && (
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{dFormError}</div>
           )}
+          <div className="rounded-lg border border-border bg-bg px-3 py-2 text-xs text-muted">
+            Manual disbursements created here are always Accounts Payable payments. Payroll payments are submitted by other departments through the Payroll module and appear directly in the list below for approval.
+          </div>
           {/*
             NOTE: ap_id / department_id / cash_account_id are plain text
             inputs below because this component no longer has the local
@@ -573,39 +648,61 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
           </>
         }
       >
-        {dDetailRecord && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold text-ink">{dDetailRecord.payee}</p>
-                <p className="text-xs text-muted">{dDetailRecord.invoice_number}</p>
+        {dDetailRecord && (() => {
+          const sourceType = getSourceType(dDetailRecord)
+          const isPayroll = sourceType === 'payroll'
+          return (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-ink">{dDetailRecord.payee}</p>
+                  <p className="text-xs text-muted">{isPayroll ? dDetailRecord.payroll_batch_number : dDetailRecord.invoice_number}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${SOURCE_BADGE_STYLES[sourceType]}`}>
+                    {SOURCE_TYPES[sourceType].label}
+                  </span>
+                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${DISBURSEMENT_STATUS_STYLES[dDetailRecord.status]}`}>{dDetailRecord.status}</span>
+                </div>
               </div>
-              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${DISBURSEMENT_STATUS_STYLES[dDetailRecord.status]}`}>{dDetailRecord.status}</span>
-            </div>
-            <div className="rounded-lg border border-border divide-y divide-border">
-              <div className="px-3 py-2">
-                <DetailRow label="Department" value={dDetailRecord.department_name} />
-                <DetailRow label="Payment Date" value={formatDate(dDetailRecord.payment_date)} />
-                <DetailRow label="Amount Paid" value={formatCurrency(dDetailRecord.amount_paid)} />
-                <DetailRow label="Payment Method" value={dDetailRecord.payment_method} />
-                <DetailRow label="Cash Account" value={dDetailRecord.cash_account_name} />
-                <DetailRow label="Reference No." value={dDetailRecord.reference_number} />
-              </div>
-              <div className="px-3 py-2">
-                <DetailRow label="Approved by" value={dDetailRecord.approved_by_name} />
-                <DetailRow label="Approved at" value={formatDateTime(dDetailRecord.approved_at)} />
-                <DetailRow label="Released by" value={dDetailRecord.released_by_name} />
-              </div>
-              <div className="px-3 py-2">
-                <DetailRow label="Created at" value={formatDateTime(dDetailRecord.created_at)} />
-                <DetailRow label="Updated at" value={formatDateTime(dDetailRecord.updated_at)} />
-                {dDetailRecord.is_archived && (
-                  <DetailRow label="Archived at" value={formatDateTime(dDetailRecord.archived_at)} />
+              <div className="rounded-lg border border-border divide-y divide-border">
+                {isPayroll ? (
+                  <div className="px-3 py-2">
+                    <DetailRow label="Requesting Department" value={dDetailRecord.department_name} />
+                    <DetailRow label="Pay Period" value={dDetailRecord.pay_period_start && dDetailRecord.pay_period_end ? `${formatDate(dDetailRecord.pay_period_start)} – ${formatDate(dDetailRecord.pay_period_end)}` : '—'} />
+                    <DetailRow label="Employees Covered" value={dDetailRecord.employee_count} />
+                    <DetailRow label="Payment Date" value={formatDate(dDetailRecord.payment_date)} />
+                    <DetailRow label="Amount Paid" value={formatCurrency(dDetailRecord.amount_paid)} />
+                    <DetailRow label="Payment Method" value={dDetailRecord.payment_method} />
+                    <DetailRow label="Cash Account" value={dDetailRecord.cash_account_name} />
+                    <DetailRow label="Reference No." value={dDetailRecord.reference_number} />
+                  </div>
+                ) : (
+                  <div className="px-3 py-2">
+                    <DetailRow label="Department" value={dDetailRecord.department_name} />
+                    <DetailRow label="Payment Date" value={formatDate(dDetailRecord.payment_date)} />
+                    <DetailRow label="Amount Paid" value={formatCurrency(dDetailRecord.amount_paid)} />
+                    <DetailRow label="Payment Method" value={dDetailRecord.payment_method} />
+                    <DetailRow label="Cash Account" value={dDetailRecord.cash_account_name} />
+                    <DetailRow label="Reference No." value={dDetailRecord.reference_number} />
+                  </div>
                 )}
+                <div className="px-3 py-2">
+                  <DetailRow label="Approved by" value={dDetailRecord.approved_by_name} />
+                  <DetailRow label="Approved at" value={formatDateTime(dDetailRecord.approved_at)} />
+                  <DetailRow label="Released by" value={dDetailRecord.released_by_name} />
+                </div>
+                <div className="px-3 py-2">
+                  <DetailRow label="Created at" value={formatDateTime(dDetailRecord.created_at)} />
+                  <DetailRow label="Updated at" value={formatDateTime(dDetailRecord.updated_at)} />
+                  {dDetailRecord.is_archived && (
+                    <DetailRow label="Archived at" value={formatDateTime(dDetailRecord.archived_at)} />
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )
+        })()}
       </Modal>
     </div>
   )

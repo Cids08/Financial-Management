@@ -11,6 +11,7 @@ class DisbursementResource extends JsonResource
     {
         return [
             'disbursement_id' => $this->id,
+            'source_type' => $this->source_type,
             'ap_id' => $this->ap_id,
             'invoice_number' => $this->whenLoaded('accountsPayable', fn () => $this->accountsPayable?->invoice_number),
             'department_id' => $this->department_id,
@@ -37,6 +38,11 @@ class DisbursementResource extends JsonResource
             'released_by_name' => $this->whenLoaded('releaser', fn () => trim(($this->releaser?->first_name ?? '').' '.($this->releaser?->last_name ?? ''))),
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
+            // Payroll-only — null on AP-sourced records.
+            'payroll_batch_number' => $this->payroll_batch_number,
+            'pay_period_start' => $this->pay_period_start?->toDateString(),
+            'pay_period_end' => $this->pay_period_end?->toDateString(),
+            'employee_count' => $this->employee_count,
         ];
     }
 }

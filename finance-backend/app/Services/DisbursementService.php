@@ -25,6 +25,7 @@ class DisbursementService
             'released' => (clone $active)->where('status', 'Released')->count(),
             'total_paid' => (float) (clone $active)->where('status', 'Released')->sum('amount_paid'),
             'archived' => Disbursement::onlyTrashed()->count(),
+            'payroll_pending' => (clone $active)->where('source_type', 'payroll')->where('status', 'Pending')->count(),
         ];
     }
 
@@ -42,6 +43,14 @@ class DisbursementService
 
         if (! empty($filters['status'])) {
             $query->where('status', $filters['status']);
+        }
+
+        // 'ap' | 'payroll'. Accounts Payable disbursements are created and
+        // managed here; payroll disbursements are created by the Payroll
+        // module and only move through approve/reject/release on this
+        // screen — see the guards in update()/archive()/attachDocument().
+        if (! empty($filters['source_type'])) {
+            $query->where('source_type', $filters['source_type']);
         }
 
         if (! empty($filters['department_id'])) {
@@ -64,13 +73,21 @@ class DisbursementService
             $query->where(function ($q) use ($term) {
                 $q->where('voucher_number', 'ilike', $term)
                     ->orWhere('payee', 'ilike', $term)
-                    ->orWhere('reference_number', 'ilike', $term);
+                    ->orWhere('reference_number', 'ilike', $term)
+                    ->orWhere('payroll_batch_number', 'ilike', $term);
             });
         }
 
         return $query->latest('created_at')->paginate($perPage);
     }
 
+    /**
+     * Manual creation via the Disbursements screen is Accounts Payable
+     * only — source_type is forced to 'ap' regardless of what's in $data,
+     * so this endpoint can never be used to fabricate a payroll record.
+     * Payroll requests are expected to arrive through
+     * createPayrollRequest() below, called by the Payroll module.
+     */
     public function create(array $data, int $userId): Disbursement
     {
         return DB::transaction(function () use ($data, $userId) {
@@ -85,6 +102,7 @@ class DisbursementService
 
             $disbursement = Disbursement::create([
                 ...$data,
+                'source_type' => 'ap',
                 'status' => 'Pending',
                 'created_by' => $userId,
             ]);
@@ -104,11 +122,51 @@ class DisbursementService
         });
     }
 
+    /**
+     * Entry point for the (future) Payroll module — a requesting
+     * department's payroll run lands here as a Pending disbursement with
+     * no linked AP record. No AP balance check applies since there's no
+     * payable being settled. Not yet wired to a route; add one
+     * (permission-gated to the Payroll module's service account/role, not
+     * disbursements.manage) when that integration exists.
+     */
+    public function createPayrollRequest(array $data, int $requestedByUserId): Disbursement
+    {
+        return DB::transaction(function () use ($data, $requestedByUserId) {
+            $disbursement = Disbursement::create([
+                ...$data,
+                'source_type' => 'payroll',
+                'ap_id' => null,
+                'status' => 'Pending',
+                'created_by' => $requestedByUserId,
+            ]);
+
+            AuditLog::create([
+                'user_id' => $requestedByUserId,
+                'module' => 'Disbursements',
+                'action' => 'create',
+                'record_id' => $disbursement->id,
+                'activity_description' => "Payroll request {$disbursement->voucher_number} submitted for {$disbursement->payee} ({$disbursement->employee_count} employees).",
+                'new_values' => $disbursement->only(['payroll_batch_number', 'department_id', 'amount_paid', 'employee_count', 'status']),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
+            return $disbursement;
+        });
+    }
+
     public function update(Disbursement $disbursement, array $data, int $userId): Disbursement
     {
         if ($disbursement->status !== 'Pending') {
             throw ValidationException::withMessages([
                 'status' => 'Only a pending disbursement can be edited.',
+            ]);
+        }
+
+        if ($disbursement->isPayroll()) {
+            throw ValidationException::withMessages([
+                'source_type' => 'Payroll requests cannot be edited here — only approved, rejected, or released.',
             ]);
         }
 
@@ -136,7 +194,8 @@ class DisbursementService
     /**
      * Authorization step. Does NOT move money yet — release() does that.
      * Splitting these mirrors the two real-world signatures on a check:
-     * being authorized to pay vs. the payment actually going out.
+     * being authorized to pay vs. the payment actually going out. Applies
+     * identically to AP and payroll disbursements.
      */
     public function approve(Disbursement $disbursement, int $approverId): Disbursement
     {
@@ -159,7 +218,8 @@ class DisbursementService
                 'action' => 'approve',
                 'record_id' => $disbursement->id,
                 'activity_description' => sprintf(
-                    'Approved disbursement %s for %s (%.2f). Awaiting release.',
+                    'Approved %s %s for %s (%.2f). Awaiting release.',
+                    $disbursement->isPayroll() ? 'payroll disbursement' : 'disbursement',
                     $disbursement->voucher_number,
                     $disbursement->payee,
                     (float) $disbursement->amount_paid
@@ -206,18 +266,13 @@ class DisbursementService
     }
 
     /**
-     * The actual payment event. Per the project's Accounts Payable business
-     * rule, a disbursement must: update AP.paid_amount, update
-     * AP.remaining_balance, mark the payable Paid when the balance hits
-     * zero, and post a journal entry. All four happen atomically here.
-     *
-     * IMPORTANT: the chart-of-accounts IDs used for the journal lines are
-     * NOT guessed — they're read from config('accounting.accounts'), which
-     * you need to populate with your real chart_of_accounts.id values
-     * (e.g. the Accounts Payable control account, and a mapping from each
-     * cash_accounts row to its corresponding chart_of_accounts row). I
-     * don't have your seeded chart of accounts, so this throws clearly
-     * instead of posting a journal entry against a fabricated account id.
+     * The actual payment event. Branches on source_type since AP and
+     * payroll settle against different ledgers:
+     *  - AP: settles the linked AccountsPayable balance (paid_amount /
+     *    remaining_balance / status) and debits the AP control account.
+     *  - Payroll: no AccountsPayable record exists, so that side is
+     *    skipped entirely; debits a payroll control account instead.
+     * Both branches move cash and post a journal entry the same way.
      */
     public function release(Disbursement $disbursement, int $releasedById): Disbursement
     {
@@ -227,6 +282,22 @@ class DisbursementService
             ]);
         }
 
+        return $disbursement->isPayroll()
+            ? $this->releasePayroll($disbursement, $releasedById)
+            : $this->releaseAp($disbursement, $releasedById);
+    }
+
+    /**
+     * IMPORTANT: the chart-of-accounts IDs used for the journal lines are
+     * NOT guessed — they're read from config('accounting.accounts'), which
+     * you need to populate with your real chart_of_accounts.id values
+     * (e.g. the Accounts Payable control account, and a mapping from each
+     * cash_accounts row to its corresponding chart_of_accounts row). I
+     * don't have your seeded chart of accounts, so this throws clearly
+     * instead of posting a journal entry against a fabricated account id.
+     */
+    private function releaseAp(Disbursement $disbursement, int $releasedById): Disbursement
+    {
         $apAccountId = config('accounting.accounts.accounts_payable_control');
         $cashAccountChartId = config("accounting.accounts.cash_account_map.{$disbursement->cash_account_id}");
 
@@ -344,8 +415,128 @@ class DisbursementService
         });
     }
 
+    /**
+     * Same shape as releaseAp() but with no AccountsPayable to settle —
+     * debits a payroll control account (e.g. "Salaries and Wages Payable")
+     * instead of the AP control account, and skips every AP-specific step.
+     *
+     * Set config('accounting.accounts.payroll_disbursement_control') to
+     * the chart-of-accounts id for that account before releasing any
+     * payroll disbursement — same "don't fabricate an account id" rule as
+     * releaseAp().
+     */
+    private function releasePayroll(Disbursement $disbursement, int $releasedById): Disbursement
+    {
+        $payrollAccountId = config('accounting.accounts.payroll_disbursement_control');
+        $cashAccountChartId = config("accounting.accounts.cash_account_map.{$disbursement->cash_account_id}");
+
+        if (! $payrollAccountId || ! $cashAccountChartId) {
+            throw ValidationException::withMessages([
+                'config' => 'Chart-of-accounts mapping is not configured (config/accounting.php). '
+                    .'Set payroll_disbursement_control and cash_account_map before releasing payroll payments.',
+            ]);
+        }
+
+        return DB::transaction(function () use ($disbursement, $releasedById, $payrollAccountId, $cashAccountChartId) {
+            $cashAccount = CashAccount::lockForUpdate()->findOrFail($disbursement->cash_account_id);
+
+            if ($disbursement->amount_paid > $cashAccount->current_balance) {
+                throw ValidationException::withMessages([
+                    'amount_paid' => 'Releasing this payroll payment would overdraw the selected cash account.',
+                ]);
+            }
+
+            $cashBalanceBefore = $cashAccount->current_balance;
+
+            $cashAccount->update([
+                'current_balance' => $cashAccount->current_balance - $disbursement->amount_paid,
+            ]);
+
+            $journalEntry = JournalEntry::create([
+                'transaction_no' => 'DV-'.$disbursement->voucher_number,
+                'transaction_date' => now()->toDateString(),
+                'description' => "Payroll disbursement {$disbursement->voucher_number} — {$disbursement->payee} ({$disbursement->department?->department_name})",
+                'status' => 'Posted',
+                'posted_by' => $releasedById,
+                'posted_at' => now(),
+                'created_by' => $releasedById,
+            ]);
+
+            JournalEntryLine::insert([
+                [
+                    'journal_entry_id' => $journalEntry->id,
+                    'account_id' => $payrollAccountId,
+                    'debit' => $disbursement->amount_paid,
+                    'credit' => 0,
+                    'reference_type' => 'disbursement',
+                    'reference_id' => $disbursement->id,
+                    'remarks' => 'Payroll settlement',
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ],
+                [
+                    'journal_entry_id' => $journalEntry->id,
+                    'account_id' => $cashAccountChartId,
+                    'debit' => 0,
+                    'credit' => $disbursement->amount_paid,
+                    'reference_type' => 'disbursement',
+                    'reference_id' => $disbursement->id,
+                    'remarks' => 'Cash paid out',
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ],
+            ]);
+
+            $disbursement->update([
+                'status' => 'Released',
+                'released_date' => now()->toDateString(),
+                'released_by' => $releasedById,
+            ]);
+
+            AuditLog::create([
+                'user_id' => $releasedById,
+                'module' => 'Disbursements',
+                'action' => 'release',
+                'record_id' => $disbursement->id,
+                'activity_description' => sprintf(
+                    'Released payroll disbursement %s: %.2f paid to %s from "%s" for %s (%d employees, period %s–%s). Journal entry %s posted.',
+                    $disbursement->voucher_number,
+                    (float) $disbursement->amount_paid,
+                    $disbursement->payee,
+                    $cashAccount->account_name,
+                    $disbursement->department?->department_name,
+                    $disbursement->employee_count,
+                    optional($disbursement->pay_period_start)->toDateString(),
+                    optional($disbursement->pay_period_end)->toDateString(),
+                    $journalEntry->transaction_no
+                ),
+                'new_values' => [
+                    'amount_paid' => (float) $disbursement->amount_paid,
+                    'department_id' => $disbursement->department_id,
+                    'payroll_batch_number' => $disbursement->payroll_batch_number,
+                    'employee_count' => $disbursement->employee_count,
+                    'cash_account_id' => $cashAccount->id,
+                    'cash_balance_before' => (float) $cashBalanceBefore,
+                    'cash_balance_after' => (float) $cashAccount->current_balance,
+                    'journal_entry_id' => $journalEntry->id,
+                    'journal_entry_no' => $journalEntry->transaction_no,
+                ],
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
+            return $disbursement->fresh();
+        });
+    }
+
     public function attachDocument(Disbursement $disbursement, \Illuminate\Http\UploadedFile $file, int $userId): SupportingDocument
     {
+        if ($disbursement->isPayroll()) {
+            throw ValidationException::withMessages([
+                'source_type' => 'Proof of payment is not attached to payroll requests here.',
+            ]);
+        }
+
         $path = $file->store("disbursement-proofs/{$disbursement->id}", 'local');
 
         $document = SupportingDocument::create([
@@ -379,6 +570,12 @@ class DisbursementService
 
     public function archive(Disbursement $disbursement, int $userId): Disbursement
     {
+        if ($disbursement->isPayroll()) {
+            throw ValidationException::withMessages([
+                'source_type' => 'Payroll requests cannot be archived here.',
+            ]);
+        }
+
         $disbursement->deleted_by = $userId;
         $disbursement->save();
         $disbursement->delete();

@@ -1,7 +1,9 @@
+import warnings
 from typing import Any
 
 import numpy as np
 from statsmodels.tsa.arima.model import ARIMA
+from statsmodels.tools.sm_exceptions import ConvergenceWarning
 
 
 class ARIMAService:
@@ -13,6 +15,11 @@ class ARIMAService:
     # small holdout so there's still enough data left to train on.
     MIN_HOLDOUT = 2
     MAX_HOLDOUT = 6
+
+    # If the requested order fails to converge even with a raised iteration
+    # cap, fall back to progressively simpler orders rather than returning
+    # an unreliable fit silently.
+    FALLBACK_ORDERS = [(1, 1, 0), (0, 1, 1), (1, 0, 0)]
 
     @staticmethod
     def validate_data(data: list[float]) -> None:
@@ -33,14 +40,64 @@ class ARIMAService:
             raise ValueError("periods must be at least 1.")
 
     @staticmethod
-    def _fit(data: np.ndarray, order: tuple[int, int, int]):
+    def _fit_once(data: np.ndarray, order: tuple[int, int, int]):
+        """
+        Attempt a single fit and report whether the optimizer actually
+        converged, instead of letting ConvergenceWarning disappear into
+        stderr with no signal in the result.
+        """
         model = ARIMA(
             data,
             order=order,
             enforce_stationarity=False,
             enforce_invertibility=False,
         )
-        return model.fit()
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always", ConvergenceWarning)
+            # statsmodels' default maxiter (50) is frequently too low for
+            # small/irregular financial series; raise it before giving up.
+            result = model.fit(method_kwargs={"maxiter": 200, "disp": False})
+            converged = not any(
+                issubclass(w.category, ConvergenceWarning) for w in caught
+            )
+
+        return result, converged
+
+    @staticmethod
+    def _fit(
+        data: np.ndarray, order: tuple[int, int, int]
+    ) -> tuple[Any, bool, tuple[int, int, int]]:
+        """
+        Fit with convergence diagnostics. If the requested order doesn't
+        converge, fall back to simpler orders rather than returning
+        unreliable coefficients. Returns (fitted_model, converged, order_used).
+        """
+        result, converged = ARIMAService._fit_once(data, order)
+        if converged:
+            return result, True, order
+
+        best_result, best_order = result, order
+        for fallback_order in ARIMAService.FALLBACK_ORDERS:
+            if fallback_order == order:
+                continue
+            try:
+                fallback_result, fallback_converged = ARIMAService._fit_once(
+                    data, fallback_order
+                )
+            except Exception:
+                continue
+            if fallback_converged:
+                return fallback_result, True, fallback_order
+            # Keep the best non-converged attempt (lowest AIC) in case
+            # nothing converges at all.
+            if fallback_result.aic < best_result.aic:
+                best_result, best_order = fallback_result, fallback_order
+
+        # Nothing converged — return the best attempt we found, clearly
+        # flagged, per the project's "communicate uncertainty honestly"
+        # forecasting standard rather than presenting it as a normal fit.
+        return best_result, False, best_order
 
     @staticmethod
     def _compute_accuracy(
@@ -64,7 +121,7 @@ class ARIMAService:
         train, actual_holdout = data[:-holdout_n], data[-holdout_n:]
 
         try:
-            fitted = ARIMAService._fit(train, order)
+            fitted, _converged, _order_used = ARIMAService._fit(train, order)
             predicted = np.asarray(fitted.get_forecast(steps=holdout_n).predicted_mean)
         except Exception:
             # A holdout-sized series can fail to converge even when the
@@ -98,7 +155,7 @@ class ARIMAService:
 
         historical_data = np.array(data, dtype=float)
 
-        fitted_model = ARIMAService._fit(historical_data, order)
+        fitted_model, converged, order_used = ARIMAService._fit(historical_data, order)
 
         forecast_result = fitted_model.get_forecast(steps=periods)
 
@@ -118,7 +175,7 @@ class ARIMAService:
                 }
             )
 
-        mape, rmse = ARIMAService._compute_accuracy(historical_data, order)
+        mape, rmse = ARIMAService._compute_accuracy(historical_data, order_used)
 
         return {
             # Named "forecasts" (plural) and "arima_order" (a p/d/q dict) to
@@ -132,5 +189,13 @@ class ARIMAService:
             "rmse": rmse,
             "algorithm": ARIMAService.ALGORITHM,
             "model_version": ARIMAService.MODEL_VERSION,
-            "arima_order": {"p": order[0], "d": order[1], "q": order[2]},
+            "arima_order": {
+                "p": order_used[0],
+                "d": order_used[1],
+                "q": order_used[2],
+            },
+            # New field: surfaces optimizer reliability instead of letting
+            # a ConvergenceWarning disappear silently, per the project's
+            # "communicate uncertainty" forecasting standard.
+            "converged": converged,
         }

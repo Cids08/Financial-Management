@@ -47,6 +47,13 @@ return [
         'key' => env('OPENAI_API_KEY'),
         'advisor_model' => env('OPENAI_ADVISOR_MODEL', 'openai/gpt-oss-120b:free'),
         'recommendation_model' => env('OPENAI_RECOMMENDATION_MODEL', 'openai/gpt-oss-120b:free'),
+        // gpt-oss models support low/medium/high reasoning effort via OpenRouter.
+        // 'low' keeps advisor replies short and fast for a chat box; bump to
+        // 'medium' if replies feel shallow on more complex questions.
+        // NOTE: this is OpenRouter/gpt-oss-specific. If you switch back to real
+        // OpenAI (see note above), remove this key or leave it unset —
+        // real OpenAI's /chat/completions endpoint does not use this param.
+        'reasoning_effort' => env('OPENAI_REASONING_EFFORT', 'low'),
         // OpenRouter-specific, optional but recommended by their docs for
         // attribution/rankings — ignored entirely by real OpenAI if you
         // switch back, so safe to leave set either way.

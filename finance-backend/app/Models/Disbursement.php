@@ -10,6 +10,7 @@ class Disbursement extends Model
     use SoftDeletes;
 
     protected $fillable = [
+        'source_type',
         'ap_id',
         'department_id',
         'cash_account_id',
@@ -23,6 +24,11 @@ class Disbursement extends Model
         'remarks',
         'created_by',
         'updated_by',
+        // Payroll-only fields — null for source_type = 'ap'.
+        'payroll_batch_number',
+        'pay_period_start',
+        'pay_period_end',
+        'employee_count',
     ];
 
     protected $casts = [
@@ -31,6 +37,9 @@ class Disbursement extends Model
         'amount_paid' => 'decimal:2',
         'approved_at' => 'datetime',
         'has_attachment' => 'boolean',
+        'pay_period_start' => 'date',
+        'pay_period_end' => 'date',
+        'employee_count' => 'integer',
     ];
 
     public function accountsPayable()
@@ -76,5 +85,10 @@ class Disbursement extends Model
     {
         return $this->hasMany(SupportingDocument::class, 'reference_id')
             ->where('reference_type', 'disbursement');
+    }
+
+    public function isPayroll(): bool
+    {
+        return $this->source_type === 'payroll';
     }
 }
