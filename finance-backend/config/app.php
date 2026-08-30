@@ -23,11 +23,6 @@ return [
     |--------------------------------------------------------------------------
     | Application Environment
     |--------------------------------------------------------------------------
-
-    /*
-    |--------------------------------------------------------------------------
-    | Application Environment
-    |--------------------------------------------------------------------------
     |
     | This value determines the "environment" your application is currently
     | running in. This may determine how you prefer to configure various
@@ -69,12 +64,15 @@ return [
     |--------------------------------------------------------------------------
     |
     | Here you may specify the default timezone for your application, which
-    | will be used by the PHP date and date-time functions. The timezone
-    | is set to "UTC" by default as it is suitable for most use cases.
+    | will be used by the PHP date and date-time functions. Set to the
+    | company's actual operating timezone (Philippines, UTC+8) rather than
+    | UTC — otherwise every now()-based timestamp (login notification
+    | emails, "this month" report boundaries, etc.) is computed 8 hours
+    | off from actual local time.
     |
     */
 
-    'timezone' => 'UTC',
+    'timezone' => env('APP_TIMEZONE', 'Asia/Manila'),
 
     /*
     |--------------------------------------------------------------------------

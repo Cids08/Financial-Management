@@ -4,6 +4,7 @@ import { menuData } from '../utils/menuData'
 import { filterMenuByPermissions } from '../utils/permissions'
 import { useCompany } from '../context/CompanyContext'
 import { usePermissions } from '../context/PermissionsContext'
+import { useNotificationsContext } from '../context/NotificationsContext'
 import SidebarItem from './SidebarItem'
 
 // Account-level actions live in a pinned footer, not the scrollable work nav
@@ -26,6 +27,14 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
   const visibleMenuData = filterMenuByPermissions(menuData, permissions)
   const mainItems = visibleMenuData.filter((item) => !FOOTER_IDS.includes(item.id))
   const footerItems = visibleMenuData.filter((item) => FOOTER_IDS.includes(item.id))
+
+  // Unread badge for the Notifications sidebar item. Reads the shared
+  // NotificationsContext (mounted once in DashboardLayout) instead of its
+  // own useNotifications() instance — fetching and polling now happen in
+  // exactly one place, and marking something read elsewhere (Header's
+  // bell, the Notifications page) updates this badge immediately since
+  // they all share the same state.
+  const { unreadCount } = useNotificationsContext()
 
   const updateScrollState = () => {
     const el = navRef.current
@@ -118,6 +127,7 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
                   item={item}
                   collapsed={collapsed}
                   onNavigate={onCloseMobile}
+                  badge={item.id === 'notifications' ? unreadCount : undefined}
                 />
               ))}
             </ul>

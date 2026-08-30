@@ -4,10 +4,12 @@ namespace App\Services;
 
 use App\Events\ForcedLogout;
 use App\Exceptions\AccountLockedException;
+use App\Mail\LoginNotificationMail;
 use App\Mail\TwoFactorCodeMail;
 use App\Models\ActivityLog;
 use App\Models\AuditLog;
 use App\Models\User;
+use App\Services\GeoIpService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
@@ -16,6 +18,10 @@ use Illuminate\Validation\ValidationException;
 
 class AuthService
 {
+    public function __construct(protected GeoIpService $geoIp)
+    {
+    }
+
     // How long a pending (password-verified, awaiting emailed code) login
     // stays valid. Public so TwoFactorCodeMail can read it without
     // duplicating the number in the email template.
@@ -224,6 +230,7 @@ class AuthService
         $expiresAt = $remember ? now()->addDays(30) : now()->addHours(8);
         $ip = request()->ip();
         $deviceLabel = $this->deviceLabel(request()->userAgent());
+        $location = $this->geoIp->locate($ip);
 
         $newToken = $user->createToken(
             name: $deviceLabel,
@@ -233,12 +240,22 @@ class AuthService
         $newToken->accessToken->forceFill([
             'ip_address' => $ip,
             'user_agent' => request()->userAgent(),
-            'location'   => $this->resolveLocation($ip),
+            'location'   => $location,
         ])->save();
 
         $user->tokens()->where('id', '!=', $newToken->accessToken->id)->delete();
 
         broadcast(new ForcedLogout($user->id, $clientSessionId, $deviceLabel));
+
+        // Secondary channel alongside the real-time WebSocket notice above
+        // — this reaches the person even if their other device/tab isn't
+        // currently open in a browser to receive the broadcast.
+        Mail::to($user->email)->send(new LoginNotificationMail(
+            $deviceLabel,
+            $ip,
+            $location,
+            now()->format('F j, Y \a\t g:i A')
+        ));
 
         return $newToken->plainTextToken;
     }
@@ -268,16 +285,6 @@ class AuthService
         };
 
         return $browser ? "{$browser} on {$platform}" : $platform;
-    }
-
-    // No geolocation provider is wired up yet (MaxMind, ipapi.co, etc. all
-    // need an account/API key or a downloaded database). Returns null
-    // until one is configured — SessionResource + the frontend already
-    // treat a null location as "Unknown location", so nothing breaks.
-    // Tell me which provider you want and I'll fill this in for real.
-    protected function resolveLocation(?string $ip): ?string
-    {
-        return null;
     }
 
     protected function pendingCacheKey(string $pendingToken): string

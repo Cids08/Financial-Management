@@ -9,6 +9,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useIdleLogout } from '../hooks/useIdleLogout'
 import { ProfileProvider } from '../context/ProfileContext'
 import { PermissionsProvider } from '../context/PermissionsContext'
+import { NotificationsProvider } from '../context/NotificationsContext'
 
 export default function DashboardLayout() {
   const [collapsed, setCollapsed] = useLocalStorage('fms-sidebar-collapsed', false)
@@ -36,35 +37,43 @@ export default function DashboardLayout() {
   return (
     <ProfileProvider>
       <PermissionsProvider>
-        <div className="min-h-screen bg-bg">
-          <Header
-            onToggleSidebar={handleHeaderToggle}
-            collapsed={collapsed}
-            onLogoutClick={() => setLogoutModalOpen(true)}
-          />
+        {/* Mounted once here — Header's bell, Sidebar's badge, and the
+            Notifications page all consume this same instance via
+            useNotificationsContext() instead of each calling
+            useNotifications() on their own. That's what keeps them in
+            sync: mark something read on the page and the sidebar/header
+            badge update immediately, not on the next 30s poll. */}
+        <NotificationsProvider>
+          <div className="min-h-screen bg-bg">
+            <Header
+              onToggleSidebar={handleHeaderToggle}
+              collapsed={collapsed}
+              onLogoutClick={() => setLogoutModalOpen(true)}
+            />
 
-          <Sidebar
-            collapsed={collapsed}
-            onToggleCollapse={() => setCollapsed((c) => !c)}
-            mobileOpen={mobileOpen}
-            onCloseMobile={() => setMobileOpen(false)}
-            onLogoutClick={() => setLogoutModalOpen(true)}
-          />
+            <Sidebar
+              collapsed={collapsed}
+              onToggleCollapse={() => setCollapsed((c) => !c)}
+              mobileOpen={mobileOpen}
+              onCloseMobile={() => setMobileOpen(false)}
+              onLogoutClick={() => setLogoutModalOpen(true)}
+            />
 
-          <div
-            className={`pt-16 flex flex-col min-h-screen transition-all duration-300 ease-in-out-smooth
-              ${collapsed ? 'lg:pl-20' : 'lg:pl-70'}
-            `}
-          >
-            <main className="flex-1 p-4 sm:p-6">
-              <Outlet />
-            </main>
-            <Footer />
+            <div
+              className={`pt-16 flex flex-col min-h-screen transition-all duration-300 ease-in-out-smooth
+                ${collapsed ? 'lg:pl-20' : 'lg:pl-70'}
+              `}
+            >
+              <main className="flex-1 p-4 sm:p-6">
+                <Outlet />
+              </main>
+              <Footer />
+            </div>
+
+            <LogoutConfirmModal open={logoutModalOpen} onClose={() => setLogoutModalOpen(false)} />
           </div>
-
-          <LogoutConfirmModal open={logoutModalOpen} onClose={() => setLogoutModalOpen(false)} />
-        </div>
+        </NotificationsProvider>
       </PermissionsProvider>
     </ProfileProvider>
   )
-} 
+}

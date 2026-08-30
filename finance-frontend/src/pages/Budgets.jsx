@@ -10,21 +10,25 @@ import { useBudgets } from '../hooks/useBudgets'
 import { useDepartments } from '../hooks/useDepartments'
 
 // status is the ONLY approval-workflow field on Budget — see
-// BudgetService::paginate()'s note on UpdateBudgetRequest::authorize()
-// checking $budget->status !== 'Approved'. There is no separate
-// Active/Closed operational field on this model.
+// status is constrained at the DB level (budgets_status_check) to:
+// Draft, Active, Closed, Cancelled — there is no separate approval_status
+// column. Draft = awaiting approval, Active = approved & spendable,
+// Cancelled = rejected, Closed = end-of-cycle (a later, separate action).
 const APPROVAL_STYLES = {
-  Pending: 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400',
-  Approved: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
-  Rejected: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
+  Draft: 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400',
+  Active: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
+  Cancelled: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
 }
-const APPROVAL_ICONS = { Pending: Clock, Approved: CheckCircle2, Rejected: XCircle }
+const APPROVAL_ICONS = { Draft: Clock, Active: CheckCircle2, Cancelled: XCircle }
+
+const BUDGET_TYPES = ['Operational', 'Capital', 'Project', 'Emergency', 'Other']
 
 const EMPTY_FORM = {
   department_id: '',
   budget_code: '',
   budget_name: '',
   budget_type: '',
+  budget_type_other: '', // only used when budget_type === 'Other' — the actual typed-in category
   fiscal_year: new Date().getFullYear(),
   allocated_amount: '',
   warning_percentage: '',
@@ -65,7 +69,7 @@ function DetailRow({ label, value }) {
 function ApprovalBadge({ status }) {
   const Icon = APPROVAL_ICONS[status] ?? Clock
   return (
-    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${APPROVAL_STYLES[status] ?? APPROVAL_STYLES.Pending}`}>
+    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${APPROVAL_STYLES[status] ?? APPROVAL_STYLES.Draft}`}>
       <Icon size={12} />
       {status}
     </span>
@@ -122,7 +126,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
 
   const statCards = useMemo(() => ([
     { key: 'total', label: 'Total Budgets', value: stats?.total ?? '—', icon: PiggyBank, iconBg: 'bg-primary/15', iconColor: 'text-primary-dark', isActive: statusFilter === 'all' && !showArchived, onClick: () => { setShowArchived(false); setStatusFilter('all') } },
-    { key: 'pending', label: 'Pending Approval', value: stats?.pending ?? '—', icon: Clock, iconBg: 'bg-amber-50 dark:bg-amber-500/10', iconColor: 'text-amber-600 dark:text-amber-400', isActive: statusFilter === 'Pending', onClick: () => { setShowArchived(false); setStatusFilter('Pending') } },
+    { key: 'pending', label: 'Draft', value: stats?.pending ?? '—', icon: Clock, iconBg: 'bg-amber-50 dark:bg-amber-500/10', iconColor: 'text-amber-600 dark:text-amber-400', isActive: statusFilter === 'Draft', onClick: () => { setShowArchived(false); setStatusFilter('Draft') } },
     { key: 'allocated', label: 'Total Allocated', value: stats?.allocated != null ? formatCurrency(stats.allocated) : '—', icon: Building2, iconBg: 'bg-blue-50 dark:bg-blue-500/10', iconColor: 'text-blue-600 dark:text-blue-400', isActive: false, onClick: () => { setShowArchived(false); setStatusFilter('all') } },
     { key: 'remaining', label: 'Total Remaining', value: stats?.remaining != null ? formatCurrency(stats.remaining) : '—', icon: TrendingDown, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: false, onClick: () => { setShowArchived(false); setStatusFilter('all') } },
     { key: 'archived', label: 'Archived', value: stats?.archived ?? '—', icon: Archive, iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-500 dark:text-slate-400', isActive: showArchived, onClick: () => setShowArchived(true) },
@@ -130,7 +134,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
 
   const openAdd = () => { setForm(EMPTY_FORM); setFormError(''); setPlanFile(null); setPlanFileError(''); setModalMode('add') }
   const openEdit = (b) => {
-    if (b.status === 'Approved') return // locked, per UpdateBudgetRequest::authorize()
+    if (b.status === 'Active') return // locked, per UpdateBudgetRequest::authorize()
     setForm({
       department_id: b.department_id,
       budget_code: b.budget_code,
@@ -172,11 +176,20 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
         setFormError('Department, budget code, name, and type are required.')
         return
       }
+      if (form.budget_type === 'Other' && !form.budget_type_other.trim()) {
+        setFormError('Please specify the budget type.')
+        return
+      }
+      // When "Other" is picked, the typed-in value IS the budget type sent
+      // to the backend — not the literal word "Other". Keeps reporting/
+      // filtering on budget_type meaningful instead of everything custom
+      // collapsing into one bucket.
+      const resolvedBudgetType = form.budget_type === 'Other' ? form.budget_type_other.trim() : form.budget_type
       result = await createBudget({
         department_id: Number(form.department_id),
         budget_code: form.budget_code,
         budget_name: form.budget_name,
-        budget_type: form.budget_type,
+        budget_type: resolvedBudgetType,
         fiscal_year: Number(form.fiscal_year),
         allocated_amount: Number(form.allocated_amount),
         warning_percentage: form.warning_percentage === '' ? undefined : Number(form.warning_percentage),
@@ -351,29 +364,24 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
       </div>
 
       <div className={`${PANEL} ${PANEL_PAD} flex flex-col gap-3 lg:flex-row lg:items-center`}>
-        <div className="relative flex-1 min-w-0">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" /> 
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by budget name or code..."
-            className={`${INPUT} pl-9`}
-          />
+        <div className="relative flex-1 min-w-0 basis-full">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
+          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by budget name or code..." className={`${INPUT} pl-9`} style={{ ...INPUT_TEXT_STYLE, width: '100%', minWidth: 0 }} autoComplete="off" />
         </div>
         <select
           value={statusFilter}
           onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
-          className={`${INPUT} lg:w-56! shrink-0`}
+          className={`${INPUT} lg:w-5
+          6! shrink-0`}
           style={INPUT_TEXT_STYLE}
         >
           <option value="all">All Approval States</option>
-          <option value="Pending">Pending</option>
-          <option value="Approved">Approved</option>
-          <option value="Rejected">Rejected</option>
+          <option value="Draft">Pending</option>
+          <option value="Active">Approved</option>
+          <option value="Cancelled">Rejected</option>
         </select>
       </div>
-        
+
       <div className={PANEL}>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -396,7 +404,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                 <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">No budgets match your filters.</td></tr>
               ) : budgets.map((b) => {
                 const pct = usedPct(b.allocated_amount, b.remaining_amount)
-                const isPending = b.status === 'Pending'
+                const isPending = b.status === 'Draft'
                 return (
                   <tr key={b.budget_id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
                     <td className="px-4 py-3.5">
@@ -465,7 +473,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                             <Printer size={15} />
                           </button>
                         </Tooltip>
-                        {b.status !== 'Approved' && (
+                        {b.status !== 'Active' && (
                           <Tooltip label="Edit budget" align="start">
                             <button type="button" onClick={() => openEdit(b)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                               <Pencil size={15} />
@@ -510,7 +518,14 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
         footer={
           <>
             <Button variant="secondary" size="md" onClick={closeModal}>Cancel</Button>
-            <Button variant="primary" size="md" onClick={handleSubmit} disabled={saving}>{saving ? 'Saving...' : isEditing ? 'Save Changes' : 'Add Budget'}</Button>
+            <Button
+              variant="primary"
+              size="md"
+              onClick={handleSubmit}
+              disabled={saving || (modalMode === 'add' && !planFile)}
+            >
+              {saving ? 'Saving...' : isEditing ? 'Save Changes' : 'Add Budget'}
+            </Button>
           </>
         }
       >
@@ -548,7 +563,21 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
               </div>
               <div>
                 <label className={LABEL}>Budget Type</label>
-                <input type="text" value={form.budget_type} onChange={(e) => setForm((f) => ({ ...f, budget_type: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="e.g. Operating" />
+                <select value={form.budget_type} onChange={(e) => setForm((f) => ({ ...f, budget_type: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE}>
+                  <option value="">Select type</option>
+                  {BUDGET_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+                {form.budget_type === 'Other' && (
+                  <input
+                    type="text"
+                    value={form.budget_type_other}
+                    onChange={(e) => setForm((f) => ({ ...f, budget_type_other: e.target.value }))}
+                    className={`${INPUT} mt-2`}
+                    style={INPUT_TEXT_STYLE}
+                    placeholder="Please specify the budget type"
+                    maxLength={100}
+                  />
+                )}
               </div>
             </div>
           )}
@@ -589,11 +618,11 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
 
           {!isEditing && (
             <div>
-              <label className={LABEL}>Budget Plan (optional)</label>
+              <label className={LABEL}>Budget Plan <span className="text-red-500">*</span></label>
               {!planFile ? (
-                <label className="flex items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-bg px-3 py-3 text-xs text-muted cursor-pointer hover:border-primary/50 hover:bg-bg/70 transition-colors duration-150">
+                <label className="flex items-center justify-center gap-2 rounded-lg border border-dashed border-amber-300 bg-amber-50/50 px-3 py-3 text-xs text-amber-700 cursor-pointer hover:border-amber-400 hover:bg-amber-50 transition-colors duration-150 dark:border-amber-500/30 dark:bg-amber-500/5 dark:text-amber-400 dark:hover:bg-amber-500/10">
                   <Paperclip size={14} />
-                  Attach now (PDF, Word, or Excel — up to 10MB)
+                  Attach plan (PDF, Word, or Excel — up to 10MB)
                   <input
                     type="file"
                     accept=".pdf,.doc,.docx,.xls,.xlsx"
@@ -623,15 +652,13 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
               )}
               {planFileError && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{planFileError}</p>}
               <p className="mt-1 text-xs text-muted">
-                {planFile
-                  ? 'This will be attached right after the budget is created.'
-                  : "Skip this and attach it later from the table — either way, approval stays blocked until it's on file."}
+                Required — a budget cannot be created without its plan attached.
               </p>
             </div>
           )}
 
           {!isEditing && (
-            <p className="text-xs text-muted">New budgets start as <span className="font-medium text-ink">Pending</span> approval.</p>
+            <p className="text-xs text-muted">New budgets start as <span className="font-medium text-ink">Draft</span> and await approval.</p>
           )}
 
           {isEditing && (
@@ -694,7 +721,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
         footer={
           <>
             <Button variant="secondary" size="md" onClick={closeDetail}>Close</Button>
-            {detailRecord && detailRecord.status === 'Pending' && (
+            {detailRecord && detailRecord.status === 'Draft' && (
               <>
                 <Button variant="secondary" size="md" icon={XCircle} onClick={() => openReject(detailRecord.budget_id)}>Reject</Button>
                 <Tooltip label={detailRecord.has_plan ? 'Approve budget' : 'Attach a budget plan before approving'}>
@@ -702,7 +729,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                 </Tooltip>
               </>
             )}
-            {detailRecord && detailRecord.status !== 'Pending' && <Button variant="primary" size="md" icon={Printer} onClick={() => handlePrint(detailRecord)}>Print Report</Button>}
+            {detailRecord && detailRecord.status !== 'Draft' && <Button variant="primary" size="md" icon={Printer} onClick={() => handlePrint(detailRecord)}>Print Report</Button>}
           </>
         }
       >
@@ -716,7 +743,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
               <ApprovalBadge status={detailRecord.status} />
             </div>
 
-            {detailRecord.status === 'Pending' && !detailRecord.has_plan && (
+            {detailRecord.status === 'Draft' && !detailRecord.has_plan && (
               <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
                 <span className="flex items-center gap-2"><AlertTriangle size={14} className="shrink-0" /> No budget plan attached yet.</span>
                 <button type="button" onClick={() => setUploadTarget(detailRecord)} className="inline-flex items-center gap-1 font-medium underline shrink-0">

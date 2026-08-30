@@ -8,6 +8,7 @@ import DashboardLayout from './layouts/DashboardLayout'
 import DashboardRouter from './pages/DashboardRouter'
 import PlaceholderPage from './pages/PlaceholderPage'
 import Profile from './pages/Profile'
+import Notifications from './pages/Notifications'
 import Users from './pages/Users'
 import Roles from './pages/Roles'
 import Customers from './pages/Customers'
@@ -177,14 +178,20 @@ export default function App() {
               <Reports crumbs={['Reports']} />
             </RequirePermission>
           } />
-          {/* Settings and Profile are intentionally NOT wrapped in
-              RequirePermission — both are "my own account" pages, open to
-              every authenticated user regardless of role, matching the
-              comment already in menuData.js. The Company Branding EDIT
-              form inside Settings.jsx checks settings.manage itself,
-              which is the correct place for that narrower restriction. */}
+          {/* Settings, Profile, and Notifications are intentionally NOT
+              wrapped in RequirePermission — all three are "my own
+              account" pages, open to every authenticated user regardless
+              of role. Notifications matches this same pattern: its
+              routes/api.php group (GET /notifications, .../unread-count,
+              PATCH .../read-all, PATCH .../{id}/read, DELETE .../{id}) has
+              no `permission:` middleware on any of those routes — only
+              auth:sanctum, same as Profile — so it stays ungated here too.
+              The Company Branding EDIT form inside Settings.jsx checks
+              settings.manage itself, which is the correct place for that
+              narrower restriction. */}
           <Route path="/settings" element={<Settings crumbs={['Settings']} />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/notifications" element={<Notifications crumbs={['Notifications']} />} />
         </Route>
       </Route>
 

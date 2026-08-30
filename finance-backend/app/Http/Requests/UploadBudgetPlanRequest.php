@@ -8,9 +8,21 @@ class UploadBudgetPlanRequest extends FormRequest
 {
     public function authorize(): bool
     {
+        // Fix #1: dropped $this->user()->can('update', $budget) — a
+        // Laravel Policy check with no registered BudgetPolicy, so it
+        // always silently resolved to false ("This action is
+        // unauthorized") for every user. Route middleware
+        // (permission:budgets.manage) already enforces the real
+        // permission check.
+        //
+        // Fix #2: was checking status !== 'Approved'. 'Approved' isn't a
+        // legal value — budgets_status_check only allows Draft, Active,
+        // Closed, Cancelled. A plan can only usefully be attached while
+        // the budget is still Draft (awaiting approval); once Active it's
+        // already approved and locked from editing anyway.
         $budget = $this->route('budget');
 
-        return $this->user()->can('update', $budget) && $budget->status !== 'Approved';
+        return $budget->status === 'Draft';
     }
 
     public function rules(): array

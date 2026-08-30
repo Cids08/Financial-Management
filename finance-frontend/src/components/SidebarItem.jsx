@@ -1,6 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom'
 
-export default function SidebarItem({ item, collapsed, onNavigate, onLogoutClick }) {
+export default function SidebarItem({ item, collapsed, onNavigate, onLogoutClick, badge }) {
   const location = useLocation()
   const hasChildren = Array.isArray(item.children) && item.children.length > 0
 
@@ -26,6 +26,22 @@ export default function SidebarItem({ item, collapsed, onNavigate, onLogoutClick
   const ActiveBar = ({ isActive }) =>
     isActive ? (
       <span className="absolute left-0 top-1/2 h-5 w-1 -translate-x-3 -translate-y-1/2 rounded-r-full bg-primary-dark" />
+    ) : null
+
+  // Unread-style badge for a leaf item. Expanded: a numeric pill pushed to
+  // the end of the row (99+ cap so it never stretches the sidebar width).
+  // Collapsed: just a small dot on the icon's corner — no room for a
+  // number at that width, and a dot is enough to say "something's here".
+  const hasBadge = typeof badge === 'number' && badge > 0
+  const BadgePill = () =>
+    hasBadge ? (
+      <span className="ml-auto flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-semibold leading-none text-white">
+        {badge > 99 ? '99+' : badge}
+      </span>
+    ) : null
+  const BadgeDot = () =>
+    hasBadge ? (
+      <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-sidebar" />
     ) : null
 
   // Parent item with children — static section, no dropdown
@@ -96,13 +112,17 @@ export default function SidebarItem({ item, collapsed, onNavigate, onLogoutClick
         to={item.path}
         onClick={onNavigate}
         className={baseLinkClasses}
-        title={collapsed ? item.label : undefined}
+        title={collapsed ? `${item.label}${hasBadge ? ` (${badge})` : ''}` : undefined}
       >
         {({ isActive }) => (
           <>
             <ActiveBar isActive={isActive} />
-            <Icon size={19} className="shrink-0" strokeWidth={1.8} />
+            <span className="relative shrink-0">
+              <Icon size={19} strokeWidth={1.8} />
+              {collapsed && <BadgeDot />}
+            </span>
             {!collapsed && <span className="truncate">{item.label}</span>}
+            {!collapsed && <BadgePill />}
           </>
         )}
       </NavLink>

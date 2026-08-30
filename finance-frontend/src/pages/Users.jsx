@@ -189,6 +189,20 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
     })
   }
 
+  // Same graceful-fallback pattern as Header.jsx's Avatar component:
+  // avatar_url being present just means the backend has *a* path on
+  // record — it doesn't guarantee the file still exists at that URL
+  // (deleted from disk, stale DB value, wrong storage disk, etc). A plain
+  // `u.avatar_url ? <img> : initials` truthy check renders the <img> tag
+  // regardless, and when that request 404s with no onError handler, the
+  // browser shows raw alt text instead of falling back to initials. This
+  // tracks failures per row so a broken URL degrades the same way a
+  // missing one does.
+  const [avatarErrorIds, setAvatarErrorIds] = useState(new Set())
+  const markAvatarError = (id) => {
+    setAvatarErrorIds((prev) => new Set(prev).add(id))
+  }
+
   useEffect(() => {
     if (!rolesLoading && roles.length && !form.role_id && modalMode === 'add') {
       setForm((f) => ({ ...f, role_id: roles[0].role_id }))
@@ -434,12 +448,23 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
 
               {!usersLoading && filteredUsers.map((u) => {
                 const revealed = revealedIds.has(u.user_id)
+                const avatarFailed = avatarErrorIds.has(u.user_id)
+                const showAvatarImage = u.avatar_url && !avatarFailed
                 return (
                   <tr key={u.user_id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
                     <td className="px-4 py-3.5">
                       <div className="flex items-start gap-2.5">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary-dark">
-                          {initials(u.first_name, u.last_name)}
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary-dark overflow-hidden">
+                          {showAvatarImage ? (
+                            <img
+                              src={u.avatar_url}
+                              alt={`${u.first_name} ${u.last_name}`}
+                              className="h-full w-full object-cover"
+                              onError={() => markAvatarError(u.user_id)}
+                            />
+                          ) : (
+                            initials(u.first_name, u.last_name)
+                          )}
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">

@@ -1,5 +1,6 @@
 import {
   LayoutDashboard,
+  Bell,
   UserCog,
   ShieldCheck,
   Database,
@@ -50,6 +51,19 @@ export const menuData = [
     // No `permission` field — every role has its own dashboard, rendered
     // per-role by DashboardController. Not module-gated, same reasoning
     // as the Settings entry below.
+  },
+  {
+    id: 'notifications',
+    label: 'Notifications',
+    icon: Bell,
+    path: '/notifications',
+    // No `permission` field, same reasoning as Settings/Profile below —
+    // this is "my own notifications", not a module. Its routes/api.php
+    // group (GET /notifications, .../unread-count, PATCH .../read-all,
+    // PATCH .../{id}/read, DELETE .../{id}) has no `permission:`
+    // middleware, only auth:sanctum, so every authenticated user sees
+    // this link regardless of role. Sidebar.jsx passes an unread-count
+    // badge to this specific item — see the `badge` prop wiring there.
   },
   {
     id: 'user-management',

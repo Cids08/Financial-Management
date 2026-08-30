@@ -280,6 +280,15 @@ class DashboardService
     {
         $userId = Auth::id();
 
+        // Auth::id() is nullable by signature — without this guard, a null
+        // here reached Notification::scopeForUser() and threw a TypeError
+        // (500 on GET /api/dashboard) before scopeForUser was widened to
+        // accept ?int. This guard is a second line of defense on top of
+        // that fix: no authenticated user simply means no notifications.
+        if ($userId === null) {
+            return [];
+        }
+
         return Notification::forUser($userId)
             ->latest('created_at')->limit($limit)->get()
             ->map(fn ($n) => [

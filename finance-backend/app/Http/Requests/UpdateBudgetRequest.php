@@ -8,18 +8,18 @@ class UpdateBudgetRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        // An approved budget is locked from editing entirely — that decision is
-        // final. The route-model-bound $budget is available via route().
+        // Was checking status !== 'Approved' — 'Approved' isn't a legal
+        // value (see budgets_status_check: Draft/Active/Closed/Cancelled),
+        // so this could never actually block anything. Editable only while
+        // Draft is the real intended rule.
         $budget = $this->route('budget');
 
-        return $this->user()->can('update', $budget) && $budget->status !== 'Approved';
+        return $budget->status === 'Draft';
     }
 
     public function rules(): array
     {
         return [
-            // department_id, fiscal_year, and budget_code are intentionally absent —
-            // those are locked once a budget exists, same as the frontend form.
             'allocated_amount' => ['required', 'numeric', 'min:0.01'],
             'warning_percentage' => ['nullable', 'numeric', 'min:1', 'max:100'],
             'start_date' => ['required', 'date'],

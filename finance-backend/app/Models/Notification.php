@@ -37,8 +37,17 @@ class Notification extends Model
         return $query->where('is_read', false);
     }
 
-    public function scopeForUser($query, int $userId)
+    // Widened from `int` to `?int` — DashboardService::getNotifications()
+    // passes Auth::id(), which is nullable by signature. The previous
+    // non-nullable `int` hint caused a TypeError (and a 500 on
+    // GET /api/dashboard) any time Auth::id() resolved to null before
+    // this scope ran.
+    public function scopeForUser($query, ?int $userId)
     {
+        if ($userId === null) {
+            return $query->whereRaw('1 = 0'); // no authenticated user -> no notifications, not a crash
+        }
+
         return $query->where('user_id', $userId);
     }
 }

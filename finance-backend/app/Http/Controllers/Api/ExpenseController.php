@@ -95,9 +95,9 @@ class ExpenseController extends Controller
         ]);
     }
 
-    public function archive(Expense $expense): JsonResponse
+    public function archive(Request $request, Expense $expense): JsonResponse
     {
-        $this->expenses->delete($expense);
+        $this->expenses->delete($expense, $request->user());
 
         return response()->json([
             'success' => true,

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Rules\NotPwnedPassword;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
 
@@ -16,7 +17,7 @@ class ChangePasswordRequest extends FormRequest
     {
         return [
             'current' => ['required', 'string'],
-            'next' => ['required', 'string', 'min:8'],
+            'next' => ['required', 'string', 'min:8', new NotPwnedPassword()],
             'confirm' => ['required', 'string'],
         ];
     }

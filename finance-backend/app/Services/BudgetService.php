@@ -16,7 +16,7 @@ class BudgetService
 
         return [
             'total' => (clone $active)->count(),
-            'pending' => (clone $active)->where('status', 'Pending')->count(),
+            'pending' => (clone $active)->where('status', 'Draft')->count(),
             'allocated' => (float) (clone $active)->sum('allocated_amount'),
             'remaining' => (float) (clone $active)->sum('remaining_amount'),
             'archived' => Budget::onlyTrashed()->count(),
@@ -24,9 +24,11 @@ class BudgetService
     }
 
     /**
-     * `status` is the single approval-workflow field (Pending / Approved /
-     * Rejected) — confirmed by UpdateBudgetRequest::authorize() checking
-     * $budget->status !== 'Approved'. `archived` triggers onlyTrashed().
+     * status is constrained at the DB level (budgets_status_check) to:
+     * Draft, Active, Closed, Cancelled — confirmed via pg_constraint.
+     * There is no separate approval_status column. Draft = awaiting
+     * approval, Active = approved and spendable, Cancelled = rejected,
+     * Closed = end-of-cycle (not part of the approval flow at all).
      */
     public function paginate(array $filters, int $perPage = 20)
     {
@@ -63,22 +65,19 @@ class BudgetService
             ...$data,
             'used_amount' => 0,
             'remaining_amount' => $data['allocated_amount'],
-            'status' => 'Pending',
+            'status' => 'Draft', // was 'Pending' — not a legal value per budgets_status_check
             'created_by' => $userId,
         ]));
     }
 
-    /**
-     * $userId is accepted to match BudgetController's call signature, but
-     * there is currently no `updated_by` column on budgets to record it
-     * against — it's unused below. Add that column if you want to track
-     * who last edited a budget; until then this param is a no-op.
-     */
     public function update(Budget $budget, array $data, int $userId): Budget
     {
-        if ($budget->status === 'Approved') {
+        // Editable only while Draft — once Active (approved) it's locked,
+        // matching the frontend's original intent even though the old
+        // check (status !== 'Approved') could never actually fire.
+        if ($budget->status !== 'Draft') {
             throw ValidationException::withMessages([
-                'status' => 'An approved budget can no longer be edited.',
+                'status' => 'Only a Draft budget can be edited.',
             ]);
         }
 
@@ -115,8 +114,8 @@ class BudgetService
 
     public function approve(Budget $budget, int $approverId): Budget
     {
-        if ($budget->status !== 'Pending') {
-            throw ValidationException::withMessages(['status' => 'Only a pending budget can be approved.']);
+        if ($budget->status !== 'Draft') {
+            throw ValidationException::withMessages(['status' => 'Only a Draft budget can be approved.']);
         }
 
         if (! $budget->has_plan) {
@@ -124,7 +123,9 @@ class BudgetService
         }
 
         return DB::transaction(function () use ($budget, $approverId) {
-            $budget->update(['status' => 'Approved', 'approved_by' => $approverId, 'approved_at' => now()]);
+            // 'Approved' is not a legal status value — Active is the
+            // approved/spendable state per budgets_status_check.
+            $budget->update(['status' => 'Active', 'approved_by' => $approverId, 'approved_at' => now()]);
 
             return $budget->fresh();
         });
@@ -132,13 +133,15 @@ class BudgetService
 
     public function reject(Budget $budget, int $approverId, ?string $reason = null): Budget
     {
-        if ($budget->status !== 'Pending') {
-            throw ValidationException::withMessages(['status' => 'Only a pending budget can be rejected.']);
+        if ($budget->status !== 'Draft') {
+            throw ValidationException::withMessages(['status' => 'Only a Draft budget can be rejected.']);
         }
 
         return DB::transaction(function () use ($budget, $approverId, $reason) {
+            // 'Rejected' is not a legal status value — Cancelled is the
+            // closest match per budgets_status_check.
             $budget->update([
-                'status' => 'Rejected',
+                'status' => 'Cancelled',
                 'approved_by' => $approverId,
                 'approved_at' => now(),
                 'remarks' => $reason ?? $budget->remarks,
@@ -157,12 +160,6 @@ class BudgetService
         return $budget;
     }
 
-    /**
-     * $userId is accepted to match BudgetController's call signature.
-     * There's no `restored_by` column on budgets, so this only clears
-     * deleted_by — the identity of who restored it isn't persisted
-     * anywhere today. Add a column if that needs to be auditable.
-     */
     public function restore(Budget $budget, int $userId): Budget
     {
         $budget->deleted_by = null;

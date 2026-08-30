@@ -118,14 +118,14 @@ class ExpenseService
         return $expense->refresh();
     }
 
-    public function delete(Expense $expense): void
+    public function delete(Expense $expense, User $actor): void
     {
-        DB::transaction(function () use ($expense) {
+        DB::transaction(function () use ($expense, $actor) {
             // deleted_by is stamped in Expense::booted() right before this.
             $expense->delete();
 
             AuditLog::create([
-                'user_id' => auth()->id(),
+                'user_id' => $actor->id,
                 'module' => 'Expenses',
                 'action' => 'archive',
                 'record_id' => $expense->id,

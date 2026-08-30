@@ -25,13 +25,13 @@ class GeoIpService
         return Cache::remember("geoip:{$ip}", now()->addHours(self::CACHE_TTL_HOURS), function () use ($ip) {
             try {
                 $response = Http::timeout(self::TIMEOUT_SECONDS)
-                    ->get("http://ip-api.com/json/{$ip}", ['fields' => 'status,city,countryCode']);
+                    ->get("http://ip-api.com/json/{$ip}", ['fields' => 'status,city,country']);
 
                 if (! $response->ok() || ($response->json('status') !== 'success')) {
                     return null;
                 }
 
-                return collect([$response->json('city'), $response->json('countryCode')])
+                return collect([$response->json('city'), $response->json('country')])
                     ->filter()
                     ->implode(', ') ?: null;
             } catch (\Throwable $e) {
