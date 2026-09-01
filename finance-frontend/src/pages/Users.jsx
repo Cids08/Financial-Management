@@ -15,6 +15,8 @@ import {
   ShieldAlert,
   Eye,
   EyeOff,
+  IdCard,
+  X,
 } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
@@ -58,6 +60,22 @@ const INPUT = `w-full h-9 px-3 rounded-lg border border-border bg-bg text-sm tex
   placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary
   transition-all duration-150`
 const LABEL = 'block text-xs font-medium text-muted mb-1.5'
+
+// Base URL used to resolve avatar paths that come back from the API as
+// root-relative paths (e.g. "/storage/avatars/3.jpg" from Laravel's
+// Storage::url()) instead of full URLs. A root-relative path with no
+// domain gets resolved by the browser against whatever origin the page
+// is currently on (the Vite dev server), not the Laravel backend — which
+// is why avatars 404'd and silently fell back to initials. Falls back to
+// the known local backend so this works out of the box in dev; set
+// VITE_API_URL in your .env for other environments (staging, production).
+const API_BASE = import.meta.env.VITE_API_URL || import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
+
+function resolveAvatarUrl(url) {
+  if (!url) return null
+  if (/^https?:\/\//i.test(url) || url.startsWith('data:')) return url
+  return `${API_BASE.replace(/\/$/, '')}/${url.replace(/^\//, '')}`
+}
 
 function initials(first, last) {
   return `${first?.[0] ?? ''}${last?.[0] ?? ''}`.toUpperCase()
@@ -134,6 +152,142 @@ function NewUserCredentialsModal({ credentials, onClose }) {
   )
 }
 
+// Full-screen preview of a single image — click-to-enlarge target for the
+// avatar shown in ViewProfileModal. Closes on backdrop click, X button, or
+// Escape key.
+function ImageLightbox({ src, alt, onClose }) {
+  useEffect(() => {
+    if (!src) return
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [src, onClose])
+
+  if (!src) return null
+
+  return (
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-ink/80 px-4 py-8 animate-fadeIn"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={alt}
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close"
+        className="absolute top-4 right-4 w-9 h-9 flex items-center justify-center rounded-full
+          bg-white/10 text-white hover:bg-white/20 transition-colors duration-150"
+      >
+        <X size={18} />
+      </button>
+      <img
+        src={src}
+        alt={alt}
+        onClick={(e) => e.stopPropagation()}
+        className="max-h-full max-w-full rounded-xl object-contain shadow-2xl cursor-default"
+      />
+    </div>
+  )
+}
+
+// Full profile view — bigger avatar than the table row, plus the user's
+// core info in one place. Clicking the avatar opens it full-screen via
+// ImageLightbox. Read-only; editing still happens through the existing
+// Edit modal so we don't duplicate validation/save logic here.
+function ViewProfileModal({ user, roleLabel, onClose }) {
+  const [imgFailed, setImgFailed] = useState(false)
+  const [lightboxOpen, setLightboxOpen] = useState(false)
+
+  // Reset per-user UI state whenever a different user is opened, otherwise
+  // a failure on user A would stick and hide user B's avatar even though
+  // B's URL is fine, and the lightbox could stay open across users.
+  useEffect(() => {
+    setImgFailed(false)
+    setLightboxOpen(false)
+  }, [user?.user_id])
+
+  if (!user) return null
+
+  const avatarSrc = resolveAvatarUrl(user.avatar_url)
+  const showImage = avatarSrc && !imgFailed
+  const fullName = `${user.first_name} ${user.last_name}`
+
+  return (
+    <Modal
+      open={!!user}
+      onClose={onClose}
+      title="User Profile"
+      maxWidth="max-w-sm"
+      footer={<Button variant="primary" size="md" onClick={onClose}>Close</Button>}
+    >
+      <div className="flex flex-col items-center gap-3 pb-4">
+        <button
+          type="button"
+          onClick={() => showImage && setLightboxOpen(true)}
+          disabled={!showImage}
+          aria-label={showImage ? 'View full-size photo' : undefined}
+          className={`flex h-24 w-24 shrink-0 items-center justify-center rounded-full bg-primary/15 text-2xl font-semibold text-primary-dark overflow-hidden ring-4 ring-primary/10
+            ${showImage ? 'cursor-zoom-in hover:ring-primary/30 transition-all duration-150' : 'cursor-default'}`}
+        >
+          {showImage ? (
+            <img
+              src={avatarSrc}
+              alt={fullName}
+              className="h-full w-full object-cover"
+              onError={() => setImgFailed(true)}
+            />
+          ) : (
+            initials(user.first_name, user.last_name)
+          )}
+        </button>
+        <div className="text-center">
+          <p className="text-base font-semibold text-ink">{fullName}</p>
+          <span className={`inline-flex mt-1.5 items-center px-2.5 py-1 rounded-full text-xs font-medium ${ROLE_STYLES[roleLabel] || ROLE_STYLE_FALLBACK}`}>
+            {roleLabel}
+          </span>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-border bg-bg divide-y divide-border">
+        <div className="px-3 py-2.5">
+          <p className="text-xs text-muted mb-0.5">Email</p>
+          <p className="text-sm text-ink break-all">{user.email}</p>
+        </div>
+        <div className="px-3 py-2.5">
+          <p className="text-xs text-muted mb-0.5">Employee No.</p>
+          <p className="text-sm text-ink font-mono">{user.employee_no}</p>
+        </div>
+        <div className="px-3 py-2.5 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs text-muted mb-0.5">Status</p>
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[user.status]}`}>
+              {user.status}
+            </span>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-muted mb-0.5">Last Login</p>
+            <p className="text-sm text-ink flex items-center gap-1 justify-end">
+              <Clock size={12} className="text-muted" /> {formatDateTime(user.last_login)}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {lightboxOpen && (
+        <ImageLightbox
+          src={avatarSrc}
+          alt={fullName}
+          onClose={() => setLightboxOpen(false)}
+        />
+      )}
+    </Modal>
+  )
+}
+
 export default function Users({ title = 'Users', crumbs = ['User Management', 'Users'] }) {
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -178,6 +332,11 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
   // initial_password. Cleared on close and never repopulated afterward.
   const [newUserCredentials, setNewUserCredentials] = useState(null)
 
+  // The user currently shown in the "View Profile" modal. Separate from
+  // modalMode (Add/Edit form) so viewing a profile never interferes with
+  // an in-progress edit.
+  const [viewingUser, setViewingUser] = useState(null)
+
   // Controls visibility of email + employee no. together per row — masked
   // by default, revealed only when the eye icon is clicked.
   const [revealedIds, setRevealedIds] = useState(new Set())
@@ -192,12 +351,13 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
   // Same graceful-fallback pattern as Header.jsx's Avatar component:
   // avatar_url being present just means the backend has *a* path on
   // record — it doesn't guarantee the file still exists at that URL
-  // (deleted from disk, stale DB value, wrong storage disk, etc). A plain
-  // `u.avatar_url ? <img> : initials` truthy check renders the <img> tag
-  // regardless, and when that request 404s with no onError handler, the
-  // browser shows raw alt text instead of falling back to initials. This
-  // tracks failures per row so a broken URL degrades the same way a
-  // missing one does.
+  // (deleted from disk, stale DB value, wrong storage disk, etc), or that
+  // it was even a resolvable URL to begin with (relative paths need
+  // resolveAvatarUrl above). A plain `u.avatar_url ? <img> : initials`
+  // truthy check renders the <img> tag regardless, and when that request
+  // 404s with no onError handler, the browser shows raw alt text instead
+  // of falling back to initials. This tracks failures per row so a
+  // broken URL degrades the same way a missing one does.
   const [avatarErrorIds, setAvatarErrorIds] = useState(new Set())
   const markAvatarError = (id) => {
     setAvatarErrorIds((prev) => new Set(prev).add(id))
@@ -449,7 +609,8 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
               {!usersLoading && filteredUsers.map((u) => {
                 const revealed = revealedIds.has(u.user_id)
                 const avatarFailed = avatarErrorIds.has(u.user_id)
-                const showAvatarImage = u.avatar_url && !avatarFailed
+                const avatarSrc = resolveAvatarUrl(u.avatar_url)
+                const showAvatarImage = avatarSrc && !avatarFailed
                 return (
                   <tr key={u.user_id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
                     <td className="px-4 py-3.5">
@@ -457,7 +618,7 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary-dark overflow-hidden">
                           {showAvatarImage ? (
                             <img
-                              src={u.avatar_url}
+                              src={avatarSrc}
                               alt={`${u.first_name} ${u.last_name}`}
                               className="h-full w-full object-cover"
                               onError={() => markAvatarError(u.user_id)}
@@ -500,6 +661,15 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap text-right">
                       <div className="flex items-center justify-end gap-1">
+                        <Tooltip label="View profile" align="start">
+                          <button
+                            type="button"
+                            onClick={() => setViewingUser(u)}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
+                          >
+                            <IdCard size={15} />
+                          </button>
+                        </Tooltip>
                         {!u.is_archived && (
                           <Tooltip label="Edit user" align="start">
                             <button
@@ -632,6 +802,12 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
       <NewUserCredentialsModal
         credentials={newUserCredentials}
         onClose={() => setNewUserCredentials(null)}
+      />
+
+      <ViewProfileModal
+        user={viewingUser}
+        roleLabel={viewingUser ? roleName(viewingUser.role_id) : ''}
+        onClose={() => setViewingUser(null)}
       />
     </div>
   )
