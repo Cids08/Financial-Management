@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import { Bot, User } from 'lucide-react'
+import { Sparkles, User } from 'lucide-react'
 
 // The advisor's system prompt is allowed exactly one lightweight
 // markdown-like pattern, **text**, reserved for a single genuinely critical
@@ -29,7 +29,7 @@ function ChatMessageBubble({ role, text }) {
           isUser ? 'bg-primary/15 text-primary-dark' : 'bg-bg text-muted border border-border'
         }`}
       >
-        {isUser ? <User size={13} /> : <Bot size={13} />}
+        {isUser ? <User size={13} /> : <Sparkles size={13} />}
       </div>
       <div
         className={`max-w-[80%] rounded-xl px-3 py-2 text-sm whitespace-pre-line leading-relaxed ${

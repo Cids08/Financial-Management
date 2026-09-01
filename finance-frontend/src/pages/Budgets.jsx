@@ -24,13 +24,24 @@ const APPROVAL_ICONS = { Draft: Clock, Active: CheckCircle2, Cancelled: XCircle 
 
 const BUDGET_TYPES = ['Operational', 'Capital', 'Project', 'Emergency', 'Other']
 
+// A new budget's fiscal year has to be the current year or later — a
+// static "min:2000"-style floor lets someone create a brand-new budget
+// for a fiscal year that's already years in the past, which the
+// start_date/fiscal_year cross-check alone doesn't catch (both fields can
+// still agree with EACH OTHER on a stale year). MAX_FISCAL_YEAR gives a
+// reasonable forward planning window rather than leaving the top
+// unbounded. Mirrors the same bound now enforced in
+// StoreBudgetRequest::rules() on the backend.
+const CURRENT_YEAR = new Date().getFullYear()
+const MAX_FISCAL_YEAR = CURRENT_YEAR + 5
+
 const EMPTY_FORM = {
   department_id: '',
   budget_code: '',
   budget_name: '',
   budget_type: '',
   budget_type_other: '', // only used when budget_type === 'Other' — the actual typed-in category
-  fiscal_year: new Date().getFullYear(),
+  fiscal_year: CURRENT_YEAR,
   allocated_amount: '',
   warning_percentage: '',
   start_date: '',
@@ -58,6 +69,18 @@ function formatDateTime(value) {
   return new Date(value).toLocaleString('en-PH', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
+// Bounds a Start/End Date input to the given fiscal year — this is the
+// frontend half of fixing "why can I add a budget starting 2020": the
+// year field and the date pickers used to have zero relationship, so
+// nothing stopped picking a start_date years away from fiscal_year. The
+// backend now rejects the mismatch too (see withValidator() in
+// StoreBudgetRequest/UpdateBudgetRequest), but bounding the picker here
+// stops the mistake before it's even submitted.
+function yearBounds(fiscalYear) {
+  if (!fiscalYear) return { min: undefined, max: undefined }
+  return { min: `${fiscalYear}-01-01`, max: `${fiscalYear}-12-31` }
+}
+
 function DetailRow({ label, value }) {
   return (
     <div className="flex items-center justify-between gap-3 py-1.5">
@@ -81,7 +104,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
   const {
     budgets, meta, stats, loading, saving, error,
     fetchBudgets, fetchStats, createBudget, updateBudget,
-    uploadPlan, downloadPlan, fetchPlanHistory, downloadPlanVersion, approveBudget, rejectBudget, archiveBudget, restoreBudget,
+    uploadPlan, viewPlan, fetchPlanHistory, viewPlanVersion, approveBudget, rejectBudget, archiveBudget, restoreBudget,
   } = useBudgets()
 
   const { departments, fetchDepartments } = useDepartments()
@@ -108,6 +131,12 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
   const [rejectingId, setRejectingId] = useState(null)
   const [rejectReason, setRejectReason] = useState('')
   const [pageNotice, setPageNotice] = useState('') // survives modal close, e.g. "budget created but plan failed to attach"
+  // Separate from pageNotice: pageNotice renders in the page body, which
+  // is exactly what a modal sits on top of and hides — so a View click
+  // made FROM INSIDE the Edit or Detail modal needs its own visible
+  // notice, shown inside that modal, or the result (e.g. "downloaded
+  // instead of previewed") is invisible until the modal is closed.
+  const [viewNotice, setViewNotice] = useState('')
 
   const load = () => {
     fetchBudgets(
@@ -142,6 +171,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
   const openAdd = () => {
     setForm(EMPTY_FORM)
     setFormError('')
+    setViewNotice('')
     setPlanFile(null)
     setPlanFileError('')
     setEditPlanFile(null)
@@ -165,6 +195,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
     setFormError('')
     setEditPlanFile(null)
     setEditPlanFileError('')
+    setViewNotice('')
     setModalMode(b)
   }
   const closeModal = () => {
@@ -172,9 +203,10 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
     setFormError('')
     setEditPlanFile(null)
     setEditPlanFileError('')
+    setViewNotice('')
   }
-  const openDetail = (b) => setDetailRecord(b)
-  const closeDetail = () => setDetailRecord(null)
+  const openDetail = (b) => { setViewNotice(''); setDetailRecord(b) }
+  const closeDetail = () => { setDetailRecord(null); setViewNotice('') }
   const isEditing = modalMode !== null && modalMode !== 'add'
 
   // Shared by both the Add and Edit plan pickers — validates a chosen
@@ -208,11 +240,46 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
     }))
   }
 
+  // Fiscal Year drives the valid range for both date pickers (see
+  // yearBounds() above) — if it changes, any already-picked start/end
+  // date that no longer falls inside the new year has to be cleared
+  // rather than silently left out-of-range until submit fails.
+  const handleFiscalYearChange = (value) => {
+    setForm((f) => {
+      const year = String(value)
+      const startStillValid = f.start_date && f.start_date.slice(0, 4) === year
+      const endStillValid = f.end_date && f.end_date.slice(0, 4) === year
+      return {
+        ...f,
+        fiscal_year: value,
+        start_date: startStillValid ? f.start_date : '',
+        end_date: startStillValid && endStillValid ? f.end_date : '',
+      }
+    })
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!form.fiscal_year || !form.allocated_amount || !form.start_date || !form.end_date) {
       setFormError('Fiscal year, allocated amount, start date, and end date are required.')
       return
+    }
+    // Fiscal year is only editable while adding (locked once a budget
+    // exists — see the isEditing branch of the Fiscal Year field below),
+    // so this only needs to run for 'add'. The <input min/max> on the
+    // Fiscal Year field stops most out-of-range typing, but min/max
+    // attributes on a number input don't block manual entry the way a
+    // native form submit would — this custom handler bypasses the
+    // browser's own constraint validation entirely (note the
+    // e.preventDefault() above), so the range still has to be checked
+    // here explicitly. Matches the bound now enforced in
+    // StoreBudgetRequest::rules() on the backend.
+    if (modalMode === 'add') {
+      const fy = Number(form.fiscal_year)
+      if (fy < CURRENT_YEAR || fy > MAX_FISCAL_YEAR) {
+        setFormError(`Fiscal year must be between ${CURRENT_YEAR} and ${MAX_FISCAL_YEAR}.`)
+        return
+      }
     }
     // Explicit check rather than relying solely on the backend's
     // after_or_equal:start_date rule — that comes back as a generic
@@ -220,6 +287,15 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
     // exception response), not the specific date problem.
     if (form.end_date < form.start_date) {
       setFormError('End date cannot be before the start date.')
+      return
+    }
+    // Same reasoning: catch the fiscal-year/start-date mismatch here with
+    // a specific message before it round-trips to the backend's
+    // withValidator() check (StoreBudgetRequest/UpdateBudgetRequest).
+    const startYear = form.start_date ? Number(form.start_date.slice(0, 4)) : null
+    const referenceFiscalYear = isEditing ? modalMode.fiscal_year : Number(form.fiscal_year)
+    if (startYear !== null && startYear !== referenceFiscalYear) {
+      setFormError(`Start date must fall within fiscal year ${referenceFiscalYear}.`)
       return
     }
     if (modalMode === 'add' && !planFile) {
@@ -340,10 +416,38 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
     }
   }
 
+  // Opens the plan in a new tab (inline) instead of forcing a download —
+  // see useBudgets.js's viewPlan() for how/why. Only PDFs actually
+  // render inline in most browsers; Word/Excel plans will still trigger
+  // a download regardless, since browsers have no native viewer for those.
   const handleViewPlan = async (b) => {
-    const result = await downloadPlan(b.budget_id, `${b.budget_code || 'budget'}-plan`)
+    // Open the tab SYNCHRONOUSLY, before any await — browsers only allow
+    // window.open() without triggering the popup blocker when it happens
+    // as a direct result of the click event. The previous version awaited
+    // the file fetch first and only called window.open() once it
+    // resolved, by which point the browser no longer considered it a
+    // direct response to the click and could silently block it. The blank
+    // tab gets redirected to the real blob URL once viewPlan() resolves —
+    // or, for a file type with no in-browser viewer (docx/xlsx/etc.),
+    // viewPlan() closes this tab itself and downloads the file instead,
+    // so nothing stays stuck at about:blank.
+    const targetWindow = window.open('', '_blank')
+    const result = await viewPlan(b.budget_id, targetWindow)
     if (!result.success) {
-      setPageNotice(`Couldn't open the budget plan: ${result.message}`)
+      const msg = `Couldn't open the budget plan: ${result.message}`
+      // Set BOTH: pageNotice covers the row-level action (table, no modal
+      // in the way), viewNotice covers this same click made from inside
+      // the Edit or Detail modal, where pageNotice's spot on the page is
+      // hidden behind the modal. Whichever one isn't currently visible
+      // just goes unused — harmless either way.
+      setPageNotice(msg)
+      setViewNotice(msg)
+    } else if (!result.viewedInline) {
+      const msg = "This file type can't be previewed in-browser, so it's been downloaded instead."
+      setPageNotice(msg)
+      setViewNotice(msg)
+    } else {
+      setViewNotice('')
     }
   }
 
@@ -399,6 +503,10 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
   const totalPages = meta.last_page || 1
   const rangeStart = meta.total === 0 ? 0 : (meta.current_page - 1) * PER_PAGE + 1
   const rangeEnd = Math.min(meta.current_page * PER_PAGE, meta.total)
+
+  const addDateBounds = yearBounds(form.fiscal_year)
+  const editDateBounds = isEditing ? yearBounds(modalMode.fiscal_year) : { min: undefined, max: undefined }
+  const dateBounds = isEditing ? editDateBounds : addDateBounds
 
   return (
     <div className="space-y-5 animate-fadeIn">
@@ -655,7 +763,19 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
               {isEditing ? (
                 <div className={INPUT_LOCKED}><span>{form.fiscal_year}</span></div>
               ) : (
-                <input type="number" value={form.fiscal_year} onChange={(e) => setForm((f) => ({ ...f, fiscal_year: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="2026" />
+                <>
+                  <input
+                    type="number"
+                    min={CURRENT_YEAR}
+                    max={MAX_FISCAL_YEAR}
+                    value={form.fiscal_year}
+                    onChange={(e) => handleFiscalYearChange(e.target.value)}
+                    className={INPUT}
+                    style={INPUT_TEXT_STYLE}
+                    placeholder={String(CURRENT_YEAR)}
+                  />
+                  <p className="mt-1 text-[11px] text-muted">Must be {CURRENT_YEAR}–{MAX_FISCAL_YEAR} — new budgets can't be backdated to a past fiscal year.</p>
+                </>
               )}
             </div>
           </div>
@@ -711,14 +831,25 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
               <input
                 type="date"
                 value={form.start_date}
+                min={dateBounds.min}
+                max={dateBounds.max}
                 onChange={(e) => handleStartDateChange(e.target.value)}
                 className={`${INPUT} scheme-light dark:scheme-dark`}
                 style={INPUT_TEXT_STYLE}
               />
+              <p className="mt-1 text-[11px] text-muted">Must fall within fiscal year {isEditing ? modalMode.fiscal_year : (form.fiscal_year || '—')}.</p>
             </div>
             <div>
               <label className={LABEL}>End Date</label>
-              <input type="date" value={form.end_date} min={form.start_date || undefined} onChange={(e) => setForm((f) => ({ ...f, end_date: e.target.value }))} className={`${INPUT} scheme-light dark:scheme-dark`} style={INPUT_TEXT_STYLE} />
+              <input
+                type="date"
+                value={form.end_date}
+                min={form.start_date || dateBounds.min}
+                max={dateBounds.max}
+                onChange={(e) => setForm((f) => ({ ...f, end_date: e.target.value }))}
+                className={`${INPUT} scheme-light dark:scheme-dark`}
+                style={INPUT_TEXT_STYLE}
+              />
             </div>
           </div>
 
@@ -747,6 +878,17 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                 <button type="button" onClick={() => handleViewPlan(modalMode)} className="shrink-0 text-xs font-medium text-primary hover:underline">
                   View
                 </button>
+              </div>
+            )}
+
+            {/* Shown here, not just via pageNotice, because pageNotice
+                renders in the page body — which this modal is sitting on
+                top of and hiding. Without a copy inside the modal itself,
+                a "downloaded instead of previewed" result from clicking
+                View above is invisible until the modal is closed. */}
+            {isEditing && viewNotice && (
+              <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+                {viewNotice}
               </div>
             )}
 
@@ -859,12 +1001,20 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
         onClose={() => setHistoryTarget(null)}
         budget={historyTarget}
         fetchHistory={fetchPlanHistory}
-        onDownload={downloadPlanVersion}
+        onView={viewPlanVersion}
       />
 
       {/* Detail modal */}
       <Modal
-        open={!!detailRecord}
+        // Hidden (not unmounted — detailRecord itself is untouched) while
+        // the History or Attach-Plan modal is open on top of it. Both of
+        // those are triggered from buttons INSIDE this modal, so without
+        // this they end up stacked behind it rather than in front — this
+        // makes Budget Details step out of the way and reappear once
+        // whichever nested modal closes, instead of fixing z-index (both
+        // modals share the same stacking context either way; the real
+        // problem was two modals being visible at once, not draw order).
+        open={!!detailRecord && !historyTarget && !uploadTarget}
         onClose={closeDetail}
         title="Budget Details"
         footer={
@@ -891,6 +1041,12 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
               </div>
               <ApprovalBadge status={detailRecord.status} />
             </div>
+
+            {viewNotice && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+                {viewNotice}
+              </div>
+            )}
 
             {detailRecord.status === 'Draft' && !detailRecord.has_plan && (
               <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">

@@ -93,13 +93,10 @@ class BudgetController extends Controller
         ]);
     }
 
-    // Lets an admin actually open/download the attached plan file to
-    // review it before approving — has_plan only told them ONE exists,
-    // not what's in it. Gated by budgets.view, not .manage, since
-    // reviewing a plan is part of deciding whether to approve it.
-    // Kept as "download the latest" for the quick one-click action in the
-    // table/detail view — see planHistory()/downloadPlanVersion() below
-    // for the full version history.
+    // Forces a download (Content-Disposition: attachment) — kept as-is
+    // for whatever explicit "download to disk" action the frontend still
+    // wants. For in-browser viewing, use viewPlan()/viewPlanVersion()
+    // below instead, which set Content-Disposition: inline.
     public function downloadPlan(Request $request, Budget $budget)
     {
         $document = $budget->supportingDocuments()->latest('uploaded_at')->first();
@@ -111,6 +108,30 @@ class BudgetController extends Controller
         $fullPath = Storage::disk('local')->path($document->storage_path);
 
         return response()->download($fullPath, $document->original_name);
+    }
+
+    // Inline viewing — response()->file() sets Content-Disposition: inline
+    // by default (unlike response()->download(), which always forces
+    // attachment), so a browser that can render the file type natively
+    // (PDF, mainly — most browsers have a built-in PDF viewer) opens it
+    // in the requesting tab instead of downloading it. .doc/.docx/.xls/
+    // .xlsx will still just download in most browsers regardless of this
+    // header, since browsers have no built-in renderer for those formats —
+    // that's a browser limitation, not something this endpoint controls.
+    // Same auth/permission gating as downloadPlan (budgets.view).
+    public function viewPlan(Request $request, Budget $budget)
+    {
+        $document = $budget->supportingDocuments()->latest('uploaded_at')->first();
+
+        if (! $document || ! $document->storage_path) {
+            abort(404, 'No plan file found for this budget.');
+        }
+
+        $fullPath = Storage::disk('local')->path($document->storage_path);
+
+        return response()->file($fullPath, [
+            'Content-Type' => $document->mime_type ?? 'application/octet-stream',
+        ]);
     }
 
     // Every plan ever attached to this budget, newest first — a re-upload
@@ -159,6 +180,26 @@ class BudgetController extends Controller
         $fullPath = Storage::disk('local')->path($document->storage_path);
 
         return response()->download($fullPath, $document->original_name);
+    }
+
+    // Inline-view equivalent of downloadPlanVersion() — same ownership
+    // check, same reasoning as viewPlan() above re: which formats a
+    // browser can actually render inline.
+    public function viewPlanVersion(Request $request, Budget $budget, SupportingDocument $document)
+    {
+        if ($document->reference_type !== 'budget' || $document->reference_id !== $budget->id) {
+            abort(404, 'This document does not belong to this budget.');
+        }
+
+        if (! $document->storage_path) {
+            abort(404, 'No file stored for this plan version.');
+        }
+
+        $fullPath = Storage::disk('local')->path($document->storage_path);
+
+        return response()->file($fullPath, [
+            'Content-Type' => $document->mime_type ?? 'application/octet-stream',
+        ]);
     }
 
     // Route-gated by permission:budgets.approve — see routes/api.php. The

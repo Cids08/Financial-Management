@@ -1,15 +1,14 @@
-import { useMemo, useRef, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import {
-  Search, Sparkles, AlertTriangle, Wallet, TrendingUp, PiggyBank, Info, Bot, Send, User,
-  Archive, RotateCcw, ChevronLeft, ChevronRight,
+  Search, Sparkles, AlertTriangle, Wallet, TrendingUp, PiggyBank, Info, LineChart,
+  Archive, RotateCcw, ChevronLeft, ChevronRight, X,
 } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
-import { formatCurrency } from '../utils/formatters'
+import AdvisorChatPanel from '../components/AdvisorChatPanel'
 import { useAiRecommendations } from '../hooks/useAiRecommendations'
-import { useAiAdvisor } from '../hooks/useAiAdvisor'
 
 // Real ai_recommendations_category_check values — confirmed against the
 // actual DB constraint. NOT the old 5-value taxonomy (Cash Flow Management,
@@ -46,35 +45,14 @@ function formatDateTime(value) {
   return new Date(value).toLocaleString('en-PH', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-// The advisor's system prompt allows exactly one lightweight markdown-like
-// pattern — **text** — reserved for a single genuinely critical phrase per
-// reply (a hard number, a risk warning, a deadline). This is the only place
-// that syntax is interpreted; everywhere else it would just show literal
-// asterisks, which is why the prompt otherwise forbids markdown entirely.
-function renderMessageText(text) {
-  const parts = text.split(/(\*\*[^*]+\*\*)/g)
-  return parts.map((part, idx) => {
-    if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
-      return (
-        <strong key={idx} className="font-bold text-ink">
-          {part.slice(2, -2)}
-        </strong>
-      )
-    }
-    return <span key={idx}>{part}</span>
-  })
+function forecastLabel(r) {
+  if (!r) return 'Unlinked forecast'
+  if (r.forecast_type && r.forecast_period) return `${r.forecast_type} — ${r.forecast_period}`
+  return `Forecast #${r.forecast_id}`
 }
-
-const SUGGESTED_PROMPTS = [
-  'Which forecast has the lowest confidence?',
-  'How can we reduce expenses?',
-  'Summarize the risk alerts',
-  'What should we do about collections?',
-]
 
 export default function AIRecommendations({ title = 'AI Financial Recommendations', crumbs = ['Analytics', 'AI Financial Recommendations'] }) {
   const { recommendations, loading, error, fetchRecommendations, archiveRecommendation, restoreRecommendation } = useAiRecommendations()
-  const { sendMessage: sendToAdvisor, error: advisorError } = useAiAdvisor()
 
   useEffect(() => {
     fetchRecommendations()
@@ -87,12 +65,6 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
   const [detail, setDetail] = useState(null)
   const [archivingId, setArchivingId] = useState(null)
 
-  const forecastLabel = (r) => {
-    if (!r) return 'Unlinked forecast'
-    if (r.forecast_type && r.forecast_period) return `${r.forecast_type} — ${r.forecast_period}`
-    return `Forecast #${r.forecast_id}`
-  }
-
   const distinctForecasts = useMemo(() => {
     const seen = new Map()
     for (const r of recommendations) {
@@ -104,17 +76,6 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
   const [activeStat, setActiveStat] = useState('all')
   const toggleStat = (key) => setActiveStat((prev) => (prev === key ? 'all' : key))
 
-  const [messages, setMessages] = useState([
-    { role: 'assistant', text: "Hi, I'm your AI financial advisor. Ask me about any of the recommendations on this page — cash flow, expenses, revenue, or budget.", at: new Date().toISOString() },
-  ])
-  const [chatInput, setChatInput] = useState('')
-  const [isThinking, setIsThinking] = useState(false)
-  const scrollRef = useRef(null)
-
-  useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-  }, [messages, isThinking])
-
   useEffect(() => {
     if (activeStat === 'risk') {
       setTypeFilter('Budget')
@@ -125,13 +86,13 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
   }, [activeStat])
 
   const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
     const rows = recommendations.filter((r) => {
       if (showArchived && !r.is_archived) return false
       if (!showArchived && r.is_archived) return false
       if (typeFilter !== 'all' && r.recommendation_type !== typeFilter) return false
       if (forecastFilter !== 'all' && r.forecast_id !== Number(forecastFilter)) return false
-      const q = search.toLowerCase()
-      if (search && !r.summary.toLowerCase().includes(q) && !(r.recommendation_type || '').toLowerCase().includes(q) && !forecastLabel(r).toLowerCase().includes(q)) {
+      if (q && !r.summary.toLowerCase().includes(q) && !(r.recommendation_type || '').toLowerCase().includes(q) && !forecastLabel(r).toLowerCase().includes(q)) {
         return false
       }
       return true
@@ -153,6 +114,19 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
   )
   const rangeStart = filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
   const rangeEnd = Math.min(page * PAGE_SIZE, filtered.length)
+
+  // Covers every control that can narrow the list — used to show/hide the
+  // "Clear filters" action, so it only appears when there's actually
+  // something to reset.
+  const hasActiveFilters = search.trim() !== '' || typeFilter !== 'all' || forecastFilter !== 'all' || activeStat !== 'all' || showArchived
+
+  const clearFilters = () => {
+    setSearch('')
+    setTypeFilter('all')
+    setForecastFilter('all')
+    setActiveStat('all')
+    setShowArchived(false)
+  }
 
   const stats = useMemo(() => {
     const active = recommendations.filter((r) => !r.is_archived)
@@ -181,7 +155,7 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
       onClick: () => { setShowArchived(false); toggleStat('risk') },
     },
     {
-      key: 'forecasts', label: 'Forecasts Covered', value: loading ? '—' : stats.distinctForecasts, icon: Bot,
+      key: 'forecasts', label: 'Forecasts Covered', value: loading ? '—' : stats.distinctForecasts, icon: LineChart,
       iconBg: 'bg-blue-50 dark:bg-blue-500/10', iconColor: 'text-blue-600 dark:text-blue-400',
       isActive: activeStat === 'forecasts' && !showArchived,
       onClick: () => { setShowArchived(false); toggleStat('forecasts') },
@@ -193,32 +167,6 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
       onClick: () => setShowArchived(true),
     },
   ]
-
-  const sendMessage = async (text) => {
-    const trimmed = text.trim()
-    if (!trimmed) return
-    const userMsg = { role: 'user', text: trimmed, at: new Date().toISOString() }
-    setMessages((prev) => [...prev, userMsg])
-    setChatInput('')
-    setIsThinking(true)
-    try {
-      const reply = await sendToAdvisor(trimmed)
-      setMessages((prev) => [...prev, { role: 'assistant', text: reply, at: new Date().toISOString() }])
-    } catch {
-      setMessages((prev) => [...prev, {
-        role: 'assistant',
-        text: 'Sorry, the AI advisor is unavailable right now. Please try again in a moment.',
-        at: new Date().toISOString(),
-      }])
-    } finally {
-      setIsThinking(false)
-    }
-  }
-
-  const handleChatSubmit = (e) => {
-    e.preventDefault()
-    sendMessage(chatInput)
-  }
 
   const handleToggleArchive = async (r) => {
     if (!archiveRecommendation || !restoreRecommendation) return
@@ -261,6 +209,7 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
               key={card.key}
               type="button"
               onClick={card.onClick}
+              aria-pressed={card.isActive}
               className={`${PANEL} ${PANEL_PAD} flex items-center gap-3 text-left cursor-pointer
                 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0
                 ${card.isActive ? 'ring-2 ring-primary/50 border-primary/50' : ''}`}
@@ -277,7 +226,7 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
         })}
       </div>
 
-      {(activeStat !== 'all' || showArchived) && (
+      {hasActiveFilters && (
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
           <span>Showing:</span>
           {showArchived && (
@@ -295,12 +244,18 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
               Grouped by linked forecast
             </span>
           )}
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="ml-auto inline-flex items-center gap-1 px-2 py-1 rounded-full border border-border text-muted hover:text-ink hover:bg-bg transition-colors duration-150"
+          >
+            <X size={12} /> Clear filters
+          </button>
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2 space-y-4">
-          <div className={`${PANEL} ${PANEL_PAD} flex flex-col gap-3 lg:flex-row lg:items-center`}>
+      <div className="space-y-4">
+        <div className={`${PANEL} ${PANEL_PAD} flex flex-col gap-3 lg:flex-row lg:items-center`}>
             <div className="relative flex-1 min-w-0 basis-full">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none z-10" />
               <input
@@ -308,28 +263,20 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search by summary, category, or linked forecast..."
+                aria-label="Search recommendations"
                 className={SEARCH_INPUT}
                 style={{ ...INPUT_TEXT_STYLE, width: '100%', minWidth: 0, outline: 'none' }}
                 autoComplete="off"
               />
             </div>
-            <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setActiveStat('all') }} className={INPUT} style={INPUT_TEXT_STYLE}>
+            <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setActiveStat('all') }} aria-label="Filter by category" className={`${INPUT} lg:w-56 lg:shrink-0`} style={INPUT_TEXT_STYLE}>
               <option value="all">All Categories</option>
               {RECOMMENDATION_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
-            <select value={forecastFilter} onChange={(e) => setForecastFilter(e.target.value)} className={INPUT} style={INPUT_TEXT_STYLE}>
+            <select value={forecastFilter} onChange={(e) => setForecastFilter(e.target.value)} aria-label="Filter by linked forecast" className={`${INPUT} lg:w-56 lg:shrink-0`} style={INPUT_TEXT_STYLE}>
               <option value="all">All Linked Forecasts</option>
               {distinctForecasts.map((r) => <option key={r.forecast_id} value={r.forecast_id}>{forecastLabel(r)}</option>)}
             </select>
-            <Button
-              variant={showArchived ? 'primary' : 'secondary'}
-              size="sm"
-              icon={Archive}
-              onClick={() => setShowArchived((prev) => !prev)}
-              className="shrink-0 whitespace-nowrap"
-            >
-              Show Archived
-            </Button>
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -410,82 +357,9 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
               </div>
             </div>
           )}
-        </div>
-
-        <div className="rounded-xl border-2 border-primary/40 bg-linear-to-b from-primary/10 via-surface to-surface shadow-lg shadow-primary/10 flex flex-col h-160 lg:sticky lg:top-4 overflow-hidden">
-          <div className="flex items-center gap-2 border-b border-primary/20 bg-primary/10 px-4 py-3">
-            <div className="relative flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-ink shrink-0">
-              <Bot size={17} />
-              <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500 border-2 border-surface" />
-              </span>
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm font-bold text-ink flex items-center gap-1.5">
-                Ask the AI Advisor
-                <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-primary text-ink">Live</span>
-              </p>
-              <p className="text-xs text-muted">Grounded in the recommendations shown here</p>
-            </div>
-          </div>
-
-          <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-            {messages.map((m, i) => (
-              <div key={i} className={`flex items-start gap-2 ${m.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${m.role === 'user' ? 'bg-primary/15 text-primary-dark' : 'bg-bg text-muted border border-border'}`}>
-                  {m.role === 'user' ? <User size={13} /> : <Bot size={13} />}
-                </div>
-                <div className={`max-w-[80%] rounded-xl px-3 py-2 text-sm whitespace-pre-line leading-relaxed ${m.role === 'user' ? 'bg-primary text-white rounded-tr-sm' : 'bg-bg text-ink border border-border rounded-tl-sm'}`}>
-                  {m.role === 'assistant' ? renderMessageText(m.text) : m.text}
-                </div>
-              </div>
-            ))}
-            {isThinking && (
-              <div className="flex items-start gap-2">
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-bg text-muted border border-border">
-                  <Bot size={13} />
-                </div>
-                <div className="rounded-xl rounded-tl-sm border border-border bg-bg px-3 py-2 text-sm text-muted">
-                  <span className="inline-flex gap-1">
-                    <span className="h-1.5 w-1.5 rounded-full bg-muted animate-bounce [animation-delay:-0.3s]" />
-                    <span className="h-1.5 w-1.5 rounded-full bg-muted animate-bounce [animation-delay:-0.15s]" />
-                    <span className="h-1.5 w-1.5 rounded-full bg-muted animate-bounce" />
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {messages.length <= 1 && (
-            <div className="px-4 pb-2 flex flex-wrap gap-1.5">
-              {SUGGESTED_PROMPTS.map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => sendMessage(p)}
-                  className="text-xs px-2.5 py-1 rounded-full border border-primary/30 bg-primary/5 text-ink hover:bg-primary/15 hover:border-primary/50 transition-colors duration-150"
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
-          )}
-
-          <form onSubmit={handleChatSubmit} className="border-t border-primary/20 bg-primary/5 p-3 flex items-center gap-2">
-            <input
-              type="text"
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              placeholder="Ask about cash flow, costs, risk..."
-              className={INPUT}
-              style={INPUT_TEXT_STYLE}
-              autoComplete="off"
-            />
-            <Button type="submit" variant="primary" size="sm" icon={Send} disabled={!chatInput.trim()}>Send</Button>
-          </form>
-        </div>
       </div>
+
+      <AdvisorChatPanel />
 
       <Modal open={!!detail} onClose={() => setDetail(null)} title="Recommendation Detail" footer={<Button variant="secondary" size="md" onClick={() => setDetail(null)}>Close</Button>}>
         {detail && (

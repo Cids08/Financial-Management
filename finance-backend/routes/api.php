@@ -291,6 +291,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('/{budget}/reject', [BudgetController::class, 'reject'])->middleware('permission:budgets.approve');
         Route::patch('/{budget}/archive', [BudgetController::class, 'archive'])->middleware('permission:budgets.manage');
         Route::patch('/{budget}/restore', [BudgetController::class, 'restore'])->middleware('permission:budgets.manage')->withTrashed();
+        Route::get('/{budget}/plan/view', [BudgetController::class, 'viewPlan'])->middleware('permission:budgets.view');
+        Route::get('/{budget}/plans/{document}/view', [BudgetController::class, 'viewPlanVersion'])->middleware('permission:budgets.view');
     });
 
     // Disbursements

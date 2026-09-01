@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { FileText, Download, Loader2, AlertTriangle } from 'lucide-react'
+import { FileText, Eye, Loader2, AlertTriangle } from 'lucide-react'
 import Modal from './Modal'
 import Button from './Button'
 import Tooltip from './Tooltip'
@@ -21,13 +21,20 @@ function formatDateTime(value) {
  * - open, onClose: standard Modal controls
  * - budget: the budget whose plan history is shown (uses budget_id, budget_name)
  * - fetchHistory: async (budgetId) => { success, data, message }
- * - onDownload: async (budgetId, documentId, filename) => { success, message }
+ * - onView: async (budgetId, documentId, targetWindow?) => { success, message } —
+ *   opens the version inline in a new tab (see useBudgets.js's
+ *   viewPlanVersion). Renamed from the previous onDownload/handleDownload —
+ *   this now opens the file instead of forcing it to disk. Only PDFs
+ *   actually render inline in most browsers; Word/Excel versions will
+ *   still trigger a download regardless, since browsers have no native
+ *   viewer for those — that's a browser limitation, not something this
+ *   modal controls.
  */
-export default function BudgetPlanHistoryModal({ open, onClose, budget, fetchHistory, onDownload }) {
+export default function BudgetPlanHistoryModal({ open, onClose, budget, fetchHistory, onView }) {
   const [documents, setDocuments] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [downloadingId, setDownloadingId] = useState(null)
+  const [viewingId, setViewingId] = useState(null)
 
   useEffect(() => {
     if (!open || !budget) return
@@ -46,12 +53,23 @@ export default function BudgetPlanHistoryModal({ open, onClose, budget, fetchHis
     return () => { cancelled = true }
   }, [open, budget, fetchHistory])
 
-  const handleDownload = async (doc) => {
-    setDownloadingId(doc.id)
-    const result = await onDownload(budget.budget_id, doc.id, doc.original_name)
-    setDownloadingId(null)
+  const handleView = async (doc) => {
+    // Open the tab SYNCHRONOUSLY, before the await below — see
+    // useBudgets.js's viewPlan()/viewPlanVersion() for why: browsers only
+    // reliably allow window.open() to bypass the popup blocker when it's
+    // a direct result of the click event, not after an async fetch has
+    // already resolved. The blank tab gets redirected to the real blob
+    // URL once onView() resolves — or, for a file type with no in-browser
+    // viewer (docx/xlsx/etc.), onView() closes this tab itself and
+    // downloads the file instead, so nothing stays stuck at about:blank.
+    const targetWindow = window.open('', '_blank')
+    setViewingId(doc.id)
+    const result = await onView(budget.budget_id, doc.id, targetWindow)
+    setViewingId(null)
     if (!result.success) {
       setError(result.message)
+    } else if (!result.viewedInline) {
+      setError("This file type can't be previewed in-browser, so it's been downloaded instead.")
     }
   }
 
@@ -103,14 +121,14 @@ export default function BudgetPlanHistoryModal({ open, onClose, budget, fetchHis
                   </div>
                 </div>
                 {doc.has_file ? (
-                  <Tooltip label="Download this version">
+                  <Tooltip label="View this version">
                     <button
                       type="button"
-                      onClick={() => handleDownload(doc)}
-                      disabled={downloadingId === doc.id}
+                      onClick={() => handleView(doc)}
+                      disabled={viewingId === doc.id}
                       className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-surface hover:text-ink transition-colors duration-150 disabled:opacity-50"
                     >
-                      {downloadingId === doc.id ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                      {viewingId === doc.id ? <Loader2 size={14} className="animate-spin" /> : <Eye size={14} />}
                     </button>
                   </Tooltip>
                 ) : (
