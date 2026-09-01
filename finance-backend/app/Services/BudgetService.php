@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Budget;
+use App\Models\Notification;
 use App\Models\SupportingDocument;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -127,6 +128,8 @@ class BudgetService
             // approved/spendable state per budgets_status_check.
             $budget->update(['status' => 'Active', 'approved_by' => $approverId, 'approved_at' => now()]);
 
+            $this->notifyCreator($budget, approved: true);
+
             return $budget->fresh();
         });
     }
@@ -147,6 +150,8 @@ class BudgetService
                 'remarks' => $reason ?? $budget->remarks,
             ]);
 
+            $this->notifyCreator($budget, approved: false, reason: $reason);
+
             return $budget->fresh();
         });
     }
@@ -166,5 +171,36 @@ class BudgetService
         $budget->restore();
 
         return $budget->fresh();
+    }
+
+    /**
+     * Notifies whoever created the budget that it was approved or
+     * rejected. Mirrors ExpenseService::notifyBudgetWarning()'s pattern —
+     * no-op if there's no creator on record, same as that method's guard.
+     *
+     * `type` is 'budget', matching NOTIFICATION_TYPE_META on the frontend
+     * (src/utils/notificationTypes.js) so this renders with the right
+     * icon/route immediately, no frontend change needed for this one.
+     */
+    private function notifyCreator(Budget $budget, bool $approved, ?string $reason = null): void
+    {
+        if (! $budget->created_by) {
+            return;
+        }
+
+        Notification::create([
+            'user_id' => $budget->created_by,
+            'title' => $approved ? 'Budget approved' : 'Budget rejected',
+            'message' => $approved
+                ? sprintf('Your budget "%s" (%s) was approved.', $budget->budget_name, $budget->budget_code)
+                : sprintf(
+                    'Your budget "%s" (%s) was rejected.%s',
+                    $budget->budget_name,
+                    $budget->budget_code,
+                    $reason ? " Reason: {$reason}" : ''
+                ),
+            'type' => 'budget',
+            'is_read' => false,
+        ]);
     }
 }

@@ -12,14 +12,24 @@ import Tooltip from '../components/Tooltip'
 import { formatCurrency } from '../utils/formatters'
 import { useForecasts } from '../hooks/useForecasts'
 
-const FORECAST_TYPES = ['Cash Flow', 'Revenue', 'Collections', 'Expenses', 'Accounts Receivable']
+// Exactly 5 categories per spec: Expense, Accounts Receivable,
+// Collection, Cash Flow, and Budget Utilization forecasts. 'Revenue'
+// removed (not part of the required 5). No standalone 'Invoices'
+// category — invoices remain transactional data feeding AR
+// (Invoice -> AR -> Collection -> Cash Flow). See
+// FinancialForecastService::FORECAST_TYPES on the backend for the
+// matching list; these two arrays must stay in sync or the dropdown
+// will offer a type the API rejects (or omit one it accepts).
+const FORECAST_TYPES = [
+  'Cash Flow', 'Collections', 'Expenses', 'Accounts Receivable', 'Budget Utilization',
+]
 
 const TYPE_STYLES = {
   'Cash Flow': 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400',
-  Revenue: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
   Collections: 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400',
   Expenses: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
   'Accounts Receivable': 'bg-purple-50 text-purple-600 dark:bg-purple-500/10 dark:text-purple-400',
+  'Budget Utilization': 'bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-400',
 }
 
 const HIGH_CONFIDENCE_THRESHOLD = 80

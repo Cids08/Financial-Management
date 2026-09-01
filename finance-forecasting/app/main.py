@@ -38,14 +38,19 @@ app.add_middleware(
 # not expose a manual override, so this is the single place that decides
 # model order per target. Falls back to (1, 1, 1) for anything unmapped.
 # NOTE: these are starting-point defaults, not backtested against real
-# Collections/Disbursements/Expenses data — revisit once there's enough
-# forecast history to compare orders against actual outcomes.
+# Collections/Disbursements/Expenses/Budget Utilization data — revisit
+# once there's enough forecast history to compare orders against actual
+# outcomes.
+# Exactly 5 categories per spec. 'Revenue' removed (not in the required
+# 5). 'Invoices' renamed back to 'Accounts Receivable' — same underlying
+# series, label only; invoices remain a data source for AR, not their
+# own category.
 DEFAULT_ORDERS: dict[str, tuple[int, int, int]] = {
-    "Revenue": (2, 1, 2),
     "Expenses": (2, 1, 1),
     "Cash Flow": (1, 1, 1),
     "Collections": (2, 1, 1),
     "Accounts Receivable": (1, 1, 1),
+    "Budget Utilization": (1, 1, 1),
 }
 
 

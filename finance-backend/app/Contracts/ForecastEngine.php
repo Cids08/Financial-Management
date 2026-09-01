@@ -23,6 +23,7 @@ interface ForecastEngine
      *   rmse: float|null,
      *   algorithm: string,
      *   model_version: string,
+     *   converged: bool,
      * }
      */
     public function generate(string $forecastType, string $horizonKey): array;

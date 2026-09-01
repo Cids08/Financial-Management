@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\AccountsPayable;
 use App\Models\AuditLog;
+use App\Models\Notification;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
@@ -156,6 +157,8 @@ class AccountsPayableService
                 'user_agent' => request()->userAgent(),
             ]);
 
+            $this->notifyCreator($bill, approved: true);
+
             return $bill->load(['supplier', 'creator', 'approver']);
         });
     }
@@ -194,5 +197,34 @@ class AccountsPayableService
                 'user_agent' => request()->userAgent(),
             ]);
         });
+    }
+
+    /**
+     * Notifies whoever created the bill about an approval decision. There
+     * is no reject() on this service today (only approve() exists, always
+     * calling this with approved: true), but the message/title now
+     * actually branch on $approved instead of hardcoding the "approved"
+     * copy — so this doesn't silently mislabel notifications the moment a
+     * reject flow gets added later.
+     *
+     * `type` is 'payable', matching NOTIFICATION_TYPE_META on the
+     * frontend (src/utils/notificationTypes.js) — renders with the right
+     * icon/route with no frontend change needed.
+     */
+    private function notifyCreator(AccountsPayable $bill, bool $approved): void
+    {
+        if (! $bill->created_by) {
+            return;
+        }
+
+        Notification::create([
+            'user_id' => $bill->created_by,
+            'title' => $approved ? 'Bill approved' : 'Bill rejected',
+            'message' => $approved
+                ? sprintf('Your bill %s was approved.', $bill->invoice_number)
+                : sprintf('Your bill %s was rejected.', $bill->invoice_number),
+            'type' => 'payable',
+            'is_read' => false,
+        ]);
     }
 }

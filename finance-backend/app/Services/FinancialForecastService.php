@@ -13,23 +13,40 @@ use Illuminate\Support\Carbon;
 
 class FinancialForecastService
 {
-    public const FORECAST_TYPES = ['Cash Flow', 'Revenue', 'Collections', 'Expenses', 'Accounts Receivable'];
+    // Exactly 5 categories per spec: Expense, Accounts Receivable,
+    // Collection, Cash Flow, and Budget Utilization forecasts. 'Revenue'
+    // removed (not in the 5; its data source — chart_of_accounts/
+    // journal_entries — isn't part of this spec either). 'Invoices'
+    // renamed back to 'Accounts Receivable' (same underlying data —
+    // outstanding AR balance reconstruction) — invoices stay
+    // transactional data feeding AR, not their own forecast category,
+    // per the stated Invoice → AR → Collection → Cash Flow relationship.
+    // 'Budget Utilization' maps to the existing 'Budget'
+    // forecast_target category — see FORECAST_TARGET_MAP below.
+    public const FORECAST_TYPES = [
+        'Cash Flow',
+        'Collections',
+        'Expenses',
+        'Accounts Receivable',
+        'Budget Utilization',
+    ];
 
     // financial_forecasts.forecast_target has its own DB-level CHECK
     // constraint restricting it to exactly ['Revenue', 'Expense',
     // 'Cash Flow', 'Budget'] — a financial-statement category, NOT a
     // scope descriptor (the previous 'Company-wide' hardcode assumed the
-    // latter and violated the constraint). This maps each of the 5
-    // forecast_type values to one of those 4 allowed categories.
-    // Collections and Accounts Receivable have no exact match; both were
-    // deliberately mapped to Cash Flow rather than Revenue — confirmed
-    // choice, not a guess.
+    // latter and violated the constraint). This maps each forecast_type
+    // value to one of those 4 allowed categories.
+    // 'Accounts Receivable' and 'Collections' have no exact match among
+    // the CHECK constraint's 4 categories; both deliberately map to
+    // 'Cash Flow' — confirmed choice, not a guess. Budget Utilization
+    // maps to 'Budget'.
     public const FORECAST_TARGET_MAP = [
-        'Revenue' => 'Revenue',
         'Expenses' => 'Expense',
         'Cash Flow' => 'Cash Flow',
         'Collections' => 'Cash Flow',
         'Accounts Receivable' => 'Cash Flow',
+        'Budget Utilization' => 'Budget',
     ];
 
     // months = forecast_period value stored in the DB (the integer column);
@@ -118,6 +135,13 @@ class FinancialForecastService
                 'rmse' => $result['rmse'],
                 'algorithm' => $result['algorithm'],
                 'model_version' => $result['model_version'],
+                // Whether the Python service's ARIMA optimizer converged
+                // for this forecast — see ForecastEngine::generate()'s
+                // return contract and migration
+                // 2026_08_30_000000_add_converged_to_financial_forecasts_table.
+                // Defaults true for engines (e.g. MockForecastEngine) that
+                // don't populate this key at all.
+                'converged' => $result['converged'] ?? true,
                 'series' => $series,
                 // status left to the DB default ('Generated') — see the
                 // unconfirmed-CHECK-constraint note in the resource.

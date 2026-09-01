@@ -13,13 +13,15 @@ use RuntimeException;
 
 /**
  * Calls the real Python ARIMA service (finance-forecasting/) over HTTP.
- * All five forecast_type values are implemented in historicalActualsFor()
- * below. Every status-string filter (COLLECTION_CONFIRMED_STATUS,
- * EXPENSE_APPROVED_STATUS, DISBURSEMENT_RELEASED_STATUS,
- * JOURNAL_ENTRY_POSTED_STATUS) is still an inferred guess, NOT confirmed
- * against a seeder — verify each before swapping this in for
- * MockForecastEngine in AppServiceProvider::register(). Only
- * REVENUE_ACCOUNT_TYPE is seeder-confirmed (ChartOfAccountSeeder).
+ * All 5 forecast_type values are implemented in historicalActualsFor()
+ * below: Expenses, Accounts Receivable, Collections, Cash Flow, Budget
+ * Utilization — matching the required 5 categories exactly (no Revenue,
+ * no standalone Invoices category; invoices remain transactional data
+ * feeding the Accounts Receivable reconstruction below). Status filters
+ * (COLLECTION_CONFIRMED_STATUS, EXPENSE_APPROVED_STATUS,
+ * DISBURSEMENT_RELEASED_STATUS, BUDGET_ACTIVE_STATUS) have all been
+ * confirmed against the actual frontend workflow code (Collections.jsx,
+ * Expenses.jsx, Disbursements.jsx, Budgets.jsx) — no longer guesses.
  *
  * generate() and buildSeries() are called back-to-back, on the same
  * injected instance, within FinancialForecastService::generate() (single
@@ -48,12 +50,12 @@ class PythonArimaForecastEngine implements ForecastEngine
     protected const COLLECTION_CONFIRMED_STATUS = 'Confirmed';
     protected const EXPENSE_APPROVED_STATUS = 'Approved';
     protected const DISBURSEMENT_RELEASED_STATUS = 'Released';
-    protected const JOURNAL_ENTRY_POSTED_STATUS = 'Posted';
 
-    // Confirmed via ChartOfAccountSeeder — account_type = 'Revenue' marks
-    // accounts 4000 (Sales Revenue) and 4100 (Service Revenue) directly,
-    // no guessing needed here.
-    protected const REVENUE_ACCOUNT_TYPE = 'Revenue';
+    // Confirmed via Budgets.jsx's own comment on the frontend:
+    // "status is constrained at the DB level (budgets_status_check) to:
+    // Draft, Active, Closed, Cancelled ... Active = approved & spendable."
+    // Only Active budgets should count as real, approved capacity.
+    protected const BUDGET_ACTIVE_STATUS = 'Active';
 
     public function __construct(?string $baseUrl = null)
     {
@@ -140,6 +142,10 @@ class PythonArimaForecastEngine implements ForecastEngine
                 $body['arima_order']['q'],
             ),
             'model_version' => $body['model_version'],
+            // Surfaces the Python service's optimizer-convergence signal.
+            // Defaults true if an older service build omits the key, so
+            // this stays backward compatible during a rolling deploy.
+            'converged' => $body['converged'] ?? true,
         ];
     }
 
@@ -202,8 +208,18 @@ class PythonArimaForecastEngine implements ForecastEngine
             'Collections' => $this->monthlyCollections($months),
             'Expenses' => $this->monthlyExpenses($months),
             'Cash Flow' => $this->monthlyCashFlow($months),
+            // Same underlying data as before — outstanding AR balance
+            // point-in-time reconstruction. Category name matches the
+            // required spec exactly; invoices remain a data source here,
+            // not their own forecast category.
             'Accounts Receivable' => $this->monthlyAccountsReceivableBalance($months),
-            'Revenue' => $this->monthlyRevenue($months),
+            // NEW — see monthlyBudgetUtilization() docblock: a
+            // reconstructed point-in-time snapshot, same technique as
+            // monthlyAccountsReceivableBalance(), because
+            // budgets.used_amount is a current-state column with no
+            // historical monthly record. INFERRED design, not confirmed
+            // against real data — verify before trusting in production.
+            'Budget Utilization' => $this->monthlyBudgetUtilization($months),
             default => throw new RuntimeException("Unknown forecast_type: {$forecastType}"),
         };
     }
@@ -311,29 +327,45 @@ class PythonArimaForecastEngine implements ForecastEngine
     }
 
     /**
-     * Net revenue per month: SUM(credit) - SUM(debit) on journal lines
-     * posted against Revenue-type chart of accounts. Revenue accounts
-     * carry a normal credit balance in double-entry bookkeeping — credits
-     * increase revenue, debits decrease it (returns/adjustments) — so
-     * this is the net of both, not a raw credit total.
+     * Budget IDs "active" as of a given month-end: budgets with status
+     * 'Active' (approved & spendable — see BUDGET_ACTIVE_STATUS) whose
+     * [start_date, end_date] period overlaps that month at all (started
+     * on/before month-end, and either still open or ended on/after month
+     * start). Draft (awaiting approval) and Cancelled budgets are
+     * excluded — they don't represent real, approved spending capacity,
+     * even if their date range happens to overlap.
      */
-    protected function monthlyRevenue(array $months): array
+    protected function activeBudgetIdsAsOf(Carbon $monthStart, Carbon $monthEnd): \Illuminate\Support\Collection
     {
-        $revenueAccountIds = DB::table('chart_of_accounts')
-            ->where('account_type', self::REVENUE_ACCOUNT_TYPE)
+        return DB::table('budgets')
+            ->where('status', self::BUDGET_ACTIVE_STATUS)
+            ->where('start_date', '<=', $monthEnd)
+            ->where('end_date', '>=', $monthStart)
             ->whereNull('deleted_at')
             ->pluck('id');
+    }
 
-        return array_map(
-            fn (array $m) => (float) DB::table('journal_entry_lines')
-                ->join('journal_entries', 'journal_entries.id', '=', 'journal_entry_lines.journal_entry_id')
-                ->whereIn('journal_entry_lines.account_id', $revenueAccountIds)
-                ->whereBetween('journal_entries.transaction_date', [$m['start'], $m['end']])
-                ->where('journal_entries.status', self::JOURNAL_ENTRY_POSTED_STATUS)
-                ->whereNull('journal_entries.deleted_at')
-                ->selectRaw('COALESCE(SUM(journal_entry_lines.credit), 0) - COALESCE(SUM(journal_entry_lines.debit), 0) as net')
-                ->value('net'),
-            $months
-        );
+    /**
+     * Cumulative approved-expense spend, AS OF each month-end, against
+     * budgets active that month — same point-in-time reconstruction
+     * technique as monthlyAccountsReceivableBalance(), since
+     * budgets.used_amount is a current-state running total with no
+     * historical monthly snapshot. NOT the same as the existing
+     * "Expenses" forecast_type, which reports incremental spend per
+     * month across ALL budgets — this is cumulative and scoped to
+     * budgets active in that specific month.
+     */
+    protected function monthlyBudgetUtilization(array $months): array
+    {
+        return array_map(function (array $m) {
+            $activeBudgetIds = $this->activeBudgetIdsAsOf($m['start'], $m['end']);
+
+            return (float) DB::table('expenses')
+                ->whereIn('budget_id', $activeBudgetIds)
+                ->where('expense_date', '<=', $m['end'])
+                ->where('status', self::EXPENSE_APPROVED_STATUS)
+                ->whereNull('deleted_at')
+                ->sum('expense_amount');
+        }, $months);
     }
 }

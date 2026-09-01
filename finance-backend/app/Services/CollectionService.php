@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\CashAccount;
 use App\Models\Collection;
 use App\Models\Collector;
+use App\Models\Notification;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
@@ -156,6 +157,13 @@ class CollectionService
                 'received_by' => $confirmedBy->id,
             ]);
 
+            $this->notifyCreator($collection, 'Collection confirmed', sprintf(
+                'Your collection #%d (%.2f against invoice %s) was confirmed.',
+                $collection->id,
+                (float) $collection->amount_received,
+                $ar->invoice_number
+            ));
+
             // Same reasoning as DisbursementService::release() — this moves
             // real money (into a cash account this time, not out), so the
             // log needs the actual financial picture, not just "confirmed".
@@ -202,6 +210,12 @@ class CollectionService
                 'status' => Collection::STATUS_CANCELLED,
                 'remarks' => $remarks ? trim(($collection->remarks ?? '') . "\n\n[Cancelled] {$remarks}") : $collection->remarks,
             ]);
+
+            $this->notifyCreator($collection, 'Collection cancelled', sprintf(
+                'Your collection #%d was cancelled.%s',
+                $collection->id,
+                $remarks ? " Reason: {$remarks}" : ''
+            ));
 
             AuditLog::create([
                 'user_id' => $actor->id,
@@ -309,5 +323,27 @@ class CollectionService
                 'efficiency' => $efficiency,
             ];
         })->values()->all();
+    }
+
+    /**
+     * Notifies whoever recorded the collection (created_by) that it was
+     * confirmed or cancelled. `type` is 'collection' — NOT currently in
+     * NOTIFICATION_TYPE_META on the frontend (src/utils/notificationTypes.js),
+     * so it renders with the default Bell icon/route to /reports until
+     * that map gets a 'collection' entry.
+     */
+    private function notifyCreator(Collection $collection, string $title, string $message): void
+    {
+        if (! $collection->created_by) {
+            return;
+        }
+
+        Notification::create([
+            'user_id' => $collection->created_by,
+            'title' => $title,
+            'message' => $message,
+            'type' => 'collection',
+            'is_read' => false,
+        ]);
     }
 }

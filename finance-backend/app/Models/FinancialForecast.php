@@ -27,6 +27,10 @@ class FinancialForecast extends Model
         'rmse',
         'algorithm',
         'model_version',
+        // Whether the ARIMA optimizer converged for this forecast. See
+        // migration 2026_08_30_000000_add_converged_to_financial_forecasts_table
+        // and FinancialForecastService::generate().
+        'converged',
         // Added so FinancialForecastService::generate()'s
         // 'series' => $series actually persists — without this in
         // $fillable, create() silently drops the key rather than erroring.
@@ -50,6 +54,10 @@ class FinancialForecast extends Model
         'mape' => 'decimal:2',
         'rmse' => 'decimal:2',
         'generated_at' => 'datetime',
+        // Ensures $forecast->converged is a real PHP bool regardless of
+        // driver quirks, matching the boolean column added by the
+        // add_converged_to_financial_forecasts_table migration.
+        'converged' => 'boolean',
         // Added to match the new jsonb series column — without this,
         // $forecast->series is a raw JSON string, not a PHP array, and
         // FinancialForecastDetailResource's 'series' => $this->series

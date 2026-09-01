@@ -8,6 +8,7 @@ use App\Models\CashAccount;
 use App\Models\Disbursement;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
+use App\Models\Notification;
 use App\Models\SupportingDocument;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -229,6 +230,12 @@ class DisbursementService
                 'user_agent' => request()->userAgent(),
             ]);
 
+            $this->notifyCreator($disbursement, 'Disbursement approved', sprintf(
+                'Your disbursement %s for %s was approved and is awaiting release.',
+                $disbursement->voucher_number,
+                $disbursement->payee
+            ));
+
             return $disbursement->fresh();
         });
     }
@@ -261,6 +268,13 @@ class DisbursementService
                 'user_agent' => request()->userAgent(),
             ]);
 
+            $this->notifyCreator($disbursement, 'Disbursement rejected', sprintf(
+                'Your disbursement %s for %s was rejected.%s',
+                $disbursement->voucher_number,
+                $disbursement->payee,
+                $reason ? " Reason: {$reason}" : ''
+            ));
+
             return $disbursement->fresh();
         });
     }
@@ -282,9 +296,18 @@ class DisbursementService
             ]);
         }
 
-        return $disbursement->isPayroll()
+        $released = $disbursement->isPayroll()
             ? $this->releasePayroll($disbursement, $releasedById)
             : $this->releaseAp($disbursement, $releasedById);
+
+        $this->notifyCreator($released, 'Disbursement released', sprintf(
+            '%.2f was released to %s (%s).',
+            (float) $released->amount_paid,
+            $released->payee,
+            $released->voucher_number
+        ));
+
+        return $released;
     }
 
     /**
@@ -609,5 +632,27 @@ class DisbursementService
         ]);
 
         return $disbursement->fresh();
+    }
+
+    /**
+     * Notifies whoever created the disbursement (or payroll request) on
+     * approve/reject/release. `type` is 'disbursement' — NOT currently in
+     * NOTIFICATION_TYPE_META on the frontend (src/utils/notificationTypes.js),
+     * so it renders with the default Bell icon/route to /reports until
+     * that map gets a 'disbursement' entry.
+     */
+    private function notifyCreator(Disbursement $disbursement, string $title, string $message): void
+    {
+        if (! $disbursement->created_by) {
+            return;
+        }
+
+        Notification::create([
+            'user_id' => $disbursement->created_by,
+            'title' => $title,
+            'message' => $message,
+            'type' => 'disbursement',
+            'is_read' => false,
+        ]);
     }
 }

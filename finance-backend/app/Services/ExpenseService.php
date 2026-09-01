@@ -196,6 +196,8 @@ class ExpenseService
                 $this->notifyBudgetWarning($budget, $expense, $usedPercentage, $isOverBudget);
             }
 
+            $this->notifyExpenseCreator($expense, approved: true);
+
             $this->postJournalEntry($expense, $approver);
 
             // This is the most consequential audit entry in this service —
@@ -249,6 +251,8 @@ class ExpenseService
                     : $expense->description,
             ]);
 
+            $this->notifyExpenseCreator($expense, approved: false, reason: $remarks);
+
             AuditLog::create([
                 'user_id' => auth()->id(),
                 'module' => 'Expenses',
@@ -285,6 +289,38 @@ class ExpenseService
                 $expense->id
             ),
             'type' => $isOverBudget ? 'budget_over' : 'budget_warning',
+            'is_read' => false,
+        ]);
+    }
+
+    /**
+     * Notifies whoever submitted the expense that it was approved or
+     * rejected. Separate from notifyBudgetWarning() above — that one
+     * tells the budget owner their budget is getting tight; this one
+     * tells the expense submitter what happened to their own request.
+     * The two can fire independently on the same approve() call and
+     * even go to the same person without duplicating content, since
+     * they carry different information.
+     *
+     * `type` is 'expense' — NOT currently in NOTIFICATION_TYPE_META on
+     * the frontend (src/utils/notificationTypes.js only maps
+     * receivable/payable/budget/forecast/ai_recommendation), so this
+     * will render with the default Bell icon and route to /reports until
+     * that map is extended with an 'expense' entry.
+     */
+    private function notifyExpenseCreator(Expense $expense, bool $approved, ?string $reason = null): void
+    {
+        if (! $expense->created_by) {
+            return;
+        }
+
+        Notification::create([
+            'user_id' => $expense->created_by,
+            'title' => $approved ? 'Expense approved' : 'Expense rejected',
+            'message' => $approved
+                ? sprintf('Your expense #%d was approved.', $expense->id)
+                : sprintf('Your expense #%d was rejected.%s', $expense->id, $reason ? " Reason: {$reason}" : ''),
+            'type' => 'expense',
             'is_read' => false,
         ]);
     }

@@ -27,6 +27,14 @@ class FinancialForecastResource extends JsonResource
             'model_version' => $this->model_version,
             'mape' => $this->mape !== null ? (float) $this->mape : null,
             'rmse' => $this->rmse !== null ? (float) $this->rmse : null,
+            // Whether the ARIMA optimizer actually converged when this
+            // forecast was generated. False means arima_model reflects the
+            // best available fit rather than a fully converged solution —
+            // the frontend should show this as a lower-confidence estimate
+            // rather than presenting it identically to a converged one,
+            // per the forecasting philosophy of never treating forecasts
+            // as guaranteed outcomes.
+            'converged' => (bool) $this->converged,
             // UNCONFIRMED: financial_forecasts.status defaults to 'Generated'
             // but the allowed set (CHECK constraint, if any) hasn't been
             // confirmed — same caution as accounts_payable.status.

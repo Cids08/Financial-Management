@@ -220,6 +220,78 @@ export function useBudgets() {
     }
   }, [])
 
+  // Downloads/opens the attached plan file so an admin can actually review
+  // it before approving — has_plan only tells you a document exists, not
+  // what's in it. Triggers a normal browser download via a blob, same as
+  // any other file-download flow, rather than opening a raw API URL
+  // directly (which wouldn't carry auth headers/cookies consistently).
+  const downloadPlan = useCallback(async (id, fallbackFilename = 'budget-plan') => {
+    try {
+      const res = await apiFetch(`/api/budgets/${id}/plan`)
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        throw new Error(json.message || 'Failed to download the budget plan.')
+      }
+      const blob = await res.blob()
+      const disposition = res.headers.get('Content-Disposition') || ''
+      const match = disposition.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)["']?/i)
+      const filename = match ? decodeURIComponent(match[1]) : fallbackFilename
+
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+      return { success: true }
+    } catch (err) {
+      return { success: false, message: err.message }
+    }
+  }, [])
+
+  // Every plan version ever attached to this budget, newest first — a
+  // re-upload doesn't erase history, it just adds another row.
+  const fetchPlanHistory = useCallback(async (id) => {
+    try {
+      const res = await apiFetch(`/api/budgets/${id}/plans`)
+      const json = await res.json()
+      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to load plan history.')
+      return { success: true, data: json.data }
+    } catch (err) {
+      return { success: false, message: err.message }
+    }
+  }, [])
+
+  // Same blob-download approach as downloadPlan, but for one specific
+  // historical version by its supporting_documents id, not just the latest.
+  const downloadPlanVersion = useCallback(async (budgetId, documentId, fallbackFilename = 'budget-plan') => {
+    try {
+      const res = await apiFetch(`/api/budgets/${budgetId}/plans/${documentId}`)
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        throw new Error(json.message || 'Failed to download this plan version.')
+      }
+      const blob = await res.blob()
+      const disposition = res.headers.get('Content-Disposition') || ''
+      const match = disposition.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)["']?/i)
+      const filename = match ? decodeURIComponent(match[1]) : fallbackFilename
+
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+      return { success: true }
+    } catch (err) {
+      return { success: false, message: err.message }
+    }
+  }, [])
+
   return {
     budgets,
     meta,
@@ -233,6 +305,9 @@ export function useBudgets() {
     createBudget,
     updateBudget,
     uploadPlan,
+    downloadPlan,
+    fetchPlanHistory,
+    downloadPlanVersion,
     approveBudget,
     rejectBudget,
     archiveBudget,

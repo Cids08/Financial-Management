@@ -1,32 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bell, BellOff, Check, CheckCheck, Trash2, Wallet, Receipt, PiggyBank, TrendingUp, Sparkles, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
+import { Bell, BellOff, Check, CheckCheck, Trash2, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Tooltip from '../components/Tooltip'
 import { useNotificationsContext } from '../context/NotificationsContext'
+import { notificationTypeMeta } from '../utils/notificationTypes'
 
 const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
-const PANEL_PAD = 'p-4'
-
-// Mirrors DashboardService::routeForNotificationType() on the backend —
-// duplicated here because the /notifications index endpoint's response
-// shape (NotificationController, not shared) isn't confirmed to include a
-// precomputed `route` field the way the dashboard's notifications section
-// does. If it turns out the API already sends `route` per notification,
-// prefer that over this local map instead of keeping two copies in sync.
-const TYPE_META = {
-  receivable: { icon: Wallet, route: '/transactions/receivable', label: 'Accounts Receivable', color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-500/10' },
-  payable: { icon: Receipt, route: '/transactions/payable', label: 'Accounts Payable', color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-500/10' },
-  budget: { icon: PiggyBank, route: '/transactions/budgets', label: 'Budgets', color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-500/10' },
-  forecast: { icon: TrendingUp, route: '/analytics/forecasting', label: 'Forecasting', color: 'text-violet-600 dark:text-violet-400', bg: 'bg-violet-50 dark:bg-violet-500/10' },
-  ai_recommendation: { icon: Sparkles, route: '/analytics/ai-recommendations', label: 'AI Recommendation', color: 'text-cyan-600 dark:text-cyan-400', bg: 'bg-cyan-50 dark:bg-cyan-500/10' },
-}
-const DEFAULT_TYPE_META = { icon: Bell, route: '/reports', label: 'General', color: 'text-slate-600 dark:text-slate-400', bg: 'bg-slate-100 dark:bg-slate-800' }
-
-function typeMeta(type) {
-  return TYPE_META[type] ?? DEFAULT_TYPE_META
-}
 
 function formatDateTime(iso) {
   if (!iso) return '—'
@@ -40,6 +21,15 @@ export default function Notifications({ title = 'Notifications', crumbs = ['Noti
   // NotificationsProvider. Marking something read/deleted here updates
   // Header's bell and Sidebar's badge immediately, since they all read
   // from this same state instead of separately polling the API.
+  //
+  // NOTE: Header's bell dropdown (Notification.jsx) also calls
+  // fetchNotifications() for its own 5-item preview, against this same
+  // shared `notifications`/`meta` state. If someone opens that dropdown
+  // while this page is also mounted, whichever fetch resolves last wins
+  // and the other's list/pagination gets overwritten. Flagging this again
+  // here since it's this page that would visibly "lose" — its list could
+  // silently reset to a 5-item, page-1 preview if the header dropdown is
+  // opened in the same tab.
   const {
     notifications, meta, unreadCount, loading, error,
     fetchNotifications, markAsRead, markAllAsRead, deleteNotification,
@@ -56,7 +46,7 @@ export default function Notifications({ title = 'Notifications', crumbs = ['Noti
 
   const handleOpen = async (n) => {
     if (!n.is_read) await markAsRead(n.id)
-    navigate(n.route ?? typeMeta(n.type).route)
+    navigate(n.route ?? notificationTypeMeta(n.type).route)
   }
 
   const handleMarkAllRead = async () => {
@@ -130,7 +120,7 @@ export default function Notifications({ title = 'Notifications', crumbs = ['Noti
               <p className="px-4 pt-3 pb-1 text-xs font-semibold uppercase tracking-wide text-muted">{group.label}</p>
               <div className="divide-y divide-border">
                 {group.items.map((n) => {
-                  const meta = typeMeta(n.type)
+                  const meta = notificationTypeMeta(n.type)
                   const Icon = meta.icon
                   return (
                     <button

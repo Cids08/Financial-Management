@@ -11,7 +11,10 @@ class ForecastRequest(BaseModel):
     forecast_target: str = Field(
         ...,
         description="Financial value being forecasted.",
-        examples=["Cash Flow", "Revenue", "Collections", "Expenses", "Accounts Receivable"]
+        examples=[
+            "Cash Flow", "Collections", "Expenses", "Accounts Receivable",
+            "Budget Utilization",
+        ]
     )
 
     forecast_period: int = Field(
@@ -31,12 +34,19 @@ class ForecastRequest(BaseModel):
     @classmethod
     def validate_forecast_target(cls, value: str) -> str:
 
+        # Exactly 5 categories per spec. 'Revenue' removed. 'Invoices'
+        # renamed back to 'Accounts Receivable' — invoices remain
+        # transactional data feeding this category, not their own
+        # category (Invoice -> AR -> Collection -> Cash Flow). See
+        # PythonArimaForecastEngine::monthlyAccountsReceivableBalance()
+        # and monthlyBudgetUtilization() on the Laravel side for how
+        # each series is reconstructed.
         allowed_targets = [
             "Cash Flow",
-            "Revenue",
             "Collections",
             "Expenses",
             "Accounts Receivable",
+            "Budget Utilization",
         ]
 
         if value not in allowed_targets:
@@ -60,11 +70,11 @@ class ForecastRequest(BaseModel):
                 "At least 6 historical observations are required."
             )
 
-        # Historical amounts can legitimately go negative for any of the 5
-        # forecast targets — refunds/credit memos can push a month's net
-        # Revenue negative, timing/overpayment edge cases can push
-        # Accounts Receivable's outstanding balance negative, and so on.
-        # Not just Cash Flow, which was the original (too narrow) assumption.
+        # Historical amounts can legitimately go negative for any of the
+        # forecast targets — refunds/credit memos can push a month's
+        # Accounts Receivable balance negative on timing/overpayment
+        # edge cases, and so on. Not just Cash Flow, which was the
+        # original (too narrow) assumption.
         return values
 
 

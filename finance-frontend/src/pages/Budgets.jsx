@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, PiggyBank, TrendingDown, Building2, Info, Printer, CheckCircle2, XCircle, Clock, AlertTriangle, ChevronLeft, ChevronRight, Paperclip, Loader2 } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, PiggyBank, TrendingDown, Building2, Info, Printer, CheckCircle2, XCircle, Clock, AlertTriangle, ChevronLeft, ChevronRight, Paperclip, Loader2, FileText, History } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
 import BudgetPlanUploadModal from '../components/BudgetPlanUploadModal'
+import BudgetPlanHistoryModal from '../components/BudgetPlanHistoryModal'
 import { formatCurrency } from '../utils/formatters'
 import { useBudgets } from '../hooks/useBudgets'
 import { useDepartments } from '../hooks/useDepartments'
@@ -80,13 +81,13 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
   const {
     budgets, meta, stats, loading, saving, error,
     fetchBudgets, fetchStats, createBudget, updateBudget,
-    uploadPlan, approveBudget, rejectBudget, archiveBudget, restoreBudget,
+    uploadPlan, downloadPlan, fetchPlanHistory, downloadPlanVersion, approveBudget, rejectBudget, archiveBudget, restoreBudget,
   } = useBudgets()
 
   const { departments, fetchDepartments } = useDepartments()
 
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all') // Pending / Approved / Rejected / all
+  const [statusFilter, setStatusFilter] = useState('all') // Draft / Active / Cancelled / Closed / all
   const [showArchived, setShowArchived] = useState(false)
   const [page, setPage] = useState(1)
   const PER_PAGE = 20
@@ -96,8 +97,14 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
   const [formError, setFormError] = useState('')
   const [detailRecord, setDetailRecord] = useState(null)
   const [uploadTarget, setUploadTarget] = useState(null) // budget currently attaching a plan (from table/detail)
+  const [historyTarget, setHistoryTarget] = useState(null) // budget whose plan version history is open
   const [planFile, setPlanFile] = useState(null) // plan picked inline in the Add Budget modal
   const [planFileError, setPlanFileError] = useState('')
+  // Replacement plan picked inline in the EDIT modal — kept separate from
+  // planFile/planFileError above so opening Add right after Edit (or vice
+  // versa) never bleeds a leftover selection from one mode into the other.
+  const [editPlanFile, setEditPlanFile] = useState(null)
+  const [editPlanFileError, setEditPlanFileError] = useState('')
   const [rejectingId, setRejectingId] = useState(null)
   const [rejectReason, setRejectReason] = useState('')
   const [pageNotice, setPageNotice] = useState('') // survives modal close, e.g. "budget created but plan failed to attach"
@@ -132,7 +139,15 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
     { key: 'archived', label: 'Archived', value: stats?.archived ?? '—', icon: Archive, iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-500 dark:text-slate-400', isActive: showArchived, onClick: () => setShowArchived(true) },
   ]), [stats, statusFilter, showArchived])
 
-  const openAdd = () => { setForm(EMPTY_FORM); setFormError(''); setPlanFile(null); setPlanFileError(''); setModalMode('add') }
+  const openAdd = () => {
+    setForm(EMPTY_FORM)
+    setFormError('')
+    setPlanFile(null)
+    setPlanFileError('')
+    setEditPlanFile(null)
+    setEditPlanFileError('')
+    setModalMode('add')
+  }
   const openEdit = (b) => {
     if (b.status === 'Active') return // locked, per UpdateBudgetRequest::authorize()
     setForm({
@@ -148,12 +163,50 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
       remarks: b.remarks ?? '',
     })
     setFormError('')
+    setEditPlanFile(null)
+    setEditPlanFileError('')
     setModalMode(b)
   }
-  const closeModal = () => { setModalMode(null); setFormError('') }
+  const closeModal = () => {
+    setModalMode(null)
+    setFormError('')
+    setEditPlanFile(null)
+    setEditPlanFileError('')
+  }
   const openDetail = (b) => setDetailRecord(b)
   const closeDetail = () => setDetailRecord(null)
   const isEditing = modalMode !== null && modalMode !== 'add'
+
+  // Shared by both the Add and Edit plan pickers — validates a chosen
+  // file's extension/size and stores it via whichever mode's setters are
+  // passed in.
+  const handlePlanFileChange = (file, setFile, setError) => {
+    if (!file) return
+    const ext = file.name.split('.').pop()?.toLowerCase()
+    if (!['pdf', 'doc', 'docx', 'xls', 'xlsx'].includes(ext)) {
+      setError(`"${file.name}" isn't a supported file type.`)
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setError(`"${file.name}" exceeds the 10MB limit.`)
+      return
+    }
+    setError('')
+    setFile(file)
+  }
+
+  // Changing the start date can leave a previously-chosen end date sitting
+  // before it — the <input min=...> on End Date only stops NEW invalid
+  // picks going forward, it doesn't retroactively fix an end_date that was
+  // set before start_date changed to something later. Clear it instead of
+  // silently letting an inverted range sit in the form.
+  const handleStartDateChange = (value) => {
+    setForm((f) => ({
+      ...f,
+      start_date: value,
+      end_date: f.end_date && value && f.end_date < value ? '' : f.end_date,
+    }))
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -161,11 +214,19 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
       setFormError('Fiscal year, allocated amount, start date, and end date are required.')
       return
     }
+    // Explicit check rather than relying solely on the backend's
+    // after_or_equal:start_date rule — that comes back as a generic
+    // "The given data was invalid." message (Laravel's default validation
+    // exception response), not the specific date problem.
+    if (form.end_date < form.start_date) {
+      setFormError('End date cannot be before the start date.')
+      return
+    }
     if (modalMode === 'add' && !planFile) {
       setFormError('A budget plan file is required to create a budget.')
       return
     }
-    if (planFileError) {
+    if (planFileError || (isEditing && editPlanFileError)) {
       setFormError('Fix the budget plan file issue above before continuing.')
       return
     }
@@ -224,6 +285,22 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
         end_date: form.end_date,
         remarks: form.remarks || undefined,
       })
+
+      // Same two-request chain as Add above, just for a REPLACEMENT plan
+      // on an existing budget. attachPlan() adds a new supporting_documents
+      // row rather than deleting the old one, so this is additive — the
+      // previous version stays visible in Plan History, it's just no
+      // longer the "Current plan on file" shown at the top.
+      if (result.success && editPlanFile) {
+        const planResult = await uploadPlan(modalMode.budget_id, editPlanFile)
+        if (!planResult.success) {
+          fetchStats()
+          load()
+          closeModal()
+          setPageNotice(`Budget updated, but the replacement plan failed to attach: ${planResult.message}. You can attach it from the table.`)
+          return
+        }
+      }
     }
 
     if (!result.success) {
@@ -260,6 +337,13 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
     if (result.success) {
       fetchStats()
       load()
+    }
+  }
+
+  const handleViewPlan = async (b) => {
+    const result = await downloadPlan(b.budget_id, `${b.budget_code || 'budget'}-plan`)
+    if (!result.success) {
+      setPageNotice(`Couldn't open the budget plan: ${result.message}`)
     }
   }
 
@@ -368,18 +452,21 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
           <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by budget name or code..." className={`${INPUT} pl-9`} style={{ ...INPUT_TEXT_STYLE, width: '100%', minWidth: 0 }} autoComplete="off" />
         </div>
-        <select
-          value={statusFilter}
-          onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
-          className={`${INPUT} lg:w-5
-          6! shrink-0`}
-          style={INPUT_TEXT_STYLE}
-        >
+        <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }} className={INPUT} style={INPUT_TEXT_STYLE}>
           <option value="all">All Approval States</option>
           <option value="Draft">Pending</option>
           <option value="Active">Approved</option>
           <option value="Cancelled">Rejected</option>
         </select>
+        <Button
+          variant={showArchived ? 'primary' : 'secondary'}
+          size="sm"
+          icon={Archive}
+          onClick={() => { setShowArchived((prev) => !prev); setPage(1) }}
+          className="shrink-0 whitespace-nowrap"
+        >
+          Show Archived
+        </Button>
       </div>
 
       <div className={PANEL}>
@@ -423,13 +510,17 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                       <p className="text-xs text-muted tabular-nums">Left: {formatCurrency(b.remaining_amount)}</p>
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        <div className="h-1.5 w-20 rounded-full bg-bg overflow-hidden">
-                          <div className={`h-full rounded-full ${pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-500' : 'bg-primary'}`} style={{ width: `${pct}%` }} />
+                      {b.status === 'Active' ? (
+                        <div className="flex items-center gap-2">
+                          <div className="h-1.5 w-20 rounded-full bg-bg overflow-hidden">
+                            <div className={`h-full rounded-full ${pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-500' : 'bg-primary'}`} style={{ width: `${pct}%` }} />
+                          </div>
+                          <span className="text-xs text-muted tabular-nums">{pct}%</span>
+                          {pct >= 90 && <Tooltip label="Nearing budget limit"><AlertTriangle size={13} className="text-red-500" /></Tooltip>}
                         </div>
-                        <span className="text-xs text-muted tabular-nums">{pct}%</span>
-                        {pct >= 90 && <Tooltip label="Nearing budget limit"><AlertTriangle size={13} className="text-red-500" /></Tooltip>}
-                      </div>
+                      ) : (
+                        <span className="text-xs text-muted">— not yet active</span>
+                      )}
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap"><ApprovalBadge status={b.status} /></td>
                     <td className="px-4 py-3.5 whitespace-nowrap text-right">
@@ -461,6 +552,20 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                                 </button>
                               </Tooltip>
                             )}
+                          </>
+                        )}
+                        {b.has_plan && (
+                          <>
+                            <Tooltip label="View current plan" align="start">
+                              <button type="button" onClick={() => handleViewPlan(b)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                                <FileText size={15} />
+                              </button>
+                            </Tooltip>
+                            <Tooltip label="View plan history" align="start">
+                              <button type="button" onClick={() => setHistoryTarget(b)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                                <History size={15} />
+                              </button>
+                            </Tooltip>
                           </>
                         )}
                         <Tooltip label="View full record" align="start">
@@ -603,7 +708,13 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={LABEL}>Start Date</label>
-              <input type="date" value={form.start_date} onChange={(e) => setForm((f) => ({ ...f, start_date: e.target.value }))} className={`${INPUT} scheme-light dark:scheme-dark`} style={INPUT_TEXT_STYLE} />
+              <input
+                type="date"
+                value={form.start_date}
+                onChange={(e) => handleStartDateChange(e.target.value)}
+                className={`${INPUT} scheme-light dark:scheme-dark`}
+                style={INPUT_TEXT_STYLE}
+              />
             </div>
             <div>
               <label className={LABEL}>End Date</label>
@@ -616,46 +727,76 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
             <input type="text" value={form.remarks} onChange={(e) => setForm((f) => ({ ...f, remarks: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="Optional notes" />
           </div>
 
-          {!isEditing && (
-            <div>
-              <label className={LABEL}>Budget Plan <span className="text-red-500">*</span></label>
-              {!planFile ? (
-                <label className="flex items-center justify-center gap-2 rounded-lg border border-dashed border-amber-300 bg-amber-50/50 px-3 py-3 text-xs text-amber-700 cursor-pointer hover:border-amber-400 hover:bg-amber-50 transition-colors duration-150 dark:border-amber-500/30 dark:bg-amber-500/5 dark:text-amber-400 dark:hover:bg-amber-500/10">
-                  <Paperclip size={14} />
-                  Attach plan (PDF, Word, or Excel — up to 10MB)
-                  <input
-                    type="file"
-                    accept=".pdf,.doc,.docx,.xls,.xlsx"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0]
-                      if (!f) return
-                      const ext = f.name.split('.').pop()?.toLowerCase()
-                      if (!['pdf', 'doc', 'docx', 'xls', 'xlsx'].includes(ext)) {
-                        setPlanFileError(`"${f.name}" isn't a supported file type.`)
-                        return
-                      }
-                      if (f.size > 10 * 1024 * 1024) {
-                        setPlanFileError(`"${f.name}" exceeds the 10MB limit.`)
-                        return
-                      }
-                      setPlanFileError('')
-                      setPlanFile(f)
-                    }}
-                  />
-                </label>
-              ) : (
-                <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-bg px-3 py-2">
-                  <span className="truncate text-xs text-ink" title={planFile.name}>{planFile.name}</span>
-                  <button type="button" onClick={() => setPlanFile(null)} className="shrink-0 text-xs font-medium text-muted hover:text-ink">Remove</button>
-                </div>
-              )}
-              {planFileError && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{planFileError}</p>}
-              <p className="mt-1 text-xs text-muted">
-                Required — a budget cannot be created without its plan attached.
-              </p>
-            </div>
-          )}
+          {/* Budget Plan — required file picker when adding; when editing,
+              shows what's currently attached (if anything) plus an
+              optional "replace" picker. Editing is only reachable while
+              status === 'Draft' (see openEdit's guard and
+              BudgetService::update()'s own check), so a Draft budget here
+              may or may not have a plan yet either way. */}
+          <div>
+            <label className={LABEL}>
+              Budget Plan {!isEditing && <span className="text-red-500">*</span>}
+            </label>
+
+            {isEditing && modalMode.has_plan && !editPlanFile && (
+              <div className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-border bg-bg px-3 py-2">
+                <span className="flex items-center gap-1.5 text-xs text-ink">
+                  <FileText size={13} className="text-muted" />
+                  Current plan on file
+                </span>
+                <button type="button" onClick={() => handleViewPlan(modalMode)} className="shrink-0 text-xs font-medium text-primary hover:underline">
+                  View
+                </button>
+              </div>
+            )}
+
+            {!(isEditing ? editPlanFile : planFile) ? (
+              <label className="flex items-center justify-center gap-2 rounded-lg border border-dashed border-amber-300 bg-amber-50/50 px-3 py-3 text-xs text-amber-700 cursor-pointer hover:border-amber-400 hover:bg-amber-50 transition-colors duration-150 dark:border-amber-500/30 dark:bg-amber-500/5 dark:text-amber-400 dark:hover:bg-amber-500/10">
+                <Paperclip size={14} />
+                {isEditing
+                  ? (modalMode.has_plan ? 'Replace plan (PDF, Word, or Excel — up to 10MB)' : 'Attach plan (PDF, Word, or Excel — up to 10MB)')
+                  : 'Attach plan (PDF, Word, or Excel — up to 10MB)'}
+                <input
+                  type="file"
+                  accept=".pdf,.doc,.docx,.xls,.xlsx"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    if (isEditing) {
+                      handlePlanFileChange(f, setEditPlanFile, setEditPlanFileError)
+                    } else {
+                      handlePlanFileChange(f, setPlanFile, setPlanFileError)
+                    }
+                  }}
+                />
+              </label>
+            ) : (
+              <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-bg px-3 py-2">
+                <span className="truncate text-xs text-ink" title={(isEditing ? editPlanFile : planFile).name}>
+                  {(isEditing ? editPlanFile : planFile).name}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => (isEditing ? setEditPlanFile(null) : setPlanFile(null))}
+                  className="shrink-0 text-xs font-medium text-muted hover:text-ink"
+                >
+                  Remove
+                </button>
+              </div>
+            )}
+
+            {(isEditing ? editPlanFileError : planFileError) && (
+              <p className="mt-1 text-xs text-red-600 dark:text-red-400">{isEditing ? editPlanFileError : planFileError}</p>
+            )}
+
+            <p className="mt-1 text-xs text-muted">
+              {isEditing
+                ? (editPlanFile
+                    ? 'This adds a new version — the current file stays available in Plan History.'
+                    : 'Optional — pick a file only if you want to replace the current plan.')
+                : 'Required — a budget cannot be created without its plan attached.'}
+            </p>
+          </div>
 
           {!isEditing && (
             <p className="text-xs text-muted">New budgets start as <span className="font-medium text-ink">Draft</span> and await approval.</p>
@@ -665,7 +806,6 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
             <div className="rounded-lg border border-border bg-bg px-3 py-2.5">
               <DetailRow label="Remaining amount" value={formatCurrency(modalMode.remaining_amount)} />
               <DetailRow label="Approval status" value={<ApprovalBadge status={modalMode.status} />} />
-              <DetailRow label="Budget plan" value={modalMode.has_plan ? 'Attached' : 'Not attached'} />
               <DetailRow label="Created by" value={modalMode.created_by_name || '—'} />
               <DetailRow label="Created at" value={formatDateTime(modalMode.created_at)} />
               <DetailRow label="Last updated" value={formatDateTime(modalMode.updated_at)} />
@@ -713,6 +853,15 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
         }}
       />
 
+      {/* Budget plan version history modal */}
+      <BudgetPlanHistoryModal
+        open={!!historyTarget}
+        onClose={() => setHistoryTarget(null)}
+        budget={historyTarget}
+        fetchHistory={fetchPlanHistory}
+        onDownload={downloadPlanVersion}
+      />
+
       {/* Detail modal */}
       <Modal
         open={!!detailRecord}
@@ -756,11 +905,30 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
               <div className="px-3 py-2">
                 <DetailRow label="Allocated Amount" value={formatCurrency(detailRecord.allocated_amount)} />
                 <DetailRow label="Remaining Amount" value={formatCurrency(detailRecord.remaining_amount)} />
-                <DetailRow label="Utilization" value={`${usedPct(detailRecord.allocated_amount, detailRecord.remaining_amount)}%`} />
+                <DetailRow
+                  label="Utilization"
+                  value={detailRecord.status === 'Active' ? `${usedPct(detailRecord.allocated_amount, detailRecord.remaining_amount)}%` : 'Not yet active'}
+                />
               </div>
               <div className="px-3 py-2">
                 <DetailRow label="Budget Type" value={detailRecord.budget_type} />
-                <DetailRow label="Budget Plan" value={detailRecord.has_plan ? 'Attached' : <span className="text-amber-600 dark:text-amber-400">Not attached</span>} />
+                <DetailRow
+                  label="Budget Plan"
+                  value={
+                    detailRecord.has_plan ? (
+                      <span className="inline-flex items-center gap-3">
+                        <button type="button" onClick={() => handleViewPlan(detailRecord)} className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
+                          <FileText size={12} /> View file
+                        </button>
+                        <button type="button" onClick={() => setHistoryTarget(detailRecord)} className="inline-flex items-center gap-1 font-medium text-muted hover:underline">
+                          <History size={12} /> History
+                        </button>
+                      </span>
+                    ) : (
+                      <span className="text-amber-600 dark:text-amber-400">Not attached</span>
+                    )
+                  }
+                />
                 <DetailRow label="Remarks" value={detailRecord.remarks || '—'} />
               </div>
               <div className="px-3 py-2">
