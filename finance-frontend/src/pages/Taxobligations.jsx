@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { Search, Plus, Pencil, Archive, RotateCcw, Receipt, CheckCircle2, Clock3, AlertTriangle, Info, Printer, Sparkles, Eye, EyeOff, ChevronLeft, ChevronRight, Loader2, CalendarRange, X } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
@@ -6,6 +6,7 @@ import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
 import { formatCurrency } from '../utils/formatters'
 import { useTaxObligations } from '../hooks/useTaxObligations'
+import { useHighlightRow } from '../hooks/useHighlightRow'
 
 const pad = (n) => String(n).padStart(2, '0')
 const QUARTER_LABELS = { 1: 'Q1 (Jan–Mar)', 2: 'Q2 (Apr–Jun)', 3: 'Q3 (Jul–Sep)', 4: 'Q4 (Oct–Dec)' }
@@ -142,6 +143,21 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
     page, setPage,
     createObligation, updateObligation, archiveObligation, restoreObligation,
   } = useTaxObligations()
+
+  // Global search (SearchBar.jsx) navigates here with a highlightId (and,
+  // since this table's `search` filter is server-side/debounced inside
+  // useTaxObligations, a highlightSearch seed) whenever a tax obligation
+  // record is clicked from search results.
+  const { highlightedId, highlightSearch } = useHighlightRow()
+  useEffect(() => {
+    if (highlightSearch == null) return
+    setSearch(highlightSearch)
+    setStatusFilter('all')
+    setShowArchived(false)
+    setDateFrom('')
+    setDateTo('')
+    setPage(1)
+  }, [highlightSearch])
 
   const [modalMode, setModalMode] = useState(null)
   const [form, setForm] = useState(buildEmptyForm)
@@ -450,7 +466,12 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                 const revealed = revealedIds.has(o.tax_id)
                 const formattedAmount = formatCurrency(o.amount)
                 return (
-                  <tr key={o.tax_id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
+                  <tr
+                    key={o.tax_id}
+                    data-row-id={o.tax_id}
+                    className={`border-b border-border last:border-0 transition-colors duration-300
+                      ${highlightedId === o.tax_id ? 'bg-primary/10' : 'hover:bg-bg'}`}
+                  >
                     <td className="px-4 py-3.5">
                       <p className="font-medium text-ink">{o.tax_type}</p>
                       <p className="text-xs text-muted">{o.tax_period}</p>

@@ -7,6 +7,7 @@ import Tooltip from '../components/Tooltip'
 import { formatCurrency } from '../utils/formatters'
 import { apiFetch } from '../utils/api'
 import { useExpenses } from '../hooks/useExpenses'
+import { useHighlightRow } from '../hooks/useHighlightRow'
 
 const EMPTY_FORM = {
   budget_id: '',
@@ -105,6 +106,25 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search])
+
+  // Global search (SearchBar.jsx) navigates here with a highlightId (and,
+  // since this table's `search` filter is server-side, a highlightSearch
+  // seed) whenever an expense record is clicked from search results.
+  const { highlightedId, highlightSearch } = useHighlightRow()
+  useEffect(() => {
+    if (highlightSearch == null) return
+    setSearch(highlightSearch) // keeps the visible search box in sync
+    setFilter({
+      search: highlightSearch,
+      status: '',
+      budget_id: '',
+      expense_category_id: '',
+      expense_date_from: '',
+      expense_date_to: '',
+      trashed: false,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightSearch])
 
   // Expense-date range filter — sent to the backend the same way as
   // search/status/category (see useExpenses.buildQuery), so it applies
@@ -369,7 +389,12 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                   {hasDateFilter ? 'No expenses fall within the selected date range.' : 'No expenses match your filters.'}
                 </td></tr>
               ) : paginatedExpenses.map((x) => (
-                <tr key={x.id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
+                <tr
+                  key={x.id}
+                  data-row-id={x.id}
+                  className={`border-b border-border last:border-0 transition-colors duration-300
+                    ${highlightedId === x.id ? 'bg-primary/10' : 'hover:bg-bg'}`}
+                >
                   <td className="px-4 py-3.5">
                     <p className="font-medium text-ink">{x.description}</p>
                     <p className="text-xs text-muted">{x.receipt_number || x.expense_source} {x.supplier_id ? `\u00b7 ${x.supplier_name || supplierName(x.supplier_id)}` : ''}</p>

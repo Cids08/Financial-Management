@@ -5,6 +5,7 @@ import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
 import { apiFetch } from '../utils/api'
+import { useHighlightRow } from '../hooks/useHighlightRow'
 
 // Masks every character (keeps dashes/spaces as visual separators)
 function maskValue(value) {
@@ -43,6 +44,17 @@ export default function Departments({ title = 'Departments', crumbs = ['Master D
   const [meta, setMeta] = useState({ currentPage: 1, lastPage: 1, total: 0 })
   const [showArchived, setShowArchived] = useState(false)
   const [revealedIds, setRevealedIds] = useState(new Set())
+
+  // Global search (SearchBar.jsx) navigates here with a highlightId (and,
+  // since this grid's `search` filter is server-side, a highlightSearch
+  // seed) whenever a department record is clicked from search results.
+  const { highlightedId, highlightSearch } = useHighlightRow()
+  useEffect(() => {
+    if (highlightSearch == null) return
+    setSearch(highlightSearch)
+    setShowArchived(false)
+    setPage(1)
+  }, [highlightSearch])
 
   const toggleReveal = (id) => {
     setRevealedIds((prev) => {
@@ -246,7 +258,12 @@ export default function Departments({ title = 'Departments', crumbs = ['Master D
           </div>
         ) : (
           departments.map((d) => (
-            <div key={d.department_id} className={`${PANEL} p-4 flex flex-col gap-3 ${showArchived ? 'opacity-75' : ''}`}>
+            <div
+              key={d.department_id}
+              data-row-id={d.department_id}
+              className={`${PANEL} p-4 flex flex-col gap-3 transition-colors duration-300
+                ${showArchived ? 'opacity-75' : ''} ${highlightedId === d.department_id ? 'ring-2 ring-primary/50 bg-primary/10' : ''}`}
+            >
               <div className="flex items-start justify-between">
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/15 text-primary-dark">
                   <Building2 size={18} />

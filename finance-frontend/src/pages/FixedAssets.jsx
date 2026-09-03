@@ -7,6 +7,7 @@ import Tooltip from '../components/Tooltip'
 import { formatCurrency, formatDate } from '../utils/formatters'
 import { useFixedAssets } from '../hooks/useFixedAssets'
 import { apiFetch } from '../utils/api'
+import { useHighlightRow } from '../hooks/useHighlightRow'
 
 // asset_category is a plain string column per the ERD (no lookup table) —
 // this list is just the frontend's suggested set for the dropdown; typing
@@ -50,6 +51,20 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
     page, setPage,
     createAsset, updateAsset, archiveAsset, restoreAsset,
   } = useFixedAssets()
+
+  // Global search (SearchBar.jsx) navigates here with a highlightId (and,
+  // since this table's `search` filter is server-side/debounced inside
+  // useFixedAssets, a highlightSearch seed) whenever a fixed asset record
+  // is clicked from search results.
+  const { highlightedId, highlightSearch } = useHighlightRow()
+  useEffect(() => {
+    if (highlightSearch == null) return
+    setSearch(highlightSearch)
+    setCategoryFilter('all')
+    setStatusFilter('all')
+    setShowArchived(false)
+    setPage(1)
+  }, [highlightSearch])
 
   // Departments come from the real API now (see routes: GET /api/departments).
   // ASSUMPTION: DepartmentResource returns { id, department_name } — the
@@ -227,7 +242,12 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
               {!loading && assets.map((a) => {
                 const CatIcon = CATEGORY_ICON[a.asset_category] || Boxes
                 return (
-                  <tr key={a.id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
+                  <tr
+                    key={a.id}
+                    data-row-id={a.id}
+                    className={`border-b border-border last:border-0 transition-colors duration-300
+                      ${highlightedId === a.id ? 'bg-primary/10' : 'hover:bg-bg'}`}
+                  >
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-2.5">
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary-dark">

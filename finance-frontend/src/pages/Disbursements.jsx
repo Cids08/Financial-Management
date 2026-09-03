@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import {
   Search, Plus, Pencil, Archive, RotateCcw, Send, CheckCircle2, Clock3, Info, Printer,
   Lock, ChevronLeft, ChevronRight, CalendarRange, X, Upload, ThumbsUp, ThumbsDown, Wallet,
@@ -12,6 +12,7 @@ import { formatCurrency } from '../utils/formatters'
 import { usePermissions } from '../context/PermissionsContext'
 import { hasPermission } from '../utils/permissions'
 import { useDisbursements } from '../hooks/useDisbursements'
+import { useHighlightRow } from '../hooks/useHighlightRow'
 
 /* ---------------------------------------------------------------------- */
 /* Static form config (these still need real endpoints for dropdowns —    */
@@ -114,6 +115,20 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
 
   const [dModalMode, setDModalMode] = useState(null) // null | 'add' | disbursement object
   const [dForm, setDForm] = useState(EMPTY_DISBURSEMENT_FORM)
+
+  // Global search (SearchBar.jsx) navigates here with a highlightId (and,
+  // since this table's search is server-side via the hook's own
+  // debounced dSearch, a highlightSearch seed) whenever a disbursement
+  // record is clicked from search results.
+  const { highlightedId, highlightSearch } = useHighlightRow()
+  useEffect(() => {
+    if (highlightSearch == null) return
+    setDSearch(highlightSearch)
+    setDStatusFilter('all')
+    setDShowArchived(false)
+    setDSourceFilter('all')
+    setDPage(1)
+  }, [highlightSearch])
   const [dFormError, setDFormError] = useState('')
   const [dDetailRecord, setDDetailRecord] = useState(null)
   const [dSubmitting, setDSubmitting] = useState(false)
@@ -403,7 +418,12 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                 const sourceType = getSourceType(d)
                 const isPayroll = sourceType === 'payroll'
                 return (
-                  <tr key={d.disbursement_id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
+                  <tr
+                    key={d.disbursement_id}
+                    data-row-id={d.disbursement_id}
+                    className={`border-b border-border last:border-0 transition-colors duration-300
+                      ${highlightedId === d.disbursement_id ? 'bg-primary/10' : 'hover:bg-bg'}`}
+                  >
                     <td className="px-4 py-3.5">
                       <p className="font-medium text-ink">{d.payee}</p>
                       <p className="text-xs text-muted">{d.voucher_number} &middot; {d.cash_account_name}</p>

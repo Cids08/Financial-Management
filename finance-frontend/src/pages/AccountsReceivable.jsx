@@ -8,6 +8,7 @@ import { formatCurrency } from '../utils/formatters'
 import { useAccountsReceivable } from '../hooks/useAccountsReceivable'
 import { apiFetch } from '../utils/api'
 import { usePermissions } from '../context/PermissionsContext'
+import { useHighlightRow } from '../hooks/useHighlightRow'
 
 const PAYMENT_METHODS = ['Bank Transfer', 'Check', 'Cash', 'Credit Card', 'GCash']
 const STATUS_OPTIONS = ['Pending', 'Partially Paid', 'Paid', 'Overdue', 'Cancelled']
@@ -219,6 +220,20 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [showArchived, setShowArchived] = useState(false)
+
+  // Global search (SearchBar.jsx) navigates here with a highlightId
+  // whenever an AR/invoice record is clicked from search results. This
+  // table already loads every record client-side (useAccountsReceivable
+  // fetches everything up front — see `filtered` below), so no
+  // highlightSearch seeding is needed; just make sure no active filter
+  // is hiding the target row.
+  const { highlightedId, highlightSearch } = useHighlightRow()
+  useEffect(() => {
+    if (highlightSearch == null) return
+    setSearch('')
+    setStatusFilter('all')
+    setShowArchived(false)
+  }, [highlightSearch])
 
   const [modalMode, setModalMode] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
@@ -500,7 +515,12 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                 <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-muted">Loading invoices…</td></tr>
               )}
               {!loading && paginated.map((r) => (
-                <tr key={r.ar_id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
+                <tr
+                  key={r.ar_id}
+                  data-row-id={r.ar_id}
+                  className={`border-b border-border last:border-0 transition-colors duration-300
+                    ${highlightedId === r.ar_id ? 'bg-primary/10' : 'hover:bg-bg'}`}
+                >
                   <td className="px-4 py-3.5">
                     <p className="font-medium text-ink">{r.invoice_number}</p>
                     <p className="text-xs text-muted">{r.reference_no} &middot; {r.payment_method}</p>

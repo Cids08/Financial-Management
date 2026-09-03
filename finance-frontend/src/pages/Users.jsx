@@ -23,6 +23,7 @@ import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
 import { useUsers } from '../hooks/useUsers'
+import { useHighlightRow } from '../hooks/useHighlightRow'
 
 // Covers both the originally-assumed role names AND the actual ones this
 // project's roles table uses (Admin, Staff) — every entry has an explicit
@@ -311,6 +312,21 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
   const [roleFilter, setRoleFilter] = useState(searchParams.get('role') || 'all')
   const [statusFilter, setStatusFilter] = useState('all')
   const [showArchived, setShowArchived] = useState(false)
+  // Users.jsx loads every user client-side (no server-side `search`
+  // paging), so highlightSearch isn't needed here — the target row is
+  // already in memory the moment it's highlighted.
+  const { highlightedId } = useHighlightRow()
+
+  // A row arriving via search highlight should always be visible — clear
+  // any active filter that could otherwise hide it (e.g. landing here
+  // with a role filter still set from a previous visit).
+  useEffect(() => {
+    if (highlightedId == null) return
+    setSearch('')
+    setRoleFilter('all')
+    setStatusFilter('all')
+    setShowArchived(false)
+  }, [highlightedId])
 
   // If arriving from a role card's deep link (/user-management/users?role=3),
   // pick up the filter once on mount and clean the URL so it doesn't linger.
@@ -612,7 +628,12 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
                 const avatarSrc = resolveAvatarUrl(u.avatar_url)
                 const showAvatarImage = avatarSrc && !avatarFailed
                 return (
-                  <tr key={u.user_id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
+                  <tr
+                    key={u.user_id}
+                    data-row-id={u.user_id}
+                    className={`border-b border-border last:border-0 transition-colors duration-300
+                      ${highlightedId === u.user_id ? 'bg-primary/10' : 'hover:bg-bg'}`}
+                  >
                     <td className="px-4 py-3.5">
                       <div className="flex items-start gap-2.5">
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary-dark overflow-hidden">

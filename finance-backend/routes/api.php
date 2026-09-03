@@ -31,6 +31,7 @@ use App\Http\Controllers\Api\CollectionController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\BudgetController;
 use App\Http\Controllers\Api\DisbursementController;
+use App\Http\Controllers\Api\SearchController;
 use Illuminate\Support\Facades\Broadcast;
 
 Broadcast::routes(['middleware' => ['auth:sanctum']]);
@@ -62,6 +63,14 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Current user's own permissions
     Route::get('/me/permissions', [PermissionController::class, 'mine']);
+
+    // Global hybrid search (SearchBar.jsx's "DATABASE RESULTS" half).
+    // Deliberately NOT gated by a single 'permission:' middleware — it
+    // spans many modules with different permission slugs, so
+    // SearchController checks each one individually per entity, the same
+    // way PermissionController::mine() above is open to every
+    // authenticated user but only ever returns that user's own data.
+    Route::get('/search', [SearchController::class, 'index']);
 
     // Settings
     Route::prefix('settings')->group(function () {

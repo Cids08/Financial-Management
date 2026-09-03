@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search, Plus, Pencil, Archive, RotateCcw, FileText, Wallet, AlertTriangle, Info, Printer, CheckCircle2, Paperclip, Upload, ScanLine, X } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
@@ -7,6 +7,7 @@ import Tooltip from '../components/Tooltip'
 import { formatCurrency } from '../utils/formatters'
 import { useAccountsPayable } from '../hooks/useAccountsPayable'
 import { apiFetch } from '../utils/api'
+import { useHighlightRow } from '../hooks/useHighlightRow'
 
 const PAYMENT_METHODS = ['Bank Transfer', 'Check', 'Cash', 'Credit Card', 'GCash']
 // Confirmed via pg_get_constraintdef on accounts_payable_status_check —
@@ -207,6 +208,18 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [showArchived, setShowArchived] = useState(false)
+
+  // Global search (SearchBar.jsx) navigates here with a highlightId
+  // whenever an AP/bill record is clicked from search results. `bills`
+  // and `archivedBills` are both already loaded in full by
+  // useAccountsPayable(), so no search-seeding is needed — just clear
+  // whatever status filter might be hiding the target row.
+  const { highlightedId, highlightSearch } = useHighlightRow()
+  useEffect(() => {
+    if (highlightSearch == null) return
+    setSearch('')
+    setStatusFilter('all')
+  }, [highlightSearch])
 
   const [modalMode, setModalMode] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
@@ -448,7 +461,12 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
               )}
 
               {!billsLoading && filtered.map((r) => (
-                <tr key={r.ap_id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
+                <tr
+                  key={r.ap_id}
+                  data-row-id={r.ap_id}
+                  className={`border-b border-border last:border-0 transition-colors duration-300
+                    ${highlightedId === r.ap_id ? 'bg-primary/10' : 'hover:bg-bg'}`}
+                >
                   <td className="px-4 py-3.5">
                     <div className="flex items-center gap-1.5">
                       <p className="font-medium text-ink">{r.invoice_number}</p>
