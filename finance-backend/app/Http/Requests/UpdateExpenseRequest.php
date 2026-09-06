@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\Expense;
+use App\Models\ExpenseCategory;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -10,7 +11,7 @@ class UpdateExpenseRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user() !== null;
+        return $this->user()?->can('update', $this->route('expense')) ?? false;
     }
 
     public function rules(): array
@@ -36,6 +37,19 @@ class UpdateExpenseRequest extends FormRequest
      * Once an expense is Approved it has already hit the budget and the
      * general ledger — editing it in place would silently desync both.
      * Rejecting or reversing it is a separate, deliberate workflow.
+     *
+     * This is now also enforced in ExpensePolicy::update() (checked via
+     * authorize() above, before rules() even runs) — kept here too as a
+     * belt-and-suspenders validation-layer message, same as
+     * ExpenseService::update()'s own guard.
+     *
+     * Inactive-category check only fires when expense_category_id is
+     * actually CHANGING to a different value. An expense that already
+     * has a since-retired category assigned must stay editable for every
+     * other field (amount, description, etc.) without being forced to
+     * first pick a different category — the block is on choosing an
+     * inactive category, not on merely having one from before it was
+     * retired.
      */
     public function withValidator(Validator $validator): void
     {
@@ -48,6 +62,19 @@ class UpdateExpenseRequest extends FormRequest
                     'status',
                     'Approved expenses cannot be edited directly. Reject or reverse it first.'
                 );
+            }
+
+            $categoryId = $this->input('expense_category_id');
+
+            if ($expense && $categoryId && (int) $categoryId !== (int) $expense->expense_category_id) {
+                $category = ExpenseCategory::find($categoryId);
+
+                if ($category && ! $category->is_active) {
+                    $validator->errors()->add(
+                        'expense_category_id',
+                        'This expense category is inactive and can no longer be selected.'
+                    );
+                }
             }
         });
     }

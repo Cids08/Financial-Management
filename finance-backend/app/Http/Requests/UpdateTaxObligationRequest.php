@@ -2,31 +2,15 @@
 
 namespace App\Http\Requests;
 
-use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
-
-class UpdateTaxObligationRequest extends FormRequest
+class UpdateTaxObligationRequest extends StoreTaxObligationRequest
 {
+    // Inherits rules() as-is from StoreTaxObligationRequest — the two were
+    // byte-for-byte identical before, so extending instead of duplicating
+    // means a future rule change only has to happen in one place. Only
+    // authorize() differs: update needs the route-bound model so a Policy
+    // can check ability against the specific record, not just the class.
     public function authorize(): bool
     {
-        return $this->user() !== null;
-    }
-
-    public function rules(): array
-    {
-        return [
-            'tax_type'          => ['required', Rule::in([
-                'VAT', 'Withholding Tax', 'Percentage Tax',
-                'Documentary Stamp Tax', 'Income Tax', 'Local Business Tax',
-            ])],
-            'tax_period'        => ['required', 'string', 'max:255'],
-            'due_date'          => ['required', 'date'],
-            'tax_rate'          => ['required', 'numeric', 'min:0', 'max:100'],
-            'taxable_amount'    => ['required', 'numeric', 'min:0'],
-            'is_paid'           => ['sometimes', 'boolean'],
-            'payment_date'      => ['required_if:is_paid,true', 'nullable', 'date'],
-            'reference_number'  => ['nullable', 'string', 'max:255'],
-            'remarks'           => ['nullable', 'string'],
-        ];
+        return $this->user()?->can('update', $this->route('taxObligation')) ?? false;
     }
 }

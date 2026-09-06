@@ -7,7 +7,6 @@ use App\Models\Budget;
 use App\Models\ChartOfAccount;
 use App\Models\Expense;
 use App\Models\JournalEntry;
-use App\Models\Notification;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
@@ -15,8 +14,14 @@ use Illuminate\Validation\ValidationException;
 
 class ExpenseService
 {
+    // NotificationService lives in the same App\Services namespace, so no
+    // `use` import is needed for it below.
+    public function __construct(protected NotificationService $notificationService)
+    {
+    }
+
     /**
-     * @param array{search?:string,status?:string,budget_id?:int,expense_category_id?:int,trashed?:bool,per_page?:int} $filters
+     * @param array{search?:string,status?:string,budget_id?:int,expense_category_id?:int,expense_date_from?:string,expense_date_to?:string,trashed?:bool,per_page?:int} $filters
      */
     public function list(array $filters): LengthAwarePaginator
     {
@@ -31,7 +36,8 @@ class ExpenseService
             ->search($filters['search'] ?? null)
             ->status($filters['status'] ?? null)
             ->forBudget($filters['budget_id'] ?? null)
-            ->forCategory($filters['expense_category_id'] ?? null);
+            ->forCategory($filters['expense_category_id'] ?? null)
+            ->expenseDateBetween($filters['expense_date_from'] ?? null, $filters['expense_date_to'] ?? null);
 
         return $query
             ->orderByDesc('expense_date')
@@ -44,10 +50,14 @@ class ExpenseService
      */
     public function stats(): array
     {
-        $active = Expense::query();
-        $total = (clone $active)->count();
-        $totalAmount = (float) (clone $active)->sum('expense_amount');
-        $thisMonthAmount = (float) (clone $active)
+        // Only Approved expenses have actually hit a budget / the ledger,
+        // so the amount cards reflect real spend rather than everything
+        // ever recorded (which would include Pending and Rejected rows).
+        $approved = Expense::query()->where('status', Expense::STATUS_APPROVED);
+
+        $total = Expense::query()->count();
+        $totalAmount = (float) (clone $approved)->sum('expense_amount');
+        $thisMonthAmount = (float) (clone $approved)
             ->whereBetween('expense_date', [now()->startOfMonth(), now()->endOfMonth()])
             ->sum('expense_amount');
         $archived = Expense::onlyTrashed()->count();
@@ -161,8 +171,23 @@ class ExpenseService
      * approving an expense must update the budget's used/remaining
      * amounts, flag over-budget, warn when the threshold is crossed,
      * and post the double-entry journal lines — all atomically.
+     *
+     * Two guards run before any of that happens:
+     *   1. The budget must belong to the same department as whoever
+     *      filed the expense — an expense should only ever draw down
+     *      its own department's budget, never another department's.
+     *      Skippable ONLY for system-generated postings where "who
+     *      happened to click the button" has no bearing on which
+     *      department the spend belongs to — see $skipDepartmentCheck
+     *      below and TaxObligationService::recordAsExpense(), its one
+     *      caller. Never set true from anything reachable by a request
+     *      the user directly controls the department/budget/creator of.
+     *   2. The budget itself must be in a spendable state (not still
+     *      Draft, not already Closed) — a budget has its own lifecycle
+     *      independent of the expenses filed against it. This check is
+     *      never skipped, including for system-generated postings.
      */
-    public function approve(Expense $expense, User $approver): Expense
+    public function approve(Expense $expense, User $approver, bool $skipDepartmentCheck = false): Expense
     {
         if ($expense->status !== Expense::STATUS_PENDING) {
             throw ValidationException::withMessages([
@@ -170,9 +195,23 @@ class ExpenseService
             ]);
         }
 
-        return DB::transaction(function () use ($expense, $approver) {
+        $expense->loadMissing('creator');
+
+        return DB::transaction(function () use ($expense, $approver, $skipDepartmentCheck) {
             /** @var Budget $budget */
             $budget = Budget::query()->lockForUpdate()->findOrFail($expense->budget_id);
+
+            if (! $skipDepartmentCheck && $expense->creator && $expense->creator->department_id !== $budget->department_id) {
+                throw ValidationException::withMessages([
+                    'budget' => "This expense's budget belongs to a different department than the person who filed it.",
+                ]);
+            }
+
+            if ($budget->status !== Budget::STATUS_ACTIVE) {
+                throw ValidationException::withMessages([
+                    'budget' => "Cannot approve expenses against a budget with status \"{$budget->status}\". The budget must be Active.",
+                ]);
+            }
 
             $newUsed = bcadd((string) $budget->used_amount, (string) $expense->expense_amount, 2);
             $newRemaining = bcsub((string) $budget->allocated_amount, $newUsed, 2);
@@ -246,9 +285,7 @@ class ExpenseService
         DB::transaction(function () use ($expense, $remarks) {
             $expense->update([
                 'status' => Expense::STATUS_REJECTED,
-                'description' => $remarks
-                    ? $expense->description . "\n\n[Rejected] {$remarks}"
-                    : $expense->description,
+                'rejection_remarks' => $remarks,
             ]);
 
             $this->notifyExpenseCreator($expense, approved: false, reason: $remarks);
@@ -269,6 +306,12 @@ class ExpenseService
         return $expense->refresh();
     }
 
+    /**
+     * REFACTOR: routed through NotificationService::create() instead of
+     * calling Notification::create() directly, so every service creates
+     * notifications the same way (one place to change behavior later —
+     * e.g. broadcasting, per-page defaults, dedup rules).
+     */
     private function notifyBudgetWarning(Budget $budget, Expense $expense, float $usedPercentage, bool $isOverBudget): void
     {
         $recipientId = $budget->approved_by ?? $budget->created_by;
@@ -277,10 +320,11 @@ class ExpenseService
             return;
         }
 
-        Notification::create([
-            'user_id' => $recipientId,
-            'title' => $isOverBudget ? 'Budget exceeded' : 'Budget nearing its limit',
-            'message' => sprintf(
+        $this->notificationService->create(
+            $recipientId,
+            $isOverBudget ? 'budget_over' : 'budget_warning',
+            $isOverBudget ? 'Budget exceeded' : 'Budget nearing its limit',
+            sprintf(
                 '%s used %.2f%% of "%s" (%s) after approving expense #%d.',
                 $isOverBudget ? 'Over budget:' : 'Warning:',
                 $usedPercentage,
@@ -288,9 +332,7 @@ class ExpenseService
                 $budget->budget_code,
                 $expense->id
             ),
-            'type' => $isOverBudget ? 'budget_over' : 'budget_warning',
-            'is_read' => false,
-        ]);
+        );
     }
 
     /**
@@ -307,6 +349,11 @@ class ExpenseService
      * receivable/payable/budget/forecast/ai_recommendation), so this
      * will render with the default Bell icon and route to /reports until
      * that map is extended with an 'expense' entry.
+     *
+     * REFACTOR: routed through NotificationService::create() instead of
+     * calling Notification::create() directly, so every service creates
+     * notifications the same way (one place to change behavior later —
+     * e.g. broadcasting, per-page defaults, dedup rules).
      */
     private function notifyExpenseCreator(Expense $expense, bool $approved, ?string $reason = null): void
     {
@@ -314,15 +361,14 @@ class ExpenseService
             return;
         }
 
-        Notification::create([
-            'user_id' => $expense->created_by,
-            'title' => $approved ? 'Expense approved' : 'Expense rejected',
-            'message' => $approved
+        $this->notificationService->create(
+            $expense->created_by,
+            'expense',
+            $approved ? 'Expense approved' : 'Expense rejected',
+            $approved
                 ? sprintf('Your expense #%d was approved.', $expense->id)
                 : sprintf('Your expense #%d was rejected.%s', $expense->id, $reason ? " Reason: {$reason}" : ''),
-            'type' => 'expense',
-            'is_read' => false,
-        ]);
+        );
     }
 
     /**

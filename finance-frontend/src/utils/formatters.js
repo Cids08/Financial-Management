@@ -11,3 +11,17 @@ export const formatDate = (isoDate) =>
     month: 'short',
     day: 'numeric',
   })
+
+// Added for Budgets — timestamps like approved_at/created_at/updated_at
+// need the time portion, which formatDate above doesn't include. Same
+// locale/style convention as formatDate, just with hour/minute appended.
+export const formatDateTime = (isoDate) => {
+  if (!isoDate) return '—'
+  return new Date(isoDate).toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}

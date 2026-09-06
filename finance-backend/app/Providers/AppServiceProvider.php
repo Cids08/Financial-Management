@@ -5,9 +5,9 @@ namespace App\Providers;
 use App\Contracts\AdvisorEngine;
 use App\Contracts\ForecastEngine;
 use App\Contracts\RecommendationEngine;
-use App\Services\Advisor\OpenAiAdvisorEngine;
+use App\Services\Advisor\RemoteAdvisorEngine;
 use App\Services\Forecasting\PythonArimaForecastEngine;
-use App\Services\Recommendation\OpenAiRecommendationEngine;
+use App\Services\Recommendation\RemoteRecommendationEngine;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -23,17 +23,18 @@ class AppServiceProvider extends ServiceProvider
         // until that's connected and confirmed.
         $this->app->bind(ForecastEngine::class, PythonArimaForecastEngine::class);
 
-        // Flipped to real OpenAI now that a key is available. Requires
-        // OPENAI_API_KEY (and optionally OPENAI_ADVISOR_MODEL) in .env.
-        // AiAdvisorService and SummarizeAiAdvisorConversation depend on the
-        // AdvisorEngine interface only — neither needed to change.
-        $this->app->bind(AdvisorEngine::class, OpenAiAdvisorEngine::class);
+        // Points at the AI microservice (ai-advisor-service), not OpenAI
+        // directly — that service owns the actual OpenRouter call.
+        // Requires AI_ADVISOR_SERVICE_URL and AI_ADVISOR_SERVICE_TOKEN in
+        // .env. AiAdvisorService and SummarizeAiAdvisorConversation depend
+        // on the AdvisorEngine interface only — neither needed to change.
+        $this->app->bind(AdvisorEngine::class, RemoteAdvisorEngine::class);
 
-        // Same key, flipped to real OpenAI. Requires OPENAI_API_KEY (and
-        // optionally OPENAI_RECOMMENDATION_MODEL) in .env.
+        // Same AI microservice, different endpoint (/recommendations).
+        // Requires the same AI_ADVISOR_SERVICE_URL/TOKEN as above.
         // GenerateAiRecommendations depends on the RecommendationEngine
         // interface only — it didn't need to change either.
-        $this->app->bind(RecommendationEngine::class, OpenAiRecommendationEngine::class);
+        $this->app->bind(RecommendationEngine::class, RemoteRecommendationEngine::class);
     }
 
     /**

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\TaxObligation;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -9,7 +10,11 @@ class StoreTaxObligationRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user() !== null;
+        // Previously just checked the user was authenticated, which meant
+        // any logged-in user — regardless of role — could create a tax
+        // obligation. Route through a Policy so this respects role-based
+        // permissions like every other financial-write endpoint.
+        return $this->user()?->can('create', TaxObligation::class) ?? false;
     }
 
     public function rules(): array

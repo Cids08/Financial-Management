@@ -36,6 +36,16 @@ const STATUS_STYLES = {
   Rejected: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
 }
 
+// Tax obligations use their own status set — the DB column is only ever
+// Pending/Paid, but the API derives 'Overdue' live (see
+// TaxObligation::derivedStatus()), so it isn't the same vocabulary as
+// an expense's Pending/Approved/Rejected above.
+const TAX_STATUS_STYLES = {
+  Pending: 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400',
+  Paid: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400',
+  Overdue: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
+}
+
 const CURRENT_MONTH_LABEL = new Date().toLocaleDateString('en-US', { month: 'short' })
 const PAGE_SIZE = 10
 
@@ -86,7 +96,7 @@ function useLookup(path) {
 
 export default function Expenses({ title = 'Expenses', crumbs = ['Financial Transactions', 'Expenses'] }) {
   const {
-    expenses, listLoading, listError, filters, setFilter, refetch,
+    expenses, meta, listLoading, listError, filters, setFilter, goToPage, refetch,
     stats, statsLoading,
     mutating, mutateError,
     createExpense, updateExpense, approveExpense, rejectExpense, archiveExpense, restoreExpense,
@@ -132,27 +142,17 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
   const hasDateFilter = Boolean(filters.expense_date_from || filters.expense_date_to)
   const clearDateFilter = () => setFilter({ expense_date_from: '', expense_date_to: '' })
 
-  // Client-side pagination over the currently-loaded/filtered expense list.
-  // NOTE: this paginates whatever `expenses` already holds. If useExpenses /
-  // the backend end up paginating server-side (Laravel's default paginator),
-  // swap this for real page/meta state from the hook instead of slicing here.
-  const [page, setPage] = useState(1)
-  useEffect(() => {
-    setPage(1)
-  }, [filters.status, filters.expense_category_id, filters.trashed, filters.search, filters.expense_date_from, filters.expense_date_to])
-
-  const totalPages = Math.max(1, Math.ceil(expenses.length / PAGE_SIZE))
-  const paginatedExpenses = useMemo(
-    () => expenses.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
-    [expenses, page]
-  )
-  const rangeStart = expenses.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
-  const rangeEnd = Math.min(page * PAGE_SIZE, expenses.length)
+  // Pagination is server-side — `expenses` is already just the current
+  // page's rows, and `meta` carries the real totals from the backend's
+  // Laravel paginator. Do not re-slice `expenses` here.
+  const rangeStart = meta.total === 0 ? 0 : (meta.current_page - 1) * meta.per_page + 1
+  const rangeEnd = Math.min(meta.current_page * meta.per_page, meta.total)
 
   const [modalMode, setModalMode] = useState(null) // 'add' | expense object | null
   const [form, setForm] = useState(EMPTY_FORM)
   const [formError, setFormError] = useState('')
   const [detailRecord, setDetailRecord] = useState(null)
+  const [detailLoading, setDetailLoading] = useState(false)
   const [rejectTarget, setRejectTarget] = useState(null)
   const [rejectRemarks, setRejectRemarks] = useState('')
 
@@ -175,6 +175,24 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
   const closeModal = () => { setModalMode(null); setFormError('') }
   const isModalOpen = modalMode !== null
   const isEditing = modalMode !== null && modalMode !== 'add'
+
+  // Options for the Add/Edit form specifically: active categories only, so
+  // a retired category can't be picked for a new (or newly re-pointed)
+  // expense — but if we're editing an expense that's already assigned an
+  // inactive category, that one stays in the list too, so opening the
+  // form doesn't force swapping away from it just to save an unrelated
+  // field. The filter-row "All Categories" dropdown above intentionally
+  // keeps using the full `categories` list — filtering historical
+  // expenses by a since-retired category should still work.
+  const categoryOptionsForForm = useMemo(() => {
+    const active = categories.filter((c) => c.is_active)
+    const currentId = isEditing ? Number(modalMode.expense_category_id) : null
+    if (currentId && !active.some((c) => c.id === currentId)) {
+      const current = categories.find((c) => c.id === currentId)
+      if (current) return [...active, current]
+    }
+    return active
+  }, [categories, isEditing, modalMode])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -209,6 +227,28 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
   const handleArchive = async (x) => { await archiveExpense(x.id) }
   const handleRestore = async (x) => { await restoreExpense(x.id) }
 
+  // The detail view (including linked tax obligations) is only returned
+  // by GET /api/expenses/{id} — the list response intentionally omits it
+  // to avoid N+1-loading tax obligations for every row on the page.
+  const openDetail = async (x) => {
+    setDetailRecord(x)
+    setDetailLoading(true)
+    try {
+      const res = await apiFetch(`/api/expenses/${x.id}`)
+      const json = await res.json()
+      if (json.success) setDetailRecord(json.data)
+    } catch {
+      // Keep showing the row's already-known fields if the detail fetch fails.
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+
+  const escapeHtml = (value) =>
+    String(value ?? '').replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[c]))
+
   const handlePrint = (x) => {
     const win = window.open('', '_blank', 'width=800,height=900')
     if (!win) return
@@ -226,7 +266,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
     win.document.write(`
       <html>
         <head>
-          <title>${x.receipt_number || 'Expense'}</title>
+          <title>${escapeHtml(x.receipt_number || 'Expense')}</title>
           <style>
             * { box-sizing: border-box; }
             body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #1a1a1a; padding: 48px; }
@@ -244,11 +284,11 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
         </head>
         <body>
           <div class="header">
-            <div><h1>Expense Slip</h1><p>${x.description}</p></div>
-            <span class="status">${categoryName(x.expense_category_id)}</span>
+            <div><h1>Expense Slip</h1><p>${escapeHtml(x.description)}</p></div>
+            <span class="status">${escapeHtml(categoryName(x.expense_category_id))}</span>
           </div>
-          <table>${rows.map(([label, value]) => `<tr><td>${label}</td><td>${value}</td></tr>`).join('')}</table>
-          <div class="footer">Printed on ${formatDateTime(new Date().toISOString())}</div>
+          <table>${rows.map(([label, value]) => `<tr><td>${escapeHtml(label)}</td><td>${escapeHtml(value)}</td></tr>`).join('')}</table>
+          <div class="footer">Printed on ${escapeHtml(formatDateTime(new Date().toISOString()))}</div>
         </body>
       </html>
     `)
@@ -349,15 +389,6 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
             </Tooltip>
           )}
         </div>
-        <Button
-          variant={filters.trashed ? 'primary' : 'secondary'}
-          size="sm"
-          icon={Archive}
-          onClick={() => setFilter({ trashed: !filters.trashed })}
-          className="shrink-0 whitespace-nowrap"
-        >
-          Show Archived
-        </Button>
       </div>
 
       {listError && (
@@ -388,13 +419,8 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                 <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-muted">
                   {hasDateFilter ? 'No expenses fall within the selected date range.' : 'No expenses match your filters.'}
                 </td></tr>
-              ) : paginatedExpenses.map((x) => (
-                <tr
-                  key={x.id}
-                  data-row-id={x.id}
-                  className={`border-b border-border last:border-0 transition-colors duration-300
-                    ${highlightedId === x.id ? 'bg-primary/10' : 'hover:bg-bg'}`}
-                >
+              ) : expenses.map((x) => (
+                <tr key={x.id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
                   <td className="px-4 py-3.5">
                     <p className="font-medium text-ink">{x.description}</p>
                     <p className="text-xs text-muted">{x.receipt_number || x.expense_source} {x.supplier_id ? `\u00b7 ${x.supplier_name || supplierName(x.supplier_id)}` : ''}</p>
@@ -430,7 +456,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                         </>
                       )}
                       <Tooltip label="View full record" align="start">
-                        <button type="button" onClick={() => setDetailRecord(x)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                        <button type="button" onClick={() => openDetail(x)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                           <Info size={15} />
                         </button>
                       </Tooltip>
@@ -462,25 +488,25 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
         {!listLoading && expenses.length > 0 && (
           <div className="flex flex-col gap-2 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-muted">
-              Showing {rangeStart}–{rangeEnd} of {expenses.length} expenses
+              Showing {rangeStart}–{rangeEnd} of {meta.total} expenses
             </p>
             <div className="flex items-center gap-1">
               <button
                 type="button"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
+                onClick={() => goToPage(meta.current_page - 1)}
+                disabled={meta.current_page <= 1}
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
                 aria-label="Previous page"
               >
                 <ChevronLeft size={15} />
               </button>
               <span className="px-2 text-xs font-medium text-ink whitespace-nowrap">
-                Page {page} of {totalPages}
+                Page {meta.current_page} of {meta.last_page}
               </span>
               <button
                 type="button"
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
+                onClick={() => goToPage(meta.current_page + 1)}
+                disabled={meta.current_page >= meta.last_page}
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
                 aria-label="Next page"
               >
@@ -518,7 +544,11 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
               <label className={LABEL}>Category</label>
               <select value={form.expense_category_id} onChange={(e) => setForm((f) => ({ ...f, expense_category_id: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE}>
                 <option value="">Select category</option>
-                {categories.map((c) => <option key={c.id} value={c.id}>{c.category_name}</option>)}
+                {categoryOptionsForForm.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.category_name}{!c.is_active ? ' (Inactive)' : ''}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -613,6 +643,9 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                 <DetailRow label="Created by" value={detailRecord.created_by_name} />
                 <DetailRow label="Created at" value={formatDateTime(detailRecord.created_at)} />
                 <DetailRow label="Updated at" value={formatDateTime(detailRecord.updated_at)} />
+                {detailRecord.status === 'Rejected' && detailRecord.rejection_remarks && (
+                  <DetailRow label="Rejection reason" value={detailRecord.rejection_remarks} />
+                )}
                 {detailRecord.deleted_at && (
                   <>
                     <DetailRow label="Archived by" value={detailRecord.deleted_by_name} />
@@ -621,6 +654,31 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                 )}
               </div>
             </div>
+
+            {/* Tax obligations traced back to this expense — expense_id on
+                tax_obligations is optional, so most expenses will show
+                nothing here; this only renders once the detail fetch
+                (GET /api/expenses/{id}) returns linked records. */}
+            {detailLoading ? (
+              <p className="text-xs text-muted text-center py-2">Loading linked records…</p>
+            ) : detailRecord.tax_obligations?.length > 0 && (
+              <div className="rounded-lg border border-border divide-y divide-border">
+                <p className="px-3 py-2 text-xs font-medium text-muted">Linked Tax Obligations</p>
+                {detailRecord.tax_obligations.map((tax) => (
+                  <div key={tax.tax_id} className="px-3 py-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium text-ink">{tax.tax_type} &middot; {tax.tax_period}</p>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${TAX_STATUS_STYLES[tax.status] || 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>
+                        {tax.status}
+                      </span>
+                    </div>
+                    <DetailRow label="Tax Amount" value={formatCurrency(tax.amount)} />
+                    <DetailRow label="Due Date" value={formatDate(tax.due_date)} />
+                    {tax.reference_number && <DetailRow label="Reference No." value={tax.reference_number} />}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </Modal>

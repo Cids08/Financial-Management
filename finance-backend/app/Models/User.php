@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -80,6 +81,16 @@ class User extends Authenticatable
         return $this->belongsTo(User::class, 'deleted_by');
     }
 
+    /**
+     * The collector identity tied to this account, if this user is a
+     * Collector. Null for every other role, and possibly null for a
+     * Collector-role user whose collectors row hasn't been linked yet.
+     */
+    public function collector(): HasOne
+    {
+        return $this->hasOne(Collector::class);
+    }
+
     public function fullName(): string
     {
         return trim("{$this->first_name} {$this->middle_name} {$this->last_name} {$this->suffix}");
@@ -104,6 +115,7 @@ class User extends Authenticatable
             return true;
         }
 
+        /** @var Role|null $role */
         $role = $this->role()->with('permissions')->first();
 
         return $role !== null && $role->hasPermission($permissionName);

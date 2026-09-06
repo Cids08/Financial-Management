@@ -9,6 +9,16 @@ class Budget extends Model
 {
     use SoftDeletes;
 
+    // Mirrors the DB-level budgets_status_check constraint exactly — these
+    // are the only four legal values, there is no separate approval_status
+    // column. Draft = awaiting approval, Active = approved and spendable,
+    // Cancelled = rejected, Closed = end-of-cycle (outside the approval
+    // flow entirely). See BudgetService for the full lifecycle notes.
+    public const STATUS_DRAFT = 'Draft';
+    public const STATUS_ACTIVE = 'Active';
+    public const STATUS_CLOSED = 'Closed';
+    public const STATUS_CANCELLED = 'Cancelled';
+
     protected $fillable = [
         'department_id',
         'budget_code',

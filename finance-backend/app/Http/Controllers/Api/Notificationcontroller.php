@@ -18,11 +18,23 @@ class NotificationController extends Controller
     /**
      * GET /api/notifications
      * GET /api/notifications?unread=1
+     * GET /api/notifications?per_page=5   (header bell preview)
+     * GET /api/notifications?per_page=20  (full Notifications page)
      */
     public function index(Request $request): JsonResponse
     {
         $unreadOnly = $request->boolean('unread');
-        $paginated = $this->notificationService->listForUser($request->user(), $unreadOnly);
+
+        // FIX: previously the service always paginated with a hardcoded
+        // 15, ignoring whatever per_page the frontend actually sent
+        // (Notifications.jsx asks for 20, the header dropdown asks for 5).
+        // validate() so a bad/huge value can't be used to pull the entire
+        // table in one request.
+        $perPage = (int) $request->validate([
+            'per_page' => 'sometimes|integer|min:1|max:100',
+        ])['per_page'] ?? 15;
+
+        $paginated = $this->notificationService->listForUser($request->user(), $unreadOnly, $perPage);
 
         return response()->json([
             'success' => true,

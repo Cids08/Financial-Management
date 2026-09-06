@@ -28,6 +28,30 @@ class AccountsReceivableController extends Controller
             $filters['archived'] = filter_var($request->query('archived'), FILTER_VALIDATE_BOOLEAN);
         }
 
+        $user = $request->user();
+
+        // A Collector may only ever see AR assigned to them. Forced here
+        // rather than trusting any client-supplied value — this is an
+        // authorization boundary, not a convenience filter. The collector
+        // role is granted ar.view by default (RolesAndPermissionsSeeder),
+        // so without this every collector would see every customer's
+        // receivables, not just their own.
+        if ($user->hasRole('collector')) {
+            $ownCollectorId = $user->collector?->id;
+
+            // Fail closed: an unlinked Collector-role account sees
+            // nothing, not everything.
+            if ($ownCollectorId === null) {
+                return response()->json([
+                    'success' => true,
+                    'message' => '',
+                    'data' => [],
+                ]);
+            }
+
+            $filters['collector_id'] = $ownCollectorId;
+        }
+
         $records = $this->service->list($filters);
 
         return response()->json([

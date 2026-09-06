@@ -13,8 +13,6 @@ use App\Models\Customer;
 use App\Models\Disbursement;
 use App\Models\Expense;
 use App\Models\FinancialForecast;
-use App\Models\FixedAsset;
-use App\Models\JournalEntry;
 use App\Models\Notification;
 use App\Models\Supplier;
 use App\Models\TaxObligation;
@@ -36,7 +34,8 @@ use Illuminate\Support\Facades\DB;
  * guessing the status string:
  *   - disbursements/budgets "awaiting approval" -> whereNull('approved_by')
  *   - tax_obligations "unpaid" -> whereNull('payment_date')
- *   - budgets "currently active" -> today between start_date/end_date
+ *   - budgets "currently active" -> today between start_date/end_date,
+ *     AND approved (approved_by IS NOT NULL)
  * This avoids the exact failure mode we hit before (a status string
  * that doesn't match the DB's actual casing silently returning zero
  * rows instead of erroring). 'Active' for collectors/customers/suppliers
@@ -103,7 +102,6 @@ class DashboardService
             'receivable' => (float) AccountsReceivable::whereNotIn('status', ['Paid', 'Cancelled'])->sum('remaining_balance'),
             'cash_balance' => (float) CashAccount::where('status', 'Active')->sum('current_balance'),
             'payable' => (float) AccountsPayable::whereNotIn('status', ['Paid', 'Cancelled'])->sum('remaining_balance'),
-            'fixed_assets_value' => (float) FixedAsset::whereNotIn('status', ['Disposed', 'Written Off'])->sum('book_value'),
 
             'active_collectors' => Collector::where('status', 'Active')->count(),
 
@@ -114,13 +112,13 @@ class DashboardService
             // "Unpaid" via payment_date IS NULL rather than a guessed status string.
             'tax_obligations' => (float) TaxObligation::whereNull('payment_date')->sum('tax_amount'),
 
-            // "Currently active" via date range rather than a guessed status string.
+            // "Currently active" via date range, restricted to approved budgets —
+            // a budget still awaiting approval (approved_by IS NULL) shouldn't
+            // count as active just because its dates overlap today.
             'active_budgets' => Budget::whereDate('start_date', '<=', $today)
                 ->whereDate('end_date', '>=', $today)
+                ->whereNotNull('approved_by')
                 ->count(),
-
-            // Confirmed enum: journal_entries.status CHECK (Draft|Posted|Cancelled).
-            'pending_journal_entries' => JournalEntry::where('status', 'Draft')->count(),
         ];
     }
 
@@ -256,7 +254,11 @@ class DashboardService
                 'route' => '/transactions/tax-obligations',
             ]);
 
+        // Eager-load department to avoid an N+1 query per budget row below.
+        // Not filtered by approved_by — this section warns about upcoming
+        // end dates regardless of approval state, unlike active_budgets above.
         $budgetReviews = Budget::whereBetween('end_date', [$today, $horizon])
+            ->with('department:id,department_name')
             ->orderBy('end_date')->limit($limit)->get()
             ->map(fn ($b) => [
                 'title' => 'Budget Period Ending',

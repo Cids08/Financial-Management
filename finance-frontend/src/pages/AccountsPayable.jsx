@@ -17,7 +17,7 @@ const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const MAX_IMAGE_MB = 8
 
 const EMPTY_FORM = {
-  supplier_id: '', invoice_number: '', invoice_date: '', due_date: '', amount: '',
+  supplier_id: '', account_id: '', invoice_number: '', invoice_date: '', due_date: '', amount: '',
   payment_method: 'Bank Transfer', billing_address: '', description: '', reference_number: '',
   status: 'Pending', purchase_order_no: '', has_attachment: false,
 }
@@ -49,6 +49,21 @@ function addDaysISO(days) {
   const d = new Date()
   d.setDate(d.getDate() + days)
   return d.toISOString().slice(0, 10)
+}
+
+// Escapes free-text/user-controlled values before they're injected into the
+// print window's raw HTML string (via document.write). Bill fields like
+// description/remarks and billing_address are user-editable and stored as-is,
+// so without this a bill containing e.g. `<img src=x onerror=...>` in its
+// description would execute script in the print window.
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[c]))
 }
 
 function DetailRow({ label, value }) {
@@ -195,6 +210,8 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
     statsLoading,
     suppliers,
     suppliersLoading,
+    accounts,
+    accountsLoading,
     formSaving,
     formError,
     actionBusyId,
@@ -203,6 +220,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
     archiveBill,
     restoreBill,
     approveBill,
+    fetchBillAuditLogs,
   } = useAccountsPayable()
 
   const [search, setSearch] = useState('')
@@ -225,8 +243,26 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
   const [form, setForm] = useState(EMPTY_FORM)
   const [formValidationError, setFormValidationError] = useState('')
   const [detailRecord, setDetailRecord] = useState(null)
+  const [auditLogs, setAuditLogs] = useState([])
+  const [auditLogsLoading, setAuditLogsLoading] = useState(false)
+  const [auditLogsError, setAuditLogsError] = useState(null)
 
   const supplierName = (id) => suppliers.find((s) => s.supplier_id === Number(id))?.supplier_name || 'Unknown'
+  const accountLabel = (id) => {
+    const acct = (accounts ?? []).find((a) => a.id === Number(id))
+    return acct ? `${acct.account_code} — ${acct.account_name}` : '—'
+  }
+  // Mirrors AccountsPayablePolicy::update() — a bill that's been approved,
+  // or whose status is Paid/Cancelled, can't be edited (goes through a
+  // corrective/void flow instead). Keeping this in sync with the backend
+  // means the Edit button doesn't show for a bill the save would 403 on.
+  const canEditBill = (r) => !r.approved_by && !['Paid', 'Cancelled'].includes(r.status)
+  // Mirrors AccountsPayablePolicy::archive() — an approved bill has a
+  // real journal entry posted with no reversal flow, so archiving it is
+  // blocked server-side. Restoring is unaffected (only applies to
+  // already-archived rows, which can't have gotten here approved anyway
+  // since approval was blocked from ever archiving them in the first place).
+  const canArchiveBill = (r) => !r.approved_by
 
   const sourceList = showArchived ? archivedBills : bills
 
@@ -247,13 +283,14 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
   }, [sourceList, search, statusFilter, suppliers])
 
   const openAdd = () => {
-    setForm({ ...EMPTY_FORM, supplier_id: suppliers[0]?.supplier_id ?? '' })
+    setForm({ ...EMPTY_FORM, supplier_id: suppliers[0]?.supplier_id ?? '', account_id: accounts[0]?.id ?? '' })
     setFormValidationError('')
     setModalMode('add')
   }
   const openEdit = (r) => {
     setForm({
       supplier_id: r.supplier_id,
+      account_id: r.account_id ?? '',
       invoice_number: r.invoice_number,
       invoice_date: r.invoice_date || '',
       due_date: r.due_date || '',
@@ -270,7 +307,16 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
     setModalMode(r)
   }
   const closeModal = () => { setModalMode(null); setFormValidationError('') }
-  const openDetail = (r) => setDetailRecord(r)
+  const openDetail = (r) => {
+    setDetailRecord(r)
+    setAuditLogs([])
+    setAuditLogsError(null)
+    setAuditLogsLoading(true)
+    fetchBillAuditLogs(r.ap_id)
+      .then(setAuditLogs)
+      .catch((err) => setAuditLogsError(err.message))
+      .finally(() => setAuditLogsLoading(false))
+  }
   const closeDetail = () => setDetailRecord(null)
 
   // Merges scanned fields into the form without clobbering anything the
@@ -290,24 +336,31 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
   const handlePrint = (r) => {
     const win = window.open('', '_blank', 'width=800,height=900')
     if (!win) return
+    // Every value below is escaped before being interpolated into the raw
+    // HTML string — description/billing_address are user-controlled fields
+    // stored verbatim, so this print window is otherwise an XSS vector.
     const rows = [
-      ['Supplier', supplierName(r.supplier_id)],
-      ['Invoice Date', formatDate(r.invoice_date)],
-      ['Due Date', formatDate(r.due_date)],
-      ['Purchase Order No.', r.purchase_order_no || '—'],
-      ['Original Amount', formatCurrency(r.amount)],
-      ['Paid Amount', formatCurrency(r.paid_amount)],
-      ['Remaining Balance', formatCurrency(r.remaining_balance)],
-      ['Payment Method', r.payment_method || '—'],
-      ['Billing Address', r.billing_address || '—'],
-      ['Description', r.description || '—'],
-      ['Reference No.', r.reference_number || '—'],
-      ['Status', r.status],
+      ['Supplier', escapeHtml(supplierName(r.supplier_id))],
+      ['Account', escapeHtml(r.account_id ? accountLabel(r.account_id) : '—')],
+      ['Invoice Date', escapeHtml(formatDate(r.invoice_date))],
+      ['Due Date', escapeHtml(formatDate(r.due_date))],
+      ['Purchase Order No.', escapeHtml(r.purchase_order_no || '—')],
+      ['Original Amount', escapeHtml(formatCurrency(r.amount))],
+      ['Paid Amount', escapeHtml(formatCurrency(r.paid_amount))],
+      ['Remaining Balance', escapeHtml(formatCurrency(r.remaining_balance))],
+      ['Payment Method', escapeHtml(r.payment_method || '—')],
+      ['Billing Address', escapeHtml(r.billing_address || '—')],
+      ['Description', escapeHtml(r.description || '—')],
+      ['Reference No.', escapeHtml(r.reference_number || '—')],
+      ['Status', escapeHtml(r.status)],
     ]
+    const invoiceNumberSafe = escapeHtml(r.invoice_number)
+    const supplierNameSafe = escapeHtml(supplierName(r.supplier_id))
+    const statusSafe = escapeHtml(r.status)
     win.document.write(`
       <html>
         <head>
-          <title>${r.invoice_number}</title>
+          <title>${invoiceNumberSafe}</title>
           <style>
             * { box-sizing: border-box; }
             body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #1a1a1a; padding: 48px; }
@@ -325,11 +378,11 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
         </head>
         <body>
           <div class="header">
-            <div><h1>Bill ${r.invoice_number}</h1><p>${supplierName(r.supplier_id)}</p></div>
-            <span class="status">${r.status}</span>
+            <div><h1>Bill ${invoiceNumberSafe}</h1><p>${supplierNameSafe}</p></div>
+            <span class="status">${statusSafe}</span>
           </div>
-          <table>${rows.map(([label, value]) => `<tr><td>${label}</td><td>${value}</td></tr>`).join('')}</table>
-          <div class="footer">Printed on ${formatDateTime(new Date().toISOString())}</div>
+          <table>${rows.map(([label, value]) => `<tr><td>${escapeHtml(label)}</td><td>${value}</td></tr>`).join('')}</table>
+          <div class="footer">Printed on ${escapeHtml(formatDateTime(new Date().toISOString()))}</div>
         </body>
       </html>
     `)
@@ -345,13 +398,31 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
       setFormValidationError('Invoice number, due date, and amount are required.')
       return
     }
+    if (!form.account_id) {
+      setFormValidationError('Select which account this bill should post against.')
+      return
+    }
+    if (form.invoice_date && form.due_date < form.invoice_date) {
+      setFormValidationError('Due date must be on or after the invoice date.')
+      return
+    }
+    const parsedAmount = Number(form.amount)
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      setFormValidationError('Enter a valid amount greater than 0.')
+      return
+    }
+    if (isEditing && parsedAmount < Number(modalMode.paid_amount || 0)) {
+      setFormValidationError(`Amount cannot be less than what's already paid (${formatCurrency(modalMode.paid_amount)}).`)
+      return
+    }
 
     const payload = {
       supplier_id: Number(form.supplier_id),
+      account_id: Number(form.account_id),
       invoice_number: form.invoice_number.trim(),
       invoice_date: form.invoice_date || null,
       due_date: form.due_date,
-      amount: Number(form.amount) || 0,
+      amount: parsedAmount,
       payment_method: form.payment_method,
       billing_address: form.billing_address.trim(),
       description: form.description.trim(),
@@ -394,7 +465,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
           <h1 className="text-xl font-bold tracking-tight text-ink">{title}</h1>
           <p className="mt-1 text-xs text-muted">Track supplier bills and amounts owed.</p>
         </div>
-        <Button variant="primary" size="sm" icon={Plus} onClick={openAdd} disabled={suppliersLoading}>Add Bill</Button>
+        <Button variant="primary" size="sm" icon={Plus} onClick={openAdd} disabled={suppliersLoading || accountsLoading}>Add Bill</Button>
       </div>
 
       {billsError && (
@@ -486,34 +557,48 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                     <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[r.status] || 'bg-gray-100 text-muted'}`}>{r.status}</span>
                   </td>
                   <td className="px-4 py-3.5 whitespace-nowrap text-right">
-                    <div className="flex items-center justify-end gap-1">
+                    <div className="flex items-center justify-end gap-3">
                       <Tooltip label="View full record" align="start">
-                        <button type="button" onClick={() => openDetail(r)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                          <Info size={15} />
+                        <button type="button" onClick={() => openDetail(r)} className="inline-flex items-center justify-center bg-transparent border-0 p-0 m-0 leading-none cursor-pointer text-ink/60 hover:text-ink transition-colors duration-150">
+                          <Info size={16} />
                         </button>
                       </Tooltip>
                       <Tooltip label="Print bill" align="start">
-                        <button type="button" onClick={() => handlePrint(r)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                          <Printer size={15} />
+                        <button type="button" onClick={() => handlePrint(r)} className="inline-flex items-center justify-center bg-transparent border-0 p-0 m-0 leading-none cursor-pointer text-ink/60 hover:text-ink transition-colors duration-150">
+                          <Printer size={16} />
                         </button>
                       </Tooltip>
-                      {!r.is_archived && (
-                        <Tooltip label="Edit bill" align="start">
-                          <button type="button" onClick={() => openEdit(r)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                            <Pencil size={15} />
+                      {!r.is_archived && !r.approved_by && (
+                        <Tooltip label="Approve bill" align="start">
+                          <button
+                            type="button"
+                            onClick={() => handleApprove(r)}
+                            disabled={actionBusyId === r.ap_id}
+                            className="inline-flex items-center justify-center bg-transparent border-0 p-0 m-0 leading-none cursor-pointer text-ink/60 hover:text-emerald-500 transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <CheckCircle2 size={16} />
                           </button>
                         </Tooltip>
                       )}
-                      <Tooltip label={r.is_archived ? 'Restore bill' : 'Archive bill'} align="end">
-                        <button
-                          type="button"
-                          onClick={() => (r.is_archived ? restoreBill(r.ap_id) : archiveBill(r.ap_id))}
-                          disabled={actionBusyId === r.ap_id}
-                          className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-50"
-                        >
-                          {r.is_archived ? <RotateCcw size={15} /> : <Archive size={15} />}
-                        </button>
-                      </Tooltip>
+                      {!r.is_archived && canEditBill(r) && (
+                        <Tooltip label="Edit bill" align="start">
+                          <button type="button" onClick={() => openEdit(r)} className="inline-flex items-center justify-center bg-transparent border-0 p-0 m-0 leading-none cursor-pointer text-ink/60 hover:text-ink transition-colors duration-150">
+                            <Pencil size={16} />
+                          </button>
+                        </Tooltip>
+                      )}
+                      {(r.is_archived || canArchiveBill(r)) && (
+                        <Tooltip label={r.is_archived ? 'Restore bill' : 'Archive bill'} align="end">
+                          <button
+                            type="button"
+                            onClick={() => (r.is_archived ? restoreBill(r.ap_id) : archiveBill(r.ap_id))}
+                            disabled={actionBusyId === r.ap_id}
+                            className="inline-flex items-center justify-center bg-transparent border-0 p-0 m-0 leading-none cursor-pointer text-ink/60 hover:text-ink transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {r.is_archived ? <RotateCcw size={16} /> : <Archive size={16} />}
+                          </button>
+                        </Tooltip>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -555,6 +640,15 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
               <label className={LABEL}>Invoice Number</label>
               <input type="text" value={form.invoice_number} onChange={(e) => setForm((f) => ({ ...f, invoice_number: e.target.value }))} className={INPUT} placeholder="SUP-INV-3301" />
             </div>
+          </div>
+          <div>
+            <label className={LABEL}>Account (what this bill debits)</label>
+            <select value={form.account_id} onChange={(e) => setForm((f) => ({ ...f, account_id: e.target.value }))} className={INPUT}>
+              <option value="" disabled>Select an account…</option>
+              {(accounts ?? []).map((a) => (
+                <option key={a.id} value={a.id}>{a.account_code} — {a.account_name}</option>
+              ))}
+            </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -660,6 +754,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
             </div>
             <div className="rounded-lg border border-border divide-y divide-border">
               <div className="px-3 py-2">
+                <DetailRow label="Account" value={detailRecord.account_id ? accountLabel(detailRecord.account_id) : '—'} />
                 <DetailRow label="Invoice Date" value={formatDate(detailRecord.invoice_date)} />
                 <DetailRow label="Due Date" value={formatDate(detailRecord.due_date)} />
                 <DetailRow label="Purchase Order No." value={detailRecord.purchase_order_no || '—'} />
@@ -681,6 +776,30 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                 <DetailRow label="Updated at" value={formatDateTime(detailRecord.updated_at)} />
                 <DetailRow label="Approved by" value={detailRecord.approved_by_name || 'Not yet approved'} />
                 {detailRecord.approved_at && <DetailRow label="Approved at" value={formatDateTime(detailRecord.approved_at)} />}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-medium text-muted mb-1.5">Activity Log</p>
+              <div className="rounded-lg border border-border divide-y divide-border max-h-48 overflow-y-auto">
+                {auditLogsLoading && (
+                  <p className="px-3 py-3 text-xs text-muted text-center">Loading activity…</p>
+                )}
+                {!auditLogsLoading && auditLogsError && (
+                  <p className="px-3 py-3 text-xs text-red-600">{auditLogsError}</p>
+                )}
+                {!auditLogsLoading && !auditLogsError && auditLogs.length === 0 && (
+                  <p className="px-3 py-3 text-xs text-muted text-center">No activity recorded.</p>
+                )}
+                {!auditLogsLoading && !auditLogsError && auditLogs.map((log) => (
+                  <div key={log.id} className="px-3 py-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-xs font-medium text-ink">{log.activity_description || log.action}</span>
+                      <span className="text-xs text-muted shrink-0">{formatDateTime(log.created_at)}</span>
+                    </div>
+                    {log.user_name && <p className="text-xs text-muted mt-0.5">by {log.user_name}</p>}
+                  </div>
+                ))}
               </div>
             </div>
           </div>

@@ -95,6 +95,7 @@ class CollectorController extends Controller
 
     /**
      * GET /api/collectors/{collector}/efficiency?period=day|week|month|year
+     * GET /api/collections/{collector}/efficiency (same handler, alt route)
      *
      * Powers Collectors.jsx's EfficiencyModal — returns a list of recent
      * period buckets (not a single number), each with collected vs.
@@ -102,6 +103,18 @@ class CollectorController extends Controller
      */
     public function efficiency(Request $request, Collector $collector): JsonResponse
     {
+        $user = $request->user();
+
+        // A Collector may only view their own efficiency stats. Not
+        // currently reachable under RolesAndPermissionsSeeder's default
+        // grants (the collector role doesn't get collectors.view by
+        // default) — but that's an admin-editable permission, not a
+        // code-level guarantee, so this check stays regardless of what's
+        // currently seeded.
+        if ($user->hasRole('collector') && $user->collector?->id !== $collector->id) {
+            abort(403, 'You may only view your own efficiency stats.');
+        }
+
         $period = $request->string('period')->toString();
         if (! in_array($period, ['day', 'week', 'month', 'year'], true)) {
             $period = 'month';

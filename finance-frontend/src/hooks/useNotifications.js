@@ -8,14 +8,6 @@ import { apiFetch } from '../utils/api'
  *   PATCH  /notifications/read-all
  *   PATCH  /notifications/{notification}/read
  *   DELETE /notifications/{notification}
- *
- * NOTE: NotificationController itself wasn't shared, so index()'s exact
- * filter/pagination support is assumed rather than confirmed — this hook
- * sends `unread` and `page`/`per_page` the same way every other paginated
- * index in this project does (see useAccountsReceivable, useBudgets). If
- * the controller doesn't support one of these query params yet, it'll just
- * ignore it silently rather than error, so worth checking that file if
- * filtering doesn't actually narrow results.
  */
 export function useNotifications() {
   const [notifications, setNotifications] = useState([])
@@ -53,7 +45,14 @@ export function useNotifications() {
       const res = await apiFetch('/api/notifications/unread-count')
       const json = await res.json()
       if (!res.ok || !json.success) return { success: false }
-      setUnreadCount(json.data?.count ?? json.data ?? 0)
+      // FIX: the controller returns { data: { unread_count: N } }, not
+      // { data: { count: N } } / a bare number. json.data.count was always
+      // undefined, and since json.data (an object) is never null/undefined,
+      // the `??` fallback never kicked in either — unreadCount state was
+      // being set to the raw {unread_count: N} object instead of a number.
+      // That silently broke every numeric comparison downstream
+      // (unreadCount === 0, unreadCount > 0, etc. in Notifications.jsx / Header.jsx).
+      setUnreadCount(json.data?.unread_count ?? 0)
       return { success: true }
     } catch {
       return { success: false }

@@ -14,6 +14,7 @@ class AccountsPayable extends Model
 
     protected $fillable = [
         'supplier_id',
+        'account_id',
         'invoice_number',
         'invoice_date',
         'due_date',
@@ -47,6 +48,13 @@ class AccountsPayable extends Model
     public function supplier(): BelongsTo
     {
         return $this->belongsTo(Supplier::class);
+    }
+
+    // The expense/asset account this bill debits when its accrual journal
+    // entry is posted on approval — see AccountsPayableService::approve().
+    public function account(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'account_id');
     }
 
     public function creator(): BelongsTo

@@ -96,11 +96,17 @@ class TaxObligationController extends Controller
 
     /**
      * PATCH /api/tax-obligations/{taxObligation}/restore
+     *
+     * Takes a plain int id rather than an implicit-bound TaxObligation:
+     * the record is soft-deleted at this point, so normal route model
+     * binding wouldn't resolve it anyway. The onlyTrashed() lookup now
+     * lives in TaxObligationService::restore() — the controller just
+     * passes the id through and lets the service own the query, same as
+     * every other action here.
      */
     public function restore(Request $request, int $taxObligation): JsonResponse
     {
-        $obligation = TaxObligation::onlyTrashed()->with(['createdBy', 'deletedBy', 'expense'])->findOrFail($taxObligation);
-        $obligation = $this->taxObligationService->restore($request->user(), $obligation);
+        $obligation = $this->taxObligationService->restore($request->user(), $taxObligation);
 
         return response()->json([
             'success' => true,

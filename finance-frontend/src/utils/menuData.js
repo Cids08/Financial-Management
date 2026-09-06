@@ -10,6 +10,7 @@ import {
   Building2,
   Wallet,
   Boxes,
+  Tags,
   ArrowLeftRight,
   FileText,
   HandCoins,
@@ -24,6 +25,7 @@ import {
   TrendingUp,
   Sparkles,
   FileBarChart,
+  ClipboardList,
   Settings,
   LogOut,
 } from 'lucide-react'
@@ -85,6 +87,10 @@ export const menuData = [
       { id: 'departments', label: 'Departments', icon: Building2, path: '/master-data/departments', permission: 'departments.view' },
       { id: 'cash-accounts', label: 'Cash Accounts', icon: Wallet, path: '/master-data/cash-accounts', permission: 'cash-accounts.view' },
       { id: 'fixed-assets', label: 'Fixed Assets', icon: Boxes, path: '/master-data/fixed-assets', permission: 'fixed-assets.view' },
+      // New — ExpenseCategoryController/Service/Policy already existed on
+      // the backend with no frontend page anywhere; expense-categories.view
+      // matches the permission the route group already enforces.
+      { id: 'expense-categories', label: 'Expense Categories', icon: Tags, path: '/master-data/expense-categories', permission: 'expense-categories.view' },
     ],
   },
   {
@@ -130,6 +136,19 @@ export const menuData = [
     icon: FileBarChart,
     path: '/reports',
     permission: 'reports.view',
+  },
+  {
+    id: 'audit-logs',
+    label: 'Audit Logs',
+    icon: ClipboardList,
+    path: '/system/audit-logs',
+    // New — system-wide trail across every module (Tax Obligations,
+    // Expenses, etc.), so it's a standalone top-level item like Reports
+    // rather than nested under any one module's section. Hyphenated slug
+    // (audit-logs.view) matches the multi-word convention noted above
+    // (cash-accounts, fixed-assets, general-ledger), not the short-form
+    // one used for tax/ai.
+    permission: 'audit-logs.view',
   },
   {
     id: 'settings',

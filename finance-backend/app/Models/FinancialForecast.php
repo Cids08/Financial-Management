@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class FinancialForecast extends Model
 {
@@ -73,5 +74,47 @@ class FinancialForecast extends Model
     public function updater(): BelongsTo
     {
         return $this->belongsTo(User::class, 'updated_by');
+    }
+
+    /**
+     * Inverse of AiRecommendation::forecast(). Added specifically so a
+     * backfill command can find forecasts with zero recommendations via
+     * whereDoesntHave('aiRecommendations') — e.g. the ones that failed
+     * during the forecast_period 422 bug / the internal-token 401 bug and
+     * never got recommendations generated at all, since
+     * GenerateAiRecommendations only ever fires once, at forecast
+     * creation time, and never retries on its own.
+     */
+    public function aiRecommendations(): HasMany
+    {
+        return $this->hasMany(AiRecommendation::class, 'forecast_id');
+    }
+
+    /**
+     * String label for forecast_period (e.g. "next_fiscal_year") for
+     * consumers — like the AI recommendation microservice — that expect
+     * a label rather than the raw integer month count stored in the
+     * forecast_period column.
+     *
+     * Deliberately derived from FinancialForecastService::HORIZON_LABELS
+     * (the same map generate() uses to write forecast_period in the first
+     * place — 'next_month' => 1, 'next_quarter' => 3, 'next_fiscal_year'
+     * => 12) rather than a second constant duplicated here. Two sources
+     * of truth for the same int<->label mapping would drift the moment
+     * either one changes.
+     *
+     * Falls back to the stringified integer for any value that doesn't
+     * match one of the known horizons, so an unexpected value degrades to
+     * something inspectable in logs rather than throwing.
+     */
+    public function getForecastPeriodLabelAttribute(): string
+    {
+        foreach (\App\Services\FinancialForecastService::HORIZON_LABELS as $label => $config) {
+            if ($config['months'] === $this->forecast_period) {
+                return $label;
+            }
+        }
+
+        return (string) $this->forecast_period;
     }
 }

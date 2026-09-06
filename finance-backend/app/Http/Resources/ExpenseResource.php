@@ -25,6 +25,7 @@ class ExpenseResource extends JsonResource
             'description' => $this->description,
             'is_over_budget' => (bool) $this->is_over_budget,
             'status' => $this->status,
+            'rejection_remarks' => $this->rejection_remarks,
             'created_by' => $this->created_by,
             'created_by_name' => $this->whenLoaded('creator', fn () => $this->creator?->first_name . ' ' . $this->creator?->last_name),
             'created_at' => $this->created_at?->toIso8601String(),
@@ -32,6 +33,11 @@ class ExpenseResource extends JsonResource
             'deleted_at' => $this->deleted_at?->toIso8601String(),
             'deleted_by' => $this->deleted_by,
             'deleted_by_name' => $this->whenLoaded('deleter', fn () => $this->deleter?->first_name . ' ' . $this->deleter?->last_name),
+            // Only present on the detail view (ExpenseController::show()),
+            // which eager-loads it. Left out of the index/list response on
+            // purpose so listing 15-50 expenses doesn't pull in every
+            // linked tax obligation for every row.
+            'tax_obligations' => TaxObligationResource::collection($this->whenLoaded('taxObligations')),
         ];
     }
 }

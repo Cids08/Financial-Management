@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   TrendingUp,
@@ -37,6 +37,7 @@ import Button from '../components/Button'
 import { formatCurrency, formatDate } from '../utils/formatters'
 import { apiFetch } from '../utils/api'
 import { useProfile } from '../hooks/useProfile'
+import { usePermissions } from '../context/PermissionsContext'
 import {
   ResponsiveContainer,
   LineChart,
@@ -154,6 +155,18 @@ const PRIORITY_ICON = { High: AlertTriangle, Medium: TrendingUp, Low: Activity }
 
 const FORECAST_ICON = { revenue: TrendingUp, expense: TrendingDown, expenses: TrendingDown, cash: PiggyBank }
 
+// Each entry maps to a real create-form route for that transaction type, and
+// the backend permission (see routes/api.php) required to actually submit
+// that form. The menu only shows options the current user holds the
+// permission for — otherwise they'd reach a form just to get a 403 on submit.
+const NEW_TRANSACTION_OPTIONS = [
+  { label: 'Receivable Invoice', icon: FileText, route: '/transactions/receivable/new', permission: 'ar.manage' },
+  { label: 'Payable Invoice', icon: CreditCard, route: '/transactions/payable/new', permission: 'ap.manage' },
+  { label: 'Expense', icon: Receipt, route: '/transactions/expenses/new', permission: 'expenses.manage' },
+  { label: 'Collection', icon: HandCoins, route: '/transactions/collections/new', permission: 'collections.manage' },
+  { label: 'Disbursement', icon: Banknote, route: '/transactions/disbursements/new', permission: 'disbursements.manage' },
+]
+
 /* ---------------------------------------------------------------------- */
 /* Shared style tokens                                                     */
 /* ---------------------------------------------------------------------- */
@@ -198,6 +211,80 @@ function ChartCard({ title, subtitle, route, navigate, empty, children }) {
   )
 }
 
+/**
+ * "New Transaction" split button — picks a transaction type, then routes to
+ * its create form. Options are filtered to whatever the current user has
+ * the corresponding *.manage permission for; the whole button hides itself
+ * if the user can't create any transaction type at all.
+ */
+function NewTransactionMenu({ navigate }) {
+  const { hasPermission } = usePermissions()
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef(null)
+
+  const visibleOptions = NEW_TRANSACTION_OPTIONS.filter((opt) => hasPermission(opt.permission))
+
+  useEffect(() => {
+    if (!open) return undefined
+    function handleClickOutside(e) {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false)
+      }
+    }
+    function handleEscape(e) {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    document.addEventListener('keydown', handleEscape)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }, [open])
+
+  if (visibleOptions.length === 0) return null
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <Button
+        variant="primary"
+        size="sm"
+        icon={Plus}
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        New Transaction
+      </Button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 z-20 mt-1 w-56 overflow-hidden rounded-lg border border-border bg-surface py-1 shadow-lg"
+        >
+          {visibleOptions.map((opt) => {
+            const Icon = opt.icon
+            return (
+              <button
+                key={opt.route}
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false)
+                  navigate(opt.route)
+                }}
+                className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs font-medium text-ink transition-colors duration-150 hover:bg-bg"
+              >
+                <Icon size={14} className="text-muted" />
+                {opt.label}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Dashboard() {
   const navigate = useNavigate()
   const { profile } = useProfile()
@@ -211,6 +298,10 @@ export default function Dashboard() {
   const [chartData, setChartData] = useState(null)
   const [chartsLoading, setChartsLoading] = useState(true)
   const [chartsError, setChartsError] = useState(null)
+
+  // "Export" downloads a full PDF snapshot of the dashboard from the backend.
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState(null)
 
   useEffect(() => {
     setLoading(true)
@@ -234,6 +325,28 @@ export default function Dashboard() {
 
   const handleModuleClick = (route) => {
     if (route) navigate(route)
+  }
+
+  const handleExport = async () => {
+    setExporting(true)
+    setExportError(null)
+    try {
+      const res = await apiFetch('/api/dashboard/export')
+      if (!res.ok) throw new Error('Export request failed')
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `dashboard-summary-${new Date().toISOString().slice(0, 10)}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      setExportError('Could not export the dashboard. Please try again.')
+    } finally {
+      setExporting(false)
+    }
   }
 
   if (loading) {
@@ -302,10 +415,17 @@ export default function Dashboard() {
             Welcome back{profile?.name ? `, ${[profile.role, profile.name.split(' ')[0]].filter(Boolean).join('-')}` : ''}!
           </h1>
           <p className="mt-1 text-xs text-muted">Here's your financial snapshot.</p>
+          {exportError && (
+            <p className="mt-1 flex items-center gap-1 text-xs text-red-600 dark:text-red-400">
+              <AlertTriangle size={12} className="shrink-0" /> {exportError}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="secondary" size="sm" icon={Download}>Export</Button>
-          <Button variant="primary" size="sm" icon={Plus}>New Transaction</Button>
+          <Button variant="secondary" size="sm" icon={Download} onClick={handleExport} disabled={exporting}>
+            {exporting ? 'Exporting…' : 'Export'}
+          </Button>
+          <NewTransactionMenu navigate={navigate} />
         </div>
       </div>
 

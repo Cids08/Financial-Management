@@ -17,6 +17,7 @@ import Collectors from './pages/Collectors'
 import Departments from './pages/Departments'
 import CashAccounts from './pages/CashAccounts'
 import FixedAssets from './pages/FixedAssets'
+import ExpenseCategories from './pages/ExpenseCategories'
 import AccountsReceivable from './pages/AccountsReceivable'
 import Collections from './pages/Collections'
 import AccountsPayable from './pages/AccountsPayable'
@@ -28,6 +29,7 @@ import Generalledger from './pages/Generalledger'
 import FinancialForecasting from './pages/FinancialForecasting'
 import AIRecommendations from './pages/AIRecommendations'
 import Reports from './pages/Reports'
+import AuditLogs from './pages/AuditLogs'
 import Settings from './pages/Settings'
 import Logout from './pages/Logout'
 import Login from './pages/Login'
@@ -110,6 +112,14 @@ export default function App() {
               <FixedAssets crumbs={['Master Data', 'Fixed Assets']} />
             </RequirePermission>
           } />
+          {/* New — matches menuData.js's new sidebar entry and the
+              expense-categories.view/.manage permissions already
+              enforced by routes/api.php + ExpenseCategoryPolicy. */}
+          <Route path="/master-data/expense-categories" element={
+            <RequirePermission permission="expense-categories.view">
+              <ExpenseCategories crumbs={['Master Data', 'Expense Categories']} />
+            </RequirePermission>
+          } />
 
           {/* Financial Transactions */}
           <Route path="/transactions/receivable" element={
@@ -176,6 +186,16 @@ export default function App() {
           <Route path="/reports" element={
             <RequirePermission permission="reports.view">
               <Reports crumbs={['Reports']} />
+            </RequirePermission>
+          } />
+          {/* New — system-wide audit trail across every module (Tax
+              Obligations, Expenses, etc.), not tied to any one module's
+              own permission. Matches the hyphenated slug convention
+              (cash-accounts.view, general-ledger.view) rather than the
+              short forms used for tax/ai — "audit-logs" is two words. */}
+          <Route path="/system/audit-logs" element={
+            <RequirePermission permission="audit-logs.view">
+              <AuditLogs crumbs={['System', 'Audit Logs']} />
             </RequirePermission>
           } />
           {/* Settings, Profile, and Notifications are intentionally NOT

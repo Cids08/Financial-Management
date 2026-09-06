@@ -49,6 +49,13 @@ class AiRecommendationResource extends JsonResource
             'forecast_predicted_amount' => $this->forecast?->predicted_amount !== null
                 ? (float) $this->forecast->predicted_amount
                 : null,
+
+            // Drives AIRecommendations.jsx's showArchived filter and the
+            // Archive/Restore button icon. Requires the controller's
+            // index() to query withTrashed() — a normal query would
+            // never surface a trashed row here at all, so this would
+            // always read as false regardless of what it should show.
+            'is_archived' => $this->trashed(),
         ];
     }
 

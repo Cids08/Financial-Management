@@ -13,6 +13,7 @@ class Collector extends Model
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
+        'user_id',
         'employee_no',
         'first_name',
         'middle_name',
@@ -34,6 +35,15 @@ class Collector extends Model
             'commission_rate' => 'decimal:2',
             'monthly_target'  => 'decimal:2',
         ];
+    }
+
+    /**
+     * The login account this collector uses, if one has been linked.
+     * Nullable — see the add_user_id_to_collectors_table migration for why.
+     */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
     }
 
     public function updatedBy(): BelongsTo

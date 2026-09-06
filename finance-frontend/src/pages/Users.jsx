@@ -170,7 +170,7 @@ function ImageLightbox({ src, alt, onClose }) {
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-ink/80 px-4 py-8 animate-fadeIn"
+      className="fixed inset-0 z-70 flex items-center justify-center bg-ink/80 px-4 py-8 animate-fadeIn"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
