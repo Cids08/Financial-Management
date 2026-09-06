@@ -19,6 +19,8 @@ class AccountsPayableController extends Controller
 
     public function index(Request $request): JsonResponse
     {
+        $this->authorize('viewAny', AccountsPayable::class);
+
         $archived = $request->boolean('archived');
 
         return response()->json([
@@ -30,6 +32,8 @@ class AccountsPayableController extends Controller
 
     public function stats(): JsonResponse
     {
+        $this->authorize('viewAny', AccountsPayable::class);
+
         return response()->json([
             'success' => true,
             'message' => '',
@@ -39,6 +43,11 @@ class AccountsPayableController extends Controller
 
     public function store(StoreAccountsPayableRequest $request): JsonResponse
     {
+        // authorize() also runs inside StoreAccountsPayableRequest, but it's
+        // called here too for defense-in-depth / readability at the
+        // controller level — cheap no-op if already authorized.
+        $this->authorize('create', AccountsPayable::class);
+
         $bill = $this->service->create($request->user(), $request->validated());
 
         return response()->json([
@@ -50,6 +59,8 @@ class AccountsPayableController extends Controller
 
     public function update(UpdateAccountsPayableRequest $request, AccountsPayable $accountsPayable): JsonResponse
     {
+        $this->authorize('update', $accountsPayable);
+
         $bill = $this->service->update($request->user(), $accountsPayable, $request->validated());
 
         return response()->json([
@@ -61,6 +72,8 @@ class AccountsPayableController extends Controller
 
     public function approve(Request $request, AccountsPayable $accountsPayable): JsonResponse
     {
+        $this->authorize('approve', $accountsPayable);
+
         $bill = $this->service->approve($request->user(), $accountsPayable);
 
         return response()->json([
@@ -72,6 +85,8 @@ class AccountsPayableController extends Controller
 
     public function archive(Request $request, AccountsPayable $accountsPayable): JsonResponse
     {
+        $this->authorize('archive', $accountsPayable);
+
         $this->service->archive($request->user(), $accountsPayable);
 
         return response()->json([
@@ -84,6 +99,8 @@ class AccountsPayableController extends Controller
     // needs withTrashed() same as the users restore route.
     public function restore(Request $request, AccountsPayable $accountsPayable): JsonResponse
     {
+        $this->authorize('restore', $accountsPayable);
+
         $this->service->restore($request->user(), $accountsPayable);
 
         return response()->json([

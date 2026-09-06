@@ -6,6 +6,7 @@ import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
 import { apiFetch } from '../utils/api'
 import { useCompany } from '../context/CompanyContext'
+import { useHighlightRow } from '../hooks/useHighlightRow'
 
 // Masks every character (keeps dashes/spaces as visual separators)
 function maskValue(value) {
@@ -54,6 +55,18 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
 
   const [page, setPage] = useState(1)
   const [meta, setMeta] = useState({ currentPage: 1, lastPage: 1, total: 0 })
+
+  // Global search (SearchBar.jsx) navigates here with a highlightId (and,
+  // since this table's `search` filter is server-side, a highlightSearch
+  // seed) whenever a customer record is clicked from search results.
+  const { highlightedId, highlightSearch } = useHighlightRow()
+  useEffect(() => {
+    if (highlightSearch == null) return
+    setSearch(highlightSearch)
+    setStatusFilter('all')
+    setShowArchived(false)
+    setPage(1)
+  }, [highlightSearch])
 
   const [modalMode, setModalMode] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
@@ -296,7 +309,12 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
                 customers.map((c) => {
                   const revealed = revealedIds.has(c.customer_id)
                   return (
-                    <tr key={c.customer_id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
+                    <tr
+                      key={c.customer_id}
+                      data-row-id={c.customer_id}
+                      className={`border-b border-border last:border-0 transition-colors duration-300
+                        ${highlightedId === c.customer_id ? 'bg-primary/10' : 'hover:bg-bg'}`}
+                    >
                       <td className="px-4 py-3.5">
                         <p className="font-medium text-ink">{c.customer_name}</p>
                         <p className="text-xs text-muted truncate max-w-55">{c.address}</p>

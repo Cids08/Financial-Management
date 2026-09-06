@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Search, Plus, Pencil, Archive, RotateCcw, Wallet, PiggyBank, Landmark, CreditCard, Eye, EyeOff, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
@@ -6,6 +6,7 @@ import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
 import { formatCurrency } from '../utils/formatters'
 import { useCashAccounts } from '../hooks/UseCashAccounts'
+import { useHighlightRow } from '../hooks/useHighlightRow'
 
 const ACCOUNT_TYPES = ['Checking', 'Savings', 'Petty Cash', 'Money Market']
 
@@ -48,6 +49,19 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
     page, setPage,
     createAccount, updateAccount, archiveAccount, restoreAccount,
   } = useCashAccounts()
+
+  // Global search (SearchBar.jsx) navigates here with a highlightId (and,
+  // since this table's `search` filter is server-side/debounced inside
+  // useCashAccounts, a highlightSearch seed) whenever a cash account
+  // record is clicked from search results.
+  const { highlightedId, highlightSearch } = useHighlightRow()
+  useEffect(() => {
+    if (highlightSearch == null) return
+    setSearch(highlightSearch)
+    setTypeFilter('all')
+    setShowArchived(false)
+    setPage(1)
+  }, [highlightSearch])
 
   const [modalMode, setModalMode] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
@@ -195,7 +209,12 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
               {!loading && accounts.map((a) => {
                 const TypeIcon = TYPE_ICON[a.account_type] || Wallet
                 return (
-                  <tr key={a.cash_account_id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
+                  <tr
+                    key={a.cash_account_id}
+                    data-row-id={a.cash_account_id}
+                    className={`border-b border-border last:border-0 transition-colors duration-300
+                      ${highlightedId === a.cash_account_id ? 'bg-primary/10' : 'hover:bg-bg'}`}
+                  >
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-2.5">
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary-dark">

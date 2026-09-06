@@ -6,6 +6,7 @@ import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
 import { apiFetch } from '../utils/api'
 import { useCompany } from '../context/CompanyContext'
+import { useHighlightRow } from '../hooks/useHighlightRow'
 
 // Masks every character (keeps dashes/spaces as visual separators)
 function maskValue(value) {
@@ -56,6 +57,17 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
   const [form, setForm] = useState(EMPTY_FORM)
   const [formError, setFormError] = useState('')
   const [saving, setSaving] = useState(false)
+
+  // Global search (SearchBar.jsx) navigates here with a highlightId (and,
+  // since this table's `search` filter is server-side, a highlightSearch
+  // seed) whenever a supplier record is clicked from search results.
+  const { highlightedId, highlightSearch } = useHighlightRow()
+  useEffect(() => {
+    if (highlightSearch == null) return
+    setSearch(highlightSearch)
+    setStatusFilter('all')
+    setShowArchived(false)
+  }, [highlightSearch])
 
   // Controls visibility of TIN, contact number, and email together per row
   const [revealedIds, setRevealedIds] = useState(new Set())
@@ -278,7 +290,12 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
                 suppliers.map((s) => {
                   const revealed = revealedIds.has(s.supplier_id)
                   return (
-                    <tr key={s.supplier_id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
+                    <tr
+                      key={s.supplier_id}
+                      data-row-id={s.supplier_id}
+                      className={`border-b border-border last:border-0 transition-colors duration-300
+                        ${highlightedId === s.supplier_id ? 'bg-primary/10' : 'hover:bg-bg'}`}
+                    >
                       <td className="px-4 py-3.5">
                         <p className="font-medium text-ink">{s.supplier_name}</p>
                         <p className="text-xs text-muted truncate max-w-55">{s.address}</p>

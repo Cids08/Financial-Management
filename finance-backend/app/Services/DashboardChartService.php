@@ -86,7 +86,7 @@ class DashboardChartService
         return $series;
     }
 
-    /** Allocated vs. used amount per department, for currently-active budgets. */
+    /** Allocated vs. used amount per department, for currently-active, approved budgets in active departments. */
     public function getBudgetUtilization(): array
     {
         $today = Carbon::today();
@@ -95,6 +95,8 @@ class DashboardChartService
             ->join('departments', 'departments.id', '=', 'budgets.department_id')
             ->whereDate('budgets.start_date', '<=', $today)
             ->whereDate('budgets.end_date', '>=', $today)
+            ->whereNotNull('budgets.approved_by')
+            ->where('departments.is_active', true)
             ->groupBy('departments.id', 'departments.department_name')
             ->orderBy('departments.department_name')
             ->selectRaw('departments.department_name as label, SUM(budgets.allocated_amount) as allocated, SUM(budgets.used_amount) as used')
@@ -138,6 +140,10 @@ class DashboardChartService
      * Shared monthly-sum-with-gap-filling logic for any model with a date
      * column + an amount column (Collections today, easy to reuse for
      * anything else shaped the same way later).
+     *
+     * NOTE: $dateColumn/$amountColumn must always be trusted literals from
+     * call sites in this file — never derived from request input — since
+     * they're interpolated directly into raw SQL.
      */
     private function monthlySeries(string $modelClass, string $dateColumn, string $amountColumn, int $months): array
     {

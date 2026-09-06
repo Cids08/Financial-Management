@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Collection;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreCollectionRequest extends FormRequest
 {
@@ -14,17 +16,27 @@ class StoreCollectionRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'ar_id' => ['required', 'integer', 'exists:accounts_receivable,id'],
-            'collector_id' => ['required', 'integer', 'exists:collectors,id'],
-            'cash_account_id' => ['required', 'integer', 'exists:cash_accounts,id'],
-            'receipt_number' => ['required', 'string', 'max:255', 'unique:collections,receipt_number'],
-            'or_number' => ['nullable', 'string', 'max:255'],
-            'collection_date' => ['required', 'date'],
-            'deposit_date' => ['nullable', 'date', 'after_or_equal:collection_date'],
-            'amount_received' => ['required', 'numeric', 'min:0.01'],
-            'payment_method' => ['required', 'string', 'max:255'],
+            'ar_id'            => ['required', 'integer', 'exists:accounts_receivable,id'],
+            'collector_id'     => ['required', 'integer', 'exists:collectors,id'],
+            'cash_account_id'  => ['required', 'integer', 'exists:cash_accounts,id'],
+            'receipt_number'   => ['required', 'string', 'max:255', 'unique:collections,receipt_number'],
+            'or_number'        => ['nullable', 'string', 'max:255'],
+            'collection_date'  => ['required', 'date'],
+            'deposit_date'     => ['nullable', 'date', 'after_or_equal:collection_date'],
+            'amount_received'  => ['required', 'numeric', 'min:0.01'],
+            'payment_method'   => ['required', 'string', 'max:255'],
             'reference_number' => ['nullable', 'string', 'max:255'],
-            'remarks' => ['nullable', 'string'],
+            'remarks'          => ['nullable', 'string'],
+
+            // Status is optional on create — service forces STATUS_PENDING
+            // regardless, but we still validate the value if supplied so
+            // a caller can't sneak in an arbitrary string. 'Voided' is
+            // intentionally absent: there is no void workflow; use cancel().
+            'status' => ['sometimes', 'string', Rule::in([
+                Collection::STATUS_PENDING,
+                Collection::STATUS_CONFIRMED,
+                Collection::STATUS_CANCELLED,
+            ])],
         ];
     }
 }

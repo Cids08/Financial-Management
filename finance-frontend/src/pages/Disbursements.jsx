@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import {
   Search, Plus, Pencil, Archive, RotateCcw, Send, CheckCircle2, Clock3, Info, Printer,
   Lock, ChevronLeft, ChevronRight, CalendarRange, X, Upload, ThumbsUp, ThumbsDown, Wallet,
@@ -12,10 +12,13 @@ import { formatCurrency } from '../utils/formatters'
 import { usePermissions } from '../context/PermissionsContext'
 import { hasPermission } from '../utils/permissions'
 import { useDisbursements } from '../hooks/useDisbursements'
+import { useDepartments } from '../hooks/useDepartments'
+import { useCashAccounts } from '../hooks/useCashAccounts'
+import { useAccountsPayable } from '../hooks/useAccountsPayable'
+import { useHighlightRow } from '../hooks/useHighlightRow'
 
 /* ---------------------------------------------------------------------- */
-/* Static form config (these still need real endpoints for dropdowns —    */
-/* wire /accounts-payable, /departments, /cash-accounts here when ready)  */
+/* Static form config                                                      */
 /* ---------------------------------------------------------------------- */
 
 const PAYMENT_METHODS = ['Bank Transfer', 'Check', 'Cash', 'GCash']
@@ -69,6 +72,49 @@ function formatDateTime(value) {
   return new Date(value).toLocaleString('en-PH', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
+// Confirmed against the real AccountsPayableResource: ap_id, invoice_number,
+// remaining_balance. supplier_name is `whenLoaded('supplier', ...)` on the
+// backend, so it only appears here if AccountsPayableController::index()
+// eager-loads the supplier relation — falls back to just the invoice
+// number if it isn't loaded, rather than showing "undefined".
+function apBillId(bill) {
+  return bill.ap_id
+}
+function apBillLabel(bill) {
+  const ref = bill.invoice_number || `AP #${bill.ap_id}`
+  const label = bill.supplier_name ? `${ref} — ${bill.supplier_name}` : ref
+  return `${label} (${formatCurrency(bill.remaining_balance)} due)`
+}
+// Only bills that are approved, still open, and not archived make sense to
+// disburse against:
+//  - not archived: obviously.
+//  - remaining_balance > 0 alone isn't enough — per AccountsPayableService::
+//    stats()'s own comment, a Cancelled bill can still carry a nonzero
+//    remaining_balance since cancelling doesn't zero that column out, so
+//    status is checked explicitly too.
+//  - approved_by !== null: per AccountsPayableService::approve()'s
+//    comment, the AP liability only posts to the ledger at approval —
+//    a disbursement is meant to settle that liability, so a bill with
+//    nothing posted yet shouldn't be payable against.
+function isSelectableApBill(bill) {
+  return !bill.is_archived
+    && bill.approved_by != null
+    && !['Paid', 'Cancelled'].includes(bill.status)
+    && Number(bill.remaining_balance) > 0
+}
+
+// ASSUMPTION: same caveat as above — CashAccountController/Resource not
+// seen. Following the same `<module>_id` convention as departments
+// (department_id) and disbursements (disbursement_id), the resource key
+// is assumed to be cash_account_id; falls back to id if not.
+function cashAccountId(account) {
+  return account.cash_account_id ?? account.id
+}
+function cashAccountLabel(account) {
+  const name = account.account_name ?? account.name ?? `Account #${cashAccountId(account)}`
+  return account.bank_name ? `${name} — ${account.bank_name}` : name
+}
+
 function DetailRow({ label, value }) {
   return (
     <div className="flex items-center justify-between gap-3 py-1.5">
@@ -112,8 +158,38 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
     uploadProof, archiveDisbursement, restoreDisbursement,
   } = useDisbursements()
 
+  // Lookup data for the Add/Edit form's dropdowns. These are only needed
+  // once canManagePayments is true, but the hooks themselves are cheap
+  // (single list fetch) and permission-gating the *inputs* rather than
+  // the hook calls keeps this component simpler — no conditional hooks.
+  const { departments, loading: departmentsLoading, fetchDepartments } = useDepartments()
+  const { accounts: cashAccounts, loading: cashAccountsLoading } = useCashAccounts()
+  const { bills: apBills, billsLoading: apBillsLoading } = useAccountsPayable()
+
+  // useDepartments() doesn't auto-fetch on mount (unlike useCashAccounts
+  // and useAccountsPayable) — it's built to be called with filters/page
+  // from the Departments page itself. Pull a single large page here since
+  // this is just a lookup list for the dropdown, not a paginated view.
+  useEffect(() => {
+    fetchDepartments({}, 1, 200)
+  }, [fetchDepartments])
+
   const [dModalMode, setDModalMode] = useState(null) // null | 'add' | disbursement object
   const [dForm, setDForm] = useState(EMPTY_DISBURSEMENT_FORM)
+
+  // Global search (SearchBar.jsx) navigates here with a highlightId (and,
+  // since this table's search is server-side via the hook's own
+  // debounced dSearch, a highlightSearch seed) whenever a disbursement
+  // record is clicked from search results.
+  const { highlightedId, highlightSearch } = useHighlightRow()
+  useEffect(() => {
+    if (highlightSearch == null) return
+    setDSearch(highlightSearch)
+    setDStatusFilter('all')
+    setDShowArchived(false)
+    setDSourceFilter('all')
+    setDPage(1)
+  }, [highlightSearch])
   const [dFormError, setDFormError] = useState('')
   const [dDetailRecord, setDDetailRecord] = useState(null)
   const [dSubmitting, setDSubmitting] = useState(false)
@@ -218,6 +294,10 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
     e.preventDefault()
     if (!dForm.payee.trim() || !dForm.amount_paid || !dForm.voucher_number.trim()) {
       setDFormError('Voucher number, payee, and amount are required.')
+      return
+    }
+    if (!dForm.ap_id || !dForm.department_id || !dForm.cash_account_id) {
+      setDFormError('Related bill, department, and cash account are required.')
       return
     }
     setDSubmitting(true)
@@ -403,7 +483,12 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                 const sourceType = getSourceType(d)
                 const isPayroll = sourceType === 'payroll'
                 return (
-                  <tr key={d.disbursement_id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
+                  <tr
+                    key={d.disbursement_id}
+                    data-row-id={d.disbursement_id}
+                    className={`border-b border-border last:border-0 transition-colors duration-300
+                      ${highlightedId === d.disbursement_id ? 'bg-primary/10' : 'hover:bg-bg'}`}
+                  >
                     <td className="px-4 py-3.5">
                       <p className="font-medium text-ink">{d.payee}</p>
                       <p className="text-xs text-muted">{d.voucher_number} &middot; {d.cash_account_name}</p>
@@ -559,21 +644,43 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
           <div className="rounded-lg border border-border bg-bg px-3 py-2 text-xs text-muted">
             Manual disbursements created here are always Accounts Payable payments. Payroll payments are submitted by other departments through the Payroll module and appear directly in the list below for approval.
           </div>
-          {/*
-            NOTE: ap_id / department_id / cash_account_id are plain text
-            inputs below because this component no longer has the local
-            AP_RECORDS/DEPARTMENTS/CASH_ACCOUNTS lookup tables — swap these
-            for <select> pickers backed by /accounts-payable, /departments,
-            /cash-accounts once those hooks exist.
-          */}
+
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Related Bill (AP ID)</label>
-              <input type="number" value={dForm.ap_id} onChange={(e) => setDForm((f) => ({ ...f, ap_id: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="AP #" />
+              <label className={LABEL}>Related Bill</label>
+              <select
+                value={dForm.ap_id}
+                onChange={(e) => setDForm((f) => ({ ...f, ap_id: e.target.value }))}
+                className={INPUT}
+                style={INPUT_TEXT_STYLE}
+                disabled={apBillsLoading}
+              >
+                <option value="">{apBillsLoading ? 'Loading bills…' : 'Select a bill…'}</option>
+                {apBills
+                  // Keep the bill this disbursement already points to in the
+                  // list even if it's no longer "selectable" (e.g. it's since
+                  // been fully paid or archived) — otherwise editing this
+                  // record would silently blank out an already-valid field.
+                  .filter((bill) => isSelectableApBill(bill) || String(apBillId(bill)) === String(dForm.ap_id))
+                  .map((bill) => (
+                    <option key={apBillId(bill)} value={apBillId(bill)}>{apBillLabel(bill)}</option>
+                  ))}
+              </select>
             </div>
             <div>
-              <label className={LABEL}>Department ID</label>
-              <input type="number" value={dForm.department_id} onChange={(e) => setDForm((f) => ({ ...f, department_id: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="Department #" />
+              <label className={LABEL}>Department</label>
+              <select
+                value={dForm.department_id}
+                onChange={(e) => setDForm((f) => ({ ...f, department_id: e.target.value }))}
+                className={INPUT}
+                style={INPUT_TEXT_STYLE}
+                disabled={departmentsLoading}
+              >
+                <option value="">{departmentsLoading ? 'Loading departments…' : 'Select a department…'}</option>
+                {departments.map((dept) => (
+                  <option key={dept.department_id} value={dept.department_id}>{dept.department_name}</option>
+                ))}
+              </select>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -604,8 +711,19 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
               </select>
             </div>
             <div>
-              <label className={LABEL}>Cash Account ID</label>
-              <input type="number" value={dForm.cash_account_id} onChange={(e) => setDForm((f) => ({ ...f, cash_account_id: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="Cash account #" />
+              <label className={LABEL}>Cash Account</label>
+              <select
+                value={dForm.cash_account_id}
+                onChange={(e) => setDForm((f) => ({ ...f, cash_account_id: e.target.value }))}
+                className={INPUT}
+                style={INPUT_TEXT_STYLE}
+                disabled={cashAccountsLoading}
+              >
+                <option value="">{cashAccountsLoading ? 'Loading accounts…' : 'Select a cash account…'}</option>
+                {cashAccounts.map((account) => (
+                  <option key={cashAccountId(account)} value={cashAccountId(account)}>{cashAccountLabel(account)}</option>
+                ))}
+              </select>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">

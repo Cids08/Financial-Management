@@ -55,6 +55,12 @@ use Illuminate\Support\Facades\DB;
  * access or vice versa. Routes for both don't exist yet in
  * routes/api.php — seeded ahead of time so it's ready once built.
  *
+ * audit-logs.view is NOT part of staff/collector's default list below —
+ * a system-wide trail across every module is Admin-tier by design, so it
+ * only reaches super-admin/admin automatically (via the "every
+ * permission" sync). Grant it to staff/collector manually via Roles.jsx
+ * if that's ever needed.
+ *
  * PRUNING: permission_name values not in the canonical list below are
  * deleted (pivot rows first) — this cleans up orphaned rows from prior
  * naming conventions this project went through.
@@ -83,6 +89,12 @@ class RolesAndPermissionsSeeder extends Seeder
         'users.manage' => ['Manage Users', 'Administration'],
         'roles.view' => ['View Roles', 'Administration'],
         'roles.manage' => ['Manage Roles', 'Administration'],
+
+        // Audit Logs — system-wide, read-only trail across every module
+        // (Tax Obligations, Expenses, etc.), not tied to any one module's
+        // own permission. See class docblock for why this stays off
+        // staff/collector's default list.
+        'audit-logs.view' => ['View Audit Logs', 'Administration'],
 
         // Master Data
         'departments.view' => ['View Departments', 'Administration'],

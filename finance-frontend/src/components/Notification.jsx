@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Bell, CheckCheck, Loader2 } from 'lucide-react'
 import { useClickOutside } from '../hooks/useClickOutside'
+import { useNotifications } from '../hooks/useNotifications'
 import { useNotificationsContext } from '../context/NotificationsContext'
 import { notificationTypeMeta } from '../utils/notificationTypes'
 
@@ -26,17 +27,33 @@ export default function Notification() {
   const ref = useRef(null)
   const navigate = useNavigate()
 
-  // Shared instance (NotificationsProvider, mounted once in
-  // DashboardLayout) — same state the Sidebar badge and the Notifications
-  // page read from. NOTE: this dropdown reuses the context's single
-  // `notifications`/`fetchNotifications` for its 5-item preview, the same
-  // list state the full Notifications page paginates through. If someone
-  // has that page open in one tab and opens this dropdown in another, one
-  // will overwrite the other's page of results the next time either
-  // fetches. Low-probability in practice, but worth knowing — the real
-  // fix would be giving the preview its own separate list state instead
-  // of sharing `notifications` from context.
-  const { notifications, unreadCount, loading, fetchNotifications, markAsRead, markAllAsRead } = useNotificationsContext()
+  // FIX: this dropdown previously read notifications/loading/
+  // fetchNotifications/markAsRead/markAllAsRead straight from
+  // NotificationsContext — the SAME shared state the full Notifications
+  // page paginates through. Opening this dropdown while that page was
+  // mounted would overwrite the page's list with this dropdown's 5-item
+  // preview (and vice versa), and would flip the page's `loading` spinner
+  // on for a fetch it never made. See the NOTE this file used to carry
+  // and the matching one still in Notifications.jsx.
+  //
+  // Own independent copy of useNotifications() for this dropdown's
+  // preview — its own notifications/loading, completely decoupled from
+  // whatever the Notifications page is showing.
+  const {
+    notifications,
+    loading,
+    fetchNotifications,
+    markAsRead: markAsReadLocal,
+    markAllAsRead: markAllAsReadLocal,
+  } = useNotifications()
+
+  // unreadCount stays on the shared context on purpose — that's the badge
+  // count and SHOULD stay in sync everywhere (this dropdown, the sidebar
+  // badge, the Notifications page header text). fetchUnreadCount() is
+  // called explicitly below after a local mark-as-read/mark-all-read,
+  // since those only update THIS component's local notifications list,
+  // not the shared unreadCount.
+  const { unreadCount, fetchUnreadCount } = useNotificationsContext()
 
   useClickOutside(ref, () => setOpen(false))
 
@@ -49,14 +66,18 @@ export default function Notification() {
   }
 
   const handleSelect = async (n) => {
-    if (!n.is_read) await markAsRead(n.id)
+    if (!n.is_read) {
+      await markAsReadLocal(n.id)
+      fetchUnreadCount()
+    }
     setOpen(false)
     navigate(n.route ?? notificationTypeMeta(n.type).route)
   }
 
   const handleMarkAllRead = async (e) => {
     e.stopPropagation()
-    await markAllAsRead()
+    await markAllAsReadLocal()
+    fetchUnreadCount()
   }
 
   const handleViewAll = () => {

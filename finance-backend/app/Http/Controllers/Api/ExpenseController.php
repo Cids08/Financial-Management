@@ -25,6 +25,8 @@ class ExpenseController extends Controller
             'status' => $request->query('status'),
             'budget_id' => $request->query('budget_id'),
             'expense_category_id' => $request->query('expense_category_id'),
+            'expense_date_from' => $request->query('expense_date_from'),
+            'expense_date_to' => $request->query('expense_date_to'),
             'trashed' => $request->boolean('trashed'),
             'per_page' => (int) $request->query('per_page', 15),
         ]);
@@ -56,7 +58,7 @@ class ExpenseController extends Controller
 
     public function show(Expense $expense): JsonResponse
     {
-        $expense->load(['budget:id,budget_name', 'category:id,category_name', 'supplier:id,supplier_name', 'creator:id,first_name,last_name', 'deleter:id,first_name,last_name']);
+        $expense->load(['budget:id,budget_name', 'category:id,category_name', 'supplier:id,supplier_name', 'creator:id,first_name,last_name', 'deleter:id,first_name,last_name', 'taxObligations.createdBy']);
 
         return response()->json([
             'success' => true,
@@ -97,6 +99,8 @@ class ExpenseController extends Controller
 
     public function archive(Request $request, Expense $expense): JsonResponse
     {
+        $this->authorize('archive', $expense);
+
         $this->expenses->delete($expense, $request->user());
 
         return response()->json([
@@ -110,6 +114,8 @@ class ExpenseController extends Controller
     // though it's soft-deleted — same pattern as UserController::restore().
     public function restore(Request $request, Expense $expense): JsonResponse
     {
+        $this->authorize('restore', $expense);
+
         $expense = $this->expenses->restore($expense, $request->user());
 
         return response()->json([
@@ -121,6 +127,8 @@ class ExpenseController extends Controller
 
     public function approve(Request $request, Expense $expense): JsonResponse
     {
+        $this->authorize('approve', $expense);
+
         try {
             $expense = $this->expenses->approve($expense, $request->user());
         } catch (ValidationException $e) {
@@ -140,6 +148,8 @@ class ExpenseController extends Controller
 
     public function reject(Request $request, Expense $expense): JsonResponse
     {
+        $this->authorize('reject', $expense);
+
         $request->validate(['remarks' => ['nullable', 'string', 'max:500']]);
 
         try {

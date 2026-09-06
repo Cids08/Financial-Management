@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\AuditLog;
 use App\Models\Budget;
 use App\Models\Expense;
 use App\Models\ExpenseCategory;
@@ -22,6 +23,14 @@ class TaxObligationService
     protected const TAX_BUDGET_CODE = 'STAT-COMPLIANCE';
     protected const TAX_CATEGORY_CODE = 'TAX';
 
+    // Fields captured in AuditLog.old_values/new_values for create/update —
+    // the obligation's actual financial and status data, not timestamps or
+    // relationship ids that don't need a diff trail.
+    protected const AUDITED_FIELDS = [
+        'tax_type', 'tax_period', 'tax_rate', 'taxable_amount', 'tax_amount',
+        'due_date', 'payment_date', 'reference_number', 'status', 'remarks',
+    ];
+
     public function __construct(private readonly ExpenseService $expenseService)
     {
     }
@@ -39,23 +48,26 @@ class TaxObligationService
 
         $query->search($filters['search'] ?? null)->latest('due_date');
 
-        $paginated = $query->paginate(self::PER_PAGE);
+        // "Overdue" is derived (Pending + due_date < today) rather than a
+        // stored value, but it's still expressible in SQL, so filter here —
+        // before pagination — instead of on an already-paginated page.
+        // Filtering post-fetch made `total`/`last_page` in the response
+        // meta reflect the unfiltered count while `data` held fewer rows,
+        // which breaks pagination controls on the frontend the moment a
+        // status filter is applied. Trashed obligations are always 'Paid'
+        // or 'Pending' in practice, but a Paid record is never reclassified
+        // regardless of due_date (see TaxObligation::derivedStatus()), so
+        // the same rule is mirrored here.
+        match ($filters['status'] ?? null) {
+            'Paid' => $query->where('status', 'Paid'),
+            'Pending' => $query->where('status', 'Pending')
+                ->where('due_date', '>=', now()->toDateString()),
+            'Overdue' => $query->where('status', 'Pending')
+                ->where('due_date', '<', now()->toDateString()),
+            default => null,
+        };
 
-        // Status filter (Pending/Overdue/Paid) has to run after fetching,
-        // since "Overdue" doesn't exist as a stored value to filter on in
-        // SQL — it's derived per-row. Given this table is small in
-        // practice (finite tax filings per period), filtering post-fetch
-        // on an already-paginated page is an acceptable trade-off here;
-        // revisit with a computed DB column if this table grows large.
-        if (! empty($filters['status']) && $filters['status'] !== 'all') {
-            $paginated->setCollection(
-                $paginated->getCollection()->filter(
-                    fn (TaxObligation $o) => $o->derivedStatus() === $filters['status']
-                )->values()
-            );
-        }
-
-        return $paginated;
+        return $query->paginate(self::PER_PAGE);
     }
 
     public function create(User $user, array $data): TaxObligation
@@ -76,6 +88,8 @@ class TaxObligationService
                 $obligation = $this->recordAsExpense($user, $obligation);
             }
 
+            $this->logAudit($user, 'create', $obligation, null, $obligation->only(self::AUDITED_FIELDS));
+
             return $obligation->fresh(['createdBy', 'deletedBy', 'expense']);
         });
     }
@@ -85,18 +99,40 @@ class TaxObligationService
         return DB::transaction(function () use ($user, $obligation, $data) {
             $wasPaid = $obligation->status === 'Paid';
             $isPaid = (bool) ($data['is_paid'] ?? false);
+            $oldValues = $obligation->only(self::AUDITED_FIELDS);
 
-            // Mirrors ExpenseService::update()'s guard against editing an
-            // Approved expense directly: once this obligation's payment has
-            // already been posted as an approved Expense (with a GL entry
-            // and budget usage), un-checking "paid" here would silently
-            // orphan that expense instead of reversing it. Archive the
-            // obligation (or, if truly needed, adjust the linked Expense
-            // itself) rather than un-marking payment here.
-            if ($wasPaid && $obligation->expense_id && ! $isPaid) {
-                throw ValidationException::withMessages([
-                    'is_paid' => 'This obligation is already recorded as a paid, approved expense. Archive the obligation instead of un-marking it as paid.',
-                ]);
+            // Once this obligation's payment has already been posted as an
+            // approved Expense (with a GL entry and budget usage already
+            // applied), it must be treated the same way ExpenseService::update()
+            // treats an Approved expense: frozen. Two failure modes matter here:
+            //
+            //  1. Un-checking "paid" would silently orphan the linked Expense
+            //     instead of reversing it.
+            //  2. Changing tax_type/tax_period/tax_rate/taxable_amount/due_date
+            //     would change tax_amount on this record without touching the
+            //     Expense (or its journal entries / budget usage) that were
+            //     already posted from the old amount — the two records would
+            //     silently drift out of sync.
+            //
+            // Both are blocked below. Archive the obligation (or, if truly
+            // needed, adjust the linked Expense itself) rather than editing a
+            // posted obligation in place.
+            if ($obligation->expense_id) {
+                $recomputedAmount = $this->computeTaxAmount($data);
+
+                $isLocked = ! $isPaid
+                    || $obligation->tax_type !== $data['tax_type']
+                    || $obligation->tax_period !== $data['tax_period']
+                    || (float) $obligation->tax_rate !== (float) $data['tax_rate']
+                    || (float) $obligation->taxable_amount !== (float) $data['taxable_amount']
+                    || $obligation->due_date->toDateString() !== $data['due_date']
+                    || (float) $obligation->tax_amount !== $recomputedAmount;
+
+                if ($isLocked) {
+                    throw ValidationException::withMessages([
+                        'is_paid' => 'This obligation is already recorded as a paid, approved expense and cannot be edited. Archive the obligation instead, or adjust the linked expense directly if a correction is truly needed.',
+                    ]);
+                }
             }
 
             $obligation->update([
@@ -111,6 +147,8 @@ class TaxObligationService
                 $obligation = $this->recordAsExpense($user, $obligation);
             }
 
+            $this->logAudit($user, 'update', $obligation, $oldValues, $obligation->fresh()->only(self::AUDITED_FIELDS));
+
             return $obligation->fresh(['createdBy', 'deletedBy', 'expense']);
         });
     }
@@ -121,15 +159,27 @@ class TaxObligationService
             $obligation->update(['deleted_by' => $user->id]);
             $obligation->delete();
 
+            $this->logAudit($user, 'archive', $obligation);
+
             return $obligation->fresh(['createdBy', 'deletedBy', 'expense']);
         });
     }
 
-    public function restore(User $user, TaxObligation $obligation): TaxObligation
+    public function restore(User $user, int $id): TaxObligation
     {
-        return DB::transaction(function () use ($obligation) {
+        return DB::transaction(function () use ($user, $id) {
+            // Lookup lives here rather than in the controller: it's the
+            // same "find the record this action operates on" work the
+            // service already does implicitly for archive() (via route
+            // model binding) — restore() just needs onlyTrashed() first
+            // since a soft-deleted record won't resolve through normal
+            // implicit binding.
+            $obligation = TaxObligation::onlyTrashed()->findOrFail($id);
+
             $obligation->restore();
             $obligation->update(['deleted_by' => null]);
+
+            $this->logAudit($user, 'restore', $obligation);
 
             return $obligation->fresh(['createdBy', 'deletedBy', 'expense']);
         });
@@ -144,6 +194,32 @@ class TaxObligationService
     }
 
     /**
+     * Writes one AuditLog row for a tax obligation event. old/new values
+     * are scoped to AUDITED_FIELDS — the obligation's actual financial and
+     * status data — rather than the full attribute set, so the diff stored
+     * is meaningful instead of noisy with timestamps/foreign keys.
+     */
+    protected function logAudit(
+        User $user,
+        string $action,
+        TaxObligation $obligation,
+        ?array $oldValues = null,
+        ?array $newValues = null,
+    ): void {
+        AuditLog::create([
+            'user_id'              => $user->id,
+            'module'               => 'Tax Obligations',
+            'action'               => $action,
+            'record_id'            => $obligation->id,
+            'activity_description' => ucfirst($action) . "d {$obligation->tax_type} obligation for {$obligation->tax_period}",
+            'old_values'           => $oldValues,
+            'new_values'           => $newValues,
+            'ip_address'           => request()?->ip(),
+            'user_agent'           => request()?->userAgent(),
+        ]);
+    }
+
+    /**
      * Creates and approves the corresponding Expense the moment an
      * obligation is marked Paid, so it flows through the exact same
      * budget-deduction + GL-posting path as any other approved expense
@@ -154,6 +230,15 @@ class TaxObligationService
      *
      * Idempotent via expense_id — safe to call defensively; will not
      * create a second Expense if one is already linked.
+     *
+     * approve() is called with skipDepartmentCheck: true — this is a
+     * system-generated compliance posting against the fixed
+     * STAT-COMPLIANCE budget, not a user-filed expense. Whichever staff
+     * member happened to mark the obligation Paid has no bearing on which
+     * department statutory tax spend belongs to, so the normal
+     * filer-department-must-match-budget-department rule doesn't apply
+     * here. The budget-status check (STAT-COMPLIANCE must be Active) is
+     * NOT skipped — that's still enforced.
      */
     protected function recordAsExpense(User $user, TaxObligation $obligation): TaxObligation
     {
@@ -182,7 +267,7 @@ class TaxObligationService
             'receipt_status' => Expense::RECEIPT_VERIFIED,
         ], $user);
 
-        $expense = $this->expenseService->approve($expense, $user);
+        $expense = $this->expenseService->approve($expense, $user, skipDepartmentCheck: true);
 
         $obligation->update(['expense_id' => $expense->id]);
 

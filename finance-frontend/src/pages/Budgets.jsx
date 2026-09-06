@@ -9,6 +9,7 @@ import BudgetPlanHistoryModal from '../components/BudgetPlanHistoryModal'
 import { formatCurrency } from '../utils/formatters'
 import { useBudgets } from '../hooks/useBudgets'
 import { useDepartments } from '../hooks/useDepartments'
+import { useHighlightRow } from '../hooks/useHighlightRow'
 
 // status is the ONLY approval-workflow field on Budget — see
 // status is constrained at the DB level (budgets_status_check) to:
@@ -114,6 +115,19 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
   const [showArchived, setShowArchived] = useState(false)
   const [page, setPage] = useState(1)
   const PER_PAGE = 20
+
+  // Global search (SearchBar.jsx) navigates here with a highlightId (and,
+  // since this table's `search` filter is server-side via load() below, a
+  // highlightSearch seed) whenever a budget record is clicked from search
+  // results.
+  const { highlightedId, highlightSearch } = useHighlightRow()
+  useEffect(() => {
+    if (highlightSearch == null) return
+    setSearch(highlightSearch)
+    setStatusFilter('all')
+    setShowArchived(false)
+    setPage(1)
+  }, [highlightSearch])
 
   const [modalMode, setModalMode] = useState(null) // null | 'add' | budget object being edited
   const [form, setForm] = useState(EMPTY_FORM)
@@ -601,7 +615,12 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                 const pct = usedPct(b.allocated_amount, b.remaining_amount)
                 const isPending = b.status === 'Draft'
                 return (
-                  <tr key={b.budget_id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
+                  <tr
+                    key={b.budget_id}
+                    data-row-id={b.budget_id}
+                    className={`border-b border-border last:border-0 transition-colors duration-300
+                      ${highlightedId === b.budget_id ? 'bg-primary/10' : 'hover:bg-bg'}`}
+                  >
                     <td className="px-4 py-3.5">
                       <p className="font-medium text-ink">{b.budget_name}</p>
                       <p className="text-xs text-muted">{b.department_name || '—'} · {b.budget_code}</p>

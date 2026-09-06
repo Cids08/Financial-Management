@@ -31,6 +31,8 @@ use App\Http\Controllers\Api\CollectionController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\BudgetController;
 use App\Http\Controllers\Api\DisbursementController;
+use App\Http\Controllers\Api\AuditLogController;
+use App\Http\Controllers\Api\SearchController;
 use Illuminate\Support\Facades\Broadcast;
 
 Broadcast::routes(['middleware' => ['auth:sanctum']]);
@@ -62,6 +64,14 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Current user's own permissions
     Route::get('/me/permissions', [PermissionController::class, 'mine']);
+
+    // Global hybrid search (SearchBar.jsx's "DATABASE RESULTS" half).
+    // Deliberately NOT gated by a single 'permission:' middleware — it
+    // spans many modules with different permission slugs, so
+    // SearchController checks each one individually per entity, the same
+    // way PermissionController::mine() above is open to every
+    // authenticated user but only ever returns that user's own data.
+    Route::get('/search', [SearchController::class, 'index']);
 
     // Settings
     Route::prefix('settings')->group(function () {
@@ -207,6 +217,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Dashboard
     Route::get('/dashboard', [DashboardController::class, 'index']);
     Route::get('/dashboard/charts', [DashboardController::class, 'charts']);
+    Route::get('/dashboard/export', [DashboardController::class, 'exportPdf']);
 
     // Invoice OCR scan
     Route::post('invoices/scan', [InvoiceScanController::class, 'scan'])->middleware('throttle:10,1');
@@ -229,14 +240,18 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     // AI recommendations
-    Route::middleware('permission:ai.view')->get('ai-recommendations', [AiRecommendationController::class, 'index']);
+    Route::middleware('permission:ai.view')->prefix('ai-recommendations')->group(function () {
+        Route::get('/', [AiRecommendationController::class, 'index']);
+        Route::patch('/{aiRecommendation}/archive', [AiRecommendationController::class, 'archive']);
+        Route::patch('/{aiRecommendation}/restore', [AiRecommendationController::class, 'restore'])->withTrashed();
+    });
 
     // AI advisor
     Route::middleware('permission:ai.view')->prefix('ai-advisor')->group(function () {
         Route::get('/conversations', [AiAdvisorController::class, 'index']);
         Route::post('/conversations', [AiAdvisorController::class, 'start']);
         Route::get('/conversations/{conversation}', [AiAdvisorController::class, 'show']);
-        Route::post('/conversations/{conversation}/messages', [AiAdvisorController::class, 'chat']);
+        Route::post('/conversations/{conversation}/messages', [AiAdvisorController::class, 'chat'])->middleware('throttle:20,1');
     });
 
     // Forecasting
@@ -259,12 +274,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('collections')->group(function () {
         Route::get('/', [CollectionController::class, 'index'])->middleware('permission:collections.view');
         Route::post('/', [CollectionController::class, 'store'])->middleware('permission:collections.manage');
+        Route::get('/efficiency', [CollectionController::class, 'efficiency'])->middleware('permission:collections.view');
         Route::put('/{collection}', [CollectionController::class, 'update'])->middleware('permission:collections.manage');
         Route::patch('/{collection}/confirm', [CollectionController::class, 'confirm'])->middleware('permission:collections.confirm');
         Route::patch('/{collection}/cancel', [CollectionController::class, 'cancel'])->middleware('permission:collections.confirm');
         Route::patch('/{collection}/archive', [CollectionController::class, 'archive'])->middleware('permission:collections.manage');
         Route::patch('/{collection}/restore', [CollectionController::class, 'restore'])->middleware('permission:collections.manage')->withTrashed();
-        Route::get('/{collector}/efficiency', [CollectorController::class, 'efficiency'])->middleware('permission:collectors.view');
     });
 
     // Reports
@@ -308,6 +323,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('/{disbursement}/release', [DisbursementController::class, 'release'])->middleware('permission:disbursements.approve');
         Route::patch('/{disbursement}/archive', [DisbursementController::class, 'archive'])->middleware('permission:disbursements.manage');
         Route::patch('/{disbursement}/restore', [DisbursementController::class, 'restore'])->middleware('permission:disbursements.manage')->withTrashed();
+    });
+
+    // Audit logs
+    Route::middleware('permission:audit-logs.view')->prefix('audit-logs')->group(function () {
+        Route::get('/', [AuditLogController::class, 'index']);
+        Route::get('/modules', [AuditLogController::class, 'modules']);
+        Route::get('/export', [AuditLogController::class, 'export']);
     });
 
     // Future modules go here.

@@ -487,7 +487,7 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
             </div>
           </div>
 
-          <form onSubmit={handleBrandSubmit} className="space-y-4 max-w-md">
+          <form onSubmit={handleBrandSubmit} className="space-y-4">
             {brandSaved && <InlineSuccess message="Branding updated." />}
             <InlineError message={brandApiError} />
 
@@ -512,28 +512,30 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
               </Button>
             </div>
 
-            <div>
-              <label className={LABEL}>Company Name</label>
-              <input
-                type="text"
-                value={brandForm.name}
-                onChange={handleBrandField('name')}
-                className={INPUT}
-                placeholder="FMS"
-                disabled={companyLoading}
-              />
-            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className={LABEL}>Company Name</label>
+                <input
+                  type="text"
+                  value={brandForm.name}
+                  onChange={handleBrandField('name')}
+                  className={INPUT}
+                  placeholder="FMS"
+                  disabled={companyLoading}
+                />
+              </div>
 
-            <div>
-              <label className={LABEL}>Tagline</label>
-              <input
-                type="text"
-                value={brandForm.tagline}
-                onChange={handleBrandField('tagline')}
-                className={INPUT}
-                placeholder="Enterprise Suite"
-                disabled={companyLoading}
-              />
+              <div>
+                <label className={LABEL}>Tagline</label>
+                <input
+                  type="text"
+                  value={brandForm.tagline}
+                  onChange={handleBrandField('tagline')}
+                  className={INPUT}
+                  placeholder="Enterprise Suite"
+                  disabled={companyLoading}
+                />
+              </div>
             </div>
 
             <div>
@@ -604,7 +606,7 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
             </div>
           </div>
 
-          <form onSubmit={handleBrandSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-md">
+          <form onSubmit={handleBrandSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className={LABEL}>Currency</label>
               <select
@@ -652,7 +654,7 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
               />
             </div>
 
-            <div className="sm:col-span-2 flex justify-end pt-1">
+            <div className="col-span-1 sm:col-span-2 lg:col-span-4 flex justify-end pt-1">
               <Button type="submit" variant="primary" size="md" loading={brandSaving} disabled={companyLoading}>
                 Save Defaults
               </Button>
@@ -673,7 +675,7 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
           </div>
         </div>
 
-        <form onSubmit={handlePasswordSubmit} className="space-y-4 max-w-md">
+        <form onSubmit={handlePasswordSubmit} className="space-y-4">
           <InlineError message={security.passwordError} />
           <InlineSuccess message={pwSuccess} />
 
@@ -682,26 +684,29 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
             value={pwForm.current}
             onChange={(e) => setPwForm((f) => ({ ...f, current: e.target.value }))}
           />
-          <div>
-            <PasswordInput
-              label="New Password"
-              value={pwForm.next}
-              onChange={(e) => setPwForm((f) => ({ ...f, next: e.target.value }))}
-            />
-            {pwForm.next && (
-              <div className="mt-1.5">
-                <div className="h-1 w-full rounded-full bg-border overflow-hidden">
-                  <div className={`h-full rounded-full transition-all duration-300 ${passwordStrength.width} ${passwordStrength.color}`} />
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <PasswordInput
+                label="New Password"
+                value={pwForm.next}
+                onChange={(e) => setPwForm((f) => ({ ...f, next: e.target.value }))}
+              />
+              {pwForm.next && (
+                <div className="mt-1.5">
+                  <div className="h-1 w-full rounded-full bg-border overflow-hidden">
+                    <div className={`h-full rounded-full transition-all duration-300 ${passwordStrength.width} ${passwordStrength.color}`} />
+                  </div>
+                  <p className="mt-1 text-[11px] text-muted">{passwordStrength.label} password</p>
                 </div>
-                <p className="mt-1 text-[11px] text-muted">{passwordStrength.label} password</p>
-              </div>
-            )}
+              )}
+            </div>
+            <PasswordInput
+              label="Confirm New Password"
+              value={pwForm.confirm}
+              onChange={(e) => setPwForm((f) => ({ ...f, confirm: e.target.value }))}
+            />
           </div>
-          <PasswordInput
-            label="Confirm New Password"
-            value={pwForm.confirm}
-            onChange={(e) => setPwForm((f) => ({ ...f, confirm: e.target.value }))}
-          />
 
           <div className="flex justify-end pt-1">
             <Button type="submit" variant="primary" size="md" loading={security.passwordSaving}>

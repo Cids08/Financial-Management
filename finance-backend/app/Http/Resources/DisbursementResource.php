@@ -29,6 +29,25 @@ class DisbursementResource extends JsonResource
             'status' => $this->status,
             'has_attachment' => (bool) $this->has_attachment,
             'remarks' => $this->remarks,
+
+            // FIX: these two were previously missing entirely, even though
+            // Disbursements.jsx reads d.is_archived (to hide Edit/Attach
+            // Proof on archived rows and to decide whether the toggle
+            // button shows "Archive" or "Restore") and d.archived_at (Detail
+            // modal). Without them, is_archived was always `undefined` on
+            // the frontend, so the toggle button could never show
+            // "Restore" and restoreDisbursement() was unreachable.
+            //
+            // The disbursements table has no dedicated archived_at column —
+            // "archive" is implemented as a plain Laravel soft delete
+            // (deleted_at / deleted_by, per the ERD and the model's
+            // SoftDeletes trait). $this->trashed() is the correct check,
+            // and deleted_at is auto-cast to Carbon by SoftDeletes itself,
+            // so no extra cast is needed on the model for this.
+            'is_archived' => $this->trashed(),
+            'archived_at' => $this->deleted_at?->toIso8601String(),
+            'archived_by' => $this->deleted_by,
+
             'created_by' => $this->created_by,
             'created_by_name' => $this->whenLoaded('creator', fn () => trim(($this->creator?->first_name ?? '').' '.($this->creator?->last_name ?? ''))),
             'approved_by' => $this->approved_by,

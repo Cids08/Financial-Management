@@ -23,18 +23,16 @@ const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
 const PANEL_PAD = 'p-4'
 
 // Staff has view/manage on these five modules — no approve on any of them
-// (see RolesAndPermissionsSeeder). Routes are guesses matching the
-// crumb/breadcrumb conventions used elsewhere (Budgets.jsx uses
-// 'Financial Transactions' > 'Budgets') — adjust the `to` paths below to
-// match your actual router config in App.jsx if they differ.
+// (see RolesAndPermissionsSeeder). Routes match the /master-data and
+// /transactions convention used by Dashboard.jsx and CollectorDashboard.jsx.
 const QUICK_LINKS = [
-  { key: 'customers', label: 'Customers', icon: Users2, to: '/accounts-receivable/customers' },
-  { key: 'suppliers', label: 'Suppliers', icon: Building2, to: '/accounts-payable/suppliers' },
-  { key: 'ar', label: 'Accounts Receivable', icon: Wallet, to: '/accounts-receivable' },
-  { key: 'ap', label: 'Accounts Payable', icon: Receipt, to: '/accounts-payable' },
-  { key: 'expenses', label: 'Expenses', icon: TrendingDown, to: '/accounting/expenses' },
-  { key: 'disbursements', label: 'Disbursements', icon: Send, to: '/budget-management/disbursements' },
-  { key: 'budgets', label: 'Budgets', icon: PiggyBank, to: '/financial-transactions/budgets' },
+  { key: 'customers', label: 'Customers', icon: Users2, to: '/master-data/customers' },
+  { key: 'suppliers', label: 'Suppliers', icon: Building2, to: '/master-data/suppliers' },
+  { key: 'ar', label: 'Accounts Receivable', icon: Wallet, to: '/transactions/receivable' },
+  { key: 'ap', label: 'Accounts Payable', icon: Receipt, to: '/transactions/payable' },
+  { key: 'expenses', label: 'Expenses', icon: TrendingDown, to: '/transactions/expenses' },
+  { key: 'disbursements', label: 'Disbursements', icon: Send, to: '/transactions/disbursements' },
+  { key: 'budgets', label: 'Budgets', icon: PiggyBank, to: '/transactions/budgets' },
 ]
 
 function formatDateTime(iso) {
@@ -183,7 +181,7 @@ export default function StaffDashboard({ title = 'Dashboard', crumbs = ['Dashboa
                   title={item.customer_name}
                   subtitle={item.due_date ? `Due ${formatDateTime(item.due_date)}` : undefined}
                   amount={item.amount}
-                  onClick={() => navigate('/accounts-receivable')}
+                  onClick={() => navigate('/transactions/receivable')}
                 />
               )}
             />
@@ -199,7 +197,7 @@ export default function StaffDashboard({ title = 'Dashboard', crumbs = ['Dashboa
                   title={item.supplier_name}
                   subtitle={item.due_date ? `Due ${formatDateTime(item.due_date)}` : undefined}
                   amount={item.amount}
-                  onClick={() => navigate('/accounts-payable')}
+                  onClick={() => navigate('/transactions/payable')}
                 />
               )}
             />
@@ -215,7 +213,7 @@ export default function StaffDashboard({ title = 'Dashboard', crumbs = ['Dashboa
                   title={item.description}
                   subtitle={item.submitted_at ? `Submitted ${formatDateTime(item.submitted_at)}` : undefined}
                   amount={item.amount}
-                  onClick={() => navigate('/accounting/expenses')}
+                  onClick={() => navigate('/transactions/expenses')}
                 />
               )}
             />
@@ -231,7 +229,7 @@ export default function StaffDashboard({ title = 'Dashboard', crumbs = ['Dashboa
                   title={item.reference}
                   subtitle={item.submitted_at ? `Submitted ${formatDateTime(item.submitted_at)}` : undefined}
                   amount={item.amount}
-                  onClick={() => navigate('/budget-management/disbursements')}
+                  onClick={() => navigate('/transactions/disbursements')}
                 />
               )}
             />
@@ -246,7 +244,7 @@ export default function StaffDashboard({ title = 'Dashboard', crumbs = ['Dashboa
                   key={item.id}
                   title={item.budget_name}
                   subtitle={item.reason || 'No budget plan attached'}
-                  onClick={() => navigate('/financial-transactions/budgets')}
+                  onClick={() => navigate('/transactions/budgets')}
                 />
               )}
             />

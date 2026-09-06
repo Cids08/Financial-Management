@@ -1,18 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { apiFetch } from '../utils/api'
 
-/**
- * Backed by:
- *   GET    /api/expenses            (filters: search, status, budget_id, expense_category_id, expense_date_from, expense_date_to, trashed, per_page, page)
- *   GET    /api/expenses/stats
- *   GET    /api/expenses/{id}
- *   POST   /api/expenses
- *   PUT    /api/expenses/{id}
- *   PATCH  /api/expenses/{id}/approve
- *   PATCH  /api/expenses/{id}/reject
- *   PATCH  /api/expenses/{id}/archive
- *   PATCH  /api/expenses/{id}/restore   (withTrashed on the backend)
- */
 export function useExpenses() {
   const [expenses, setExpenses] = useState([])
   const [meta, setMeta] = useState({ current_page: 1, last_page: 1, per_page: 15, total: 0 })

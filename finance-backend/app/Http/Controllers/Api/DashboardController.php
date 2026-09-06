@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Services\DashboardChartService;
 use App\Services\DashboardService;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
+use Symfony\Component\HttpFoundation\Response;
 
 class DashboardController extends Controller
 {
@@ -57,5 +59,34 @@ class DashboardController extends Controller
             'message' => '',
             'data' => $this->chartService->getAll(),
         ]);
+    }
+
+    /**
+     * GET /api/dashboard/export
+     *
+     * Renders the same overview/module-card/recent-transaction data shown
+     * on the Dashboard page into a downloadable PDF snapshot. Reuses
+     * DashboardService rather than querying separately, so the export
+     * always matches what the person is looking at on screen.
+     *
+     * Requires barryvdh/laravel-dompdf (composer require barryvdh/laravel-dompdf).
+     */
+    public function exportPdf(): Response
+    {
+        $data = [
+            'generated_at' => now(),
+            'overview' => $this->dashboardService->getOverview(),
+            'module_cards' => $this->dashboardService->getModuleCards(),
+            // A wider slice than the on-screen "8 most recent" — the PDF
+            // is a standalone document, so it's worth giving more context.
+            'recent_transactions' => $this->dashboardService->getRecentTransactions(25),
+        ];
+
+        $pdf = Pdf::loadView('pdf.dashboard-summary', $data)
+            ->setPaper('a4', 'portrait');
+
+        $filename = 'dashboard-summary-' . now()->format('Y-m-d') . '.pdf';
+
+        return $pdf->download($filename);
     }
 }

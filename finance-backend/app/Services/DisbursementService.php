@@ -94,6 +94,20 @@ class DisbursementService
         return DB::transaction(function () use ($data, $userId) {
             $ap = AccountsPayable::lockForUpdate()->findOrFail($data['ap_id']);
 
+            // FIX: previously missing entirely. AccountsPayableService::
+            // approve() is what posts the bill's accrual journal entry
+            // (Dr Expense / Cr Accounts Payable) — before that, there is
+            // no liability on the books for a disbursement to settle.
+            // Without this check, release() would later post Dr AP
+            // Control / Cr Cash for a liability that was never accrued,
+            // which can drive the AP control account negative or leave a
+            // cash payout with no corresponding accrual behind it.
+            if ($ap->approved_by === null) {
+                throw ValidationException::withMessages([
+                    'ap_id' => "Bill {$ap->invoice_number} must be approved before a disbursement can be created against it.",
+                ]);
+            }
+
             if ($data['amount_paid'] > $ap->remaining_balance) {
                 throw ValidationException::withMessages([
                     'amount_paid' => 'Payment amount cannot exceed the payable\'s remaining balance ('

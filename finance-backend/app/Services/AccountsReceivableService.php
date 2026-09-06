@@ -11,9 +11,13 @@ use Illuminate\Support\Facades\DB;
 class AccountsReceivableService
 {
     /**
-     * $filters: ['status' => ?string, 'archived' => bool, 'search' => ?string]
+     * $filters: ['status' => ?string, 'archived' => bool, 'search' => ?string, 'collector_id' => ?int]
      * Matches the filter behavior already implemented client-side in
      * AccountsReceivable.jsx's `filtered` useMemo, moved server-side.
+     *
+     * collector_id is the enforcement point for Collector-role scoping —
+     * see AccountsReceivableController::index(), which forces this value
+     * to the caller's own collector id rather than trusting the client.
      */
     public function list(array $filters = []): Collection
     {
@@ -29,6 +33,10 @@ class AccountsReceivableService
 
         if (! empty($filters['status']) && $filters['status'] !== 'all') {
             $query->where('status', $filters['status']);
+        }
+
+        if (array_key_exists('collector_id', $filters) && $filters['collector_id'] !== null) {
+            $query->where('collector_id', $filters['collector_id']);
         }
 
         if (! empty($filters['search'])) {

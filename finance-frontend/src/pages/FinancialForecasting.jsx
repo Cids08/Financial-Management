@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Search, Plus, TrendingUp, Target, Percent, Info, Activity, CalendarRange, Archive, ArchiveRestore,
+  Search, Plus, TrendingUp, Target, Percent, Info, Activity, CalendarRange, Archive, ArchiveRestore, AlertTriangle,
 } from 'lucide-react'
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend,
@@ -34,6 +34,15 @@ const TYPE_STYLES = {
 
 const HIGH_CONFIDENCE_THRESHOLD = 80
 const LOW_ERROR_THRESHOLD = 8
+
+// Above this, MAPE isn't just "not great" — it indicates the model's
+// percentage error is large enough that the forecast shouldn't be
+// treated as reliable at all (see the ai-forecasting skill's "communicate
+// poor accuracy honestly" philosophy). MAPE can legitimately spike into
+// the thousands of percent when historical actuals include near-zero
+// months (division-by-small-number blowup), which is a real, observed
+// case for this dataset, not a hypothetical edge case.
+const MAPE_WARNING_THRESHOLD = 50
 
 const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
 const PANEL_PAD = 'p-4'
@@ -86,6 +95,19 @@ function confidenceColor(pct) {
   return 'text-red-600 dark:text-red-400'
 }
 
+// Mirrors confidenceColor()'s tiering, but for MAPE (lower is better, and
+// the top end is unbounded rather than capped at 100 like confidence is).
+function mapeColor(mape) {
+  if (mape == null) return 'text-muted'
+  if (mape > MAPE_WARNING_THRESHOLD) return 'text-red-600 dark:text-red-400 font-semibold'
+  if (mape > LOW_ERROR_THRESHOLD) return 'text-amber-600 dark:text-amber-400'
+  return 'text-emerald-600 dark:text-emerald-400'
+}
+
+function isMapeUnreliable(mape) {
+  return mape != null && mape > MAPE_WARNING_THRESHOLD
+}
+
 const StatCard = memo(function StatCard({ label, value, icon: Icon, iconBg, iconColor, isActive, onClick }) {
   return (
     <button
@@ -107,6 +129,7 @@ const StatCard = memo(function StatCard({ label, value, icon: Icon, iconBg, icon
 })
 
 const ForecastRow = memo(function ForecastRow({ forecast: f, showArchived, onViewDetail, onArchive, onRestore }) {
+  const unreliable = isMapeUnreliable(f.mape)
   return (
     <tr
       onClick={() => onViewDetail(f)}
@@ -119,7 +142,16 @@ const ForecastRow = memo(function ForecastRow({ forecast: f, showArchived, onVie
       <td className="px-4 py-3.5 whitespace-nowrap text-muted">{f.historical_period}</td>
       <td className="px-4 py-3.5 whitespace-nowrap text-right tabular-nums text-ink">{formatCurrency(f.predicted_amount)}</td>
       <td className={`px-4 py-3.5 whitespace-nowrap text-right tabular-nums font-medium ${confidenceColor(f.confidence_level)}`}>{f.confidence_level}%</td>
-      <td className="px-4 py-3.5 whitespace-nowrap text-right tabular-nums text-muted">{f.mape != null ? `${f.mape}%` : '—'}</td>
+      <td className={`px-4 py-3.5 whitespace-nowrap text-right tabular-nums ${mapeColor(f.mape)}`}>
+        <span className="inline-flex items-center gap-1 justify-end">
+          {unreliable && (
+            <Tooltip label="High error margin — treat this forecast with caution" align="end">
+              <AlertTriangle size={12} className="shrink-0" />
+            </Tooltip>
+          )}
+          {f.mape != null ? `${f.mape}%` : '—'}
+        </span>
+      </td>
       <td className="px-4 py-3.5 whitespace-nowrap text-muted">{f.arima_model}</td>
       <td className="px-4 py-3.5 whitespace-nowrap text-right">
         <div className="flex items-center justify-end gap-1">
@@ -324,9 +356,20 @@ const GenerateForecastModal = memo(function GenerateForecastModal({ open, onClos
               </div>
               <div className="rounded-lg border border-border px-3 py-2">
                 <p className="text-xs text-muted">MAPE</p>
-                <p className="text-sm font-semibold text-ink mt-0.5">{result.mape != null ? `${result.mape}%` : '—'}</p>
+                <p className={`text-sm font-semibold mt-0.5 ${mapeColor(result.mape)}`}>{result.mape != null ? `${result.mape}%` : '—'}</p>
               </div>
             </div>
+
+            {isMapeUnreliable(result.mape) && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400 flex items-start gap-2">
+                <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                <span>
+                  This forecast's error margin is unusually high, likely due to a sharp jump or near-zero
+                  months in the historical data it trained on. Treat this prediction with caution rather
+                  than as a reliable projection.
+                </span>
+              </div>
+            )}
 
             <p className="text-xs text-muted">This forecast has been saved. Regenerate runs a fresh forecast (saved separately), or Edit Inputs to change the type/horizon.</p>
           </div>
@@ -400,9 +443,20 @@ const ForecastDetailModal = memo(function ForecastDetailModal({ forecastId, onCl
             </div>
             <div className="rounded-lg border border-border px-3 py-2">
               <p className="text-xs text-muted">MAPE</p>
-              <p className="text-sm font-semibold text-ink mt-0.5">{forecast.mape != null ? `${forecast.mape}%` : '—'}</p>
+              <p className={`text-sm font-semibold mt-0.5 ${mapeColor(forecast.mape)}`}>{forecast.mape != null ? `${forecast.mape}%` : '—'}</p>
             </div>
           </div>
+
+          {isMapeUnreliable(forecast.mape) && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400 flex items-start gap-2">
+              <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+              <span>
+                This forecast's error margin is unusually high, likely due to a sharp jump or near-zero
+                months in the historical data it trained on. Treat this prediction with caution rather
+                than as a reliable projection.
+              </span>
+            </div>
+          )}
 
           <p className="text-xs text-muted">Generated by {forecast.generated_by_name || `User #${forecast.generated_by}`} on {formatDateTime(forecast.generated_at)}</p>
         </div>

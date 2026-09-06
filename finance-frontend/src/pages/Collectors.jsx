@@ -10,6 +10,7 @@ import Tooltip2 from '../components/Tooltip'
 import { formatCurrency } from '../utils/formatters'
 import { apiFetch } from '../utils/api'
 import { useCollectors } from '../hooks/useCollectors'
+import { useHighlightRow } from '../hooks/useHighlightRow'
 
 const EMPTY_FORM = { employee_no: '', first_name: '', last_name: '', email: '', contact_no: '', assigned_area: '', service_area_id: '', monthly_target: '', commission_rate: '', is_active: true }
 
@@ -250,6 +251,19 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
     getEfficiency,
   } = useCollectors()
 
+  // Global search (SearchBar.jsx) navigates here with a highlightId (and,
+  // since this table's `search` filter is server-side/debounced inside
+  // useCollectors, a highlightSearch seed) whenever a collector record is
+  // clicked from search results.
+  const { highlightedId, highlightSearch } = useHighlightRow()
+  useEffect(() => {
+    if (highlightSearch == null) return
+    setSearch(highlightSearch)
+    setStatusFilter('all')
+    setShowArchived(false)
+    setPage(1)
+  }, [highlightSearch])
+
   const serviceAreas = useServiceAreas()
 
   const [modalMode, setModalMode] = useState(null)
@@ -413,7 +427,12 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
               {!loading && collectors.map((c) => {
                 const revealed = revealedIds.has(c.collector_id)
                 return (
-                  <tr key={c.collector_id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
+                  <tr
+                    key={c.collector_id}
+                    data-row-id={c.collector_id}
+                    className={`border-b border-border last:border-0 transition-colors duration-300
+                      ${highlightedId === c.collector_id ? 'bg-primary/10' : 'hover:bg-bg'}`}
+                  >
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-2.5">
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary-dark overflow-hidden">

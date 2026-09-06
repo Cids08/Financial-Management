@@ -91,4 +91,13 @@ class Disbursement extends Model
     {
         return $this->source_type === 'payroll';
     }
+
+    // "Archive" is implemented as a plain soft delete on this table
+    // (deleted_at / deleted_by) — there is no separate archived_at column.
+    // trashed() already comes from SoftDeletes; this is just a readable
+    // alias for it, matching the naming Resources/Controllers use elsewhere.
+    public function isArchived(): bool
+    {
+        return $this->trashed();
+    }
 }

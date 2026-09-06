@@ -69,6 +69,17 @@ return [
         'base_url' => env('FORECAST_SERVICE_URL'),
     ],
 
+    // Base URL of the AI advisor/recommendation microservice
+    // (ai-advisor-service/) — RemoteAdvisorEngine and
+    // RemoteRecommendationEngine both call this instead of OpenRouter
+    // directly; the microservice itself owns the actual OpenAI-compatible
+    // call. Token must match INTERNAL_SERVICE_TOKEN in that service's own
+    // .env exactly, or every request gets rejected with a 401.
+    'ai_advisor' => [
+        'url' => env('AI_ADVISOR_SERVICE_URL', 'http://localhost:8002'),
+        'token' => env('AI_ADVISOR_SERVICE_TOKEN'),
+    ],
+
     'tesseract' => [
         'executable' => env('TESSERACT_PATH'),
     ],

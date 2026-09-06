@@ -7,13 +7,20 @@ use App\Http\Requests\StoreExpenseCategoryRequest;
 use App\Http\Requests\UpdateExpenseCategoryRequest;
 use App\Http\Resources\ExpenseCategoryResource;
 use App\Models\ExpenseCategory;
+use App\Services\ExpenseCategoryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class ExpenseCategoryController extends Controller
 {
+    public function __construct(private readonly ExpenseCategoryService $categories)
+    {
+    }
+
     public function index(Request $request): JsonResponse
     {
+        $this->authorize('viewAny', ExpenseCategory::class);
+
         $query = ExpenseCategory::query()
             ->withCount('expenses')
             ->search($request->query('search'));
@@ -37,10 +44,7 @@ class ExpenseCategoryController extends Controller
 
     public function store(StoreExpenseCategoryRequest $request): JsonResponse
     {
-        $category = ExpenseCategory::create([
-            ...$request->validated(),
-            'is_active' => $request->boolean('is_active', true),
-        ]);
+        $category = $this->categories->create($request->validated(), $request->user());
 
         return response()->json([
             'success' => true,
@@ -51,7 +55,7 @@ class ExpenseCategoryController extends Controller
 
     public function update(UpdateExpenseCategoryRequest $request, ExpenseCategory $expenseCategory): JsonResponse
     {
-        $expenseCategory->update($request->validated());
+        $expenseCategory = $this->categories->update($expenseCategory, $request->validated(), $request->user());
 
         return response()->json([
             'success' => true,
@@ -60,9 +64,11 @@ class ExpenseCategoryController extends Controller
         ]);
     }
 
-    public function archive(ExpenseCategory $expenseCategory): JsonResponse
+    public function archive(Request $request, ExpenseCategory $expenseCategory): JsonResponse
     {
-        $expenseCategory->delete();
+        $this->authorize('archive', $expenseCategory);
+
+        $this->categories->archive($expenseCategory, $request->user());
 
         return response()->json([
             'success' => true,
@@ -71,9 +77,11 @@ class ExpenseCategoryController extends Controller
         ]);
     }
 
-    public function restore(ExpenseCategory $expenseCategory): JsonResponse
+    public function restore(Request $request, ExpenseCategory $expenseCategory): JsonResponse
     {
-        $expenseCategory->restore();
+        $this->authorize('restore', $expenseCategory);
+
+        $expenseCategory = $this->categories->restore($expenseCategory, $request->user());
 
         return response()->json([
             'success' => true,
