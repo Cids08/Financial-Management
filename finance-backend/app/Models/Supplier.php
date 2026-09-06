@@ -14,11 +14,11 @@ class Supplier extends Model
         'supplier_code',
         'supplier_name',
         'contact_person',
+        'position',
         'contact_number',
         'email',
         'website',
         'address',
-        'tin',
         'current_balance',
         'status',
         'updated_by',
@@ -40,6 +40,32 @@ class Supplier extends Model
         $last = static::withTrashed()->orderByDesc('id')->value('id') ?? 0;
 
         return 'SUPP-' . str_pad((string) ($last + 1), 5, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Recomputes and persists current_balance from the supplier's actual
+     * AP bills, mirroring Customer::recalculateBalance() exactly. Called
+     * from AccountsPayable's booted() hooks.
+     *
+     * Excludes 'Paid' (nothing left owed) and 'Cancelled' bills — matches
+     * AccountsPayableService::stats()'s own 'payable' metric and its
+     * documented reasoning: a Cancelled bill can still carry a nonzero
+     * remaining_balance since cancelling doesn't zero that column out,
+     * so it must be excluded explicitly rather than trusting
+     * remaining_balance alone (unlike AR, where remaining_balance reaching
+     * 0 was sufficient on its own).
+     *
+     * Soft-deleted/archived bills are excluded automatically by
+     * AccountsPayable's SoftDeletes global scope — no explicit
+     * whereNull('deleted_at') needed here.
+     */
+    public static function recalculateBalance(int $supplierId): void
+    {
+        $balance = AccountsPayable::where('supplier_id', $supplierId)
+            ->whereNotIn('status', ['Paid', 'Cancelled'])
+            ->sum('remaining_balance');
+
+        static::where('id', $supplierId)->update(['current_balance' => $balance]);
     }
 
     public function scopeSearch(Builder $query, ?string $term): Builder

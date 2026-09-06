@@ -154,6 +154,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/{collector}', [CollectorController::class, 'update'])->middleware('permission:collectors.manage');
         Route::delete('/{collector}', [CollectorController::class, 'archive'])->middleware('permission:collectors.manage');
         Route::patch('/{collector}/restore', [CollectorController::class, 'restore'])->middleware('permission:collectors.manage');
+        Route::get('/available-users', [CollectorController::class, 'availableUsers'])->middleware('permission:collectors.view');
         Route::get('/{collector}/efficiency', [CollectorController::class, 'efficiency'])->middleware('permission:collectors.view');
     });
 
@@ -199,6 +200,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('/{accountsPayable}/approve', [AccountsPayableController::class, 'approve'])->middleware('permission:ap.approve');
         Route::patch('/{accountsPayable}/archive', [AccountsPayableController::class, 'archive'])->middleware('permission:ap.manage');
         Route::patch('/{accountsPayable}/restore', [AccountsPayableController::class, 'restore'])->middleware('permission:ap.manage')->withTrashed();
+
+        // Supporting documents — upload history and inline view
+        Route::get('/{accountsPayable}/document', [AccountsPayableController::class, 'documentHistory'])->middleware('permission:ap.view');
+        Route::post('/{accountsPayable}/document', [AccountsPayableController::class, 'attachDocument'])->middleware('permission:ap.manage');
+        Route::get('/{accountsPayable}/document/{document}/view', [AccountsPayableController::class, 'viewDocument'])->middleware('permission:ap.view');
     });
 
     // Expenses
@@ -212,6 +218,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('/{expense}/reject', [ExpenseController::class, 'reject'])->middleware('permission:expenses.approve');
         Route::patch('/{expense}/archive', [ExpenseController::class, 'archive'])->middleware('permission:expenses.manage');
         Route::patch('/{expense}/restore', [ExpenseController::class, 'restore'])->middleware('permission:expenses.manage')->withTrashed();
+        Route::post('/{expense}/receipt', [ExpenseController::class, 'uploadReceipt'])->middleware('permission:expenses.manage');
+        Route::get('/{expense}/receipt/view', [ExpenseController::class, 'viewReceipt'])->middleware('permission:expenses.view');
+        Route::get('/{expense}/receipts', [ExpenseController::class, 'receiptHistory'])->middleware('permission:expenses.view');
+        Route::get('/{expense}/receipts/{document}/view', [ExpenseController::class, 'viewReceiptVersion'])->middleware('permission:expenses.view');
     });
 
     // Dashboard
@@ -237,6 +247,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/{taxObligation}', [TaxObligationController::class, 'update'])->middleware('permission:tax.manage');
         Route::delete('/{taxObligation}', [TaxObligationController::class, 'archive'])->middleware('permission:tax.manage');
         Route::patch('/{taxObligation}/restore', [TaxObligationController::class, 'restore'])->middleware('permission:tax.manage');
+
+        // Supporting documents — same singular "document" shape as
+        // AccountsPayable's document routes above (history + upload share
+        // one path, distinguished by HTTP verb; view takes the document id).
+        Route::get('/{taxObligation}/document', [TaxObligationController::class, 'documentHistory'])->middleware('permission:tax.view');
+        Route::post('/{taxObligation}/document', [TaxObligationController::class, 'attachDocument'])->middleware('permission:tax.manage');
+        Route::get('/{taxObligation}/document/{document}/view', [TaxObligationController::class, 'viewDocument'])->middleware('permission:tax.view');
     });
 
     // AI recommendations
@@ -275,11 +292,18 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/', [CollectionController::class, 'index'])->middleware('permission:collections.view');
         Route::post('/', [CollectionController::class, 'store'])->middleware('permission:collections.manage');
         Route::get('/efficiency', [CollectionController::class, 'efficiency'])->middleware('permission:collections.view');
+
+        // Parameterised routes — model-bound, must come after static routes above
         Route::put('/{collection}', [CollectionController::class, 'update'])->middleware('permission:collections.manage');
         Route::patch('/{collection}/confirm', [CollectionController::class, 'confirm'])->middleware('permission:collections.confirm');
         Route::patch('/{collection}/cancel', [CollectionController::class, 'cancel'])->middleware('permission:collections.confirm');
         Route::patch('/{collection}/archive', [CollectionController::class, 'archive'])->middleware('permission:collections.manage');
         Route::patch('/{collection}/restore', [CollectionController::class, 'restore'])->middleware('permission:collections.manage')->withTrashed();
+
+        // Proof of receipt — upload history and inline view
+        Route::get('/{collection}/proof', [CollectionController::class, 'proofHistory'])->middleware('permission:collections.view');
+        Route::post('/{collection}/proof', [CollectionController::class, 'attachProof'])->middleware('permission:collections.manage');
+        Route::get('/{collection}/proof/{document}/view', [CollectionController::class, 'viewProof'])->middleware('permission:collections.view');
     });
 
     // Reports
@@ -313,6 +337,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Disbursements
     Route::prefix('disbursements')->group(function () {
         Route::get('/stats', [DisbursementController::class, 'stats'])->middleware('permission:disbursements.view');
+        Route::get('/next-voucher-number', [DisbursementController::class, 'nextVoucherNumber'])->middleware('permission:disbursements.manage');
         Route::get('/', [DisbursementController::class, 'index'])->middleware('permission:disbursements.view');
         Route::get('/{disbursement}', [DisbursementController::class, 'show'])->middleware('permission:disbursements.view');
         Route::post('/', [DisbursementController::class, 'store'])->middleware('permission:disbursements.manage');

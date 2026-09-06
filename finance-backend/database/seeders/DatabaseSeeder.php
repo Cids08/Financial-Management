@@ -24,6 +24,9 @@ class DatabaseSeeder extends Seeder
             ExpenseSeeder::class,
             CashAccountSeeder::class,
             BudgetSeeder::class,
+            AccountsPayableSeeder::class,
+            DisbursementSeeder::class,
+            DisbursementPayrollDemoSeeder::class,
             // ...other seeders (RoleSeeder, DepartmentSeeder, etc.) go here
         ]);
     }

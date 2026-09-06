@@ -26,6 +26,7 @@ class ExpenseResource extends JsonResource
             'is_over_budget' => (bool) $this->is_over_budget,
             'status' => $this->status,
             'rejection_remarks' => $this->rejection_remarks,
+            'has_receipt' => $this->has_receipt,
             'created_by' => $this->created_by,
             'created_by_name' => $this->whenLoaded('creator', fn () => $this->creator?->first_name . ' ' . $this->creator?->last_name),
             'created_at' => $this->created_at?->toIso8601String(),

@@ -16,7 +16,6 @@ use Illuminate\Validation\ValidationException;
 
 class AccountSecurityService
 {
-    // How long an emailed setup code stays valid.
     protected const SETUP_CODE_TTL_MINUTES = 10;
 
     public function __construct(protected TotpService $totp)
@@ -35,18 +34,19 @@ class AccountSecurityService
 
         $user->update([
             'password' => $new,
+            // Clears the forced-change flag, if set — this is the exit
+            // point for both a normal password change AND the
+            // must_change_password-blocked first-login flow, since both
+            // funnel through this same method.
+            'must_change_password' => false,
             'updated_by' => $user->id,
         ]);
 
-        // Changing the password revokes every other session for safety.
         $user->tokens()->when($currentTokenId, fn ($q) => $q->where('id', '!=', $currentTokenId))->delete();
 
         $this->log($user, 'Password Change', 'Settings', 'Password was changed.');
     }
 
-    // 2FA setup is email-code based, not an authenticator app: generate a
-    // one-time code, cache its hash against the user, and email it. Nothing
-    // is written to the user record until the code is confirmed.
     public function initiateTwoFactor(User $user): array
     {
         $code = (string) random_int(100000, 999999);

@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreCollectionRequest;
 use App\Http\Requests\UpdateCollectionRequest;
+use App\Http\Requests\UploadCollectionProofRequest;
 use App\Http\Resources\CollectionResource;
 use App\Models\Collection;
+use App\Models\SupportingDocument;
 use App\Services\CollectionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -22,39 +24,9 @@ class CollectionController extends Controller
     {
         $this->authorize('viewAny', Collection::class);
 
-        $user = $request->user();
-        $collectorId = $request->query('collector_id');
-
-        // CollectionPolicy::viewAny() only checks "does this user have
-        // collections.view at all" — it can't know which specific rows
-        // they should see. That row-level scoping has to happen here: a
-        // Collector may only ever see their own collections, regardless
-        // of what collector_id (or lack of one) the client sends.
-        if ($user->hasRole('collector')) {
-            $ownCollectorId = $user->collector?->id;
-
-            // Fail closed: an unlinked Collector-role account sees
-            // nothing, not everything.
-            if ($ownCollectorId === null) {
-                return response()->json([
-                    'success' => true,
-                    'message' => '',
-                    'data'    => [],
-                    'meta'    => [
-                        'current_page' => 1,
-                        'last_page'    => 1,
-                        'per_page'     => (int) $request->query('per_page', 15),
-                        'total'        => 0,
-                    ],
-                ]);
-            }
-
-            $collectorId = $ownCollectorId;
-        }
-
         $paginated = $this->collections->list([
             'search'       => $request->query('search'),
-            'collector_id' => $collectorId,
+            'collector_id' => $request->query('collector_id'),
             'status'       => $request->query('status'),
             'trashed'      => $request->boolean('trashed'),
             'per_page'     => (int) $request->query('per_page', 15),
@@ -175,6 +147,94 @@ class CollectionController extends Controller
             'success' => true,
             'message' => 'Collection restored.',
             'data'    => new CollectionResource($collection),
+        ]);
+    }
+
+    /**
+     * GET /api/collections/{collection}/proof/{document}/view
+     * Serve a specific proof version inline (Content-Disposition: inline)
+     * so the browser can render PDFs and images natively in a new tab.
+     * Non-previewable types (none expected here since we only accept
+     * pdf/jpg/jpeg/png) will still download — browser limitation.
+     *
+     * Ownership check on reference_type + reference_id mirrors
+     * BudgetController::viewPlanVersion() — prevents ID enumeration
+     * across modules since supporting_documents is a shared table.
+     */
+    public function viewProof(Collection $collection, SupportingDocument $document): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    {
+        $this->authorize('view', $collection);
+
+        if ($document->reference_type !== 'collection' || (int) $document->reference_id !== $collection->id) {
+            abort(404, 'This document does not belong to this collection.');
+        }
+
+        if (! $document->storage_path) {
+            abort(404, 'No file stored for this proof version.');
+        }
+
+        $fullPath = \Illuminate\Support\Facades\Storage::disk('local')->path($document->storage_path);
+
+        return response()->file($fullPath, [
+            'Content-Type' => $document->mime_type ?? 'application/octet-stream',
+        ]);
+    }
+
+    /**
+     * POST /api/collections/{collection}/proof
+     * Attach a proof-of-receipt document. Re-uploading adds a new version;
+     * it does not replace the previous one (history is preserved).
+     */
+    public function attachProof(UploadCollectionProofRequest $request, Collection $collection): JsonResponse
+    {
+        $this->authorize('update', $collection);
+
+        try {
+            $document = $this->collections->attachProof(
+                $collection,
+                $request->file('proof'),
+                $request->user()
+            );
+        } catch (ValidationException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage(), 'errors' => $e->errors()], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Proof of receipt attached.',
+            'data'    => [
+                'id'            => $document->id,
+                'original_name' => $document->original_name,
+                'file_size'     => $document->file_size,
+                'mime_type'     => $document->mime_type,
+                'uploaded_at'   => $document->uploaded_at?->toIso8601String(),
+                'has_file'      => true,
+            ],
+        ], 201);
+    }
+
+    /**
+     * GET /api/collections/{collection}/proof
+     * Return the full proof upload history for a collection, newest first.
+     */
+    public function proofHistory(Collection $collection): JsonResponse
+    {
+        $this->authorize('view', $collection);
+
+        $documents = $this->collections->getProofHistory($collection);
+
+        return response()->json([
+            'success' => true,
+            'message' => '',
+            'data'    => $documents->map(fn ($doc) => [
+                'id'               => $doc->id,
+                'original_name'    => $doc->original_name,
+                'file_size'        => $doc->file_size,
+                'mime_type'        => $doc->mime_type,
+                'uploaded_at'      => $doc->uploaded_at?->toIso8601String(),
+                'uploaded_by_name' => $doc->uploaded_by_name,
+                'has_file'         => $doc->has_file,
+            ]),
         ]);
     }
 

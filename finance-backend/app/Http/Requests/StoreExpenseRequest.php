@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\Budget;
+use App\Models\Department;
 use App\Models\Expense;
 use App\Models\ExpenseCategory;
 use Illuminate\Contracts\Validation\Validator;
@@ -27,8 +28,8 @@ class StoreExpenseRequest extends FormRequest
             'expense_source' => ['required', 'string', 'max:100'],
             'receipt_status' => ['nullable', 'in:' . implode(',', [
                 Expense::RECEIPT_PENDING,
-                Expense::RECEIPT_VERIFIED,
-                Expense::RECEIPT_REJECTED,
+                Expense::RECEIPT_UPLOADED,
+                Expense::RECEIPT_MISSING,
             ])],
             'description' => ['required', 'string'],
         ];
@@ -68,9 +69,17 @@ class StoreExpenseRequest extends FormRequest
                 $user = $this->user();
 
                 if ($budget && $user && $budget->department_id !== $user->department_id) {
+                    $budgetDept = Department::find($budget->department_id)?->department_name ?? 'an unassigned department';
+                    $userDept = Department::find($user->department_id)?->department_name ?? 'no department';
+
                     $validator->errors()->add(
                         'budget_id',
-                        'You can only file expenses against your own department\'s budget.'
+                        sprintf(
+                            'Budget "%s" belongs to %s, but you are assigned to %s. You can only file expenses against your own department\'s budget.',
+                            $budget->budget_name,
+                            $budgetDept,
+                            $userDept
+                        )
                     );
                 }
             }

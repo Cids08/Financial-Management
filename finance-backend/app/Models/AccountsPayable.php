@@ -45,6 +45,32 @@ class AccountsPayable extends Model
         'has_attachment' => 'boolean',
     ];
 
+    protected static function booted(): void
+    {
+        // Mirrors AccountsReceivable's hooks exactly — fires for every
+        // create/update on this model regardless of which service
+        // triggered it (AccountsPayableService::create/update/approve(),
+        // DisbursementService::releaseAp()'s $ap->update([...]), etc.),
+        // as long as it's Eloquent rather than a raw DB::table() query.
+        // Keeps suppliers.current_balance in sync without any of those
+        // services having to remember to call it themselves.
+        static::saved(function (AccountsPayable $ap) {
+            Supplier::recalculateBalance($ap->supplier_id);
+
+            if ($ap->wasChanged('supplier_id')) {
+                Supplier::recalculateBalance($ap->getOriginal('supplier_id'));
+            }
+        });
+
+        static::deleted(function (AccountsPayable $ap) {
+            Supplier::recalculateBalance($ap->supplier_id);
+        });
+
+        static::restored(function (AccountsPayable $ap) {
+            Supplier::recalculateBalance($ap->supplier_id);
+        });
+    }
+
     public function supplier(): BelongsTo
     {
         return $this->belongsTo(Supplier::class);

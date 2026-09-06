@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Search, Plus, Pencil, Archive, RotateCcw, FileText, Wallet, AlertTriangle, Info, Printer, CheckCircle2, Paperclip, Upload, ScanLine, X } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
@@ -7,7 +7,7 @@ import Tooltip from '../components/Tooltip'
 import { formatCurrency } from '../utils/formatters'
 import { useAccountsPayable } from '../hooks/useAccountsPayable'
 import { apiFetch } from '../utils/api'
-import { useHighlightRow } from '../hooks/useHighlightRow'
+import AccountsPayableDocumentModal from '../components/AccountsPayableDocumentModal'
 
 const PAYMENT_METHODS = ['Bank Transfer', 'Check', 'Cash', 'Credit Card', 'GCash']
 // Confirmed via pg_get_constraintdef on accounts_payable_status_check —
@@ -16,10 +16,20 @@ const STATUS_OPTIONS = ['Pending', 'Partially Paid', 'Paid', 'Overdue', 'Cancell
 const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const MAX_IMAGE_MB = 8
 
+// Sanity bounds for invoice/due date pickers — nothing previously stopped
+// a fat-fingered year (e.g. "1111" instead of "2026") from being typed
+// directly into a native date input and saved without complaint. Mirrors
+// Budgets.jsx's CURRENT_YEAR/MAX_FISCAL_YEAR reasoning: a static floor/
+// ceiling catches typos that a same-field cross-check (due_date vs.
+// invoice_date) can't, since both fields can still agree with each other
+// on a nonsense year.
+const MIN_BILL_DATE = '2000-01-01'
+const MAX_BILL_DATE = `${new Date().getFullYear() + 5}-12-31`
+
 const EMPTY_FORM = {
   supplier_id: '', account_id: '', invoice_number: '', invoice_date: '', due_date: '', amount: '',
   payment_method: 'Bank Transfer', billing_address: '', description: '', reference_number: '',
-  status: 'Pending', purchase_order_no: '', has_attachment: false,
+  status: 'Pending', purchase_order_no: '',
 }
 
 const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
@@ -221,23 +231,15 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
     restoreBill,
     approveBill,
     fetchBillAuditLogs,
+    attachDocument,
+    fetchDocumentHistory,
+    viewDocument,
+    refetch,
   } = useAccountsPayable()
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [showArchived, setShowArchived] = useState(false)
-
-  // Global search (SearchBar.jsx) navigates here with a highlightId
-  // whenever an AP/bill record is clicked from search results. `bills`
-  // and `archivedBills` are both already loaded in full by
-  // useAccountsPayable(), so no search-seeding is needed — just clear
-  // whatever status filter might be hiding the target row.
-  const { highlightedId, highlightSearch } = useHighlightRow()
-  useEffect(() => {
-    if (highlightSearch == null) return
-    setSearch('')
-    setStatusFilter('all')
-  }, [highlightSearch])
 
   const [modalMode, setModalMode] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
@@ -246,6 +248,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
   const [auditLogs, setAuditLogs] = useState([])
   const [auditLogsLoading, setAuditLogsLoading] = useState(false)
   const [auditLogsError, setAuditLogsError] = useState(null)
+  const [documentTarget, setDocumentTarget] = useState(null)
 
   const supplierName = (id) => suppliers.find((s) => s.supplier_id === Number(id))?.supplier_name || 'Unknown'
   const accountLabel = (id) => {
@@ -301,7 +304,6 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
       reference_number: r.reference_number || '',
       status: r.status,
       purchase_order_no: r.purchase_order_no || '',
-      has_attachment: r.has_attachment,
     })
     setFormValidationError('')
     setModalMode(r)
@@ -402,6 +404,14 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
       setFormValidationError('Select which account this bill should post against.')
       return
     }
+    if (form.invoice_date && (form.invoice_date < MIN_BILL_DATE || form.invoice_date > MAX_BILL_DATE)) {
+      setFormValidationError(`Invoice date must be between ${MIN_BILL_DATE} and ${MAX_BILL_DATE}.`)
+      return
+    }
+    if (form.due_date < MIN_BILL_DATE || form.due_date > MAX_BILL_DATE) {
+      setFormValidationError(`Due date must be between ${MIN_BILL_DATE} and ${MAX_BILL_DATE}.`)
+      return
+    }
     if (form.invoice_date && form.due_date < form.invoice_date) {
       setFormValidationError('Due date must be on or after the invoice date.')
       return
@@ -429,7 +439,6 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
       reference_number: form.reference_number.trim(),
       status: form.status,
       purchase_order_no: form.purchase_order_no.trim(),
-      has_attachment: form.has_attachment,
     }
 
     const result = modalMode === 'add'
@@ -437,6 +446,21 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
       : await updateBill(modalMode.ap_id, payload)
 
     if (result.success) closeModal()
+  }
+
+  // Quick-view the newest document without opening the full history modal
+  // first — mirrors Budgets.jsx's "View current plan" button, adapted for
+  // the fact that our view endpoint needs an explicit document id (unlike
+  // Budget's /plan/view, which resolves "current" server-side by
+  // budget_id alone). Fetches history, takes the newest entry, views it.
+  const handleViewLatestDocument = async (r) => {
+    const targetWindow = window.open('', '_blank')
+    const history = await fetchDocumentHistory(r.ap_id)
+    if (!history.success || !history.data?.length) {
+      targetWindow?.close()
+      return
+    }
+    await viewDocument(r.ap_id, history.data[0].id, targetWindow)
   }
 
   const handleApprove = async (r) => {
@@ -521,7 +545,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Bill</th>
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Supplier</th>
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Due Date</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Original → Balance</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Amount Due</th>
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Status</th>
                 <th className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Actions</th>
               </tr>
@@ -532,12 +556,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
               )}
 
               {!billsLoading && filtered.map((r) => (
-                <tr
-                  key={r.ap_id}
-                  data-row-id={r.ap_id}
-                  className={`border-b border-border last:border-0 transition-colors duration-300
-                    ${highlightedId === r.ap_id ? 'bg-primary/10' : 'hover:bg-bg'}`}
-                >
+                <tr key={r.ap_id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
                   <td className="px-4 py-3.5">
                     <div className="flex items-center gap-1.5">
                       <p className="font-medium text-ink">{r.invoice_number}</p>
@@ -568,6 +587,30 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                           <Printer size={16} />
                         </button>
                       </Tooltip>
+                      <Tooltip label={r.has_attachment ? 'Supporting document attached' : 'Attach supporting document'} align="start">
+                        <button
+                          type="button"
+                          onClick={() => setDocumentTarget(r)}
+                          className={`inline-flex items-center justify-center bg-transparent border-0 p-0 m-0 leading-none cursor-pointer transition-colors duration-150 ${
+                            r.has_attachment
+                              ? 'text-primary-dark hover:text-primary'
+                              : 'text-ink/60 hover:text-ink'
+                          }`}
+                        >
+                          <Paperclip size={16} fill={r.has_attachment ? 'currentColor' : 'none'} fillOpacity={r.has_attachment ? 0.15 : 0} />
+                        </button>
+                      </Tooltip>
+                      {r.has_attachment && (
+                        <Tooltip label="View current document" align="start">
+                          <button
+                            type="button"
+                            onClick={() => handleViewLatestDocument(r)}
+                            className="inline-flex items-center justify-center bg-transparent border-0 p-0 m-0 leading-none cursor-pointer text-ink/60 hover:text-ink transition-colors duration-150"
+                          >
+                            <FileText size={16} />
+                          </button>
+                        </Tooltip>
+                      )}
                       {!r.is_archived && !r.approved_by && (
                         <Tooltip label="Approve bill" align="start">
                           <button
@@ -632,7 +675,29 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={LABEL}>Supplier</label>
-              <select value={form.supplier_id} onChange={(e) => setForm((f) => ({ ...f, supplier_id: e.target.value }))} className={INPUT}>
+              <select
+                value={form.supplier_id}
+                onChange={(e) => {
+                  const newSupplierId = e.target.value
+                  setForm((f) => {
+                    // ASSUMPTION: supplier records may include a
+                    // billing_address field — I don't have SupplierController
+                    // to confirm the real shape, so this is a best-effort
+                    // auto-fill: only applies when that field actually
+                    // exists on the record, and only when the user hasn't
+                    // already typed their own billing address (never
+                    // overwrites something they entered on purpose).
+                    const supplier = suppliers.find((s) => s.supplier_id === Number(newSupplierId))
+                    const shouldAutoFill = !f.billing_address.trim() && supplier?.billing_address
+                    return {
+                      ...f,
+                      supplier_id: newSupplierId,
+                      billing_address: shouldAutoFill ? supplier.billing_address : f.billing_address,
+                    }
+                  })
+                }}
+                className={INPUT}
+              >
                 {suppliers.map((s) => <option key={s.supplier_id} value={s.supplier_id}>{s.supplier_name}</option>)}
               </select>
             </div>
@@ -653,11 +718,11 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={LABEL}>Invoice Date</label>
-              <input type="date" value={form.invoice_date} onChange={(e) => setForm((f) => ({ ...f, invoice_date: e.target.value }))} className={INPUT} />
+              <input type="date" value={form.invoice_date} min={MIN_BILL_DATE} max={MAX_BILL_DATE} onChange={(e) => setForm((f) => ({ ...f, invoice_date: e.target.value }))} className={INPUT} />
             </div>
             <div>
               <label className={LABEL}>Due Date</label>
-              <input type="date" value={form.due_date} onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))} className={INPUT} />
+              <input type="date" value={form.due_date} min={MIN_BILL_DATE} max={MAX_BILL_DATE} onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))} className={INPUT} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -696,15 +761,11 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
               {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
-          <label className="flex items-center gap-2 text-sm text-ink cursor-pointer">
-            <input
-              type="checkbox"
-              checked={form.has_attachment}
-              onChange={(e) => setForm((f) => ({ ...f, has_attachment: e.target.checked }))}
-              className="h-4 w-4 rounded border-2 border-border bg-bg accent-primary cursor-pointer dark:border-slate-500 focus:outline-none focus:ring-2 focus:ring-primary/50"
-            />
-            Has a supporting document attached
-          </label>
+          {isEditing && (
+            <p className="text-xs text-muted">
+              To attach a supporting document (invoice scan/photo), use the <Paperclip size={12} className="inline" /> icon on the bill's row after saving.
+            </p>
+          )}
 
           {isEditing && (
             <div className="rounded-lg border border-border bg-bg px-3 py-2.5">
@@ -805,6 +866,16 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
           </div>
         )}
       </Modal>
+
+      <AccountsPayableDocumentModal
+        open={!!documentTarget}
+        onClose={() => setDocumentTarget(null)}
+        bill={documentTarget}
+        fetchHistory={fetchDocumentHistory}
+        onUpload={(file) => attachDocument(documentTarget.ap_id, file)}
+        onView={viewDocument}
+        onUploaded={refetch}
+      />
     </div>
   )
 }

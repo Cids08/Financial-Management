@@ -17,7 +17,12 @@ class StoreDisbursementRequest extends FormRequest
             'ap_id' => ['required', 'integer', 'exists:accounts_payable,id'],
             'department_id' => ['required', 'integer', 'exists:departments,id'],
             'cash_account_id' => ['required', 'integer', 'exists:cash_accounts,id'],
-            'voucher_number' => ['required', 'string', 'max:50', 'unique:disbursements,voucher_number'],
+            // voucher_number removed: DisbursementService::create() now
+            // always generates it server-side via a real DB sequence, so
+            // it's never accepted from the client — this also means a
+            // request can no longer collide with the 'unique' rule that
+            // used to sit here, since the client-supplied value is simply
+            // ignored rather than validated.
             'payee' => ['required', 'string', 'max:255'],
             'payment_date' => ['required', 'date'],
             'amount_paid' => ['required', 'numeric', 'min:0.01'],

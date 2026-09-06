@@ -19,9 +19,13 @@ class Expense extends Model
     public const STATUS_APPROVED = 'Approved';
     public const STATUS_REJECTED = 'Rejected';
 
+    // Legal values per the DB check constraint (expenses_receipt_status_check)
+    // — confirmed directly against Postgres, not assumed. 'Verified'/
+    // 'Rejected' were never valid; RECEIPT_UPLOADED/RECEIPT_MISSING replace
+    // what those constants used to (incorrectly) represent.
     public const RECEIPT_PENDING = 'Pending';
-    public const RECEIPT_VERIFIED = 'Verified';
-    public const RECEIPT_REJECTED = 'Rejected';
+    public const RECEIPT_UPLOADED = 'Uploaded';
+    public const RECEIPT_MISSING = 'Missing';
 
     protected $fillable = [
         'budget_id',
@@ -47,6 +51,10 @@ class Expense extends Model
         'updated_at' => 'datetime',
         'deleted_at' => 'datetime',
     ];
+
+    // Mirrors Budget's $appends = ['has_plan'] pattern exactly — has_receipt
+    // is what the React row actions read to decide "Attach" vs "View/History".
+    protected $appends = ['has_receipt'];
 
     protected static function booted(): void
     {
@@ -95,6 +103,38 @@ class Expense extends Model
     public function taxObligations(): HasMany
     {
         return $this->hasMany(TaxObligation::class);
+    }
+
+    /**
+     * Receipt/document files attached to this expense, via the shared
+     * supporting_documents table (reference_type = 'expense') — same
+     * mechanism Budget uses for plan uploads and Collection uses for
+     * proof-of-receipt (reference_type = 'budget' / 'collection'
+     * respectively). Each module only ever queries its own
+     * reference_type back; there's no cross-module fetching here.
+     */
+    public function supportingDocuments(): HasMany
+    {
+        return $this->hasMany(SupportingDocument::class, 'reference_id')
+            ->where('reference_type', 'expense');
+    }
+
+    /**
+     * Whether a receipt has been attached. Mirrors Budget's
+     * getHasPlanAttribute() exactly, including the same N+1 warning:
+     * calling this in a loop over many expenses (e.g. the index listing)
+     * will N+1 — callers that list many expenses should eager-load
+     * withCount('supportingDocuments as supporting_documents_count')
+     * instead of relying on this accessor directly, the same way
+     * BudgetService::forApprovalList() does for budgets.
+     */
+    public function getHasReceiptAttribute(): bool
+    {
+        if (array_key_exists('supporting_documents_count', $this->attributes)) {
+            return ((int) $this->attributes['supporting_documents_count']) > 0;
+        }
+
+        return $this->supportingDocuments()->exists();
     }
 
     public function scopeSearch(Builder $query, ?string $term): Builder

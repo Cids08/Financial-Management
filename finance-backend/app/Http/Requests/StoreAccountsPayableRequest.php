@@ -27,10 +27,12 @@ class StoreAccountsPayableRequest extends FormRequest
             // never fails partway through for a missing account.
             'account_id' => ['required', 'integer', Rule::exists('chart_of_accounts', 'id')],
             'invoice_number' => ['required', 'string', 'max:255', Rule::unique('accounts_payable', 'invoice_number')],
-            'invoice_date' => ['nullable', 'date'],
+            'invoice_date' => ['nullable', 'date', 'after_or_equal:2000-01-01', 'before_or_equal:' . now()->addYears(5)->toDateString()],
             'due_date' => [
                 'required',
                 'date',
+                'after_or_equal:2000-01-01',
+                'before_or_equal:' . now()->addYears(5)->toDateString(),
                 function ($attribute, $value, $fail) {
                     // invoice_date defaults to today server-side (see
                     // AccountsPayableService::create()) when left blank,

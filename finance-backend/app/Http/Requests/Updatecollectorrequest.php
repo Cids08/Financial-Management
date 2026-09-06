@@ -28,6 +28,11 @@ class UpdateCollectorRequest extends FormRequest
             'commission_rate'  => ['nullable', 'numeric', 'min:0', 'max:100'],
             'monthly_target'   => ['nullable', 'numeric', 'min:0'],
             'is_active'        => ['sometimes', 'boolean'],
+            // New — links this collector record to a login account.
+            // ->ignore($collectorId) matters here specifically: without
+            // it, re-saving a collector that's already linked to user_id
+            // X would fail uniqueness against its own existing row.
+            'user_id'          => ['nullable', 'integer', 'exists:users,id', Rule::unique('collectors', 'user_id')->ignore($collectorId)],
         ];
     }
 }

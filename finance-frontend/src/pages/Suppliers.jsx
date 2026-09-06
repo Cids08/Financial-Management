@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, Truck, UserCheck, UserX, Mail, Phone, Eye, EyeOff, Globe } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, Truck, UserCheck, UserX, Mail, Phone, Eye, EyeOff, Globe, Briefcase } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
@@ -28,7 +28,7 @@ function formatCurrency(value, currency = 'PHP') {
   return amount.toLocaleString('en-PH', { style: 'currency', currency })
 }
 
-const EMPTY_FORM = { supplier_name: '', contact_person: '', contact_number: '', email: '', website: '', address: '', TIN: '', status: 'Active' }
+const EMPTY_FORM = { supplier_name: '', contact_person: '', position: '', contact_number: '', email: '', website: '', address: '', status: 'Active' }
 
 const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
 const PANEL_PAD = 'p-4'
@@ -69,7 +69,9 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
     setShowArchived(false)
   }, [highlightSearch])
 
-  // Controls visibility of TIN, contact number, and email together per row
+  // Controls visibility of contact number and email together per row
+  // (TIN used to be part of this too — column dropped from the app
+  // layer, so it's gone from both the mask set and the table).
   const [revealedIds, setRevealedIds] = useState(new Set())
   const toggleReveal = (id) => {
     setRevealedIds((prev) => {
@@ -153,11 +155,11 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
     setForm({
       supplier_name: s.supplier_name,
       contact_person: s.contact_person,
+      position: s.position || '',
       contact_number: s.contact_number || '',
       email: s.email,
       website: s.website || '',
       address: s.address || '',
-      TIN: s.TIN || '',
       status: s.status,
     })
     setFormError('')
@@ -275,7 +277,6 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
               <tr className="border-b border-border">
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Supplier</th>
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Contact</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">TIN</th>
                 <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Balance Owed</th>
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Status</th>
                 <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Actions</th>
@@ -283,9 +284,9 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">Loading suppliers…</td></tr>
+                <tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-muted">Loading suppliers…</td></tr>
               ) : suppliers.length === 0 ? (
-                <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">No suppliers match your filters.</td></tr>
+                <tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-muted">No suppliers match your filters.</td></tr>
               ) : (
                 suppliers.map((s) => {
                   const revealed = revealedIds.has(s.supplier_id)
@@ -304,6 +305,9 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
                         <div className="flex items-start gap-1.5">
                           <div className="min-w-0">
                             <p className="text-ink">{s.contact_person}</p>
+                            {s.position && (
+                              <p className="text-xs text-muted flex items-center gap-1"><Briefcase size={11} className="shrink-0" /> {s.position}</p>
+                            )}
                             <div className="mt-0.5 flex flex-col gap-0.5 text-xs text-muted font-mono">
                               <span className="flex items-center gap-1"><Mail size={11} className="shrink-0" /> {revealed ? s.email : maskEmail(s.email)}</span>
                               <span className="flex items-center gap-1"><Phone size={11} className="shrink-0" /> {revealed ? s.contact_number : maskValue(s.contact_number)}</span>
@@ -318,9 +322,6 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
                             {revealed ? <EyeOff size={13} /> : <Eye size={13} />}
                           </button>
                         </div>
-                      </td>
-                      <td className="px-4 py-3.5 whitespace-nowrap text-muted font-mono text-xs">
-                        {revealed ? s.TIN : maskValue(s.TIN)}
                       </td>
                       <td className="px-4 py-3.5 whitespace-nowrap text-right">
                         <p className={`font-medium ${Number(s.current_balance) > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-ink'}`}>
@@ -378,45 +379,43 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
               <input type="text" value={form.contact_person} onChange={(e) => setForm((f) => ({ ...f, contact_person: e.target.value }))} className={INPUT} placeholder="Rico Alvarado" />
             </div>
             <div>
-              <label className={LABEL}>Contact Number</label>
-              <input type="text" value={form.contact_number} onChange={(e) => setForm((f) => ({ ...f, contact_number: e.target.value }))} className={INPUT} placeholder="0917 111 2233" />
+              <label className={LABEL}>Position</label>
+              <input type="text" value={form.position} onChange={(e) => setForm((f) => ({ ...f, position: e.target.value }))} className={INPUT} placeholder="Sales Manager" />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
+              <label className={LABEL}>Contact Number</label>
+              <input type="text" value={form.contact_number} onChange={(e) => setForm((f) => ({ ...f, contact_number: e.target.value }))} className={INPUT} placeholder="0917 111 2233" />
+            </div>
+            <div>
               <label className={LABEL}>Email</label>
               <input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className={INPUT} placeholder="sales@company.com" />
             </div>
-            <div>
-              <label className={LABEL}>Website</label>
-              <div className="flex items-center gap-2 rounded-lg border border-border bg-bg px-3 py-2 focus-within:border-primary focus-within:bg-white transition-colors duration-150">
-                <Globe size={15} className="text-muted shrink-0" />
-                <input
-                  type="text"
-                  value={form.website}
-                  onChange={(e) => setForm((f) => ({ ...f, website: e.target.value }))}
-                  placeholder="northgatesupplies.com"
-                  className="w-full text-sm text-ink bg-transparent outline-none border-0"
-                />
-              </div>
+          </div>
+          <div>
+            <label className={LABEL}>Website</label>
+            <div className="flex items-center gap-2 rounded-lg border border-border bg-bg px-3 py-2 focus-within:border-primary focus-within:bg-white transition-colors duration-150">
+              <Globe size={15} className="text-muted shrink-0" />
+              <input
+                type="text"
+                value={form.website}
+                onChange={(e) => setForm((f) => ({ ...f, website: e.target.value }))}
+                placeholder="northgatesupplies.com"
+                className="w-full text-sm text-ink bg-transparent outline-none border-0"
+              />
             </div>
           </div>
           <div>
             <label className={LABEL}>Address</label>
             <input type="text" value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} className={INPUT} placeholder="Pasig City, Metro Manila" />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={LABEL}>TIN</label>
-              <input type="text" value={form.TIN} onChange={(e) => setForm((f) => ({ ...f, TIN: e.target.value }))} className={INPUT} placeholder="111-222-333-000" />
-            </div>
-            <div>
-              <label className={LABEL}>Status</label>
-              <select value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))} className={INPUT}>
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
-              </select>
-            </div>
+          <div>
+            <label className={LABEL}>Status</label>
+            <select value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))} className={INPUT}>
+              <option value="Active">Active</option>
+              <option value="Inactive">Inactive</option>
+            </select>
           </div>
           {isEditing && (
             <p className="text-[11px] text-muted">

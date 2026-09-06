@@ -12,7 +12,7 @@ import { apiFetch } from '../utils/api'
 import { useCollectors } from '../hooks/useCollectors'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 
-const EMPTY_FORM = { employee_no: '', first_name: '', last_name: '', email: '', contact_no: '', assigned_area: '', service_area_id: '', monthly_target: '', commission_rate: '', is_active: true }
+const EMPTY_FORM = { employee_no: '', first_name: '', last_name: '', email: '', contact_no: '', assigned_area: '', service_area_id: '', monthly_target: '', commission_rate: '', is_active: true, user_id: '' }
 
 const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
 const PANEL_PAD = 'p-4'
@@ -85,6 +85,36 @@ function useServiceAreas() {
   }, [])
 
   return areas
+}
+
+/**
+ * Users eligible to link to the collector currently being added/edited —
+ * refetched every time the modal opens (not once on page mount) since the
+ * eligible set depends on which collector, if any, is being edited: when
+ * editing, that collector's own already-linked user must still appear as
+ * an option even though GET .../available-users otherwise excludes users
+ * already linked to *some* collector. See CollectorService::availableUsers().
+ *
+ * `collectorId` is null for "Add Collector" and the numeric id for "Edit".
+ */
+function useAvailableUsers(collectorId, active) {
+  const [users, setUsers] = useState([])
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!active) return
+    let cancelled = false
+    setLoading(true)
+    const qs = collectorId ? `?collector_id=${collectorId}` : ''
+    apiFetch(`/api/collectors/available-users${qs}`)
+      .then((res) => res.json())
+      .then((json) => { if (!cancelled && json.success) setUsers(json.data) })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [collectorId, active])
+
+  return { users, loading }
 }
 
 // Custom tooltip so amounts render through formatCurrency and the
@@ -271,6 +301,17 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
   const [formError, setFormError] = useState('')
   const [efficiencyTarget, setEfficiencyTarget] = useState(null)
 
+  const isModalOpen = modalMode !== null
+  const isEditing = modalMode !== null && modalMode !== 'add'
+
+  // Fetched fresh each time the modal opens — see useAvailableUsers()'s
+  // docblock for why this can't just be fetched once on page mount like
+  // useServiceAreas() above.
+  const { users: availableUsers, loading: usersLoading } = useAvailableUsers(
+    isEditing ? modalMode.collector_id : null,
+    isModalOpen,
+  )
+
   // Controls visibility of email + employee no. + contact no. together
   // per row — masked by default, revealed only when the eye icon is
   // clicked, same pattern as Customers/Suppliers/Users.
@@ -305,6 +346,7 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
       monthly_target: c.monthly_target,
       commission_rate: c.commission_rate,
       is_active: c.is_active,
+      user_id: c.user_id || '',
     })
     setFormError('')
     setModalMode(c)
@@ -329,6 +371,7 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
       monthly_target: Number(form.monthly_target) || 0,
       commission_rate: Number(form.commission_rate) || 0,
       is_active: form.is_active === true || form.is_active === 'true',
+      user_id: form.user_id ? Number(form.user_id) : null,
     }
 
     const result = modalMode === 'add'
@@ -348,9 +391,6 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
     { key: 'inactive', label: 'Inactive (this page)', value: pageStats.inactive, icon: UserX, iconBg: 'bg-red-50 dark:bg-red-500/10', iconColor: 'text-red-600 dark:text-red-400', isActive: statusFilter === 'inactive' && !showArchived, onClick: () => { setStatusFilter('inactive'); setShowArchived(false) } },
     { key: 'archived', label: 'Archived', value: showArchived ? meta.total : '—', icon: Archive, iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-500 dark:text-slate-400', isActive: showArchived, onClick: () => setShowArchived(true) },
   ]
-
-  const isModalOpen = modalMode !== null
-  const isEditing = modalMode !== null && modalMode !== 'add'
 
   return (
     <div className="space-y-5 animate-fadeIn">
@@ -458,6 +498,9 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
                           {c.email && (
                             <p className="truncate text-xs text-muted flex items-center gap-1"><Mail size={11} /> {revealed ? c.email : maskEmail(c.email)}</p>
                           )}
+                          {c.user_name && (
+                            <p className="truncate text-[11px] text-primary-dark">Linked: {c.user_name}</p>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -562,6 +605,25 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
           <div>
             <label className={LABEL}>Email</label>
             <input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className={INPUT} placeholder="ramon.torres@alibaton.test" />
+          </div>
+          <div>
+            <label className={LABEL}>Linked User Account</label>
+            <select
+              value={form.user_id}
+              onChange={(e) => setForm((f) => ({ ...f, user_id: e.target.value }))}
+              className={INPUT}
+              disabled={usersLoading}
+            >
+              <option value="">Not linked</option>
+              {availableUsers.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name}{u.employee_no ? ` (${u.employee_no})` : ''}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[11px] text-muted">
+              Only shows Users with the "Collector" role who aren't already linked to another collector record.
+            </p>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>

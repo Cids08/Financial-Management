@@ -4,13 +4,6 @@ import Button from './Button'
 import { apiFetch } from '../utils/api'
 import { clearToken } from '../utils/authToken'
 
-/**
- * Mount once, alongside AuthExpiredListener in App.jsx (needs to run even
- * before other authenticated pages have loaded, since the very first
- * authenticated API call after a forced-password-change login is what
- * triggers this). Not dismissible — the only way out is a successful
- * password change or logging out entirely.
- */
 export default function MustChangePasswordListener() {
   const [visible, setVisible] = useState(false)
   const [form, setForm] = useState({ current: '', next: '', confirm: '' })
@@ -51,9 +44,6 @@ export default function MustChangePasswordListener() {
         throw new Error(json.message || 'Could not update password.')
       }
 
-      // Password changed successfully — the backend has cleared
-      // must_change_password, so a full reload re-fetches everything
-      // cleanly under the new, now-unblocked account state.
       window.location.reload()
     } catch (err) {
       setError(err.message)

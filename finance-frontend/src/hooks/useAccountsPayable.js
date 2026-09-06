@@ -232,6 +232,60 @@ export function useAccountsPayable() {
     }
   }, [fetchBills, fetchStats])
 
+  // Attach a supporting document to a bill. multipart/form-data — apiFetch
+  // must not set a Content-Type header itself (same as BillScanUpload's
+  // /api/invoices/scan call) so the browser sets the multipart boundary.
+  const attachDocument = useCallback(async (apId, file) => {
+    try {
+      const formData = new FormData()
+      formData.append('document', file)
+      const res = await apiFetch(`/api/accounts-payable/${apId}/document`, { method: 'POST', body: formData })
+      const json = await res.json()
+      if (!res.ok || !json.success) {
+        const firstError = json.errors ? Object.values(json.errors)[0]?.[0] : json.message
+        return { success: false, message: firstError || 'Failed to attach document.' }
+      }
+      return { success: true, data: json.data }
+    } catch (err) {
+      return { success: false, message: err.message || 'Network error.' }
+    }
+  }, [])
+
+  const fetchDocumentHistory = useCallback(async (apId) => {
+    try {
+      const res = await apiFetch(`/api/accounts-payable/${apId}/document`)
+      const json = await res.json()
+      if (!res.ok || !json.success) return { success: false, message: json.message || 'Failed to load document history.' }
+      return { success: true, data: json.data ?? [] }
+    } catch (err) {
+      return { success: false, message: err.message || 'Network error.' }
+    }
+  }, [])
+
+  // targetWindow: a window already opened synchronously by the caller's
+  // click handler (see AccountsPayableDocumentModal's handleView) — popup
+  // blockers only reliably allow window.open() as a direct result of the
+  // click event, not after this async fetch resolves.
+  const viewDocument = useCallback(async (apId, documentId, targetWindow) => {
+    try {
+      const res = await apiFetch(`/api/accounts-payable/${apId}/document/${documentId}/view`)
+      if (!res.ok) {
+        targetWindow?.close()
+        return { success: false, message: 'Failed to load document.' }
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const previewable = ['application/pdf', 'image/jpeg', 'image/png'].includes(blob.type)
+      if (targetWindow) {
+        targetWindow.location = url
+      }
+      return { success: true, viewedInline: previewable }
+    } catch (err) {
+      targetWindow?.close()
+      return { success: false, message: err.message || 'Network error.' }
+    }
+  }, [])
+
   return {
     bills,
     archivedBills,
@@ -254,6 +308,9 @@ export function useAccountsPayable() {
     restoreBill,
     approveBill,
     fetchBillAuditLogs,
+    attachDocument,
+    fetchDocumentHistory,
+    viewDocument,
     refetch: refetchAll,
   }
 }

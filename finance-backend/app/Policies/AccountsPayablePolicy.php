@@ -96,4 +96,18 @@ class AccountsPayablePolicy
     {
         return $user->hasPermission('ap.manage'); // restore route uses ap.manage per routes/api.php
     }
+
+    /**
+     * Attaching a supporting document (invoice scan/photo) is pure
+     * documentation with no ledger or approval-workflow impact — unlike
+     * update(), it's NOT blocked by approved_by or a Paid/Cancelled
+     * status. Same reasoning ExpenseService::attachReceipt() documents
+     * for its own equivalent: re-evaluate this if that assumption ever
+     * changes (e.g. if attaching a document should also mutate
+     * has_attachment in a way that matters to an already-closed bill).
+     */
+    public function attachDocument(User $user, AccountsPayable $bill): bool
+    {
+        return $user->hasPermission('ap.manage');
+    }
 }

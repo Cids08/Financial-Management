@@ -11,6 +11,7 @@ use App\Models\Collection;
 use App\Models\Collector;
 use App\Models\JournalEntry;
 use App\Models\Notification;
+use App\Models\SupportingDocument;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
@@ -370,8 +371,78 @@ class CollectionService
     }
 
     /**
-     * Posts the double-entry journal for a confirmed collection:
+     * Attach a proof-of-receipt document to a collection.
      *
+     * Allowed on Confirmed and Partially Paid AR collections — the receipt
+     * exists once payment is received, not before. Re-uploading adds a new
+     * version rather than replacing the previous one, so the full upload
+     * history is preserved (same pattern as BudgetService::uploadPlan()).
+     *
+     * Storage path: collection-proofs/{collection_id}/{filename}
+     * reference_type: 'collection' — consistent with DisbursementService
+     * which uses 'disbursement' for the same table.
+     */
+    public function attachProof(Collection $collection, \Illuminate\Http\UploadedFile $file, User $actor): SupportingDocument
+    {
+        if (! in_array($collection->status, [Collection::STATUS_CONFIRMED, Collection::STATUS_PENDING])) {
+            throw ValidationException::withMessages([
+                'proof' => "Proof can only be attached to pending or confirmed collections (current status: {$collection->status}).",
+            ]);
+        }
+
+        $path = $file->store("collection-proofs/{$collection->id}", 'local');
+
+        $document = SupportingDocument::create([
+            'reference_type' => 'collection',
+            'reference_id'   => $collection->id,
+            'file_name'      => basename($path),
+            'original_name'  => $file->getClientOriginalName(),
+            'storage_path'   => $path,
+            'mime_type'      => $file->getClientMimeType(),
+            'file_size'      => $file->getSize(),
+            'uploaded_by'    => $actor->id,
+            'uploaded_at'    => now(),
+        ]);
+
+        AuditLog::create([
+            'user_id'              => $actor->id,
+            'module'               => 'Collections',
+            'action'               => 'attach_proof',
+            'record_id'            => $collection->id,
+            'activity_description' => "Attached proof of receipt \"{$file->getClientOriginalName()}\" to collection #{$collection->id}.",
+            'ip_address'           => request()->ip(),
+            'user_agent'           => request()->userAgent(),
+        ]);
+
+        return $document;
+    }
+
+    /**
+     * Return all proof documents for a collection, newest first.
+     * The first item in the list is the current/latest proof.
+     *
+     * @return \Illuminate\Database\Eloquent\Collection<int, SupportingDocument>
+     */
+    public function getProofHistory(Collection $collection): \Illuminate\Database\Eloquent\Collection
+    {
+        return SupportingDocument::query()
+            ->with('uploader:id,first_name,last_name')
+            ->where('reference_type', 'collection')
+            ->where('reference_id', $collection->id)
+            ->orderByDesc('uploaded_at')
+            ->orderByDesc('id')
+            ->get()
+            ->map(function (SupportingDocument $doc) {
+                $doc->uploaded_by_name = $doc->uploader
+                    ? trim("{$doc->uploader->first_name} {$doc->uploader->last_name}")
+                    : null;
+                // has_file mirrors BudgetPlanHistoryModal's expectation —
+                // true as long as storage_path is set.
+                $doc->has_file = (bool) $doc->storage_path;
+                return $doc;
+            });
+    }
+    /**
      *   Dr  Cash / Bank  — the chart_of_accounts row whose account_code
      *                      matches cash_accounts.account_code with the
      *                      "CA-" prefix stripped (e.g. CA-1010 → 1010).

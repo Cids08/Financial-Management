@@ -15,7 +15,6 @@ import { useDisbursements } from '../hooks/useDisbursements'
 import { useDepartments } from '../hooks/useDepartments'
 import { useCashAccounts } from '../hooks/useCashAccounts'
 import { useAccountsPayable } from '../hooks/useAccountsPayable'
-import { useHighlightRow } from '../hooks/useHighlightRow'
 
 /* ---------------------------------------------------------------------- */
 /* Static form config                                                      */
@@ -156,6 +155,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
     createDisbursement, updateDisbursement,
     approveDisbursement, rejectDisbursement, releaseDisbursement,
     uploadProof, archiveDisbursement, restoreDisbursement,
+    fetchNextVoucherNumber,
   } = useDisbursements()
 
   // Lookup data for the Add/Edit form's dropdowns. These are only needed
@@ -176,20 +176,6 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
 
   const [dModalMode, setDModalMode] = useState(null) // null | 'add' | disbursement object
   const [dForm, setDForm] = useState(EMPTY_DISBURSEMENT_FORM)
-
-  // Global search (SearchBar.jsx) navigates here with a highlightId (and,
-  // since this table's search is server-side via the hook's own
-  // debounced dSearch, a highlightSearch seed) whenever a disbursement
-  // record is clicked from search results.
-  const { highlightedId, highlightSearch } = useHighlightRow()
-  useEffect(() => {
-    if (highlightSearch == null) return
-    setDSearch(highlightSearch)
-    setDStatusFilter('all')
-    setDShowArchived(false)
-    setDSourceFilter('all')
-    setDPage(1)
-  }, [highlightSearch])
   const [dFormError, setDFormError] = useState('')
   const [dDetailRecord, setDDetailRecord] = useState(null)
   const [dSubmitting, setDSubmitting] = useState(false)
@@ -209,7 +195,21 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
     [stats, disbursements]
   )
 
-  const openAddDisbursement = () => { setDForm(EMPTY_DISBURSEMENT_FORM); setDFormError(''); setDModalMode('add') }
+  const openAddDisbursement = () => {
+    // Default Payment Date to today — there's nothing bill-specific to
+    // derive it from (bills only carry invoice_date/due_date), and most
+    // disbursements are being recorded as happening now.
+    setDForm({ ...EMPTY_DISBURSEMENT_FORM, payment_date: new Date().toISOString().slice(0, 10) })
+    setDFormError('')
+    setDModalMode('add')
+    // Preview the next voucher number right away — see
+    // useDisbursements' fetchNextVoucherNumber comment for why this is a
+    // preview, not a reservation. Falls back to the "Auto-generated on
+    // save" placeholder if the fetch fails for any reason.
+    fetchNextVoucherNumber().then((voucherNumber) => {
+      if (voucherNumber) setDForm((f) => ({ ...f, voucher_number: voucherNumber }))
+    })
+  }
   const openEditDisbursement = (d) => {
     if (!canManagePayments || d.status !== 'Pending' || getSourceType(d) === 'payroll') return
     setDForm({
@@ -224,6 +224,34 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
   const closeDisbursementModal = () => { setDModalMode(null); setDFormError('') }
   const openDisbursementDetail = (d) => setDDetailRecord(d)
   const closeDisbursementDetail = () => setDDetailRecord(null)
+
+  // Selecting a bill already tells us who's being paid and how much they're
+  // owed — auto-fill Payee/Amount Paid/Currency (and Payment Method, if the
+  // bill's method is one this form actually supports) instead of making the
+  // user retype what's already on the bill. Amount Paid defaults to the
+  // FULL remaining_balance (a full settlement); the user can still lower it
+  // for a partial payment. Only fires on an actual selection change, so
+  // opening the Edit modal for an existing disbursement won't clobber
+  // fields that were already customized after this bill was picked.
+  const handleApBillChange = (e) => {
+    const selectedId = e.target.value
+    const bill = apBills.find((b) => String(apBillId(b)) === String(selectedId))
+    setDForm((f) => ({
+      ...f,
+      ap_id: selectedId,
+      payee: bill?.supplier_name ?? f.payee,
+      amount_paid: bill ? String(bill.remaining_balance) : f.amount_paid,
+      currency: bill?.currency ?? f.currency,
+      payment_method: bill?.payment_method && PAYMENT_METHODS.includes(bill.payment_method)
+        ? bill.payment_method
+        : f.payment_method,
+      // Head start only, not guaranteed correct — the bill's reference is
+      // often a PO/invoice reference, while the disbursement's is more
+      // often the actual payment transaction reference (check no., bank
+      // transfer ID) that may not exist yet. Still editable either way.
+      reference_number: bill?.reference_number ?? f.reference_number,
+    }))
+  }
 
   const handlePrintDisbursement = (d) => {
     const win = window.open('', '_blank', 'width=800,height=900')
@@ -292,8 +320,8 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
 
   const handleDisbursementSubmit = async (e) => {
     e.preventDefault()
-    if (!dForm.payee.trim() || !dForm.amount_paid || !dForm.voucher_number.trim()) {
-      setDFormError('Voucher number, payee, and amount are required.')
+    if (!dForm.payee.trim() || !dForm.amount_paid) {
+      setDFormError('Payee and amount are required.')
       return
     }
     if (!dForm.ap_id || !dForm.department_id || !dForm.cash_account_id) {
@@ -483,12 +511,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                 const sourceType = getSourceType(d)
                 const isPayroll = sourceType === 'payroll'
                 return (
-                  <tr
-                    key={d.disbursement_id}
-                    data-row-id={d.disbursement_id}
-                    className={`border-b border-border last:border-0 transition-colors duration-300
-                      ${highlightedId === d.disbursement_id ? 'bg-primary/10' : 'hover:bg-bg'}`}
-                  >
+                  <tr key={d.disbursement_id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
                     <td className="px-4 py-3.5">
                       <p className="font-medium text-ink">{d.payee}</p>
                       <p className="text-xs text-muted">{d.voucher_number} &middot; {d.cash_account_name}</p>
@@ -650,7 +673,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
               <label className={LABEL}>Related Bill</label>
               <select
                 value={dForm.ap_id}
-                onChange={(e) => setDForm((f) => ({ ...f, ap_id: e.target.value }))}
+                onChange={handleApBillChange}
                 className={INPUT}
                 style={INPUT_TEXT_STYLE}
                 disabled={apBillsLoading}
@@ -686,7 +709,19 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={LABEL}>Voucher Number</label>
-              <input type="text" value={dForm.voucher_number} onChange={(e) => setDForm((f) => ({ ...f, voucher_number: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="DV-0001" disabled={isEditingDisbursement} />
+              <input
+                type="text"
+                value={dForm.voucher_number}
+                className={INPUT}
+                style={INPUT_TEXT_STYLE}
+                placeholder={!isEditingDisbursement ? 'Fetching next number…' : 'Auto-generated on save'}
+                disabled
+              />
+              {!isEditingDisbursement && (
+                <p className="mt-1 text-[11px] text-muted">
+                  Reserved automatically — the exact number is only final once saved.
+                </p>
+              )}
             </div>
             <div>
               <label className={LABEL}>Payee</label>

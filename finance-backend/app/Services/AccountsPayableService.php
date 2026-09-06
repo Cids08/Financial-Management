@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\ChartOfAccount;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
+use App\Models\Notification;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
@@ -14,12 +15,6 @@ use RuntimeException;
 
 class AccountsPayableService
 {
-    // NotificationService lives in the same App\Services namespace, so no
-    // `use` import is needed for it below.
-    public function __construct(protected NotificationService $notificationService)
-    {
-    }
-
     public function list(bool $withArchived = false): Collection
     {
         $query = AccountsPayable::query()->with(['supplier', 'account', 'creator', 'approver'])->latest('invoice_date');
@@ -267,27 +262,27 @@ class AccountsPayableService
 
     /**
      * Looks up the single Accounts Payable liability account in the
-     * chart of accounts. UNCONFIRMED: assumes that account's code is
-     * config('accounting.accounts_payable_account_code'), which now
-     * defaults to '2000' — confirmed against this project's real
-     * chart_of_accounts data (id 8, code 2000, "Accounts Payable").
-     * Previously defaulted to a placeholder '2100', which in this
-     * project's real data is actually "Taxes Payable" — if that had
-     * gone unnoticed, every approved bill's journal entry would have
-     * posted Cr Taxes Payable instead of Cr Accounts Payable. If your
-     * chart of accounts ever changes this code, update the config value
-     * rather than this default.
+     * chart of accounts. Uses the SAME config key
+     * config('accounting.accounts.accounts_payable_control') that
+     * DisbursementService::releaseAp() already reads for this same
+     * account — previously this used a separate, second config key
+     * (accounts_payable_account_code) that looked the account up by
+     * code instead of id. Two keys meaning the same account risked them
+     * drifting apart (accrual posting to a different account than
+     * settlement); unified onto Disbursements' existing key instead of
+     * inventing a parallel one. Confirmed against this project's real
+     * chart_of_accounts data: id 8, code 2000, "Accounts Payable".
      */
     private function resolveAccountsPayableLedgerAccount(): ChartOfAccount
     {
-        $code = config('accounting.accounts_payable_account_code', '2000');
+        $accountId = config('accounting.accounts.accounts_payable_control');
 
-        $account = ChartOfAccount::where('account_code', $code)->first();
+        $account = $accountId ? ChartOfAccount::find($accountId) : null;
 
         if ($account === null) {
             throw new RuntimeException(
-                "No chart_of_accounts row found for Accounts Payable (code: {$code}). "
-                . "Check config('accounting.accounts_payable_account_code')."
+                "No chart_of_accounts row found for Accounts Payable (id: {$accountId}). "
+                . "Check config('accounting.accounts.accounts_payable_control')."
             );
         }
 
@@ -351,14 +346,20 @@ class AccountsPayableService
      * copy — so this doesn't silently mislabel notifications the moment a
      * reject flow gets added later.
      *
-     * `type` is 'payable', matching NOTIFICATION_TYPE_META on the
-     * frontend (src/utils/notificationTypes.js) — renders with the right
-     * icon/route with no frontend change needed.
-     *
-     * REFACTOR: routed through NotificationService::create() instead of
-     * calling Notification::create() directly, so every service creates
-     * notifications the same way (one place to change behavior later —
-     * e.g. broadcasting, per-page defaults, dedup rules).
+     * CORRECTED: `type` is NOT a per-module category — confirmed via
+     * notifications_type_check that it's a generic severity level,
+     * constrained to Info/Success/Warning/Error only. The original
+     * assumption that `type: 'payable'` would match a frontend
+     * NOTIFICATION_TYPE_META lookup for AP-specific icon/routing was
+     * wrong and would have violated this DB constraint on every approval.
+     * Mapped to the closest real severity instead. If the frontend does
+     * need a way to know "this notification is about Accounts Payable"
+     * for routing/icons, that has to come from some other field (title
+     * parsing, or a column this table has that isn't being set here) —
+     * not from `type`. Worth checking the Notification model/migration
+     * and the frontend's actual notification-routing logic to confirm
+     * what that mechanism really is before assuming AP notifications
+     * link anywhere useful once clicked.
      */
     private function notifyCreator(AccountsPayable $bill, bool $approved): void
     {
@@ -366,13 +367,94 @@ class AccountsPayableService
             return;
         }
 
-        $this->notificationService->create(
-            $bill->created_by,
-            'payable',
-            $approved ? 'Bill approved' : 'Bill rejected',
-            $approved
+        Notification::create([
+            'user_id' => $bill->created_by,
+            'title' => $approved ? 'Bill approved' : 'Bill rejected',
+            'message' => $approved
                 ? sprintf('Your bill %s was approved.', $bill->invoice_number)
                 : sprintf('Your bill %s was rejected.', $bill->invoice_number),
-        );
+            'type' => $approved ? 'Success' : 'Warning',
+            'is_read' => false,
+        ]);
+    }
+
+    /**
+     * Attach a supporting document (invoice scan/photo) to a bill, via
+     * the shared supporting_documents table — same pattern as
+     * ExpenseService::attachReceipt() / CollectionService::attachProof().
+     * reference_type = 'accounts_payable' to match this module's own
+     * naming (singular snake_case, consistent with 'expense'/'collection'
+     * elsewhere in that shared table).
+     *
+     * Re-uploading adds a new version rather than replacing the previous
+     * one — full history preserved, same as the Expense/Collection
+     * equivalents.
+     *
+     * Syncs has_attachment to true on a successful attach, same reasoning
+     * ExpenseService documents for receipt_status: that field exists
+     * specifically to reflect whether a real file is on record, so it
+     * shouldn't be manually toggled independent of whether one actually
+     * exists (previously it was just a raw checkbox in the Add/Edit form
+     * with no file behind it at all — this replaces that).
+     *
+     * No status/approval restriction — see
+     * AccountsPayablePolicy::attachDocument() for why.
+     *
+     * Storage path: accounts-payable-documents/{bill_id}/{filename}
+     */
+    public function attachDocument(AccountsPayable $bill, \Illuminate\Http\UploadedFile $file, User $actor): \App\Models\SupportingDocument
+    {
+        $path = $file->store("accounts-payable-documents/{$bill->id}", 'local');
+
+        $document = \App\Models\SupportingDocument::create([
+            'reference_type' => 'accounts_payable',
+            'reference_id' => $bill->id,
+            'file_name' => basename($path),
+            'original_name' => $file->getClientOriginalName(),
+            'storage_path' => $path,
+            'mime_type' => $file->getClientMimeType(),
+            'file_size' => $file->getSize(),
+            'uploaded_by' => $actor->id,
+            'uploaded_at' => now(),
+        ]);
+
+        $bill->update(['has_attachment' => true]);
+
+        AuditLog::create([
+            'user_id' => $actor->id,
+            'module' => 'Accounts Payable',
+            'action' => 'attach_document',
+            'record_id' => $bill->id,
+            'activity_description' => "Attached document \"{$file->getClientOriginalName()}\" to bill {$bill->invoice_number}.",
+            'ip_address' => request()->ip(),
+            'user_agent' => request()->userAgent(),
+        ]);
+
+        return $document;
+    }
+
+    /**
+     * Return all supporting documents for a bill, newest first. The
+     * first item is the current/latest document. Mirrors
+     * ExpenseService::getReceiptHistory() / CollectionService::getProofHistory() exactly.
+     *
+     * @return Collection<int, \App\Models\SupportingDocument>
+     */
+    public function getDocumentHistory(AccountsPayable $bill): Collection
+    {
+        return \App\Models\SupportingDocument::query()
+            ->with('uploader:id,first_name,last_name')
+            ->where('reference_type', 'accounts_payable')
+            ->where('reference_id', $bill->id)
+            ->orderByDesc('uploaded_at')
+            ->orderByDesc('id')
+            ->get()
+            ->map(function (\App\Models\SupportingDocument $doc) {
+                $doc->uploaded_by_name = $doc->uploader
+                    ? trim("{$doc->uploader->first_name} {$doc->uploader->last_name}")
+                    : null;
+                $doc->has_file = (bool) $doc->storage_path;
+                return $doc;
+            });
     }
 }

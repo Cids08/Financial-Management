@@ -14,27 +14,21 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        // Both aliases MUST live in this single withMiddleware() call —
+        // All aliases MUST live in this single withMiddleware() call —
         // it assigns one callback internally, so a second ->withMiddleware()
         // call elsewhere would silently replace this one instead of
-        // merging with it. That bug previously dropped the 'permission'
-        // alias entirely once 'honeypot' was added in a separate call.
+        // merging with it.
         $middleware->alias([
             'permission' => \App\Http\Middleware\CheckPermission::class,
             'honeypot' => \App\Http\Middleware\HoneypotCheck::class,
+            'require.password.change' => \App\Http\Middleware\EnsurePasswordChanged::class,
         ]);
 
-        // Scoped to the api group specifically, since this is an
-        // API-only backend serving a separate React SPA — there's no
-        // HTML being rendered here for the strict CSP to conflict with.
         $middleware->api(append: [
             \App\Http\Middleware\SecurityHeaders::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        // Format throttle (429) responses to match the API's standard
-        // { success, message, data } shape, and surface retryAfter so the
-        // frontend can show a live countdown instead of a static message.
         $exceptions->render(function (ThrottleRequestsException $e, $request) {
             if (! $request->is('api/*')) {
                 return null;

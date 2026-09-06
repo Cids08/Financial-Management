@@ -26,6 +26,11 @@ class StoreCollectorRequest extends FormRequest
             'commission_rate'  => ['nullable', 'numeric', 'min:0', 'max:100'],
             'monthly_target'   => ['nullable', 'numeric', 'min:0'],
             'is_active'        => ['sometimes', 'boolean'],
+            // New — links this collector record to a login account.
+            // 'unique' here is safe on a nullable field: Laravel skips
+            // every other rule for a field once 'nullable' lets a null
+            // value through, so this never fires for an unlinked collector.
+            'user_id'          => ['nullable', 'integer', 'exists:users,id', 'unique:collectors,user_id'],
         ];
     }
 }

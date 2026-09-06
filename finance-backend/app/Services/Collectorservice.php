@@ -19,7 +19,10 @@ class CollectorService
      */
     public function list(array $filters): LengthAwarePaginator
     {
-        $query = Collector::query()->with('serviceArea');
+        // 'user' added — so CollectorResource can surface which login
+        // account (if any) is linked to each collector row without an
+        // N+1 query per row.
+        $query = Collector::query()->with(['serviceArea', 'user']);
 
         // Mirrors the frontend's "Show archived" checkbox: archived and
         // active collectors are two disjoint views, never mixed.
@@ -45,7 +48,7 @@ class CollectorService
                 'updated_by' => $user->id,
             ]);
 
-            return $collector->load('serviceArea');
+            return $collector->load(['serviceArea', 'user']);
         });
     }
 
@@ -60,7 +63,7 @@ class CollectorService
                 'updated_by' => $user->id,
             ]);
 
-            return $collector->fresh('serviceArea');
+            return $collector->fresh(['serviceArea', 'user']);
         });
     }
 
@@ -74,7 +77,7 @@ class CollectorService
             $collector->update(['status' => 'Inactive', 'deleted_by' => $user->id]);
             $collector->delete();
 
-            return $collector->fresh('serviceArea');
+            return $collector->fresh(['serviceArea', 'user']);
         });
     }
 
@@ -89,8 +92,49 @@ class CollectorService
             $collector->restore();
             $collector->update(['updated_by' => $user->id]);
 
-            return $collector->fresh('serviceArea');
+            return $collector->fresh(['serviceArea', 'user']);
         });
+    }
+
+    /**
+     * Users eligible to be linked to a collector record via the "Linked
+     * User Account" dropdown on the Add/Edit Collector form:
+     *   - role is 'collector' (via users.role_id -> roles.id, roles.name).
+     *     ASSUMPTION: User has a `role()` BelongsTo(Role::class) relation
+     *     matching that FK — the same relation $user->hasRole('collector')
+     *     in CollectorController::efficiency() must already rely on
+     *     internally. If your User model's relation is named differently,
+     *     rename `role` in the whereHas() below to match.
+     *   - not already linked to a DIFFERENT collector record (a user
+     *     should back at most one collector profile). When editing an
+     *     existing collector, pass its id as $currentCollectorId so that
+     *     collector's own already-linked user still appears in the list
+     *     (otherwise the dropdown would omit the very user it's currently
+     *     set to, since that user_id is "already linked" — just to this
+     *     same record).
+     *
+     * @return SupportCollection<int, array{id:int, name:string, email:?string, employee_no:?string}>
+     */
+    public function availableUsers(?int $currentCollectorId = null): SupportCollection
+    {
+        $linkedUserIds = Collector::query()
+            ->whereNotNull('user_id')
+            ->when($currentCollectorId, fn ($q) => $q->where('id', '!=', $currentCollectorId))
+            ->pluck('user_id');
+
+        return User::query()
+            ->whereHas('role', fn ($q) => $q->where('name', 'collector'))
+            ->whereNotIn('id', $linkedUserIds)
+            ->orderBy('first_name')
+            ->orderBy('last_name')
+            ->get(['id', 'first_name', 'last_name', 'email', 'employee_no'])
+            ->map(fn (User $u) => [
+                'id'          => $u->id,
+                'name'        => trim("{$u->first_name} {$u->last_name}"),
+                'email'       => $u->email,
+                'employee_no' => $u->employee_no,
+            ])
+            ->values();
     }
 
     /**
@@ -180,4 +224,4 @@ class CollectorService
 
         return $buckets;
     }
-}
+}   

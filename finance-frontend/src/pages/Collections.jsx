@@ -1,18 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, HandCoins, Clock3, Wallet, Info, Printer, ChevronLeft, ChevronRight, CheckCircle2, XCircle } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, HandCoins, Clock3, Wallet, Info, Printer, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Paperclip } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
 import CollectionEfficiencyPanel from '../components/CollectionEfficiencyPanel'
+import CollectionProofHistoryModal from '../components/CollectionProofHistoryModal'
 import { useCollectionUpdates } from '../hooks/useCollectionUpdates'
 import { formatCurrency } from '../utils/formatters'
 import { apiFetch } from '../utils/api'
 
-// ---------------------------------------------------------------------------
-// Status constants — aligned with backend Collection::STATUS_* constants.
-// 'Voided' is intentionally absent; use the cancel endpoint instead.
-// ---------------------------------------------------------------------------
 const STATUS_OPTIONS = ['Pending', 'Confirmed', 'Cancelled']
 const PAGE_SIZE = 10
 
@@ -63,61 +60,88 @@ function DetailRow({ label, value }) {
 }
 
 // ---------------------------------------------------------------------------
-// Lookup hook — fetches AR records, collectors, cash accounts, and users
-// in parallel. Each lookup falls back to [] on error so a single failed
-// endpoint doesn't block the whole page.
+// Lookup hook
+// Each endpoint may return a different primary key name:
+//   AR records   → ar_id   (AccountsReceivable uses ar_id, not id)
+//   Collectors   → collector_id
+//   Cash accounts→ id
+//   Users        → user_id or id
+// We normalise everything to a plain `_key` field so the rest of the
+// component doesn't need to care about the source shape.
 // ---------------------------------------------------------------------------
+function normaliseKey(item, possibleKeys) {
+  for (const k of possibleKeys) {
+    if (item[k] !== undefined) return item[k]
+  }
+  return undefined
+}
+
 function useLookups() {
-  const [arRecords,     setArRecords]     = useState([])
-  const [collectors,    setCollectors]    = useState([])
-  const [cashAccounts,  setCashAccounts]  = useState([])
-  const [users,         setUsers]         = useState([])
-  const [lookupsReady,  setLookupsReady]  = useState(false)
-  const [lookupErrors,  setLookupErrors]  = useState([])
+  const [arRecords,    setArRecords]    = useState([])
+  const [collectors,   setCollectors]   = useState([])
+  const [cashAccounts, setCashAccounts] = useState([])
+  const [users,        setUsers]        = useState([])
+  const [lookupsReady, setLookupsReady] = useState(false)
+  const [lookupErrors, setLookupErrors] = useState([])
 
   useEffect(() => {
-    const endpoints = [
-      // Assumed shapes:
-      //   AR:           { id, invoice_number, customer_name }
-      //   Collectors:   { id, first_name, last_name }
-      //   Cash accounts:{ id, account_name }
-      //   Users:        { id, first_name, last_name }
-      { url: '/api/accounts-receivable?per_page=500', set: setArRecords,    label: 'AR records'    },
-      { url: '/api/collectors?per_page=500',          set: setCollectors,   label: 'collectors'    },
-      { url: '/api/cash-accounts?per_page=500',       set: setCashAccounts, label: 'cash accounts' },
-      { url: '/api/users?per_page=500',               set: setUsers,        label: 'users'         },
-    ]
-
     const errors = []
+    Promise.all([
+      // AR — primary key is ar_id
+      apiFetch('/api/accounts-receivable?per_page=500')
+        .then((r) => r.json())
+        .then((j) => {
+          if (!j.success) throw new Error(j.message || 'Failed to load AR records.')
+          const data = Array.isArray(j.data) ? j.data : j.data?.data ?? []
+          // Normalise: expose _key = ar_id so dropdowns are consistent
+          setArRecords(data.map((a) => ({ ...a, _key: a.ar_id ?? a.id })))
+        })
+        .catch((e) => errors.push(`AR records: ${e.message}`)),
 
-    Promise.all(
-      endpoints.map(({ url, set, label }) =>
-        apiFetch(url)
-          .then((res) => res.json())
-          .then((json) => {
-            if (!json.success) throw new Error(json.message || `Failed to load ${label}.`)
-            // Support both paginated ({ data: [...] }) and flat (data: [...]) responses.
-            set(Array.isArray(json.data) ? json.data : json.data?.data ?? [])
-          })
-          .catch((err) => {
-            errors.push(`${label}: ${err.message}`)
-          })
-      )
-    ).finally(() => {
+      // Collectors — primary key is collector_id
+      apiFetch('/api/collectors?per_page=500')
+        .then((r) => r.json())
+        .then((j) => {
+          if (!j.success) throw new Error(j.message || 'Failed to load collectors.')
+          const data = Array.isArray(j.data) ? j.data : j.data?.data ?? []
+          setCollectors(data.map((c) => ({ ...c, _key: c.collector_id ?? c.id })))
+        })
+        .catch((e) => errors.push(`collectors: ${e.message}`)),
+
+      // Cash accounts — primary key is id
+      apiFetch('/api/cash-accounts?per_page=500')
+        .then((r) => r.json())
+        .then((j) => {
+          if (!j.success) throw new Error(j.message || 'Failed to load cash accounts.')
+          const data = Array.isArray(j.data) ? j.data : j.data?.data ?? []
+          setCashAccounts(data.map((a) => ({ ...a, _key: a.id })))
+        })
+        .catch((e) => errors.push(`cash accounts: ${e.message}`)),
+
+      // Users — primary key is user_id or id
+      apiFetch('/api/users?per_page=500')
+        .then((r) => r.json())
+        .then((j) => {
+          if (!j.success) throw new Error(j.message || 'Failed to load users.')
+          const data = Array.isArray(j.data) ? j.data : j.data?.data ?? []
+          setUsers(data.map((u) => ({ ...u, _key: u.user_id ?? u.id })))
+        })
+        .catch((e) => errors.push(`users: ${e.message}`)),
+    ]).finally(() => {
       if (errors.length) setLookupErrors(errors)
       setLookupsReady(true)
     })
   }, [])
 
-  // Lookup helpers derived from fetched data
-  const arInfo       = (id) => arRecords.find((a) => a.id === Number(id))
+  // Lookup helpers — all use _key for matching
+  const arInfo        = (id) => arRecords.find((a) => Number(a._key) === Number(id))
   const collectorName = (id) => {
-    const c = collectors.find((c) => c.id === Number(id))
+    const c = collectors.find((c) => Number(c._key) === Number(id))
     return c ? `${c.first_name} ${c.last_name}` : '—'
   }
-  const accountName  = (id) => cashAccounts.find((a) => a.id === Number(id))?.account_name ?? '—'
-  const userName     = (id) => {
-    const u = users.find((u) => u.id === Number(id))
+  const accountName   = (id) => cashAccounts.find((a) => Number(a._key) === Number(id))?.account_name ?? '—'
+  const userName      = (id) => {
+    const u = users.find((u) => Number(u._key) === Number(id))
     return u ? `${u.first_name} ${u.last_name}` : '—'
   }
 
@@ -125,7 +149,7 @@ function useLookups() {
 }
 
 // ---------------------------------------------------------------------------
-// Collections hook — fetches and manages collection records from the API.
+// Collections hook
 // ---------------------------------------------------------------------------
 function useCollections() {
   const [collections, setCollections] = useState([])
@@ -136,7 +160,7 @@ function useCollections() {
 
   const fetchCollections = (opts = {}) => {
     const params = new URLSearchParams({
-      per_page: 500, // fetch all; client-side pagination slices the result
+      per_page: 500,
       ...(opts.trashed ?? trashed ? { trashed: 1 } : {}),
     })
     setLoading(true)
@@ -152,11 +176,9 @@ function useCollections() {
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => {
-    fetchCollections()
-  }, [trashed])
+  useEffect(() => { fetchCollections() }, [trashed])
 
-  return { collections, setCollections, loading, error, meta, trashed, setTrashed, refetch: fetchCollections }
+  return { collections, loading, error, meta, trashed, setTrashed, refetch: fetchCollections }
 }
 
 // ---------------------------------------------------------------------------
@@ -168,56 +190,47 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
     arInfo, collectorName, accountName, userName,
   } = useLookups()
 
-  const {
-    collections, loading, error, meta,
-    trashed, setTrashed, refetch,
-  } = useCollections()
+  const { collections, loading, error, meta, trashed, setTrashed, refetch } = useCollections()
 
-  // Auto-refresh when any user confirms or cancels a collection via Reverb.
   useCollectionUpdates(refetch)
 
   const [search,       setSearch]       = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
-
   const [modalMode,    setModalMode]    = useState(null)
   const [form,         setForm]         = useState(EMPTY_FORM)
   const [formError,    setFormError]    = useState('')
   const [submitting,   setSubmitting]   = useState(false)
   const [detailRecord, setDetailRecord] = useState(null)
+  const [confirmTarget,setConfirmTarget]= useState(null)
+  const [cancelTarget, setCancelTarget] = useState(null)
+  const [cancelRemarks,setCancelRemarks]= useState('')
+  const [actionError,  setActionError]  = useState('')
+  const [actioning,    setActioning]    = useState(false)
+  const [proofTarget,  setProofTarget]  = useState(null)
 
-  // Client-side filter on top of the paginated API results.
-  // Once server-side search is wired (?search=), remove this and drive
-  // filtering through the fetchCollections() params instead.
-  const filtered = useMemo(() => {
-    return collections.filter((c) => {
-      if (statusFilter !== 'all' && c.status !== statusFilter) return false
-      const info = arInfo(c.ar_id)
-      const q    = search.toLowerCase()
-      if (
-        search &&
-        !c.receipt_number?.toLowerCase().includes(q) &&
-        !info?.customer_name?.toLowerCase().includes(q) &&
-        !collectorName(c.collector_id)?.toLowerCase().includes(q)
-      ) return false
-      return true
-    })
-  }, [collections, search, statusFilter, arRecords, collectors])
+  const filtered = useMemo(() => collections.filter((c) => {
+    if (statusFilter !== 'all' && c.status !== statusFilter) return false
+    const info = arInfo(c.ar_id)
+    const q    = search.toLowerCase()
+    if (search &&
+      !c.receipt_number?.toLowerCase().includes(q) &&
+      !info?.customer_name?.toLowerCase().includes(q) &&
+      !collectorName(c.collector_id)?.toLowerCase().includes(q)
+    ) return false
+    return true
+  }), [collections, search, statusFilter, arRecords, collectors])
 
-  // Client-side pagination over filtered results — consistent with AR page.
   const [page, setPage] = useState(1)
   useEffect(() => { setPage(1) }, [search, statusFilter, trashed])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-  const paginated  = useMemo(
-    () => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
-    [filtered, page]
-  )
+  const paginated  = useMemo(() => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [filtered, page])
   const rangeStart = filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
   const rangeEnd   = Math.min(page * PAGE_SIZE, filtered.length)
 
   const stats = useMemo(() => ({
     total:     collections.length,
-    collected: collections.filter((c) => c.status === 'Confirmed').reduce((sum, c) => sum + c.amount_received, 0),
+    collected: collections.filter((c) => c.status === 'Confirmed').reduce((s, c) => s + c.amount_received, 0),
     pending:   collections.filter((c) => c.status === 'Pending').length,
   }), [collections])
 
@@ -227,9 +240,11 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
   const openAdd = () => {
     setForm({
       ...EMPTY_FORM,
-      ar_id:           arRecords[0]?.id    ?? '',
-      collector_id:    collectors[0]?.id   ?? '',
-      cash_account_id: cashAccounts[0]?.id ?? '',
+      // Use _key (normalised) for the initial value so the dropdown
+      // matches on first render — arRecords[0]._key is ar_id for AR.
+      ar_id:           arRecords[0]?._key    ?? '',
+      collector_id:    collectors[0]?._key   ?? '',
+      cash_account_id: cashAccounts[0]?._key ?? '',
     })
     setFormError('')
     setModalMode('add')
@@ -255,16 +270,22 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
   const closeModal  = () => { setModalMode(null); setFormError('') }
   const openDetail  = (c) => setDetailRecord(c)
   const closeDetail = () => setDetailRecord(null)
+  const openConfirm = (c) => { setConfirmTarget(c); setActionError('') }
+  const closeConfirm= () => { setConfirmTarget(null); setActionError('') }
+  const openCancel  = (c) => { setCancelTarget(c); setCancelRemarks(''); setActionError('') }
+  const closeCancel = () => { setCancelTarget(null); setCancelRemarks(''); setActionError('') }
 
   // -------------------------------------------------------------------------
-  // Submit — create or update via API
+  // Submit
   // -------------------------------------------------------------------------
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!form.receipt_number.trim() || !form.collection_date || !form.amount_received) {
-      setFormError('Receipt number, collection date, and amount are required.')
-      return
-    }
+    if (!form.ar_id) { setFormError('Please select an invoice.'); return }
+    if (!form.collector_id) { setFormError('Please select a collector.'); return }
+    if (!form.cash_account_id) { setFormError('Please select a cash account.'); return }
+    if (!form.receipt_number.trim()) { setFormError('Receipt number is required.'); return }
+    if (!form.collection_date) { setFormError('Collection date is required.'); return }
+    if (!form.amount_received) { setFormError('Amount received is required.'); return }
 
     const payload = {
       ...form,
@@ -276,21 +297,17 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
 
     setSubmitting(true)
     setFormError('')
-
     try {
       const isAdd = modalMode === 'add'
-      const url    = isAdd ? '/api/collections' : `/api/collections/${modalMode.id}`
-      const method = isAdd ? 'POST' : 'PUT'
-
-      const res  = await apiFetch(url, { method, body: JSON.stringify(payload) })
+      const res  = await apiFetch(
+        isAdd ? '/api/collections' : `/api/collections/${modalMode.id}`,
+        { method: isAdd ? 'POST' : 'PUT', body: JSON.stringify(payload) }
+      )
       const json = await res.json()
-
       if (!json.success) {
-        const firstError = json.errors ? Object.values(json.errors)[0]?.[0] : json.message
-        setFormError(firstError || 'Something went wrong.')
+        setFormError(json.errors ? Object.values(json.errors)[0]?.[0] : json.message || 'Something went wrong.')
         return
       }
-
       closeModal()
       refetch()
     } catch (err) {
@@ -301,118 +318,25 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
   }
 
   // -------------------------------------------------------------------------
-  // Archive / restore via API
+  // Archive / restore
   // -------------------------------------------------------------------------
   const handleArchive = async (c) => {
-    const url    = c.deleted_at ? `/api/collections/${c.id}/restore` : `/api/collections/${c.id}/archive`
-    const method = 'PATCH'
+    const url = c.deleted_at
+      ? `/api/collections/${c.id}/restore`
+      : `/api/collections/${c.id}/archive`
     try {
-      const res  = await apiFetch(url, { method })
+      const res  = await apiFetch(url, { method: 'PATCH' })
       const json = await res.json()
       if (!json.success) throw new Error(json.message)
       refetch()
     } catch (err) {
-      // Surface error inline — replace with your toast/notification system if available
       alert(err.message)
     }
   }
 
   // -------------------------------------------------------------------------
-  // Print
+  // Confirm / cancel
   // -------------------------------------------------------------------------
-  const handlePrint = (c) => {
-    const win = window.open('', '_blank', 'width=800,height=900')
-    if (!win) return
-    const info = arInfo(c.ar_id)
-    const rows = [
-      ['Invoice',         c.invoice_number  || info?.invoice_number  || '—'],
-      ['Customer',        info?.customer_name || '—'],
-      ['Collector',       c.collector_name  || collectorName(c.collector_id)],
-      ['Collection Date', formatDate(c.collection_date)],
-      ['Amount Received', formatCurrency(c.amount_received)],
-      ['Payment Method',  c.payment_method],
-      ['Deposited To',    c.cash_account_name || accountName(c.cash_account_id)],
-      ['Reference No.',   c.reference_number || '—'],
-      ['Status',          c.status],
-      ...(c.remarks ? [['Remarks', c.remarks]] : []),
-    ]
-    win.document.write(`
-      <html>
-        <head>
-          <title>${c.receipt_number}</title>
-          <style>
-            * { box-sizing: border-box; }
-            body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #1a1a1a; padding: 48px; }
-            .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1a1a1a; padding-bottom: 20px; margin-bottom: 24px; }
-            .header h1 { margin: 0 0 4px; font-size: 22px; }
-            .header p  { margin: 0; color: #666; font-size: 14px; }
-            .status { display: inline-block; padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; background: #f3f3f3; }
-            table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-            td { padding: 10px 4px; border-bottom: 1px solid #eee; font-size: 14px; }
-            td:first-child { color: #666; width: 40%; }
-            td:last-child  { font-weight: 600; text-align: right; }
-            .footer { margin-top: 32px; font-size: 12px; color: #999; text-align: center; }
-            @media print { body { padding: 24px; } }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div><h1>Official Receipt ${c.receipt_number}</h1><p>${info?.customer_name || ''}</p></div>
-            <span class="status">${c.status}</span>
-          </div>
-          <table>${rows.map(([label, value]) => `<tr><td>${label}</td><td>${value}</td></tr>`).join('')}</table>
-          <div class="footer">Printed on ${formatDateTime(new Date().toISOString())}</div>
-        </body>
-      </html>
-    `)
-    win.document.close()
-    win.focus()
-    win.print()
-  }
-
-  // -------------------------------------------------------------------------
-  // Stat cards
-  // -------------------------------------------------------------------------
-  const statCards = [
-    {
-      key: 'total', label: 'Total Collections', value: stats.total,
-      icon: HandCoins, iconBg: 'bg-primary/15', iconColor: 'text-primary-dark',
-      isActive: statusFilter === 'all' && !trashed,
-      onClick: () => { setStatusFilter('all'); setTrashed(false) },
-    },
-    {
-      key: 'collected', label: 'Confirmed Amount', value: formatCurrency(stats.collected),
-      icon: Wallet, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400',
-      isActive: statusFilter === 'Confirmed' && !trashed,
-      onClick: () => { setStatusFilter('Confirmed'); setTrashed(false) },
-    },
-    {
-      key: 'pending', label: 'Pending', value: stats.pending,
-      icon: Clock3, iconBg: 'bg-amber-50 dark:bg-amber-500/10', iconColor: 'text-amber-600 dark:text-amber-400',
-      isActive: statusFilter === 'Pending' && !trashed,
-      onClick: () => { setStatusFilter('Pending'); setTrashed(false) },
-    },
-    {
-      key: 'archived', label: 'Archived', value: '—',
-      icon: Archive, iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-500 dark:text-slate-400',
-      isActive: trashed,
-      onClick: () => { setTrashed(true); setStatusFilter('all') },
-    },
-  ]
-
-  // Confirm / cancel action state
-  const [confirmTarget, setConfirmTarget] = useState(null) // collection to confirm
-  const [cancelTarget,  setCancelTarget]  = useState(null) // collection to cancel
-  const [cancelRemarks, setCancelRemarks] = useState('')
-  const [actionError,   setActionError]   = useState('')
-  const [actioning,     setActioning]     = useState(false)
-
-  const openConfirm = (c) => { setConfirmTarget(c); setActionError('') }
-  const closeConfirm = () => { setConfirmTarget(null); setActionError('') }
-
-  const openCancel = (c) => { setCancelTarget(c); setCancelRemarks(''); setActionError('') }
-  const closeCancel = () => { setCancelTarget(null); setCancelRemarks(''); setActionError('') }
-
   const handleConfirm = async () => {
     if (!confirmTarget) return
     setActioning(true)
@@ -450,6 +374,52 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
     }
   }
 
+  // -------------------------------------------------------------------------
+  // Print
+  // -------------------------------------------------------------------------
+  const handlePrint = (c) => {
+    const win = window.open('', '_blank', 'width=800,height=900')
+    if (!win) return
+    const info = arInfo(c.ar_id)
+    const rows = [
+      ['Invoice',         c.invoice_number  || info?.invoice_number  || '—'],
+      ['Customer',        info?.customer_name || '—'],
+      ['Collector',       c.collector_name  || collectorName(c.collector_id)],
+      ['Collection Date', formatDate(c.collection_date)],
+      ['Amount Received', formatCurrency(c.amount_received)],
+      ['Payment Method',  c.payment_method],
+      ['Deposited To',    c.cash_account_name || accountName(c.cash_account_id)],
+      ['Reference No.',   c.reference_number || '—'],
+      ['Status',          c.status],
+      ...(c.remarks ? [['Remarks', c.remarks]] : []),
+    ]
+    win.document.write(`<html><head><title>${c.receipt_number}</title><style>
+      *{box-sizing:border-box}body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1a1a1a;padding:48px}
+      .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #1a1a1a;padding-bottom:20px;margin-bottom:24px}
+      .header h1{margin:0 0 4px;font-size:22px}.header p{margin:0;color:#666;font-size:14px}
+      .status{display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:600;background:#f3f3f3}
+      table{width:100%;border-collapse:collapse;margin-top:8px}
+      td{padding:10px 4px;border-bottom:1px solid #eee;font-size:14px}
+      td:first-child{color:#666;width:40%}td:last-child{font-weight:600;text-align:right}
+      .footer{margin-top:32px;font-size:12px;color:#999;text-align:center}
+      @media print{body{padding:24px}}
+    </style></head><body>
+      <div class="header"><div><h1>Official Receipt ${c.receipt_number}</h1><p>${info?.customer_name || ''}</p></div><span class="status">${c.status}</span></div>
+      <table>${rows.map(([l, v]) => `<tr><td>${l}</td><td>${v}</td></tr>`).join('')}</table>
+      <div class="footer">Printed on ${formatDateTime(new Date().toISOString())}</div>
+    </body></html>`)
+    win.document.close()
+    win.focus()
+    win.print()
+  }
+
+  const statCards = [
+    { key: 'total',     label: 'Total Collections', value: stats.total,                  icon: HandCoins, iconBg: 'bg-primary/15',                        iconColor: 'text-primary-dark',                          isActive: statusFilter === 'all'       && !trashed, onClick: () => { setStatusFilter('all');       setTrashed(false) } },
+    { key: 'collected', label: 'Confirmed Amount',  value: formatCurrency(stats.collected), icon: Wallet,    iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: statusFilter === 'Confirmed'  && !trashed, onClick: () => { setStatusFilter('Confirmed'); setTrashed(false) } },
+    { key: 'pending',   label: 'Pending',           value: stats.pending,                  icon: Clock3,    iconBg: 'bg-amber-50 dark:bg-amber-500/10',     iconColor: 'text-amber-600 dark:text-amber-400',     isActive: statusFilter === 'Pending'   && !trashed, onClick: () => { setStatusFilter('Pending');   setTrashed(false) } },
+    { key: 'archived',  label: 'Archived',          value: '—',                            icon: Archive,   iconBg: 'bg-slate-100 dark:bg-slate-800',       iconColor: 'text-slate-500 dark:text-slate-400',     isActive: trashed,                                  onClick: () => { setTrashed(true); setStatusFilter('all') } },
+  ]
+
   const isModalOpen = modalMode !== null
   const isEditing   = modalMode !== null && modalMode !== 'add'
 
@@ -467,14 +437,11 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
         </Button>
       </div>
 
-      {/* Lookup errors — non-fatal, shown as a warning banner */}
       {lookupErrors.length > 0 && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
           Some dropdowns may be incomplete: {lookupErrors.join(' · ')}
         </div>
       )}
-
-      {/* API error */}
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
           {error}
@@ -486,13 +453,8 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
         {statCards.map((card) => {
           const Icon = card.icon
           return (
-            <button
-              key={card.key}
-              type="button"
-              onClick={card.onClick}
-              className={`${PANEL} ${PANEL_PAD} flex items-center gap-3 text-left cursor-pointer
-                transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0
-                ${card.isActive ? 'ring-2 ring-primary/50 border-primary/50' : ''}`}
+            <button key={card.key} type="button" onClick={card.onClick}
+              className={`${PANEL} ${PANEL_PAD} flex items-center gap-3 text-left cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 ${card.isActive ? 'ring-2 ring-primary/50 border-primary/50' : ''}`}
             >
               <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${card.iconBg}`}>
                 <Icon size={18} className={card.iconColor} />
@@ -506,26 +468,17 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
         })}
       </div>
 
-      {/* Aggregate efficiency panel */}
       <CollectionEfficiencyPanel />
 
-      {/* Search / filter bar */}
+      {/* Search / filter */}
       <div className={`${PANEL} ${PANEL_PAD} flex flex-col gap-3 lg:flex-row lg:items-center`}>
         <div className="relative flex-1">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by receipt no., customer, or collector..."
-            className={`${INPUT} pl-9`}
-          />
+            className={`${INPUT} pl-9`} />
         </div>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className={`${INPUT} lg:w-56! shrink-0`}
-        >
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={`${INPUT} lg:w-56! shrink-0`}>
           <option value="all">All Statuses</option>
           {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
@@ -556,7 +509,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                   <tr key={c.id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
                     <td className="px-4 py-3.5">
                       <p className="font-medium text-ink">{c.receipt_number}</p>
-                      <p className="text-xs text-muted">{formatDate(c.collection_date)} &middot; {c.cash_account_name || accountName(c.cash_account_id)}</p>
+                      <p className="text-xs text-muted">{formatDate(c.collection_date)} · {c.cash_account_name || accountName(c.cash_account_id)}</p>
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
                       <p className="text-ink">{c.invoice_number || info?.invoice_number}</p>
@@ -572,39 +525,36 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                     <td className="px-4 py-3.5 whitespace-nowrap text-right">
                       <div className="flex items-center justify-end gap-1">
                         <Tooltip label="View full record" align="start">
-                          <button type="button" onClick={() => openDetail(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                            <Info size={15} />
-                          </button>
+                          <button type="button" onClick={() => openDetail(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"><Info size={15} /></button>
                         </Tooltip>
                         <Tooltip label="Print receipt" align="start">
-                          <button type="button" onClick={() => handlePrint(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                            <Printer size={15} />
-                          </button>
+                          <button type="button" onClick={() => handlePrint(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"><Printer size={15} /></button>
+                        </Tooltip>
+                        <Tooltip label="Proof of receipt" align="start">
+                          <button type="button" onClick={() => setProofTarget(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"><Paperclip size={15} /></button>
                         </Tooltip>
                         {c.status === 'Pending' && (
                           <Tooltip label="Confirm collection" align="start">
-                            <button type="button" onClick={() => openConfirm(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-400 transition-colors duration-150">
-                              <CheckCircle2 size={15} />
-                            </button>
+                            <button type="button" onClick={() => openConfirm(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-400 transition-colors duration-150"><CheckCircle2 size={15} /></button>
                           </Tooltip>
                         )}
                         {c.status === 'Pending' && (
                           <Tooltip label="Cancel collection" align="start">
-                            <button type="button" onClick={() => openCancel(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400 transition-colors duration-150">
-                              <XCircle size={15} />
+                            <button type="button" onClick={() => openCancel(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400 transition-colors duration-150"><XCircle size={15} /></button>
+                          </Tooltip>
+                        )}
+                        {c.status !== 'Confirmed' && (
+                          <Tooltip label="Edit collection" align="start">
+                            <button type="button" onClick={() => openEdit(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"><Pencil size={15} /></button>
+                          </Tooltip>
+                        )}
+                        {c.status !== 'Confirmed' && (
+                          <Tooltip label={c.deleted_at ? 'Restore collection' : 'Archive collection'} align="end">
+                            <button type="button" onClick={() => handleArchive(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                              {c.deleted_at ? <RotateCcw size={15} /> : <Archive size={15} />}
                             </button>
                           </Tooltip>
                         )}
-                        <Tooltip label="Edit collection" align="start">
-                          <button type="button" onClick={() => openEdit(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                            <Pencil size={15} />
-                          </button>
-                        </Tooltip>
-                        <Tooltip label={c.deleted_at ? 'Restore collection' : 'Archive collection'} align="end">
-                          <button type="button" onClick={() => handleArchive(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                            {c.deleted_at ? <RotateCcw size={15} /> : <Archive size={15} />}
-                          </button>
-                        </Tooltip>
                       </div>
                     </td>
                   </tr>
@@ -614,32 +564,17 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
           </table>
         </div>
 
-        {/* Pagination */}
         {!loading && filtered.length > 0 && (
           <div className="flex flex-col gap-2 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs text-muted">
-              Showing {rangeStart}–{rangeEnd} of {filtered.length} collections
-            </p>
+            <p className="text-xs text-muted">Showing {rangeStart}–{rangeEnd} of {filtered.length} collections</p>
             <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
-                aria-label="Previous page"
-              >
+              <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed" aria-label="Previous page">
                 <ChevronLeft size={15} />
               </button>
-              <span className="px-2 text-xs font-medium text-ink whitespace-nowrap">
-                Page {page} of {totalPages}
-              </span>
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
-                aria-label="Next page"
-              >
+              <span className="px-2 text-xs font-medium text-ink whitespace-nowrap">Page {page} of {totalPages}</span>
+              <button type="button" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed" aria-label="Next page">
                 <ChevronRight size={15} />
               </button>
             </div>
@@ -648,10 +583,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
       </div>
 
       {/* Add / Edit modal */}
-      <Modal
-        open={isModalOpen}
-        onClose={closeModal}
-        title={isEditing ? 'Edit Collection' : 'Add Collection'}
+      <Modal open={isModalOpen} onClose={closeModal} title={isEditing ? 'Edit Collection' : 'Add Collection'}
         footer={
           <>
             <Button variant="secondary" size="md" onClick={closeModal} disabled={submitting}>Cancel</Button>
@@ -663,30 +595,37 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           {formError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
-              {formError}
-            </div>
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{formError}</div>
           )}
+
           <div className="grid grid-cols-2 gap-3">
+            {/* Invoice — uses _key (= ar_id) as option value */}
             <div>
               <label className={LABEL}>Invoice</label>
               <select value={form.ar_id} onChange={(e) => setForm((f) => ({ ...f, ar_id: e.target.value }))} className={INPUT}>
-                {!form.ar_id && <option value="">Select invoice…</option>}
+                <option value="">Select invoice…</option>
                 {arRecords.map((a) => (
-                  <option key={a.id} value={a.id}>{a.invoice_number} — {a.customer_name}</option>
+                  <option key={a._key} value={a._key}>
+                    {a.invoice_number} — {a.customer_name}
+                  </option>
                 ))}
               </select>
             </div>
+
+            {/* Collector — uses _key (= collector_id) as option value */}
             <div>
               <label className={LABEL}>Collector</label>
               <select value={form.collector_id} onChange={(e) => setForm((f) => ({ ...f, collector_id: e.target.value }))} className={INPUT}>
-                {!form.collector_id && <option value="">Select collector…</option>}
+                <option value="">Select collector…</option>
                 {collectors.map((c) => (
-                  <option key={c.id} value={c.id}>{c.first_name} {c.last_name}</option>
+                  <option key={c._key} value={c._key}>
+                    {c.first_name} {c.last_name}
+                  </option>
                 ))}
               </select>
             </div>
           </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={LABEL}>Receipt Number</label>
@@ -697,10 +636,11 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
               <input type="date" value={form.collection_date} onChange={(e) => setForm((f) => ({ ...f, collection_date: e.target.value }))} className={INPUT} />
             </div>
           </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={LABEL}>Amount Received</label>
-              <input type="number" value={form.amount_received} onChange={(e) => setForm((f) => ({ ...f, amount_received: e.target.value }))} className={INPUT} placeholder="0.00" />
+              <input type="number" min="0.01" step="0.01" value={form.amount_received} onChange={(e) => setForm((f) => ({ ...f, amount_received: e.target.value }))} className={INPUT} placeholder="0.00" />
             </div>
             <div>
               <label className={LABEL}>Payment Method</label>
@@ -709,13 +649,17 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
               </select>
             </div>
           </div>
+
           <div className="grid grid-cols-2 gap-3">
+            {/* Cash account — uses _key (= id) as option value */}
             <div>
               <label className={LABEL}>Deposit To (Cash Account)</label>
               <select value={form.cash_account_id} onChange={(e) => setForm((f) => ({ ...f, cash_account_id: e.target.value }))} className={INPUT}>
-                {!form.cash_account_id && <option value="">Select account…</option>}
+                <option value="">Select account…</option>
                 {cashAccounts.map((a) => (
-                  <option key={a.id} value={a.id}>{a.account_name}</option>
+                  <option key={a._key} value={a._key}>
+                    {a.account_name}
+                  </option>
                 ))}
               </select>
             </div>
@@ -727,12 +671,8 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
 
           <div>
             <label className={LABEL}>Status</label>
-            <select
-              value={form.status}
-              onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
-              className={INPUT}
-              disabled={isEditing && modalMode?.status === 'Confirmed'}
-            >
+            <select value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))} className={INPUT}
+              disabled={isEditing && modalMode?.status === 'Confirmed'}>
               {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
             {isEditing && modalMode?.status === 'Confirmed' && (
@@ -763,18 +703,11 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
       </Modal>
 
       {/* Detail modal */}
-      <Modal
-        open={!!detailRecord}
-        onClose={closeDetail}
-        title="Collection Details"
+      <Modal open={!!detailRecord} onClose={closeDetail} title="Collection Details"
         footer={
           <>
             <Button variant="secondary" size="md" onClick={closeDetail}>Close</Button>
-            {detailRecord && (
-              <Button variant="primary" size="md" icon={Printer} onClick={() => handlePrint(detailRecord)}>
-                Print Receipt
-              </Button>
-            )}
+            {detailRecord && <Button variant="primary" size="md" icon={Printer} onClick={() => handlePrint(detailRecord)}>Print Receipt</Button>}
           </>
         }
       >
@@ -785,9 +718,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                 <p className="text-sm font-semibold text-ink">{detailRecord.receipt_number}</p>
                 <p className="text-xs text-muted">{arInfo(detailRecord.ar_id)?.customer_name}</p>
               </div>
-              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[detailRecord.status] ?? 'bg-slate-100 text-slate-600'}`}>
-                {detailRecord.status}
-              </span>
+              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[detailRecord.status] ?? 'bg-slate-100 text-slate-600'}`}>{detailRecord.status}</span>
             </div>
             <div className="rounded-lg border border-border divide-y divide-border">
               <div className="px-3 py-2">
@@ -820,11 +751,8 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
         )}
       </Modal>
 
-      {/* Confirm collection modal */}
-      <Modal
-        open={!!confirmTarget}
-        onClose={closeConfirm}
-        title="Confirm Collection"
+      {/* Confirm modal */}
+      <Modal open={!!confirmTarget} onClose={closeConfirm} title="Confirm Collection"
         footer={
           <>
             <Button variant="secondary" size="md" onClick={closeConfirm} disabled={actioning}>Back</Button>
@@ -836,9 +764,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
       >
         {confirmTarget && (
           <div className="space-y-4">
-            <p className="text-sm text-muted">
-              Confirming this collection will update the invoice balance and credit the cash account. This cannot be undone.
-            </p>
+            <p className="text-sm text-muted">Confirming this collection will update the invoice balance and credit the cash account. This cannot be undone.</p>
             <div className="rounded-lg border border-border divide-y divide-border">
               <div className="px-3 py-2">
                 <DetailRow label="Receipt"         value={confirmTarget.receipt_number} />
@@ -853,19 +779,14 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
               </div>
             </div>
             {actionError && (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
-                {actionError}
-              </div>
+              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{actionError}</div>
             )}
           </div>
         )}
       </Modal>
 
-      {/* Cancel collection modal */}
-      <Modal
-        open={!!cancelTarget}
-        onClose={closeCancel}
-        title="Cancel Collection"
+      {/* Cancel modal */}
+      <Modal open={!!cancelTarget} onClose={closeCancel} title="Cancel Collection"
         footer={
           <>
             <Button variant="secondary" size="md" onClick={closeCancel} disabled={actioning}>Back</Button>
@@ -877,9 +798,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
       >
         {cancelTarget && (
           <div className="space-y-4">
-            <p className="text-sm text-muted">
-              This will mark the collection as cancelled. The invoice balance will not be affected.
-            </p>
+            <p className="text-sm text-muted">This will mark the collection as cancelled. The invoice balance will not be affected.</p>
             <div className="rounded-lg border border-border divide-y divide-border">
               <div className="px-3 py-2">
                 <DetailRow label="Receipt"         value={cancelTarget.receipt_number} />
@@ -890,23 +809,23 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
             </div>
             <div>
               <label className={LABEL}>Reason for cancellation <span className="text-muted">(optional)</span></label>
-              <input
-                type="text"
-                value={cancelRemarks}
-                onChange={(e) => setCancelRemarks(e.target.value)}
-                className={INPUT}
-                placeholder="e.g. Duplicate entry, incorrect amount..."
-                maxLength={500}
-              />
+              <input type="text" value={cancelRemarks} onChange={(e) => setCancelRemarks(e.target.value)}
+                className={INPUT} placeholder="e.g. Duplicate entry, incorrect amount..." maxLength={500} />
             </div>
             {actionError && (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
-                {actionError}
-              </div>
+              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{actionError}</div>
             )}
           </div>
         )}
       </Modal>
+
+      {/* Proof of receipt history modal */}
+      <CollectionProofHistoryModal
+        open={!!proofTarget}
+        onClose={() => setProofTarget(null)}
+        collection={proofTarget}
+        onUploaded={refetch}
+      />
     </div>
   )
 }

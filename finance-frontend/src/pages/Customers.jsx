@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, Users as UsersIcon, UserCheck, UserX, Mail, Phone, Eye, EyeOff, Wallet } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, Users as UsersIcon, UserCheck, UserX, Mail, Phone, Eye, EyeOff, Wallet, Briefcase } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
@@ -28,13 +28,21 @@ function formatCurrency(value, currency = 'PHP') {
   return amount.toLocaleString('en-PH', { style: 'currency', currency })
 }
 
-const EMPTY_FORM = { customer_name: '', contact_person: '', contact_number: '', email: '', address: '', TIN: '', credit_limit: '0', status: 'Active' }
+// Trimmed to exactly the 7 fields this form should collect. Credit Limit
+// and Status are no longer set here — they keep whatever the backend
+// defaults to on create (credit_limit: 0, status: 'Active', per the
+// customers migration) and are left untouched on edit (StoreCustomer/
+// UpdateCustomerRequest both still accept them as 'sometimes', so not
+// sending them just means the existing/default value stands).
+const EMPTY_FORM = { customer_name: '', address: '', contact_person: '', position: '', contact_number: '', email: '', industry: '', credit_limit: '0' }
 
 const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
 const PANEL_PAD = 'p-4'
-const INPUT = `w-full h-9 px-3 rounded-lg border border-border bg-bg text-sm text-ink
+const INPUT = `w-full h-9 px-3 rounded-lg border border-border bg-bg text-sm !text-ink
   placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary
+  [color-scheme:light] dark:[color-scheme:dark]
   transition-all duration-150`
+const INPUT_TEXT_STYLE = { color: 'var(--color-ink, #0f172a)', caretColor: 'var(--color-ink, #0f172a)' }
 const LABEL = 'block text-xs font-medium text-muted mb-1.5'
 
 const STATUS_STYLES = {
@@ -73,7 +81,9 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
   const [formError, setFormError] = useState('')
   const [saving, setSaving] = useState(false)
 
-  // Controls visibility of TIN, contact number, and email together per row
+  // Controls visibility of contact number and email together per row
+  // (TIN used to be part of this too — column dropped, so it's gone
+  // from both the mask set and the table).
   const [revealedIds, setRevealedIds] = useState(new Set())
   const toggleReveal = (id) => {
     setRevealedIds((prev) => {
@@ -173,13 +183,13 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
   const openEdit = (c) => {
     setForm({
       customer_name: c.customer_name,
+      address: c.address || '',
       contact_person: c.contact_person,
+      position: c.position || '',
       contact_number: c.contact_number || '',
       email: c.email,
-      address: c.address || '',
-      TIN: c.TIN || '',
+      industry: c.industry || '',
       credit_limit: String(c.credit_limit ?? 0),
-      status: c.status,
     })
     setFormError('')
     setModalMode(c)
@@ -189,7 +199,7 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!form.customer_name.trim() || !form.contact_person.trim() || !form.email.trim()) {
-      setFormError('Customer name, contact person, and email are required.')
+      setFormError('Company name, contact person, and email are required.')
       return
     }
     if (!/^\S+@\S+\.\S+$/.test(form.email)) {
@@ -292,9 +302,9 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10 bg-surface">
               <tr className="border-b border-border">
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Customer</th>
+                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Company</th>
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Contact</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">TIN</th>
+                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Industry</th>
                 <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Balance / Limit</th>
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Status</th>
                 <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Actions</th>
@@ -323,6 +333,9 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
                         <div className="flex items-start gap-1.5">
                           <div className="min-w-0">
                             <p className="text-ink">{c.contact_person}</p>
+                            {c.position && (
+                              <p className="text-xs text-muted flex items-center gap-1"><Briefcase size={11} className="shrink-0" /> {c.position}</p>
+                            )}
                             <div className="mt-0.5 flex flex-col gap-0.5 text-xs text-muted font-mono">
                               <span className="flex items-center gap-1"><Mail size={11} className="shrink-0" /> {revealed ? c.email : maskEmail(c.email)}</span>
                               <span className="flex items-center gap-1"><Phone size={11} className="shrink-0" /> {revealed ? c.contact_number : maskValue(c.contact_number)}</span>
@@ -338,8 +351,8 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
                           </button>
                         </div>
                       </td>
-                      <td className="px-4 py-3.5 whitespace-nowrap text-muted font-mono text-xs">
-                        {revealed ? c.TIN : maskValue(c.TIN)}
+                      <td className="px-4 py-3.5 whitespace-nowrap text-muted">
+                        {c.industry || '—'}
                       </td>
                       <td className="px-4 py-3.5 whitespace-nowrap text-right">
                         <p className={`font-medium ${Number(c.current_balance) > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-ink'}`}>
@@ -415,39 +428,36 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{formError}</div>
           )}
           <div>
-            <label className={LABEL}>Customer Name</label>
-            <input type="text" value={form.customer_name} onChange={(e) => setForm((f) => ({ ...f, customer_name: e.target.value }))} className={INPUT} placeholder="Delacruz Trading" />
+            <label className={LABEL}>Company Name</label>
+            <input type="text" value={form.customer_name} onChange={(e) => setForm((f) => ({ ...f, customer_name: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="Delacruz Trading Corp." />
+          </div>
+          <div>
+            <label className={LABEL}>Company Address</label>
+            <input type="text" value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="Quezon City, Metro Manila" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={LABEL}>Contact Person</label>
-              <input type="text" value={form.contact_person} onChange={(e) => setForm((f) => ({ ...f, contact_person: e.target.value }))} className={INPUT} placeholder="Juan Delacruz" />
+              <input type="text" value={form.contact_person} onChange={(e) => setForm((f) => ({ ...f, contact_person: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="Juan Delacruz" />
             </div>
             <div>
-              <label className={LABEL}>Contact Number</label>
-              <input type="text" value={form.contact_number} onChange={(e) => setForm((f) => ({ ...f, contact_number: e.target.value }))} className={INPUT} placeholder="0917 234 5678" />
+              <label className={LABEL}>Position</label>
+              <input type="text" value={form.position} onChange={(e) => setForm((f) => ({ ...f, position: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="Procurement Manager" />
             </div>
-          </div>
-          <div>
-            <label className={LABEL}>Email</label>
-            <input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className={INPUT} placeholder="accounts@company.com" />
-          </div>
-          <div>
-            <label className={LABEL}>Address</label>
-            <input type="text" value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} className={INPUT} placeholder="Quezon City, Metro Manila" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>TIN</label>
-              <input type="text" value={form.TIN} onChange={(e) => setForm((f) => ({ ...f, TIN: e.target.value }))} className={INPUT} placeholder="123-456-789-000" />
+              <label className={LABEL}>Contact Number</label>
+              <input type="text" value={form.contact_number} onChange={(e) => setForm((f) => ({ ...f, contact_number: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="0917 234 5678" />
             </div>
             <div>
-              <label className={LABEL}>Status</label>
-              <select value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))} className={INPUT}>
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
-              </select>
+              <label className={LABEL}>Email Address</label>
+              <input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="accounts@company.com" />
             </div>
+          </div>
+          <div>
+            <label className={LABEL}>Industry/Business Type</label>
+            <input type="text" value={form.industry} onChange={(e) => setForm((f) => ({ ...f, industry: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="Construction Supplies" />
           </div>
           <div>
             <label className={LABEL}>Credit Limit</label>
@@ -460,7 +470,8 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
                 value={form.credit_limit}
                 onChange={(e) => setForm((f) => ({ ...f, credit_limit: e.target.value }))}
                 placeholder="0.00"
-                className="w-full text-sm text-ink bg-transparent outline-none border-0"
+                style={INPUT_TEXT_STYLE}
+                className="w-full text-sm bg-transparent outline-none border-0"
               />
             </div>
             {isEditing && (

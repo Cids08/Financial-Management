@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\AuditLog;
+use App\Models\Collector;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
@@ -14,6 +15,7 @@ use Illuminate\Validation\ValidationException;
 class UserService
 {
     protected const SUPER_ADMIN_ROLE = 'super-admin';
+    protected const COLLECTOR_ROLE = 'collector';
 
     /**
      * @param bool $withArchived When true, returns only soft-deleted users
@@ -70,6 +72,15 @@ class UserService
                 'user_agent' => request()->userAgent(),
             ]);
 
+            // New — a User created with the Collector role should show up
+            // on the Collectors page immediately, without a separate
+            // manual "Add Collector" step. Runs inside this same
+            // transaction: if creating the collectors row fails (e.g. an
+            // employee_no collision on that table), the whole user
+            // creation rolls back too, rather than leaving a Collector-role
+            // user account with no matching collectors row.
+            $this->syncCollectorRecord($actor, $user);
+
             return $user->load('role');
         });
     }
@@ -106,6 +117,14 @@ class UserService
                 'ip_address' => request()->ip(),
                 'user_agent' => request()->userAgent(),
             ]);
+
+            // New — same auto-link as create(): if this user's role was
+            // just changed TO Collector (e.g. promoted from Staff), give
+            // them a collectors row too, same as if they'd been created
+            // with that role from the start. No-ops if they already have
+            // one (e.g. re-saving a Collector-role user, or one manually
+            // linked earlier via the Collectors page).
+            $this->syncCollectorRecord($actor, $user);
 
             return $user->load('role');
         });
@@ -168,6 +187,75 @@ class UserService
         $next = User::withTrashed()->max('id') + 1;
 
         return 'EMP-' . str_pad((string) $next, 5, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Auto-creates the matching `collectors` row the moment a User has
+     * the Collector role — closing the gap User::collector() (HasOne)
+     * already anticipated but nothing was actually populating. Called
+     * from both create() and update(), inside their existing
+     * transactions, so a failure here rolls back the whole request
+     * rather than leaving a Collector-role user with no collector
+     * profile.
+     *
+     * Intentionally a no-op if:
+     *   - the user's role isn't Collector, or
+     *   - a collectors row already exists for this user (e.g. this ran
+     *     once on create() and is now re-running via a later update(),
+     *     or the row was linked manually beforehand via the Collectors
+     *     page's "Linked User Account" dropdown).
+     *
+     * Does NOT run in reverse — if a Collector-role user's role changes
+     * to something else, their existing collectors row is left alone on
+     * purpose. Whether their collection history should stay attributed
+     * to them is a real business decision, not something that should
+     * happen silently as a side effect of an unrelated role change.
+     *
+     * @throws ValidationException
+     */
+    protected function syncCollectorRecord(User $actor, User $user): void
+    {
+        $collectorRoleId = Role::where('name', self::COLLECTOR_ROLE)->value('id');
+
+        if ($collectorRoleId === null || (int) $user->role_id !== (int) $collectorRoleId) {
+            return;
+        }
+
+        if ($user->collector()->exists()) {
+            return;
+        }
+
+        // employee_no is unique on BOTH users and collectors
+        // independently (see StoreCollectorRequest / StoreUserRequest).
+        // Reusing the same value is intentional — one person, one
+        // employee number — but if a stray collectors row already used
+        // this number for some other reason, this insert violates that
+        // constraint. Surfaced as a clear ValidationException (422)
+        // rather than a raw 500, and — since this runs inside create()'s/
+        // update()'s own transaction — the whole request rolls back
+        // rather than leaving a half-created user.
+        try {
+            Collector::create([
+                'user_id'         => $user->id,
+                'employee_no'     => $user->employee_no,
+                'first_name'      => $user->first_name,
+                'middle_name'     => $user->middle_name,
+                'last_name'       => $user->last_name,
+                'phone_number'    => $user->phone_number,
+                'email'           => $user->email,
+                'profile_photo'   => $user->profile_photo,
+                'assigned_area'   => null,
+                'service_area_id' => null,
+                'commission_rate' => 0,
+                'monthly_target'  => 0,
+                'status'          => $user->status === 'Active' ? 'Active' : 'Inactive',
+                'updated_by'      => $actor->id,
+            ]);
+        } catch (\Throwable $e) {
+            throw ValidationException::withMessages([
+                'role_id' => ["Could not create a matching collector profile for this user: {$e->getMessage()}"],
+            ]);
+        }
     }
 
     /**

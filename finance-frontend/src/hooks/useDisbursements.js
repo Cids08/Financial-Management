@@ -157,6 +157,22 @@ export function useDisbursements() {
     return json.data
   }, [refresh])
 
+  // Preview only — see DisbursementService::previewNextVoucherNumber()'s
+  // own comment: this shows what the next voucher number will probably
+  // be, without reserving it. Returns null on failure instead of
+  // throwing, so the caller can just fall back to the "Auto-generated on
+  // save" placeholder rather than blocking the modal from opening.
+  const fetchNextVoucherNumber = useCallback(async () => {
+    try {
+      const res = await apiFetch('/api/disbursements/next-voucher-number')
+      const json = await res.json()
+      if (!res.ok || !json.success) return null
+      return json.data?.voucher_number ?? null
+    } catch {
+      return null
+    }
+  }, [])
+
   const archiveDisbursement = useCallback(async (id) => {
     const res = await apiFetch(`/api/disbursements/${id}/archive`, { method: 'PATCH' })
     const json = await res.json()
@@ -183,5 +199,6 @@ export function useDisbursements() {
     refresh, createDisbursement, updateDisbursement,
     approveDisbursement, rejectDisbursement, releaseDisbursement,
     uploadProof, archiveDisbursement, restoreDisbursement,
+    fetchNextVoucherNumber,
   }
 }

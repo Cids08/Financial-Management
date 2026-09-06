@@ -5,28 +5,31 @@ namespace App\Services;
 use App\Models\AuditLog;
 use App\Models\Budget;
 use App\Models\ChartOfAccount;
+use App\Models\Department;
 use App\Models\Expense;
 use App\Models\JournalEntry;
+use App\Models\Notification;
+use App\Models\SupportingDocument;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class ExpenseService
 {
-    // NotificationService lives in the same App\Services namespace, so no
-    // `use` import is needed for it below.
-    public function __construct(protected NotificationService $notificationService)
-    {
-    }
-
     /**
      * @param array{search?:string,status?:string,budget_id?:int,expense_category_id?:int,expense_date_from?:string,expense_date_to?:string,trashed?:bool,per_page?:int} $filters
      */
     public function list(array $filters): LengthAwarePaginator
     {
         $query = Expense::query()
-            ->with(['budget:id,budget_name', 'category:id,category_name', 'supplier:id,supplier_name', 'creator:id,first_name,last_name']);
+            ->with(['budget:id,budget_name', 'category:id,category_name', 'supplier:id,supplier_name', 'creator:id,first_name,last_name'])
+            // Backs Expense::getHasReceiptAttribute() — without this, the
+            // has_receipt accessor falls back to a live exists() query per
+            // row, N+1-ing across every expense on the page. Mirrors
+            // BudgetService::paginate()'s withCount for has_plan exactly.
+            ->withCount(['supportingDocuments as supporting_documents_count']);
 
         if (! empty($filters['trashed'])) {
             $query->onlyTrashed();
@@ -202,8 +205,20 @@ class ExpenseService
             $budget = Budget::query()->lockForUpdate()->findOrFail($expense->budget_id);
 
             if (! $skipDepartmentCheck && $expense->creator && $expense->creator->department_id !== $budget->department_id) {
+                $filerDeptName = Department::find($expense->creator->department_id)?->department_name;
+                $budgetDeptName = Department::find($budget->department_id)?->department_name ?? 'no department';
+                $filerPhrase = $filerDeptName
+                    ? "under the {$filerDeptName} department"
+                    : 'without an assigned department';
+
                 throw ValidationException::withMessages([
-                    'budget' => "This expense's budget belongs to a different department than the person who filed it.",
+                    'budget' => sprintf(
+                        '%s filed this expense %s, but budget "%s" belongs to %s. An expense can only be approved against a budget owned by the same department as whoever filed it.',
+                        $expense->creator->first_name ?? 'This user',
+                        $filerPhrase,
+                        $budget->budget_name,
+                        $budgetDeptName
+                    ),
                 ]);
             }
 
@@ -306,12 +321,6 @@ class ExpenseService
         return $expense->refresh();
     }
 
-    /**
-     * REFACTOR: routed through NotificationService::create() instead of
-     * calling Notification::create() directly, so every service creates
-     * notifications the same way (one place to change behavior later —
-     * e.g. broadcasting, per-page defaults, dedup rules).
-     */
     private function notifyBudgetWarning(Budget $budget, Expense $expense, float $usedPercentage, bool $isOverBudget): void
     {
         $recipientId = $budget->approved_by ?? $budget->created_by;
@@ -320,11 +329,10 @@ class ExpenseService
             return;
         }
 
-        $this->notificationService->create(
-            $recipientId,
-            $isOverBudget ? 'budget_over' : 'budget_warning',
-            $isOverBudget ? 'Budget exceeded' : 'Budget nearing its limit',
-            sprintf(
+        Notification::create([
+            'user_id' => $recipientId,
+            'title' => $isOverBudget ? 'Budget exceeded' : 'Budget nearing its limit',
+            'message' => sprintf(
                 '%s used %.2f%% of "%s" (%s) after approving expense #%d.',
                 $isOverBudget ? 'Over budget:' : 'Warning:',
                 $usedPercentage,
@@ -332,7 +340,9 @@ class ExpenseService
                 $budget->budget_code,
                 $expense->id
             ),
-        );
+            'type' => $isOverBudget ? 'budget_over' : 'budget_warning',
+            'is_read' => false,
+        ]);
     }
 
     /**
@@ -349,11 +359,6 @@ class ExpenseService
      * receivable/payable/budget/forecast/ai_recommendation), so this
      * will render with the default Bell icon and route to /reports until
      * that map is extended with an 'expense' entry.
-     *
-     * REFACTOR: routed through NotificationService::create() instead of
-     * calling Notification::create() directly, so every service creates
-     * notifications the same way (one place to change behavior later —
-     * e.g. broadcasting, per-page defaults, dedup rules).
      */
     private function notifyExpenseCreator(Expense $expense, bool $approved, ?string $reason = null): void
     {
@@ -361,14 +366,15 @@ class ExpenseService
             return;
         }
 
-        $this->notificationService->create(
-            $expense->created_by,
-            'expense',
-            $approved ? 'Expense approved' : 'Expense rejected',
-            $approved
+        Notification::create([
+            'user_id' => $expense->created_by,
+            'title' => $approved ? 'Expense approved' : 'Expense rejected',
+            'message' => $approved
                 ? sprintf('Your expense #%d was approved.', $expense->id)
                 : sprintf('Your expense #%d was rejected.%s', $expense->id, $reason ? " Reason: {$reason}" : ''),
-        );
+            'type' => 'expense',
+            'is_read' => false,
+        ]);
     }
 
     /**
@@ -423,5 +429,101 @@ class ExpenseService
                 'remarks' => 'Expense settled',
             ],
         ]);
+    }
+
+    /**
+     * Attach a receipt file to an expense, via the shared
+     * supporting_documents table (reference_type = 'expense') — same
+     * pattern as CollectionService::attachProof() / BudgetService's plan
+     * upload. Re-uploading adds a new version rather than replacing the
+     * previous one, so the full upload history is preserved.
+     *
+     * Unlike CollectionService::attachProof() (which only allows
+     * Pending/Confirmed), no status restriction is applied here — a
+     * receipt is pure documentation with no budget/ledger impact, so
+     * there's no equivalent reason to lock it once an expense is
+     * Approved or Rejected. Re-evaluate this if that assumption changes.
+     *
+     * Deliberately syncs receipt_status to Uploaded on a successful
+     * attach — Expense::RECEIPT_UPLOADED exists specifically to mean
+     * "a receipt file is on file for this expense", so leaving that
+     * field manually out of sync with whether a file actually exists
+     * would defeat its purpose. This bypasses UpdateExpenseRequest's
+     * approved-expense lock intentionally: attaching documentation to
+     * an already-approved expense doesn't touch budget_id, amount, or
+     * anything ExpenseService::update() guards against.
+     *
+     * Storage path: expense-receipts/{expense_id}/{filename}
+     */
+    public function attachReceipt(Expense $expense, UploadedFile $file, User $actor): SupportingDocument
+    {
+        $path = $file->store("expense-receipts/{$expense->id}", 'local');
+
+        $document = SupportingDocument::create([
+            'reference_type' => 'expense',
+            'reference_id' => $expense->id,
+            'file_name' => basename($path),
+            'original_name' => $file->getClientOriginalName(),
+            'storage_path' => $path,
+            'mime_type' => $file->getClientMimeType(),
+            'file_size' => $file->getSize(),
+            'uploaded_by' => $actor->id,
+            'uploaded_at' => now(),
+        ]);
+
+        $expense->update(['receipt_status' => Expense::RECEIPT_UPLOADED]);
+
+        AuditLog::create([
+            'user_id' => $actor->id,
+            'module' => 'Expenses',
+            'action' => 'attach_receipt',
+            'record_id' => $expense->id,
+            'activity_description' => "Attached receipt \"{$file->getClientOriginalName()}\" to expense #{$expense->id}.",
+            'ip_address' => request()->ip(),
+            'user_agent' => request()->userAgent(),
+        ]);
+
+        return $document;
+    }
+
+    /**
+     * Return all receipt documents for an expense, newest first. The
+     * first item in the list is the current/latest receipt. Mirrors
+     * CollectionService::getProofHistory() exactly.
+     *
+     * @return \Illuminate\Database\Eloquent\Collection<int, SupportingDocument>
+     */
+    public function getReceiptHistory(Expense $expense): \Illuminate\Database\Eloquent\Collection
+    {
+        return SupportingDocument::query()
+            ->with('uploader:id,first_name,last_name')
+            ->where('reference_type', 'expense')
+            ->where('reference_id', $expense->id)
+            ->orderByDesc('uploaded_at')
+            ->orderByDesc('id')
+            ->get()
+            ->map(function (SupportingDocument $doc) {
+                $doc->uploaded_by_name = $doc->uploader
+                    ? trim("{$doc->uploader->first_name} {$doc->uploader->last_name}")
+                    : null;
+                $doc->has_file = (bool) $doc->storage_path;
+                return $doc;
+            });
+    }
+
+    /**
+     * The single most recently uploaded receipt, or null if none exist —
+     * what the "current" (singular, /receipt/view) endpoint serves, as
+     * opposed to getReceiptHistory()'s full list. Same ordering as the
+     * history query's first row, just without loading everything else.
+     */
+    public function getCurrentReceipt(Expense $expense): ?SupportingDocument
+    {
+        return SupportingDocument::query()
+            ->where('reference_type', 'expense')
+            ->where('reference_id', $expense->id)
+            ->orderByDesc('uploaded_at')
+            ->orderByDesc('id')
+            ->first();
     }
 }

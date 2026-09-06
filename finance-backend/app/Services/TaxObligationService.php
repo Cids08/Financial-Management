@@ -6,9 +6,11 @@ use App\Models\AuditLog;
 use App\Models\Budget;
 use App\Models\Expense;
 use App\Models\ExpenseCategory;
+use App\Models\SupportingDocument;
 use App\Models\TaxObligation;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -230,15 +232,6 @@ class TaxObligationService
      *
      * Idempotent via expense_id — safe to call defensively; will not
      * create a second Expense if one is already linked.
-     *
-     * approve() is called with skipDepartmentCheck: true — this is a
-     * system-generated compliance posting against the fixed
-     * STAT-COMPLIANCE budget, not a user-filed expense. Whichever staff
-     * member happened to mark the obligation Paid has no bearing on which
-     * department statutory tax spend belongs to, so the normal
-     * filer-department-must-match-budget-department rule doesn't apply
-     * here. The budget-status check (STAT-COMPLIANCE must be Active) is
-     * NOT skipped — that's still enforced.
      */
     protected function recordAsExpense(User $user, TaxObligation $obligation): TaxObligation
     {
@@ -267,10 +260,80 @@ class TaxObligationService
             'receipt_status' => Expense::RECEIPT_VERIFIED,
         ], $user);
 
-        $expense = $this->expenseService->approve($expense, $user, skipDepartmentCheck: true);
+        $expense = $this->expenseService->approve($expense, $user);
 
         $obligation->update(['expense_id' => $expense->id]);
 
         return $obligation;
+    }
+
+    /**
+     * Attach a supporting document (BIR receipt, official receipt scan,
+     * etc.) to a tax obligation, via the same shared supporting_documents
+     * table ExpenseService::attachReceipt()/BudgetService's plan upload
+     * use (reference_type = 'tax_obligation'). Re-uploading adds a new
+     * version rather than replacing the previous one — full history is
+     * preserved, same as receipts/plans elsewhere.
+     *
+     * Deliberately NOT gated on the obligation's Paid/Pending/expense_id
+     * state — unlike Budget's plan (required before approval), this is
+     * pure documentation with no workflow action depending on it. If tax
+     * obligations should require proof before being marked Paid the way
+     * Budget requires a plan before approval, that's a separate, larger
+     * change to make() in create()/update() — this method alone doesn't
+     * enforce it.
+     *
+     * Storage path: tax-obligation-documents/{obligation_id}/{filename}
+     */
+    public function attachDocument(TaxObligation $obligation, UploadedFile $file, User $actor): SupportingDocument
+    {
+        $path = $file->store("tax-obligation-documents/{$obligation->id}", 'local');
+
+        $document = SupportingDocument::create([
+            'reference_type' => 'tax_obligation',
+            'reference_id' => $obligation->id,
+            'file_name' => basename($path),
+            'original_name' => $file->getClientOriginalName(),
+            'storage_path' => $path,
+            'mime_type' => $file->getClientMimeType(),
+            'file_size' => $file->getSize(),
+            'uploaded_by' => $actor->id,
+            'uploaded_at' => now(),
+        ]);
+
+        $this->logAudit(
+            $actor,
+            'attach_document',
+            $obligation,
+            null,
+            ['document' => $file->getClientOriginalName()]
+        );
+
+        return $document;
+    }
+
+    /**
+     * Every document ever attached to this obligation, newest first —
+     * mirrors ExpenseService::getReceiptHistory() exactly, including the
+     * uploaded_by_name/has_file shape the frontend history modal expects.
+     *
+     * @return \Illuminate\Database\Eloquent\Collection<int, SupportingDocument>
+     */
+    public function getDocumentHistory(TaxObligation $obligation): \Illuminate\Database\Eloquent\Collection
+    {
+        return SupportingDocument::query()
+            ->with('uploader:id,first_name,last_name')
+            ->where('reference_type', 'tax_obligation')
+            ->where('reference_id', $obligation->id)
+            ->orderByDesc('uploaded_at')
+            ->orderByDesc('id')
+            ->get()
+            ->map(function (SupportingDocument $doc) {
+                $doc->uploaded_by_name = $doc->uploader
+                    ? trim("{$doc->uploader->first_name} {$doc->uploader->last_name}")
+                    : null;
+                $doc->has_file = (bool) $doc->storage_path;
+                return $doc;
+            });
     }
 }

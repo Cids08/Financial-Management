@@ -30,6 +30,14 @@ class CollectorResource extends JsonResource
             'monthly_target'  => (float) $this->monthly_target,
             'is_active'       => $this->status === 'Active',
             'is_archived'     => $this->trashed(),
+            // Which login account (if any) is linked to this collector —
+            // powers the "Linked User Account" field in the Add/Edit
+            // modal. user_id can be null (see the add_user_id_to_collectors
+            // migration referenced on Collector::user()).
+            'user_id'         => $this->user_id,
+            'user_name'       => $this->whenLoaded('user', fn () => $this->user
+                ? trim("{$this->user->first_name} {$this->user->last_name}")
+                : null),
         ];
     }
 }

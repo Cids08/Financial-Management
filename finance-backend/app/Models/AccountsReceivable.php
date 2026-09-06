@@ -55,6 +55,35 @@ class AccountsReceivable extends Model
         'deleted_at' => 'datetime',
     ];
 
+    protected static function booted(): void
+    {
+        // Fires for every create/update on this model, regardless of
+        // which service triggered it (AccountsReceivableService::create/
+        // update(), CollectionService::confirm()'s $ar->update([...]),
+        // etc.) — as long as it goes through Eloquent rather than a raw
+        // DB::table() query. This is the single point that keeps
+        // customers.current_balance in sync, instead of every AR-touching
+        // service having to remember to call it themselves.
+        static::saved(function (AccountsReceivable $ar) {
+            Customer::recalculateBalance($ar->customer_id);
+
+            // If this AR record was reassigned to a different customer,
+            // the OLD customer's balance also needs recalculating (their
+            // total owed just went down by this invoice's balance).
+            if ($ar->wasChanged('customer_id')) {
+                Customer::recalculateBalance($ar->getOriginal('customer_id'));
+            }
+        });
+
+        static::deleted(function (AccountsReceivable $ar) {
+            Customer::recalculateBalance($ar->customer_id);
+        });
+
+        static::restored(function (AccountsReceivable $ar) {
+            Customer::recalculateBalance($ar->customer_id);
+        });
+    }
+
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class, 'customer_id');

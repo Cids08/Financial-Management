@@ -83,11 +83,54 @@ class DisbursementService
     }
 
     /**
+     * Generates the next sequential voucher number, e.g. DV-0001, DV-0002.
+     * Backs onto a real Postgres sequence (disbursement_voucher_seq — see
+     * its migration) rather than reading MAX(voucher_number) under a lock;
+     * see that migration's comment for why a locked aggregate read isn't
+     * actually safe against concurrent creates here.
+     */
+    private function generateVoucherNumber(): string
+    {
+        $next = DB::selectOne("SELECT nextval('disbursement_voucher_seq') AS next_val")->next_val;
+
+        return 'DV-'.str_pad((string) $next, 4, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * PREVIEW ONLY — shows the frontend what the next voucher number will
+     * probably be (e.g. for display in the Add Disbursement form before
+     * saving), WITHOUT calling nextval() and consuming it. Reads the
+     * sequence's own last_value/is_called columns directly, which
+     * Postgres exposes because a sequence can be queried like a one-row
+     * table.
+     *
+     * This is a preview, not a reservation: if two disbursements were
+     * somehow created in the exact window between this preview and the
+     * real create() call, the actual assigned number could differ by one.
+     * create() is still the only source of truth — it always calls
+     * generateVoucherNumber() itself regardless of what was last
+     * previewed.
+     */
+    public function previewNextVoucherNumber(): string
+    {
+        $row = DB::selectOne(
+            "SELECT CASE WHEN is_called THEN last_value + 1 ELSE last_value END AS next_val
+             FROM disbursement_voucher_seq"
+        );
+
+        return 'DV-'.str_pad((string) $row->next_val, 4, '0', STR_PAD_LEFT);
+    }
+
+    /**
      * Manual creation via the Disbursements screen is Accounts Payable
      * only — source_type is forced to 'ap' regardless of what's in $data,
      * so this endpoint can never be used to fabricate a payroll record.
      * Payroll requests are expected to arrive through
      * createPayrollRequest() below, called by the Payroll module.
+     *
+     * voucher_number is likewise always generated here, never taken from
+     * $data — StoreDisbursementRequest no longer even accepts it from the
+     * client, so this is the single source of truth for it.
      */
     public function create(array $data, int $userId): Disbursement
     {
@@ -117,6 +160,7 @@ class DisbursementService
 
             $disbursement = Disbursement::create([
                 ...$data,
+                'voucher_number' => $this->generateVoucherNumber(),
                 'source_type' => 'ap',
                 'status' => 'Pending',
                 'created_by' => $userId,
@@ -144,12 +188,20 @@ class DisbursementService
      * payable being settled. Not yet wired to a route; add one
      * (permission-gated to the Payroll module's service account/role, not
      * disbursements.manage) when that integration exists.
+     *
+     * voucher_number is generated the same way as create() — shares the
+     * same sequence/prefix as AP disbursements since they're the same
+     * underlying voucher_number column. If payroll vouchers should get a
+     * visually distinct prefix (e.g. PR-0001 instead of DV-0001), that's
+     * a one-line change here, but nothing in the schema currently
+     * distinguishes them beyond source_type.
      */
     public function createPayrollRequest(array $data, int $requestedByUserId): Disbursement
     {
         return DB::transaction(function () use ($data, $requestedByUserId) {
             $disbursement = Disbursement::create([
                 ...$data,
+                'voucher_number' => $this->generateVoucherNumber(),
                 'source_type' => 'payroll',
                 'ap_id' => null,
                 'status' => 'Pending',
@@ -248,7 +300,7 @@ class DisbursementService
                 'Your disbursement %s for %s was approved and is awaiting release.',
                 $disbursement->voucher_number,
                 $disbursement->payee
-            ));
+            ), 'Success');
 
             return $disbursement->fresh();
         });
@@ -287,7 +339,7 @@ class DisbursementService
                 $disbursement->voucher_number,
                 $disbursement->payee,
                 $reason ? " Reason: {$reason}" : ''
-            ));
+            ), 'Warning');
 
             return $disbursement->fresh();
         });
@@ -319,35 +371,43 @@ class DisbursementService
             (float) $released->amount_paid,
             $released->payee,
             $released->voucher_number
-        ));
+        ), 'Success');
 
         return $released;
     }
 
     /**
-     * IMPORTANT: the chart-of-accounts IDs used for the journal lines are
-     * NOT guessed — they're read from config('accounting.accounts'), which
-     * you need to populate with your real chart_of_accounts.id values
-     * (e.g. the Accounts Payable control account, and a mapping from each
-     * cash_accounts row to its corresponding chart_of_accounts row). I
-     * don't have your seeded chart of accounts, so this throws clearly
-     * instead of posting a journal entry against a fabricated account id.
+     * IMPORTANT: the AP control account id is still read from
+     * config('accounting.accounts.accounts_payable_control') — that's a
+     * single global setting, reasonable to configure once. The cash-side
+     * account, however, now comes directly off the cash account itself
+     * (cash_accounts.chart_of_account_id — see the migration adding it)
+     * instead of a config('accounting.accounts.cash_account_map') entry
+     * that had to be hand-maintained every time a new cash account was
+     * created.
      */
     private function releaseAp(Disbursement $disbursement, int $releasedById): Disbursement
     {
         $apAccountId = config('accounting.accounts.accounts_payable_control');
-        $cashAccountChartId = config("accounting.accounts.cash_account_map.{$disbursement->cash_account_id}");
 
-        if (! $apAccountId || ! $cashAccountChartId) {
+        if (! $apAccountId) {
             throw ValidationException::withMessages([
                 'config' => 'Chart-of-accounts mapping is not configured (config/accounting.php). '
-                    .'Set accounts_payable_control and cash_account_map before releasing payments.',
+                    .'Set accounts_payable_control before releasing payments.',
             ]);
         }
 
-        return DB::transaction(function () use ($disbursement, $releasedById, $apAccountId, $cashAccountChartId) {
+        return DB::transaction(function () use ($disbursement, $releasedById, $apAccountId) {
             $ap = AccountsPayable::lockForUpdate()->findOrFail($disbursement->ap_id);
             $cashAccount = CashAccount::lockForUpdate()->findOrFail($disbursement->cash_account_id);
+
+            if (! $cashAccount->chart_of_account_id) {
+                throw ValidationException::withMessages([
+                    'cash_account_id' => "Cash account \"{$cashAccount->account_name}\" has no linked chart-of-accounts entry — set one on the cash account before releasing payments from it.",
+                ]);
+            }
+
+            $cashAccountChartId = $cashAccount->chart_of_account_id;
 
             $newPaid = $ap->paid_amount + $disbursement->amount_paid;
             $newRemaining = $ap->original_amount - $newPaid;
@@ -459,23 +519,31 @@ class DisbursementService
      *
      * Set config('accounting.accounts.payroll_disbursement_control') to
      * the chart-of-accounts id for that account before releasing any
-     * payroll disbursement — same "don't fabricate an account id" rule as
-     * releaseAp().
+     * payroll disbursement — a single global setting, unlike the cash
+     * side below which now comes from the cash account's own
+     * chart_of_account_id.
      */
     private function releasePayroll(Disbursement $disbursement, int $releasedById): Disbursement
     {
         $payrollAccountId = config('accounting.accounts.payroll_disbursement_control');
-        $cashAccountChartId = config("accounting.accounts.cash_account_map.{$disbursement->cash_account_id}");
 
-        if (! $payrollAccountId || ! $cashAccountChartId) {
+        if (! $payrollAccountId) {
             throw ValidationException::withMessages([
                 'config' => 'Chart-of-accounts mapping is not configured (config/accounting.php). '
-                    .'Set payroll_disbursement_control and cash_account_map before releasing payroll payments.',
+                    .'Set payroll_disbursement_control before releasing payroll payments.',
             ]);
         }
 
-        return DB::transaction(function () use ($disbursement, $releasedById, $payrollAccountId, $cashAccountChartId) {
+        return DB::transaction(function () use ($disbursement, $releasedById, $payrollAccountId) {
             $cashAccount = CashAccount::lockForUpdate()->findOrFail($disbursement->cash_account_id);
+
+            if (! $cashAccount->chart_of_account_id) {
+                throw ValidationException::withMessages([
+                    'cash_account_id' => "Cash account \"{$cashAccount->account_name}\" has no linked chart-of-accounts entry — set one on the cash account before releasing payments from it.",
+                ]);
+            }
+
+            $cashAccountChartId = $cashAccount->chart_of_account_id;
 
             if ($disbursement->amount_paid > $cashAccount->current_balance) {
                 throw ValidationException::withMessages([
@@ -650,12 +718,20 @@ class DisbursementService
 
     /**
      * Notifies whoever created the disbursement (or payroll request) on
-     * approve/reject/release. `type` is 'disbursement' — NOT currently in
-     * NOTIFICATION_TYPE_META on the frontend (src/utils/notificationTypes.js),
-     * so it renders with the default Bell icon/route to /reports until
-     * that map gets a 'disbursement' entry.
+     * approve/reject/release. FIX: `type` was previously hardcoded to
+     * 'disbursement' — a module name — but the notifications.type column
+     * is a CHECK constraint restricted to severity levels only ('Info',
+     * 'Success', 'Warning', 'Error'; see disbursements status-check bug
+     * fixed earlier — same category of issue). The frontend's
+     * NOTIFICATION_TYPE_META (src/utils/notificationTypes.js) already
+     * moved to severity-based keys and explicitly documents that
+     * module-specific keys "will never be written by new code" — this
+     * brings the backend in line with that, not the other way around.
+     * Routing is coarse as a result (all 'Success' notifications link to
+     * /transactions/collections, per that file's own note) — a known,
+     * already-accepted tradeoff, not something introduced here.
      */
-    private function notifyCreator(Disbursement $disbursement, string $title, string $message): void
+    private function notifyCreator(Disbursement $disbursement, string $title, string $message, string $type = 'Info'): void
     {
         if (! $disbursement->created_by) {
             return;
@@ -665,7 +741,7 @@ class DisbursementService
             'user_id' => $disbursement->created_by,
             'title' => $title,
             'message' => $message,
-            'type' => 'disbursement',
+            'type' => $type,
             'is_read' => false,
         ]);
     }

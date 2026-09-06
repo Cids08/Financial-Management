@@ -26,6 +26,22 @@ class DisbursementController extends Controller
         ]);
     }
 
+    // NEW: lets the Add Disbursement form show the voucher number that
+    // will (very likely) be assigned, before the user actually saves —
+    // see DisbursementService::previewNextVoucherNumber()'s own comment
+    // for why this is a preview and not a guarantee. Registered in
+    // routes/api.php ABOVE the /{disbursement} show route, since
+    // "next-voucher-number" would otherwise be swallowed by that route's
+    // {disbursement} parameter.
+    public function nextVoucherNumber(Request $request)
+    {
+        return response()->json([
+            'success' => true,
+            'message' => '',
+            'data' => ['voucher_number' => $this->disbursements->previewNextVoucherNumber()],
+        ]);
+    }
+
     public function index(Request $request)
     {
         // Was previously only forwarding ['status', 'department_id',

@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, Receipt, Wallet, Tag, Info, Printer, CheckCircle2, XCircle, ChevronLeft, ChevronRight, CalendarRange, X } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, Receipt, Wallet, Tag, Info, Printer, CheckCircle2, XCircle, ChevronLeft, ChevronRight, CalendarRange, X, Paperclip, FileText, History, AlertTriangle } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
+import ExpenseReceiptUploadModal from '../components/ExpenseReceiptUploadModal'
+import ExpenseReceiptHistoryModal from '../components/ExpenseReceiptHistoryModal'
 import { formatCurrency } from '../utils/formatters'
 import { apiFetch } from '../utils/api'
 import { useExpenses } from '../hooks/useExpenses'
-import { useHighlightRow } from '../hooks/useHighlightRow'
 
 const EMPTY_FORM = {
   budget_id: '',
@@ -100,6 +101,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
     stats, statsLoading,
     mutating, mutateError,
     createExpense, updateExpense, approveExpense, rejectExpense, archiveExpense, restoreExpense,
+    uploadReceipt, viewReceipt, fetchReceiptHistory, viewReceiptVersion,
   } = useExpenses()
 
   const { options: budgets } = useLookup('/api/budgets')
@@ -116,25 +118,6 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search])
-
-  // Global search (SearchBar.jsx) navigates here with a highlightId (and,
-  // since this table's `search` filter is server-side, a highlightSearch
-  // seed) whenever an expense record is clicked from search results.
-  const { highlightedId, highlightSearch } = useHighlightRow()
-  useEffect(() => {
-    if (highlightSearch == null) return
-    setSearch(highlightSearch) // keeps the visible search box in sync
-    setFilter({
-      search: highlightSearch,
-      status: '',
-      budget_id: '',
-      expense_category_id: '',
-      expense_date_from: '',
-      expense_date_to: '',
-      trashed: false,
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [highlightSearch])
 
   // Expense-date range filter — sent to the backend the same way as
   // search/status/category (see useExpenses.buildQuery), so it applies
@@ -155,6 +138,9 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
   const [detailLoading, setDetailLoading] = useState(false)
   const [rejectTarget, setRejectTarget] = useState(null)
   const [rejectRemarks, setRejectRemarks] = useState('')
+  const [receiptUploadTarget, setReceiptUploadTarget] = useState(null) // expense currently attaching a receipt
+  const [receiptHistoryTarget, setReceiptHistoryTarget] = useState(null) // expense whose receipt history is open
+  const [receiptNotice, setReceiptNotice] = useState('') // survives modal close, e.g. "downloaded instead of previewed"
 
   const openAdd = () => { setForm(EMPTY_FORM); setFormError(''); setModalMode('add') }
   const openEdit = (x) => {
@@ -225,6 +211,21 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
     if (result.success) setRejectTarget(null)
   }
   const handleArchive = async (x) => { await archiveExpense(x.id) }
+
+  // Opens the current receipt in a new tab (inline) instead of forcing a
+  // download — mirrors Budgets.jsx's handleViewPlan() exactly, including
+  // the popup-blocker-safe synchronous window.open().
+  const handleViewReceipt = async (x) => {
+    const targetWindow = window.open('', '_blank')
+    const result = await viewReceipt(x.id, targetWindow)
+    if (!result.success) {
+      setReceiptNotice(`Couldn't open the receipt: ${result.message}`)
+    } else if (!result.viewedInline) {
+      setReceiptNotice("This file type can't be previewed in-browser, so it's been downloaded instead.")
+    } else {
+      setReceiptNotice('')
+    }
+  }
   const handleRestore = async (x) => { await restoreExpense(x.id) }
 
   // The detail view (including linked tax obligations) is only returned
@@ -397,6 +398,12 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
       {mutateError && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{mutateError}</div>
       )}
+      {receiptNotice && (
+        <div className="flex items-start justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+          <span className="flex items-center gap-2"><AlertTriangle size={13} className="shrink-0" /> {receiptNotice}</span>
+          <button type="button" onClick={() => setReceiptNotice('')} className="shrink-0 font-medium underline">Dismiss</button>
+        </div>
+      )}
 
       <div className={PANEL}>
         <div className="overflow-x-auto overflow-y-auto max-h-[70vh] rounded-t-xl">
@@ -460,6 +467,28 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                           <Info size={15} />
                         </button>
                       </Tooltip>
+                      {x.has_receipt ? (
+                        <>
+                          <Tooltip label="View current receipt" align="start">
+                            <button type="button" onClick={() => handleViewReceipt(x)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                              <FileText size={15} />
+                            </button>
+                          </Tooltip>
+                          <Tooltip label="View receipt history" align="start">
+                            <button type="button" onClick={() => setReceiptHistoryTarget(x)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                              <History size={15} />
+                            </button>
+                          </Tooltip>
+                        </>
+                      ) : (
+                        !filters.trashed && (
+                          <Tooltip label="Attach receipt" align="start">
+                            <button type="button" onClick={() => setReceiptUploadTarget(x)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                              <Paperclip size={15} />
+                            </button>
+                          </Tooltip>
+                        )
+                      )}
                       <Tooltip label="Print expense slip" align="start">
                         <button type="button" onClick={() => handlePrint(x)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                           <Printer size={15} />
@@ -581,8 +610,8 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
               <label className={LABEL}>Receipt Status</label>
               <select value={form.receipt_status} onChange={(e) => setForm((f) => ({ ...f, receipt_status: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE}>
                 <option value="Pending">Pending</option>
-                <option value="Verified">Verified</option>
-                <option value="Rejected">Rejected</option>
+                <option value="Uploaded">Uploaded</option>
+                <option value="Missing">Missing</option>
               </select>
             </div>
             <div>
@@ -637,6 +666,25 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                 <DetailRow label="Source" value={detailRecord.expense_source} />
                 <DetailRow label="Receipt No." value={detailRecord.receipt_number} />
                 <DetailRow label="Receipt Status" value={detailRecord.receipt_status} />
+                <DetailRow
+                  label="Receipt File"
+                  value={
+                    detailRecord.has_receipt ? (
+                      <span className="inline-flex items-center gap-3">
+                        <button type="button" onClick={() => handleViewReceipt(detailRecord)} className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
+                          <FileText size={12} /> View file
+                        </button>
+                        <button type="button" onClick={() => setReceiptHistoryTarget(detailRecord)} className="inline-flex items-center gap-1 font-medium text-muted hover:underline">
+                          <History size={12} /> History
+                        </button>
+                      </span>
+                    ) : (
+                      <button type="button" onClick={() => setReceiptUploadTarget(detailRecord)} className="inline-flex items-center gap-1 font-medium text-amber-600 hover:underline dark:text-amber-400">
+                        <Paperclip size={12} /> Not attached — attach one
+                      </button>
+                    )
+                  }
+                />
                 <DetailRow label="Supplier" value={detailRecord.supplier_name || supplierName(detailRecord.supplier_id)} />
               </div>
               <div className="px-3 py-2">
@@ -703,6 +751,25 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
           </div>
         </div>
       </Modal>
+
+      <ExpenseReceiptUploadModal
+        open={!!receiptUploadTarget}
+        onClose={() => setReceiptUploadTarget(null)}
+        expense={receiptUploadTarget}
+        onUpload={async (file) => {
+          const result = await uploadReceipt(receiptUploadTarget.id, file)
+          if (result.success) refetch()
+          return result
+        }}
+      />
+
+      <ExpenseReceiptHistoryModal
+        open={!!receiptHistoryTarget}
+        onClose={() => setReceiptHistoryTarget(null)}
+        expense={receiptHistoryTarget}
+        fetchHistory={fetchReceiptHistory}
+        onView={viewReceiptVersion}
+      />
     </div>
   )
 }

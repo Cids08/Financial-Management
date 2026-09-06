@@ -26,8 +26,8 @@ class UpdateExpenseRequest extends FormRequest
             'expense_source' => ['sometimes', 'required', 'string', 'max:100'],
             'receipt_status' => ['nullable', 'in:' . implode(',', [
                 Expense::RECEIPT_PENDING,
-                Expense::RECEIPT_VERIFIED,
-                Expense::RECEIPT_REJECTED,
+                Expense::RECEIPT_UPLOADED,
+                Expense::RECEIPT_MISSING,
             ])],
             'description' => ['sometimes', 'required', 'string'],
         ];

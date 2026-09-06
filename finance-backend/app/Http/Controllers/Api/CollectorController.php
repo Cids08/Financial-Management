@@ -41,6 +41,30 @@ class CollectorController extends Controller
         ]);
     }
 
+    /**
+     * GET /api/collectors/available-users?collector_id=
+     *
+     * Powers the "Linked User Account" dropdown in Collectors.jsx's
+     * Add/Edit modal — Users with the 'collector' role who aren't
+     * already linked to a different Collector record.
+     *
+     * ?collector_id= is passed when editing an existing collector, so
+     * that collector's own currently-linked user still appears in the
+     * options (see CollectorService::availableUsers()'s docblock).
+     */
+    public function availableUsers(Request $request): JsonResponse
+    {
+        $collectorId = $request->integer('collector_id') ?: null;
+
+        $users = $this->collectorService->availableUsers($collectorId);
+
+        return response()->json([
+            'success' => true,
+            'message' => '',
+            'data'    => $users,
+        ]);
+    }
+
     public function store(StoreCollectorRequest $request): JsonResponse
     {
         $collector = $this->collectorService->create($request->user(), $request->validated());

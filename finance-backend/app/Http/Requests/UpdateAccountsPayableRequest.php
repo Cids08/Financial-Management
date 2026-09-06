@@ -40,10 +40,12 @@ class UpdateAccountsPayableRequest extends FormRequest
                 // doesn't trip the uniqueness check on save.
                 Rule::unique('accounts_payable', 'invoice_number')->ignore($apId),
             ],
-            'invoice_date' => ['nullable', 'date'],
+            'invoice_date' => ['nullable', 'date', 'after_or_equal:2000-01-01', 'before_or_equal:' . now()->addYears(5)->toDateString()],
             'due_date' => [
                 'required',
                 'date',
+                'after_or_equal:2000-01-01',
+                'before_or_equal:' . now()->addYears(5)->toDateString(),
                 function ($attribute, $value, $fail) {
                     if ($this->filled('invoice_date') && strtotime($value) < strtotime($this->input('invoice_date'))) {
                         $fail('The due date must be on or after the invoice date.');
