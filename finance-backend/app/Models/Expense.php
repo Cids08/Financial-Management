@@ -27,6 +27,14 @@ class Expense extends Model
     public const RECEIPT_UPLOADED = 'Uploaded';
     public const RECEIPT_MISSING = 'Missing';
 
+    // Legal values per the DB check constraint (expenses_expense_source_check)
+    // — confirmed directly against Postgres. The frontend's free-text input
+    // for this field was never actually free text; it just happened not to
+    // fail until a value outside these three was entered.
+    public const SOURCE_CASH = 'Cash';
+    public const SOURCE_BANK = 'Bank';
+    public const SOURCE_PETTY_CASH = 'Petty Cash';
+
     protected $fillable = [
         'budget_id',
         'expense_category_id',

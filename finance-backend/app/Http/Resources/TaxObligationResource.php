@@ -36,6 +36,13 @@ class TaxObligationResource extends JsonResource
             'archived_at'       => $this->deleted_at?->toIso8601String(),
             'archived_by'       => $this->deleted_by,
             'archived_by_name'  => $this->whenLoaded('deletedBy', fn () => $this->deletedBy ? trim("{$this->deletedBy->first_name} {$this->deletedBy->last_name}") : null),
+            // Both only set by TaxObligationService::list() (one batched
+            // query for the whole page — see that method). Default to
+            // false/null on create/update/archive/restore responses,
+            // harmless since the frontend always refetches the list after
+            // any of those and gets the real values then.
+            'has_document'        => (bool) ($this->has_document ?? false),
+            'latest_document_id'  => $this->latest_document_id ?? null,
         ];
     }
 }

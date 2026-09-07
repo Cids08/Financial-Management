@@ -108,7 +108,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
   const { options: categories } = useLookup('/api/expense-categories')
   const { options: suppliers } = useLookup('/api/suppliers')
 
-  const budgetLabel = (id) => budgets.find((b) => b.id === Number(id))?.budget_name || '—'
+  const budgetLabel = (id) => budgets.find((b) => b.budget_id === Number(id))?.budget_name || '—'
   const categoryName = (id) => categories.find((c) => c.id === Number(id))?.category_name || '—'
   const supplierName = (id) => suppliers.find((s) => s.id === Number(id))?.supplier_name || 'N/A'
 
@@ -566,7 +566,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
               <label className={LABEL}>Budget</label>
               <select value={form.budget_id} onChange={(e) => setForm((f) => ({ ...f, budget_id: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE}>
                 <option value="">Select budget</option>
-                {budgets.map((b) => <option key={b.id} value={b.id}>{b.budget_name}</option>)}
+                {budgets.map((b) => <option key={b.budget_id} value={b.budget_id}>{b.budget_name}</option>)}
               </select>
             </div>
             <div>

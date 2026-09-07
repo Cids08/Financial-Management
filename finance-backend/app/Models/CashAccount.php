@@ -24,6 +24,13 @@ class CashAccount extends Model
         'current_balance',
         'is_default',
         'status',
+        // Links this cash account to its own chart_of_accounts row —
+        // DisbursementService::releaseAp()/releasePayroll() read this
+        // directly to know which GL account to credit when cash goes
+        // out. Replaces the old config('accounting.accounts.
+        // cash_account_map') array, which had to be hand-edited every
+        // time a cash account was added.
+        'chart_of_account_id',
         'updated_by',
     ];
 
@@ -34,6 +41,11 @@ class CashAccount extends Model
             'current_balance' => 'decimal:2',
             'is_default'      => 'boolean',
         ];
+    }
+
+    public function chartOfAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'chart_of_account_id');
     }
 
     public function updatedBy(): BelongsTo

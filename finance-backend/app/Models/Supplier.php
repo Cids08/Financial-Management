@@ -43,9 +43,9 @@ class Supplier extends Model
     }
 
     /**
-     * Recomputes and persists current_balance from the supplier's actual
-     * AP bills, mirroring Customer::recalculateBalance() exactly. Called
-     * from AccountsPayable's booted() hooks.
+     * Recomputes current_balance from the supplier's actual AP bills,
+     * mirroring Customer::recalculateBalance() exactly. Called from
+     * AccountsPayable's booted() hooks.
      *
      * Excludes 'Paid' (nothing left owed) and 'Cancelled' bills — matches
      * AccountsPayableService::stats()'s own 'payable' metric and its
@@ -58,14 +58,60 @@ class Supplier extends Model
      * Soft-deleted/archived bills are excluded automatically by
      * AccountsPayable's SoftDeletes global scope — no explicit
      * whereNull('deleted_at') needed here.
+     *
+     * Notifies every admin/staff user whenever the balance actually
+     * changes, same as Customer::recalculateBalance().
      */
     public static function recalculateBalance(int $supplierId): void
     {
-        $balance = AccountsPayable::where('supplier_id', $supplierId)
+        $supplier = static::find($supplierId);
+        if (! $supplier) {
+            return;
+        }
+
+        $newBalance = AccountsPayable::where('supplier_id', $supplierId)
             ->whereNotIn('status', ['Paid', 'Cancelled'])
             ->sum('remaining_balance');
 
-        static::where('id', $supplierId)->update(['current_balance' => $balance]);
+        $oldBalance = (string) $supplier->current_balance;
+
+        if (bccomp($oldBalance, (string) $newBalance, 2) === 0) {
+            return;
+        }
+
+        $supplier->update(['current_balance' => $newBalance]);
+
+        static::notifyBalanceChange($supplier, (float) $oldBalance, (float) $newBalance);
+    }
+
+    /**
+     * Notifies every admin/staff user (excludes collector) that a
+     * supplier's balance changed. See Customer::notifyBalanceChange() for
+     * the same reasoning on 'Info' type and the noise-volume caveat —
+     * this fires on every AP change (bill approval, disbursement release,
+     * etc.), any amount, for every admin/staff user.
+     */
+    protected static function notifyBalanceChange(Supplier $supplier, float $oldBalance, float $newBalance): void
+    {
+        $recipients = User::query()
+            ->whereHas('role', fn ($q) => $q->whereIn('name', ['super-admin', 'admin', 'staff']))
+            ->whereNull('deleted_at')
+            ->get();
+
+        foreach ($recipients as $recipient) {
+            Notification::create([
+                'user_id' => $recipient->id,
+                'title' => 'Supplier balance updated',
+                'message' => sprintf(
+                    '%s\'s balance owed changed from %.2f to %.2f.',
+                    $supplier->supplier_name,
+                    $oldBalance,
+                    $newBalance
+                ),
+                'type' => 'Info',
+                'is_read' => false,
+            ]);
+        }
     }
 
     public function scopeSearch(Builder $query, ?string $term): Builder

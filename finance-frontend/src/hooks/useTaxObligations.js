@@ -171,12 +171,17 @@ export function useTaxObligations() {
       })
       const json = await res.json()
       if (!res.ok || !json.success) throw new Error(json.message || 'Failed to attach document.')
+      // Refetch so has_document flips on the row/button immediately —
+      // same pattern as createObligation/updateObligation/etc. above.
+      // Without this, the Attach button stayed muted until the next
+      // unrelated filter/page change happened to trigger a reload.
+      await fetchObligations()
       return { success: true, data: json.data }
     } catch (err) {
       setError(err.message)
       return { success: false, message: err.message }
     }
-  }, [])
+  }, [fetchObligations])
 
   // Every document version ever attached to this obligation, newest
   // first — a re-upload doesn't erase history, it just adds another row.

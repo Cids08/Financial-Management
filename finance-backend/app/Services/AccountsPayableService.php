@@ -262,16 +262,16 @@ class AccountsPayableService
 
     /**
      * Looks up the single Accounts Payable liability account in the
-     * chart of accounts. Uses the SAME config key
-     * config('accounting.accounts.accounts_payable_control') that
-     * DisbursementService::releaseAp() already reads for this same
-     * account — previously this used a separate, second config key
-     * (accounts_payable_account_code) that looked the account up by
-     * code instead of id. Two keys meaning the same account risked them
-     * drifting apart (accrual posting to a different account than
-     * settlement); unified onto Disbursements' existing key instead of
-     * inventing a parallel one. Confirmed against this project's real
-     * chart_of_accounts data: id 8, code 2000, "Accounts Payable".
+     * chart of accounts. Uses config('accounting.accounts.
+     * accounts_payable_control') — the SAME key DisbursementService::
+     * releaseAp() reads for this same account. Kept as config
+     * deliberately: there's genuinely only one AP control account, so a
+     * single global setting is reasonable here (unlike the old
+     * cash_account_map, which needed a value per cash account and had
+     * to be hand-edited every time one was added — that side moved to a
+     * real column, cash_accounts.chart_of_account_id; this one didn't
+     * need to). Confirmed against this project's real chart_of_accounts
+     * data: id 8, code 2000, "Accounts Payable".
      */
     private function resolveAccountsPayableLedgerAccount(): ChartOfAccount
     {

@@ -134,8 +134,20 @@ class ExpenseController extends Controller
     {
         $this->authorize('approve', $expense);
 
+        // Super Admin / Admin bypass the filer-department-must-match-
+        // budget-department check — same override tier that already
+        // short-circuits hasPermission() to true everywhere else (see
+        // User::hasPermission()'s SUPER_ADMIN_ROLE handling and
+        // ExpensePolicy's docblock). This is the SAME $skipDepartmentCheck
+        // flag TaxObligationService::recordAsExpense() uses for its own
+        // system-generated posting — two different callers, same
+        // reasoning: "who happens to be approving/posting this" has no
+        // bearing on whether the filer's department genuinely doesn't
+        // match the budget's, in either case.
+        $isAdminOverride = $request->user()->hasAnyRole(['super-admin', 'admin']);
+
         try {
-            $expense = $this->expenses->approve($expense, $request->user());
+            $expense = $this->expenses->approve($expense, $request->user(), skipDepartmentCheck: $isAdminOverride);
         } catch (ValidationException $e) {
             return response()->json([
                 'success' => false,

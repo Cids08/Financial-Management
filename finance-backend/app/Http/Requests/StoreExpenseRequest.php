@@ -25,7 +25,11 @@ class StoreExpenseRequest extends FormRequest
             'expense_date' => ['required', 'date'],
             'receipt_number' => ['nullable', 'string', 'max:100'],
             'expense_amount' => ['required', 'numeric', 'min:0.01'],
-            'expense_source' => ['required', 'string', 'max:100'],
+            'expense_source' => ['required', 'string', 'in:' . implode(',', [
+                Expense::SOURCE_CASH,
+                Expense::SOURCE_BANK,
+                Expense::SOURCE_PETTY_CASH,
+            ])],
             'receipt_status' => ['nullable', 'in:' . implode(',', [
                 Expense::RECEIPT_PENDING,
                 Expense::RECEIPT_UPLOADED,
@@ -54,6 +58,12 @@ class StoreExpenseRequest extends FormRequest
      * this one already ran — but catching it here means a mismatched
      * expense never even makes it to Pending.
      *
+     * Super Admin/Admin bypass this the same way they bypass it at
+     * approval time (see ExpenseController::approve()'s $isAdminOverride)
+     * — same rule, same reasoning, just enforced at the other end of the
+     * expense's lifecycle. A non-admin filer with no department assigned
+     * (or a real cross-department mismatch) still gets blocked here.
+     *
      * A category being Inactive is checked the same way, for the same
      * reason: the frontend dropdown already filters to active categories
      * only, but that's a UI convenience, not enforcement — someone could
@@ -63,10 +73,11 @@ class StoreExpenseRequest extends FormRequest
     {
         $validator->after(function (Validator $validator) {
             $budgetId = $this->input('budget_id');
+            $user = $this->user();
+            $isAdminOverride = $user?->hasAnyRole(['super-admin', 'admin']) ?? false;
 
-            if ($budgetId) {
+            if ($budgetId && ! $isAdminOverride) {
                 $budget = Budget::find($budgetId);
-                $user = $this->user();
 
                 if ($budget && $user && $budget->department_id !== $user->department_id) {
                     $budgetDept = Department::find($budget->department_id)?->department_name ?? 'an unassigned department';

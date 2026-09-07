@@ -23,7 +23,11 @@ class UpdateExpenseRequest extends FormRequest
             'expense_date' => ['sometimes', 'required', 'date'],
             'receipt_number' => ['nullable', 'string', 'max:100'],
             'expense_amount' => ['sometimes', 'required', 'numeric', 'min:0.01'],
-            'expense_source' => ['sometimes', 'required', 'string', 'max:100'],
+            'expense_source' => ['sometimes', 'required', 'string', 'in:' . implode(',', [
+                Expense::SOURCE_CASH,
+                Expense::SOURCE_BANK,
+                Expense::SOURCE_PETTY_CASH,
+            ])],
             'receipt_status' => ['nullable', 'in:' . implode(',', [
                 Expense::RECEIPT_PENDING,
                 Expense::RECEIPT_UPLOADED,

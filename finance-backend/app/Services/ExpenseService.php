@@ -179,12 +179,14 @@ class ExpenseService
      *   1. The budget must belong to the same department as whoever
      *      filed the expense — an expense should only ever draw down
      *      its own department's budget, never another department's.
-     *      Skippable ONLY for system-generated postings where "who
-     *      happened to click the button" has no bearing on which
-     *      department the spend belongs to — see $skipDepartmentCheck
-     *      below and TaxObligationService::recordAsExpense(), its one
-     *      caller. Never set true from anything reachable by a request
-     *      the user directly controls the department/budget/creator of.
+     *      Skippable for two callers only:
+     *        (a) System-generated postings, where "who happens to click
+     *            the button" has no bearing on the department — see
+     *            TaxObligationService::recordAsExpense().
+     *        (b) A Super Admin/Admin approver overriding the check —
+     *            see ExpenseController::approve()'s $isAdminOverride.
+     *      Never set true from anything a non-admin request can trigger
+     *      directly.
      *   2. The budget itself must be in a spendable state (not still
      *      Draft, not already Closed) — a budget has its own lifecycle
      *      independent of the expenses filed against it. This check is
@@ -340,7 +342,15 @@ class ExpenseService
                 $budget->budget_code,
                 $expense->id
             ),
-            'type' => $isOverBudget ? 'budget_over' : 'budget_warning',
+            // notifications.type has a DB CHECK constraint limiting it to
+            // exactly Info/Success/Warning/Error — 'budget_over'/
+            // 'budget_warning' were never legal values and would have
+            // thrown a 23514 check violation on every single call, the
+            // same way 'expense' below did. Error carries the right
+            // severity for over-budget; Warning for merely approaching
+            // the threshold. Same convention CollectionService::
+            // notifyCreator() already uses correctly.
+            'type' => $isOverBudget ? 'Error' : 'Warning',
             'is_read' => false,
         ]);
     }
@@ -354,11 +364,16 @@ class ExpenseService
      * even go to the same person without duplicating content, since
      * they carry different information.
      *
-     * `type` is 'expense' — NOT currently in NOTIFICATION_TYPE_META on
-     * the frontend (src/utils/notificationTypes.js only maps
-     * receivable/payable/budget/forecast/ai_recommendation), so this
-     * will render with the default Bell icon and route to /reports until
-     * that map is extended with an 'expense' entry.
+     * `type` must be one of Info/Success/Warning/Error (DB CHECK
+     * constraint on notifications.type) — 'expense' was never a legal
+     * value and crashed every single approve()/reject() call with a
+     * 23514 check violation the moment it tried to insert this row.
+     * Matches CollectionService::notifyCreator()'s exact convention:
+     * Success for the positive outcome, Warning for the negative one.
+     * The frontend's NOTIFICATION_TYPE_META being keyed on module names
+     * rather than these four DB values is a separate, cosmetic-only
+     * concern (wrong icon/route) — this fix is about the insert not
+     * crashing at all, which is the bug that actually needed fixing.
      */
     private function notifyExpenseCreator(Expense $expense, bool $approved, ?string $reason = null): void
     {
@@ -372,7 +387,7 @@ class ExpenseService
             'message' => $approved
                 ? sprintf('Your expense #%d was approved.', $expense->id)
                 : sprintf('Your expense #%d was rejected.%s', $expense->id, $reason ? " Reason: {$reason}" : ''),
-            'type' => 'expense',
+            'type' => $approved ? 'Success' : 'Warning',
             'is_read' => false,
         ]);
     }

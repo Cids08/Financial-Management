@@ -69,7 +69,37 @@ class TaxObligationService
             default => null,
         };
 
-        return $query->paginate(self::PER_PAGE);
+        $paginated = $query->paginate(self::PER_PAGE);
+
+        // has_document + latest_document_id: computed in ONE extra query
+        // for the whole page, not per-row — avoids an N+1 against
+        // supporting_documents. latest_document_id lets the frontend jump
+        // straight to viewing the current file (a direct "View current
+        // document" action) without opening History first to find its id.
+        // Both set as plain dynamic properties; TaxObligationResource
+        // reads them directly. Only meaningful on this list endpoint —
+        // create/update/archive/restore responses don't set them, since
+        // the frontend always refetches the list after any of those.
+        $idsOnPage = $paginated->getCollection()->pluck('id');
+        $latestDocumentByObligation = SupportingDocument::query()
+            ->where('reference_type', 'tax_obligation')
+            ->whereIn('reference_id', $idsOnPage)
+            ->orderByDesc('uploaded_at')
+            ->orderByDesc('id')
+            ->get(['id', 'reference_id'])
+            // unique() keeps the FIRST row per reference_id it encounters;
+            // since the query above is already ordered newest-first, that
+            // first row per obligation IS the latest document.
+            ->unique('reference_id')
+            ->keyBy('reference_id');
+
+        $paginated->getCollection()->each(function (TaxObligation $obligation) use ($latestDocumentByObligation) {
+            $latest = $latestDocumentByObligation->get($obligation->id);
+            $obligation->has_document = (bool) $latest;
+            $obligation->latest_document_id = $latest?->id;
+        });
+
+        return $paginated;
     }
 
     public function create(User $user, array $data): TaxObligation

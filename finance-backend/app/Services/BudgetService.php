@@ -178,9 +178,24 @@ class BudgetService
      * rejected. Mirrors ExpenseService::notifyBudgetWarning()'s pattern —
      * no-op if there's no creator on record, same as that method's guard.
      *
-     * `type` is 'budget', matching NOTIFICATION_TYPE_META on the frontend
-     * (src/utils/notificationTypes.js) so this renders with the right
-     * icon/route immediately, no frontend change needed for this one.
+     * FIXED: `type` was 'budget', intended to match NOTIFICATION_TYPE_META
+     * on the frontend for icon/routing — but notifications_type_check only
+     * allows Info/Success/Warning/Error, so every approval/rejection was
+     * throwing a 500 before the notification (or the approval/rejection
+     * itself, since this runs inside the same transaction) could complete.
+     *
+     * UNVERIFIED TRADEOFF: mapping to Success/Warning unblocks the crash,
+     * but if NOTIFICATION_TYPE_META keys strictly off type === 'budget'
+     * with no fallback, this notification will now render with whatever
+     * generic icon Success/Warning maps to instead of a budget-specific
+     * one — a cosmetic regression, not a functional one. If per-module
+     * icons/routing matter, the real fix is a separate column (e.g.
+     * reference_type/reference_id, matching the pattern
+     * supporting_documents already uses) so `type` can stay a pure
+     * severity level and module identity lives elsewhere. That's a
+     * migration + model change I haven't made here since I don't have
+     * visibility into notificationTypes.js or the notifications schema
+     * beyond what this constraint violation revealed.
      */
     private function notifyCreator(Budget $budget, bool $approved, ?string $reason = null): void
     {
@@ -199,7 +214,7 @@ class BudgetService
                     $budget->budget_code,
                     $reason ? " Reason: {$reason}" : ''
                 ),
-            'type' => 'budget',
+            'type' => $approved ? 'Success' : 'Warning',
             'is_read' => false,
         ]);
     }

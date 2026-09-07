@@ -1,9 +1,11 @@
 import { useMemo, useState, useEffect } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, Receipt, CheckCircle2, Clock3, AlertTriangle, Info, Printer, Sparkles, Eye, EyeOff, ChevronLeft, ChevronRight, Loader2, CalendarRange, X } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, Receipt, CheckCircle2, Clock3, AlertTriangle, Info, Printer, Sparkles, Eye, EyeOff, ChevronLeft, ChevronRight, Loader2, CalendarRange, X, Paperclip, History, FileText } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
+import TaxObligationDocumentUploadModal from '../components/TaxObligationDocumentUploadModal'
+import TaxObligationDocumentHistoryModal from '../components/TaxObligationDocumentHistoryModal'
 import { formatCurrency } from '../utils/formatters'
 import { useTaxObligations } from '../hooks/useTaxObligations'
 import { useHighlightRow } from '../hooks/useHighlightRow'
@@ -142,6 +144,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
     dateTo, setDateTo,
     page, setPage,
     createObligation, updateObligation, archiveObligation, restoreObligation,
+    uploadDocument, fetchDocumentHistory, viewDocument,
   } = useTaxObligations()
 
   // Global search (SearchBar.jsx) navigates here with a highlightId (and,
@@ -164,6 +167,17 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
   const [formError, setFormError] = useState('')
   const [detailRecord, setDetailRecord] = useState(null)
   const [refTouched, setRefTouched] = useState(false)
+
+  // Supporting document upload/history — same uploadTarget/historyTarget
+  // pattern as Budgets.jsx's plan attach/history, just without a has_plan
+  // style gate: a tax obligation's document is optional documentation,
+  // not a precondition for any workflow action here.
+  const [uploadTarget, setUploadTarget] = useState(null)
+  const [historyTarget, setHistoryTarget] = useState(null)
+  // Surfaces a failure from handleViewDocument() below — same reasoning
+  // as Budgets.jsx's viewNotice: this page has no other place to show a
+  // "couldn't open this file" message.
+  const [docNotice, setDocNotice] = useState('')
 
   // Due-date range filter now lives in useTaxObligations and is sent to the
   // backend alongside search/status, so it applies across every page.
@@ -269,6 +283,23 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
     closeModal()
   }
 
+  // Opens the current (latest) attached document in a new tab instead of
+  // requiring History-then-View. Same synchronous-tab-then-redirect
+  // approach as Budgets.jsx's handleViewPlan() — the tab has to open
+  // BEFORE the await below, or most browsers' popup blockers no longer
+  // consider it a direct result of the click and may silently block it.
+  const handleViewDocument = async (o) => {
+    const targetWindow = window.open('', '_blank')
+    const result = await viewDocument(o.tax_id, o.latest_document_id, targetWindow)
+    if (!result.success) {
+      setDocNotice(`Couldn't open the document: ${result.message}`)
+    } else if (!result.viewedInline) {
+      setDocNotice("This file type can't be previewed in-browser, so it's been downloaded instead.")
+    } else {
+      setDocNotice('')
+    }
+  }
+
   const handlePrint = (o) => {
     const win = window.open('', '_blank', 'width=800,height=900')
     if (!win) return
@@ -327,6 +358,15 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
 
   const isModalOpen = modalMode !== null
   const isEditing = modalMode !== null && modalMode !== 'add'
+  // Mirrors TaxObligationService::update()'s actual guard exactly: once
+  // expense_id is set, tax_type/period/rate/amount/due_date/is_paid are
+  // rejected server-side if changed — remarks/payment_date/reference_number
+  // are NOT locked (pure documentation, no financial impact). Rather than
+  // hide the whole Edit action (which would also block those still-legal
+  // edits), lock only the fields the backend actually rejects, so the
+  // form shows the real rule instead of letting you type into a field
+  // that fails on save.
+  const isLockedObligation = isEditing && !!modalMode.expense_id
   const periodType = TAX_TYPE_CONFIG[form.tax_type].periodType
   const yearOptions = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 1 + i)
 
@@ -353,6 +393,13 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{error}</div>
+      )}
+
+      {docNotice && (
+        <div className="flex items-start justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+          <span>{docNotice}</span>
+          <button type="button" onClick={() => setDocNotice('')} className="shrink-0 font-medium underline">Dismiss</button>
+        </div>
       )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -507,6 +554,31 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                             <Info size={15} />
                           </button>
                         </Tooltip>
+                        <Tooltip label={o.has_document ? 'Document attached — click to add another version' : 'Attach supporting document'} align="start">
+                          <button
+                            type="button"
+                            onClick={() => setUploadTarget(o)}
+                            className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors duration-150 ${
+                              o.has_document
+                                ? 'text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10'
+                                : 'text-muted hover:bg-bg hover:text-ink'
+                            }`}
+                          >
+                            <Paperclip size={15} />
+                          </button>
+                        </Tooltip>
+                        {o.has_document && (
+                          <Tooltip label="View current document" align="start">
+                            <button type="button" onClick={() => handleViewDocument(o)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                              <FileText size={15} />
+                            </button>
+                          </Tooltip>
+                        )}
+                        <Tooltip label="Document history" align="start">
+                          <button type="button" onClick={() => setHistoryTarget(o)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                            <History size={15} />
+                          </button>
+                        </Tooltip>
                         <Tooltip label="Print" align="start">
                           <button type="button" onClick={() => handlePrint(o)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                             <Printer size={15} />
@@ -588,9 +660,21 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{formError}</div>
           )}
 
+          {isLockedObligation && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+              This obligation's payment has already been posted as an approved expense — tax type, period, rate, taxable amount, due date, and the paid checkbox are locked. Remarks, payment date, and reference number can still be edited. To correct the amount or dates, archive this obligation instead.
+            </div>
+          )}
+
           <div>
             <label className={LABEL}>Tax Type</label>
-            <select value={form.tax_type} onChange={(e) => updatePeriod({ tax_type: e.target.value })} className={INPUT} style={INPUT_TEXT_STYLE}>
+            <select
+              value={form.tax_type}
+              onChange={(e) => updatePeriod({ tax_type: e.target.value })}
+              className={INPUT}
+              style={INPUT_TEXT_STYLE}
+              disabled={isLockedObligation}
+            >
               {TAX_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
@@ -598,14 +682,26 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={LABEL}>Year</label>
-              <select value={form.period_year} onChange={(e) => updatePeriod({ period_year: Number(e.target.value) })} className={INPUT} style={INPUT_TEXT_STYLE}>
+              <select
+                value={form.period_year}
+                onChange={(e) => updatePeriod({ period_year: Number(e.target.value) })}
+                className={INPUT}
+                style={INPUT_TEXT_STYLE}
+                disabled={isLockedObligation}
+              >
                 {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
               </select>
             </div>
             {periodType === 'month' ? (
               <div>
                 <label className={LABEL}>Month</label>
-                <select value={form.period_month} onChange={(e) => updatePeriod({ period_month: Number(e.target.value) })} className={INPUT} style={INPUT_TEXT_STYLE}>
+                <select
+                  value={form.period_month}
+                  onChange={(e) => updatePeriod({ period_month: Number(e.target.value) })}
+                  className={INPUT}
+                  style={INPUT_TEXT_STYLE}
+                  disabled={isLockedObligation}
+                >
                   {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
                     <option key={m} value={m}>{new Date(2000, m - 1, 1).toLocaleDateString('en-PH', { month: 'long' })}</option>
                   ))}
@@ -614,7 +710,13 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
             ) : (
               <div>
                 <label className={LABEL}>Quarter</label>
-                <select value={form.period_quarter} onChange={(e) => updatePeriod({ period_quarter: Number(e.target.value) })} className={INPUT} style={INPUT_TEXT_STYLE}>
+                <select
+                  value={form.period_quarter}
+                  onChange={(e) => updatePeriod({ period_quarter: Number(e.target.value) })}
+                  className={INPUT}
+                  style={INPUT_TEXT_STYLE}
+                  disabled={isLockedObligation}
+                >
                   {[1, 2, 3, 4].map((q) => <option key={q} value={q}>{QUARTER_LABELS[q]}</option>)}
                 </select>
               </div>
@@ -634,7 +736,14 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
             </div>
             <div>
               <label className={LABEL}>Due Date</label>
-              <input type="date" value={form.due_date} onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} />
+              <input
+                type="date"
+                value={form.due_date}
+                onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))}
+                className={INPUT}
+                style={INPUT_TEXT_STYLE}
+                disabled={isLockedObligation}
+              />
             </div>
           </div>
 
@@ -645,11 +754,28 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={LABEL}>Taxable Amount</label>
-              <input type="number" value={form.taxable_amount} onChange={(e) => setForm((f) => ({ ...f, taxable_amount: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="0.00" />
+              <input
+                type="number"
+                value={form.taxable_amount}
+                onChange={(e) => setForm((f) => ({ ...f, taxable_amount: e.target.value }))}
+                className={INPUT}
+                style={INPUT_TEXT_STYLE}
+                placeholder="0.00"
+                disabled={isLockedObligation}
+              />
             </div>
             <div>
               <label className={LABEL}>Tax Rate (%)</label>
-              <input type="number" step="0.01" value={form.tax_rate} onChange={(e) => setForm((f) => ({ ...f, tax_rate: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="12" />
+              <input
+                type="number"
+                step="0.01"
+                value={form.tax_rate}
+                onChange={(e) => setForm((f) => ({ ...f, tax_rate: e.target.value }))}
+                className={INPUT}
+                style={INPUT_TEXT_STYLE}
+                placeholder="12"
+                disabled={isLockedObligation}
+              />
             </div>
           </div>
           <div className="rounded-lg border border-border bg-bg px-3 py-2 flex items-center justify-between">
@@ -657,8 +783,14 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
             <span className="text-sm font-semibold text-ink tabular-nums">{formatCurrency(computedTaxAmount)}</span>
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-ink cursor-pointer">
-            <input type="checkbox" checked={form.is_paid} onChange={(e) => togglePaid(e.target.checked)} className="rounded border-border accent-primary" />
+          <label className={`flex items-center gap-2 text-sm text-ink ${isLockedObligation ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
+            <input
+              type="checkbox"
+              checked={form.is_paid}
+              onChange={(e) => togglePaid(e.target.checked)}
+              className="rounded border-border accent-primary"
+              disabled={isLockedObligation}
+            />
             Already paid / filed
           </label>
           <p className="-mt-2 text-xs text-muted">Leave unchecked to keep as Pending — it will automatically show as Overdue past the due date, no need to set that manually.</p>
@@ -728,6 +860,45 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
               </div>
               <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[detailRecord.status]}`}>{detailRecord.status}</span>
             </div>
+
+            <div className="flex items-center gap-3 rounded-lg border border-border bg-bg px-3 py-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setUploadTarget(detailRecord)}
+                className={`inline-flex items-center gap-1.5 text-xs font-medium hover:underline ${
+                  detailRecord.has_document ? 'text-emerald-600 dark:text-emerald-400' : 'text-primary'
+                }`}
+              >
+                <Paperclip size={12} /> {detailRecord.has_document ? 'Document attached' : 'Attach document'}
+              </button>
+              {detailRecord.has_document && (
+                <>
+                  <span className="text-border">·</span>
+                  <button
+                    type="button"
+                    onClick={() => handleViewDocument(detailRecord)}
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+                  >
+                    <FileText size={12} /> View file
+                  </button>
+                </>
+              )}
+              <span className="text-border">·</span>
+              <button
+                type="button"
+                onClick={() => setHistoryTarget(detailRecord)}
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-muted hover:underline"
+              >
+                <History size={12} /> Document history
+              </button>
+            </div>
+
+            {docNotice && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+                {docNotice}
+              </div>
+            )}
+
             <div className="rounded-lg border border-border divide-y divide-border">
               <div className="px-3 py-2">
                 <DetailRow label="Due Date" value={formatDate(detailRecord.due_date)} />
@@ -768,6 +939,24 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
           </div>
         )}
       </Modal>
+
+      {/* Attach supporting document modal — triggered from a row action or
+          from inside the Detail modal above. */}
+      <TaxObligationDocumentUploadModal
+        open={!!uploadTarget}
+        onClose={() => setUploadTarget(null)}
+        obligation={uploadTarget}
+        onUpload={async (file) => uploadDocument(uploadTarget.tax_id, file)}
+      />
+
+      {/* Document version history modal — same trigger points as above. */}
+      <TaxObligationDocumentHistoryModal
+        open={!!historyTarget}
+        onClose={() => setHistoryTarget(null)}
+        obligation={historyTarget}
+        fetchHistory={fetchDocumentHistory}
+        onView={viewDocument}
+      />
     </div>
   )
 }
