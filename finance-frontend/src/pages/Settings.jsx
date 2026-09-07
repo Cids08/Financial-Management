@@ -540,7 +540,7 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
 
             <div>
               <label className={LABEL}>Company Address</label>
-              <div className="flex items-center gap-2 rounded-lg border border-border bg-bg px-3 py-2 focus-within:border-primary focus-within:bg-white transition-colors duration-150">
+              <div className="flex items-center gap-2 rounded-lg border border-border bg-bg px-3 py-2 focus-within:border-primary focus-within:bg-surface transition-colors duration-150">
                 <MapPin size={15} className="text-muted shrink-0" />
                 <input
                   type="text"
@@ -556,7 +556,7 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className={LABEL}>Company Email</label>
-                <div className="flex items-center gap-2 rounded-lg border border-border bg-bg px-3 py-2 focus-within:border-primary focus-within:bg-white transition-colors duration-150">
+                <div className="flex items-center gap-2 rounded-lg border border-border bg-bg px-3 py-2 focus-within:border-primary focus-within:bg-surface transition-colors duration-150">
                   <Mail size={15} className="text-muted shrink-0" />
                   <input
                     type="email"
@@ -570,7 +570,7 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
               </div>
               <div>
                 <label className={LABEL}>Company Phone</label>
-                <div className="flex items-center gap-2 rounded-lg border border-border bg-bg px-3 py-2 focus-within:border-primary focus-within:bg-white transition-colors duration-150">
+                <div className="flex items-center gap-2 rounded-lg border border-border bg-bg px-3 py-2 focus-within:border-primary focus-within:bg-surface transition-colors duration-150">
                   <Phone size={15} className="text-muted shrink-0" />
                   <input
                     type="text"

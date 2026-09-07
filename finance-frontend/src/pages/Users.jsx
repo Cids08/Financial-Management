@@ -342,7 +342,7 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
   // Modal state: null = closed, 'add' = create mode, or the user object being edited
   const [modalMode, setModalMode] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
-  const [formValidationError, setFormValidationError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState({})
 
   // Set only right after a successful create, when the response includes
   // initial_password. Cleared on close and never repopulated afterward.
@@ -419,7 +419,7 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
 
   const openAddModal = () => {
     setForm({ ...EMPTY_FORM, role_id: roles[0]?.role_id ?? '' })
-    setFormValidationError('')
+    setFieldErrors({})
     setModalMode('add')
   }
 
@@ -431,27 +431,26 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
       role_id: user.role_id,
       status: user.status,
     })
-    setFormValidationError('')
+    setFieldErrors({})
     setModalMode(user)
   }
 
   const closeModal = () => {
     setModalMode(null)
-    setFormValidationError('')
+    setFieldErrors({})
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    setFormValidationError('')
-
-    if (!form.first_name.trim() || !form.last_name.trim() || !form.email.trim()) {
-      setFormValidationError('First name, last name, and email are required.')
-      return
+    const errors = {}
+    if (!form.first_name.trim()) errors.first_name = 'First name is required.'
+    if (!form.last_name.trim()) errors.last_name = 'Last name is required.'
+    if (!form.email.trim()) {
+      errors.email = 'Email is required.'
+    } else if (!/^\S+@\S+\.\S+$/.test(form.email)) {
+      errors.email = 'Enter a valid email address.'
     }
-    if (!/^\S+@\S+\.\S+$/.test(form.email)) {
-      setFormValidationError('Enter a valid email address.')
-      return
-    }
+    if (Object.keys(errors).length) { setFieldErrors(errors); return }
 
     const payload = {
       first_name: form.first_name.trim(),
@@ -745,9 +744,9 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
         }
       >
         <form onSubmit={handleSubmit} className="space-y-4">
-          {(formValidationError || formError) && (
+          {formError && (
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
-              {formValidationError || formError}
+              {formError}
             </div>
           )}
 
@@ -760,36 +759,39 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>First Name</label>
+              <label className={LABEL}>First Name <span className="text-red-500">*</span></label>
               <input
                 type="text"
                 value={form.first_name}
-                onChange={(e) => setForm((f) => ({ ...f, first_name: e.target.value }))}
-                className={INPUT}
+                onChange={(e) => { setForm((f) => ({ ...f, first_name: e.target.value })); setFieldErrors((fe) => ({ ...fe, first_name: '' })) }}
+                className={`${INPUT} ${fieldErrors.first_name ? 'border-red-400 dark:border-red-500' : ''}`}
                 placeholder="Juan"
               />
+              {fieldErrors.first_name && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.first_name}</p>}
             </div>
             <div>
-              <label className={LABEL}>Last Name</label>
+              <label className={LABEL}>Last Name <span className="text-red-500">*</span></label>
               <input
                 type="text"
                 value={form.last_name}
-                onChange={(e) => setForm((f) => ({ ...f, last_name: e.target.value }))}
-                className={INPUT}
+                onChange={(e) => { setForm((f) => ({ ...f, last_name: e.target.value })); setFieldErrors((fe) => ({ ...fe, last_name: '' })) }}
+                className={`${INPUT} ${fieldErrors.last_name ? 'border-red-400 dark:border-red-500' : ''}`}
                 placeholder="Dela Cruz"
               />
+              {fieldErrors.last_name && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.last_name}</p>}
             </div>
           </div>
 
           <div>
-            <label className={LABEL}>Email</label>
+            <label className={LABEL}>Email <span className="text-red-500">*</span></label>
             <input
               type="email"
               value={form.email}
-              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-              className={INPUT}
+              onChange={(e) => { setForm((f) => ({ ...f, email: e.target.value })); setFieldErrors((fe) => ({ ...fe, email: '' })) }}
+              className={`${INPUT} ${fieldErrors.email ? 'border-red-400 dark:border-red-500' : ''}`}
               placeholder="juan.delacruz@alibaton.com"
             />
+            {fieldErrors.email && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.email}</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-3">

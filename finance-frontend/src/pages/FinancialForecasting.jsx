@@ -628,11 +628,11 @@ export default function FinancialForecasting({ title = 'Financial Forecasting', 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <div className="flex items-center gap-2">
               <label className="text-xs text-muted whitespace-nowrap">Generated From</label>
-              <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className={INPUT} />
+              <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className={`${INPUT} scheme-light dark:scheme-dark`} />
             </div>
             <div className="flex items-center gap-2">
               <label className="text-xs text-muted whitespace-nowrap">To</label>
-              <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className={INPUT} />
+              <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className={`${INPUT} scheme-light dark:scheme-dark`} />
             </div>
           </div>
           <Button

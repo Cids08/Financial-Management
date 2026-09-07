@@ -13,7 +13,7 @@ import { usePermissions } from '../context/PermissionsContext'
 import { hasPermission } from '../utils/permissions'
 import { useDisbursements } from '../hooks/useDisbursements'
 import { useDepartments } from '../hooks/useDepartments'
-import { useCashAccounts } from '../hooks/useCashAccounts'
+import { useCashAccounts } from '../hooks/UseCashAccounts'
 import { useAccountsPayable } from '../hooks/useAccountsPayable'
 
 /* ---------------------------------------------------------------------- */
@@ -177,9 +177,29 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
   const [dModalMode, setDModalMode] = useState(null) // null | 'add' | disbursement object
   const [dForm, setDForm] = useState(EMPTY_DISBURSEMENT_FORM)
   const [dFormError, setDFormError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState({})
+  const [dateErrors, setDateErrors] = useState({ payment_date: '' })
   const [dDetailRecord, setDDetailRecord] = useState(null)
   const [dSubmitting, setDSubmitting] = useState(false)
   const [dActionError, setDActionError] = useState('')
+
+  const validateDate = (field, value) => {
+    if (!value) {
+      setDateErrors((e) => ({ ...e, [field]: '' }))
+      return
+    }
+    const d = new Date(value)
+    const min = new Date('2017-01-01')
+    const max = new Date(`${new Date().getFullYear() + 1}-12-31`)
+    if (isNaN(d.getTime())) {
+      setDateErrors((e) => ({ ...e, [field]: 'Invalid date.' }))
+    } else if (d < min || d > max) {
+      setDateErrors((e) => ({ ...e, [field]: 'Date is out of range.' }))
+    } else {
+      setDateErrors((e) => ({ ...e, [field]: '' }))
+    }
+  }
+
   // Source filter is applied client-side over the page the hook already
   // fetched. If/when useDisbursements grows a server-side `source_type`
   // param, swap this for a hook-driven filter like the status filter above.
@@ -201,6 +221,8 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
     // disbursements are being recorded as happening now.
     setDForm({ ...EMPTY_DISBURSEMENT_FORM, payment_date: new Date().toISOString().slice(0, 10) })
     setDFormError('')
+    setFieldErrors({})
+    setDateErrors({ payment_date: '' })
     setDModalMode('add')
     // Preview the next voucher number right away — see
     // useDisbursements' fetchNextVoucherNumber comment for why this is a
@@ -219,9 +241,11 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
       reference_number: d.reference_number || '', remarks: d.remarks || '',
     })
     setDFormError('')
+    setFieldErrors({})
+    setDateErrors({ payment_date: '' })
     setDModalMode(d)
   }
-  const closeDisbursementModal = () => { setDModalMode(null); setDFormError('') }
+  const closeDisbursementModal = () => { setDModalMode(null); setDFormError(''); setFieldErrors({}); setDateErrors({ payment_date: '' }) }
   const openDisbursementDetail = (d) => setDDetailRecord(d)
   const closeDisbursementDetail = () => setDDetailRecord(null)
 
@@ -320,15 +344,29 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
 
   const handleDisbursementSubmit = async (e) => {
     e.preventDefault()
-    if (!dForm.payee.trim() || !dForm.amount_paid) {
-      setDFormError('Payee and amount are required.')
+    const errors = {}
+    if (!dForm.ap_id) errors.ap_id = 'Please select a related bill.'
+    if (!dForm.department_id) errors.department_id = 'Please select a department.'
+    if (!dForm.payee.trim()) errors.payee = 'Payee is required.'
+    if (!dForm.cash_account_id) errors.cash_account_id = 'Please select a cash account.'
+    if (!dForm.payment_date) {
+      errors.payment_date = 'Payment date is required.'
+    } else if (dForm.payment_date < '2017-01-01') {
+      errors.payment_date = 'Date is out of range.'
+    }
+
+    const amt = Number(dForm.amount_paid)
+    if (!dForm.amount_paid) {
+      errors.amount_paid = 'Amount paid is required.'
+    } else if (amt <= 0) {
+      errors.amount_paid = 'Amount must be greater than zero.'
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors)
       return
     }
-    if (!dForm.ap_id || !dForm.department_id || !dForm.cash_account_id) {
-      setDFormError('Related bill, department, and cash account are required.')
-      return
-    }
-    setDSubmitting(true)
+    setFieldErrors({})
     setDFormError('')
     try {
       const payload = {
@@ -670,32 +708,29 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Related Bill</label>
+              <label className={LABEL}>Related Bill <span className="text-red-500 dark:text-red-400">*</span></label>
               <select
                 value={dForm.ap_id}
-                onChange={handleApBillChange}
-                className={INPUT}
+                onChange={(e) => { handleApBillChange(e); setFieldErrors((fe) => ({ ...fe, ap_id: '' })) }}
+                className={`${INPUT} ${fieldErrors.ap_id ? 'border-red-400 dark:border-red-500' : ''}`}
                 style={INPUT_TEXT_STYLE}
                 disabled={apBillsLoading}
               >
                 <option value="">{apBillsLoading ? 'Loading bills…' : 'Select a bill…'}</option>
                 {apBills
-                  // Keep the bill this disbursement already points to in the
-                  // list even if it's no longer "selectable" (e.g. it's since
-                  // been fully paid or archived) — otherwise editing this
-                  // record would silently blank out an already-valid field.
                   .filter((bill) => isSelectableApBill(bill) || String(apBillId(bill)) === String(dForm.ap_id))
                   .map((bill) => (
                     <option key={apBillId(bill)} value={apBillId(bill)}>{apBillLabel(bill)}</option>
                   ))}
               </select>
+              {fieldErrors.ap_id && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.ap_id}</p>}
             </div>
             <div>
-              <label className={LABEL}>Department</label>
+              <label className={LABEL}>Department <span className="text-red-500 dark:text-red-400">*</span></label>
               <select
                 value={dForm.department_id}
-                onChange={(e) => setDForm((f) => ({ ...f, department_id: e.target.value }))}
-                className={INPUT}
+                onChange={(e) => { setDForm((f) => ({ ...f, department_id: e.target.value })); setFieldErrors((fe) => ({ ...fe, department_id: '' })) }}
+                className={`${INPUT} ${fieldErrors.department_id ? 'border-red-400 dark:border-red-500' : ''}`}
                 style={INPUT_TEXT_STYLE}
                 disabled={departmentsLoading}
               >
@@ -704,6 +739,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                   <option key={dept.department_id} value={dept.department_id}>{dept.department_name}</option>
                 ))}
               </select>
+              {fieldErrors.department_id && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.department_id}</p>}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -724,18 +760,57 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
               )}
             </div>
             <div>
-              <label className={LABEL}>Payee</label>
-              <input type="text" value={dForm.payee} onChange={(e) => setDForm((f) => ({ ...f, payee: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="Northgate Supplies Inc." />
+              <label className={LABEL}>Payee <span className="text-red-500 dark:text-red-400">*</span></label>
+              <input
+                type="text"
+                value={dForm.payee}
+                onChange={(e) => { setDForm((f) => ({ ...f, payee: e.target.value })); setFieldErrors((fe) => ({ ...fe, payee: '' })) }}
+                className={`${INPUT} ${fieldErrors.payee ? 'border-red-400 dark:border-red-500' : ''}`}
+                style={INPUT_TEXT_STYLE}
+                placeholder="Northgate Supplies Inc."
+              />
+              {fieldErrors.payee && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.payee}</p>}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Payment Date</label>
-              <input type="date" value={dForm.payment_date} onChange={(e) => setDForm((f) => ({ ...f, payment_date: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} />
+              <label className={LABEL}>Payment Date <span className="text-red-500 dark:text-red-400">*</span></label>
+              <input
+                type="date"
+                min="2017-01-01"
+                max={`${new Date().getFullYear() + 1}-12-31`}
+                value={dForm.payment_date}
+                onChange={(e) => { setDForm((f) => ({ ...f, payment_date: e.target.value })); setFieldErrors((fe) => ({ ...fe, payment_date: '' })) }}
+                onBlur={(e) => validateDate('payment_date', e.target.value)}
+                className={`${INPUT} scheme-light dark:scheme-dark ${dateErrors.payment_date || fieldErrors.payment_date ? 'border-red-400 dark:border-red-500' : ''}`}
+                style={INPUT_TEXT_STYLE}
+              />
+              {(dateErrors.payment_date || fieldErrors.payment_date) && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{dateErrors.payment_date || fieldErrors.payment_date}</p>}
             </div>
             <div>
-              <label className={LABEL}>Amount Paid</label>
-              <input type="number" value={dForm.amount_paid} onChange={(e) => setDForm((f) => ({ ...f, amount_paid: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="0.00" />
+              <label className={LABEL}>Amount Paid <span className="text-red-500 dark:text-red-400">*</span></label>
+              <input
+                type="number"
+                min="0.01"
+                step="any"
+                value={dForm.amount_paid}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setDForm((f) => ({ ...f, amount_paid: val }))
+                  setFieldErrors((fe) => ({ ...fe, amount_paid: '' }))
+                  if (val === '') {
+                    setFieldErrors((fe) => ({ ...fe, amount_paid: '' }))
+                  } else if (Number(val) < 0) {
+                    setFieldErrors((fe) => ({ ...fe, amount_paid: 'Amount paid cannot be negative.' }))
+                  } else if (Number(val) === 0) {
+                    setFieldErrors((fe) => ({ ...fe, amount_paid: 'Amount paid must be greater than zero.' }))
+                  }
+                }}
+                className={`${INPUT} ${fieldErrors.amount_paid ? 'border-red-400 dark:border-red-500' : ''}`}
+                style={INPUT_TEXT_STYLE}
+                placeholder="0.00"
+              />
+              {fieldErrors.amount_paid && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.amount_paid}</p>}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -746,19 +821,20 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
               </select>
             </div>
             <div>
-              <label className={LABEL}>Cash Account</label>
+              <label className={LABEL}>Cash Account <span className="text-red-500 dark:text-red-400">*</span></label>
               <select
                 value={dForm.cash_account_id}
-                onChange={(e) => setDForm((f) => ({ ...f, cash_account_id: e.target.value }))}
-                className={INPUT}
+                onChange={(e) => { setDForm((f) => ({ ...f, cash_account_id: e.target.value })); setFieldErrors((fe) => ({ ...fe, cash_account_id: '' })) }}
+                className={`${INPUT} ${fieldErrors.cash_account_id ? 'border-red-400 dark:border-red-500' : ''}`}
                 style={INPUT_TEXT_STYLE}
                 disabled={cashAccountsLoading}
               >
-                <option value="">{cashAccountsLoading ? 'Loading accounts…' : 'Select a cash account…'}</option>
-                {cashAccounts.map((account) => (
-                  <option key={cashAccountId(account)} value={cashAccountId(account)}>{cashAccountLabel(account)}</option>
+                <option value="">{cashAccountsLoading ? 'Loading accounts…' : 'Select an account…'}</option>
+                {cashAccounts.map((a) => (
+                  <option key={a.id} value={a.id}>{a.account_name}</option>
                 ))}
               </select>
+              {fieldErrors.cash_account_id && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.cash_account_id}</p>}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">

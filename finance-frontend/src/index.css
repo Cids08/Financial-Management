@@ -92,3 +92,37 @@ body {
 
 .scrollbar-none::-webkit-scrollbar { display: none; }
 .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Hide native spinner arrows on number inputs — not useful for financial
+   amount fields and adds visual clutter. Fields still accept numeric input
+   and keyboard up/down if needed. */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* Ensure all native select options, dates, and form controls respect
+   dark mode tokens and browser color-scheme automatically */
+select option {
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+}
+
+/* Equivalent to Tailwind's scheme-light dark:scheme-dark, applied globally
+   so every single input, date picker, select, and textarea automatically
+   follows the active theme without needing the utility class on every element */
+input,
+select,
+textarea {
+  color-scheme: light;
+}
+
+.dark input,
+.dark select,
+.dark textarea {
+  color-scheme: dark;
+}

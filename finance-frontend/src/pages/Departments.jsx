@@ -67,6 +67,7 @@ export default function Departments({ title = 'Departments', crumbs = ['Master D
   const [modalMode, setModalMode] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [formError, setFormError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState({})
   const [saving, setSaving] = useState(false)
 
   const [deptToArchive, setDeptToArchive] = useState(null)
@@ -120,7 +121,7 @@ export default function Departments({ title = 'Departments', crumbs = ['Master D
     setPage(1)
   }
 
-  const openAdd = () => { setForm(EMPTY_FORM); setFormError(''); setModalMode('add') }
+  const openAdd = () => { setForm(EMPTY_FORM); setFormError(''); setFieldErrors({}); setModalMode('add') }
   const openEdit = (d) => {
     setForm({
       department_name: d.department_name,
@@ -131,20 +132,19 @@ export default function Departments({ title = 'Departments', crumbs = ['Master D
       status: d.status,
     })
     setFormError('')
+    setFieldErrors({})
     setModalMode(d)
   }
-  const closeModal = () => { setModalMode(null); setFormError('') }
+  const closeModal = () => { setModalMode(null); setFormError(''); setFieldErrors({}) }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!form.department_name.trim()) {
-      setFormError('Department name is required.')
-      return
-    }
+    const errors = {}
+    if (!form.department_name.trim()) errors.department_name = 'Department name is required.'
     if (form.department_email && !/^\S+@\S+\.\S+$/.test(form.department_email)) {
-      setFormError('Enter a valid department email address.')
-      return
+      errors.department_email = 'Enter a valid email address.'
     }
+    if (Object.keys(errors).length) { setFieldErrors(errors); return }
 
     setSaving(true)
     setFormError('')
@@ -391,8 +391,9 @@ export default function Departments({ title = 'Departments', crumbs = ['Master D
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{formError}</div>
           )}
           <div>
-            <label className={LABEL}>Department Name</label>
-            <input type="text" value={form.department_name} onChange={(e) => setForm((f) => ({ ...f, department_name: e.target.value }))} className={INPUT} placeholder="e.g. Finance" />
+            <label className={LABEL}>Department Name <span className="text-red-500">*</span></label>
+            <input type="text" value={form.department_name} onChange={(e) => { setForm((f) => ({ ...f, department_name: e.target.value })); setFieldErrors((fe) => ({ ...fe, department_name: '' })) }} className={`${INPUT} ${fieldErrors.department_name ? 'border-red-400 dark:border-red-500' : ''}`} placeholder="e.g. Finance" />
+            {fieldErrors.department_name && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.department_name}</p>}
           </div>
           <div>
             <label className={LABEL}>Department Head</label>
@@ -401,7 +402,8 @@ export default function Departments({ title = 'Departments', crumbs = ['Master D
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={LABEL}>Department Email</label>
-              <input type="email" value={form.department_email} onChange={(e) => setForm((f) => ({ ...f, department_email: e.target.value }))} className={INPUT} placeholder="finance@alibaton.com" />
+              <input type="email" value={form.department_email} onChange={(e) => { setForm((f) => ({ ...f, department_email: e.target.value })); setFieldErrors((fe) => ({ ...fe, department_email: '' })) }} className={`${INPUT} ${fieldErrors.department_email ? 'border-red-400 dark:border-red-500' : ''}`} placeholder="finance@alibaton.com" />
+              {fieldErrors.department_email && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.department_email}</p>}
             </div>
             <div>
               <label className={LABEL}>Department Phone</label>

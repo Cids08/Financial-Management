@@ -131,7 +131,10 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
 
   const [modalMode, setModalMode] = useState(null) // null | 'add' | budget object being edited
   const [form, setForm] = useState(EMPTY_FORM)
-  const [formError, setFormError] = useState('')
+  const [serverError, setServerError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState({})
+  const [dateErrors, setDateErrors] = useState({ start_date: '', end_date: '' })
+  const [amountError, setAmountError] = useState('')
   const [detailRecord, setDetailRecord] = useState(null)
   const [uploadTarget, setUploadTarget] = useState(null) // budget currently attaching a plan (from table/detail)
   const [historyTarget, setHistoryTarget] = useState(null) // budget whose plan version history is open
@@ -182,9 +185,33 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
     { key: 'archived', label: 'Archived', value: stats?.archived ?? '—', icon: Archive, iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-500 dark:text-slate-400', isActive: showArchived, onClick: () => setShowArchived(true) },
   ]), [stats, statusFilter, showArchived])
 
+  const validateDate = (field, value) => {
+    if (!value) {
+      setDateErrors((e) => ({ ...e, [field]: '' }))
+      return
+    }
+    const d = new Date(value)
+    const min = new Date('2017-01-01')
+    if (isNaN(d.getTime())) {
+      setDateErrors((e) => ({ ...e, [field]: 'Invalid date.' }))
+    } else if (d < min) {
+      setDateErrors((e) => ({ ...e, [field]: 'Date is out of range.' }))
+    } else {
+      const fy = isEditing ? modalMode.fiscal_year : Number(form.fiscal_year)
+      if (fy && d.getFullYear() !== fy) {
+        setDateErrors((e) => ({ ...e, [field]: 'Date is out of range.' }))
+      } else {
+        setDateErrors((e) => ({ ...e, [field]: '' }))
+      }
+    }
+  }
+
   const openAdd = () => {
     setForm(EMPTY_FORM)
-    setFormError('')
+    setServerError('')
+    setFieldErrors({})
+    setDateErrors({ start_date: '', end_date: '' })
+    setAmountError('')
     setViewNotice('')
     setPlanFile(null)
     setPlanFileError('')
@@ -206,7 +233,10 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
       end_date: b.end_date?.slice(0, 10) ?? '',
       remarks: b.remarks ?? '',
     })
-    setFormError('')
+    setServerError('')
+    setFieldErrors({})
+    setDateErrors({ start_date: '', end_date: '' })
+    setAmountError('')
     setEditPlanFile(null)
     setEditPlanFileError('')
     setViewNotice('')
@@ -214,7 +244,10 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
   }
   const closeModal = () => {
     setModalMode(null)
-    setFormError('')
+    setServerError('')
+    setFieldErrors({})
+    setDateErrors({ start_date: '', end_date: '' })
+    setAmountError('')
     setEditPlanFile(null)
     setEditPlanFileError('')
     setViewNotice('')
@@ -238,6 +271,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
       return
     }
     setError('')
+    setFieldErrors((fe) => ({ ...fe, plan_file: '' }))
     setFile(file)
   }
 
@@ -247,6 +281,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
   // set before start_date changed to something later. Clear it instead of
   // silently letting an inverted range sit in the form.
   const handleStartDateChange = (value) => {
+    setFieldErrors((fe) => ({ ...fe, start_date: '' }))
     setForm((f) => ({
       ...f,
       start_date: value,
@@ -259,6 +294,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
   // date that no longer falls inside the new year has to be cleared
   // rather than silently left out-of-range until submit fails.
   const handleFiscalYearChange = (value) => {
+    setFieldErrors((fe) => ({ ...fe, fiscal_year: '' }))
     setForm((f) => {
       const year = String(value)
       const startStillValid = f.start_date && f.start_date.slice(0, 4) === year
@@ -274,67 +310,68 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!form.fiscal_year || !form.allocated_amount || !form.start_date || !form.end_date) {
-      setFormError('Fiscal year, allocated amount, start date, and end date are required.')
-      return
-    }
-    // Fiscal year is only editable while adding (locked once a budget
-    // exists — see the isEditing branch of the Fiscal Year field below),
-    // so this only needs to run for 'add'. The <input min/max> on the
-    // Fiscal Year field stops most out-of-range typing, but min/max
-    // attributes on a number input don't block manual entry the way a
-    // native form submit would — this custom handler bypasses the
-    // browser's own constraint validation entirely (note the
-    // e.preventDefault() above), so the range still has to be checked
-    // here explicitly. Matches the bound now enforced in
-    // StoreBudgetRequest::rules() on the backend.
+    setServerError('')
+    const errors = {}
+
     if (modalMode === 'add') {
-      const fy = Number(form.fiscal_year)
-      if (fy < CURRENT_YEAR || fy > MAX_FISCAL_YEAR) {
-        setFormError(`Fiscal year must be between ${CURRENT_YEAR} and ${MAX_FISCAL_YEAR}.`)
-        return
+      if (!form.department_id) errors.department_id = 'Department is required.'
+      if (!form.fiscal_year) {
+        errors.fiscal_year = 'Fiscal year is required.'
+      } else {
+        const fy = Number(form.fiscal_year)
+        if (fy < CURRENT_YEAR || fy > MAX_FISCAL_YEAR) {
+          errors.fiscal_year = `Fiscal year must be between ${CURRENT_YEAR} and ${MAX_FISCAL_YEAR}.`
+        }
       }
+      if (!form.budget_code?.trim()) errors.budget_code = 'Budget code is required.'
+      if (!form.budget_type) errors.budget_type = 'Budget type is required.'
+      if (form.budget_type === 'Other' && !form.budget_type_other?.trim()) {
+        errors.budget_type_other = 'Please specify the budget type.'
+      }
+      if (!form.budget_name?.trim()) errors.budget_name = 'Budget name is required.'
+      if (!planFile) errors.plan_file = 'A budget plan file is required to create a budget.'
     }
-    // Explicit check rather than relying solely on the backend's
-    // after_or_equal:start_date rule — that comes back as a generic
-    // "The given data was invalid." message (Laravel's default validation
-    // exception response), not the specific date problem.
-    if (form.end_date < form.start_date) {
-      setFormError('End date cannot be before the start date.')
-      return
+
+    if (!form.allocated_amount && form.allocated_amount !== 0) {
+      errors.allocated_amount = 'Allocated amount is required.'
+    } else if (Number(form.allocated_amount) < 0) {
+      errors.allocated_amount = 'Allocated amount cannot be negative.'
+    } else if (Number(form.allocated_amount) === 0) {
+      errors.allocated_amount = 'Allocated amount must be greater than zero.'
     }
-    // Same reasoning: catch the fiscal-year/start-date mismatch here with
-    // a specific message before it round-trips to the backend's
-    // withValidator() check (StoreBudgetRequest/UpdateBudgetRequest).
+
+    if (form.warning_percentage !== '' && (Number(form.warning_percentage) < 1 || Number(form.warning_percentage) > 100)) {
+      errors.warning_percentage = 'Warning percentage must be between 1 and 100.'
+    }
+
+    if (!form.start_date) {
+      errors.start_date = 'Start date is required.'
+    }
+    if (!form.end_date) {
+      errors.end_date = 'End date is required.'
+    }
+    if (form.start_date && form.end_date && form.end_date < form.start_date) {
+      errors.end_date = 'End date cannot be before start date.'
+    }
+
     const startYear = form.start_date ? Number(form.start_date.slice(0, 4)) : null
     const referenceFiscalYear = isEditing ? modalMode.fiscal_year : Number(form.fiscal_year)
     if (startYear !== null && startYear !== referenceFiscalYear) {
-      setFormError(`Start date must fall within fiscal year ${referenceFiscalYear}.`)
-      return
+      errors.start_date = 'Date is out of range.'
     }
-    if (modalMode === 'add' && !planFile) {
-      setFormError('A budget plan file is required to create a budget.')
-      return
-    }
+
     if (planFileError || (isEditing && editPlanFileError)) {
-      setFormError('Fix the budget plan file issue above before continuing.')
+      errors.plan_file = 'Fix the budget plan file issue before continuing.'
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors)
       return
     }
+    setFieldErrors({})
 
     let result
     if (modalMode === 'add') {
-      if (!form.budget_code || !form.budget_name || !form.budget_type || !form.department_id) {
-        setFormError('Department, budget code, name, and type are required.')
-        return
-      }
-      if (form.budget_type === 'Other' && !form.budget_type_other.trim()) {
-        setFormError('Please specify the budget type.')
-        return
-      }
-      // When "Other" is picked, the typed-in value IS the budget type sent
-      // to the backend — not the literal word "Other". Keeps reporting/
-      // filtering on budget_type meaningful instead of everything custom
-      // collapsing into one bucket.
       const resolvedBudgetType = form.budget_type === 'Other' ? form.budget_type_other.trim() : form.budget_type
       result = await createBudget({
         department_id: Number(form.department_id),
@@ -349,17 +386,9 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
         remarks: form.remarks || undefined,
       })
 
-      // Budget plan can't be attached until the budget exists (the upload
-      // endpoint is POST /budgets/{budget}/plan) — so this is still two
-      // requests under the hood, just chained automatically instead of
-      // making you come back to the table for the second one.
       if (result.success && planFile) {
         const planResult = await uploadPlan(result.data.budget_id, planFile)
         if (!planResult.success) {
-          // The budget itself was created fine — don't lose that, and don't
-          // leave the modal open in a stale "add" state (resubmitting would
-          // create a second budget). Close normally, surface the plan
-          // failure as a page-level notice instead.
           fetchStats()
           load()
           closeModal()
@@ -376,11 +405,6 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
         remarks: form.remarks || undefined,
       })
 
-      // Same two-request chain as Add above, just for a REPLACEMENT plan
-      // on an existing budget. attachPlan() adds a new supporting_documents
-      // row rather than deleting the old one, so this is additive — the
-      // previous version stays visible in Plan History, it's just no
-      // longer the "Current plan on file" shown at the top.
       if (result.success && editPlanFile) {
         const planResult = await uploadPlan(modalMode.budget_id, editPlanFile)
         if (!planResult.success) {
@@ -394,7 +418,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
     }
 
     if (!result.success) {
-      setFormError(result.message)
+      setServerError(result.message)
       return
     }
     fetchStats()
@@ -408,7 +432,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
       fetchStats()
       setDetailRecord((prev) => (prev && prev.budget_id === id ? result.data : prev))
     } else {
-      setFormError(result.message)
+      setServerError(result.message)
     }
   }
 
@@ -762,23 +786,34 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
         }
       >
         <form onSubmit={handleSubmit} className="space-y-4">
-          {formError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{formError}</div>
+          {serverError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{serverError}</div>
           )}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Department</label>
+              <label className={LABEL}>Department {!isEditing && <span className="text-red-500">*</span>}</label>
               {isEditing ? (
                 <div className={INPUT_LOCKED}><span className="truncate">{modalMode.department_name || '—'}</span></div>
               ) : (
-                <select value={form.department_id} onChange={(e) => setForm((f) => ({ ...f, department_id: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE}>
-                  <option value="">Select department</option>
-                  {departments.map((d) => <option key={d.department_id} value={d.department_id}>{d.department_name}</option>)}
-                </select>
+                <>
+                  <select
+                    value={form.department_id}
+                    onChange={(e) => {
+                      setFieldErrors((fe) => ({ ...fe, department_id: '' }))
+                      setForm((f) => ({ ...f, department_id: e.target.value }))
+                    }}
+                    className={`${INPUT} ${fieldErrors.department_id ? 'border-red-400 dark:border-red-500' : ''}`}
+                    style={INPUT_TEXT_STYLE}
+                  >
+                    <option value="">Select department</option>
+                    {departments.map((d) => <option key={d.department_id} value={d.department_id}>{d.department_name}</option>)}
+                  </select>
+                  {fieldErrors.department_id && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.department_id}</p>}
+                </>
               )}
             </div>
             <div>
-              <label className={LABEL}>Fiscal Year</label>
+              <label className={LABEL}>Fiscal Year {!isEditing && <span className="text-red-500">*</span>}</label>
               {isEditing ? (
                 <div className={INPUT_LOCKED}><span>{form.fiscal_year}</span></div>
               ) : (
@@ -789,11 +824,15 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                     max={MAX_FISCAL_YEAR}
                     value={form.fiscal_year}
                     onChange={(e) => handleFiscalYearChange(e.target.value)}
-                    className={INPUT}
+                    className={`${INPUT} ${fieldErrors.fiscal_year ? 'border-red-400 dark:border-red-500' : ''}`}
                     style={INPUT_TEXT_STYLE}
                     placeholder={String(CURRENT_YEAR)}
                   />
-                  <p className="mt-1 text-[11px] text-muted">Must be {CURRENT_YEAR}–{MAX_FISCAL_YEAR} — new budgets can't be backdated to a past fiscal year.</p>
+                  {fieldErrors.fiscal_year ? (
+                    <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.fiscal_year}</p>
+                  ) : (
+                    <p className="mt-1 text-[11px] text-muted">Must be {CURRENT_YEAR}–{MAX_FISCAL_YEAR} — new budgets can't be backdated to a past fiscal year.</p>
+                  )}
                 </>
               )}
             </div>
@@ -802,25 +841,51 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
           {!isEditing && (
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className={LABEL}>Budget Code</label>
-                <input type="text" value={form.budget_code} onChange={(e) => setForm((f) => ({ ...f, budget_code: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="e.g. BUD-2026-IT-01" />
+                <label className={LABEL}>Budget Code <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  value={form.budget_code}
+                  onChange={(e) => {
+                    setFieldErrors((fe) => ({ ...fe, budget_code: '' }))
+                    setForm((f) => ({ ...f, budget_code: e.target.value }))
+                  }}
+                  className={`${INPUT} ${fieldErrors.budget_code ? 'border-red-400 dark:border-red-500' : ''}`}
+                  style={INPUT_TEXT_STYLE}
+                  placeholder="e.g. BUD-2026-IT-01"
+                />
+                {fieldErrors.budget_code && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.budget_code}</p>}
               </div>
               <div>
-                <label className={LABEL}>Budget Type</label>
-                <select value={form.budget_type} onChange={(e) => setForm((f) => ({ ...f, budget_type: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE}>
+                <label className={LABEL}>Budget Type <span className="text-red-500">*</span></label>
+                <select
+                  value={form.budget_type}
+                  onChange={(e) => {
+                    setFieldErrors((fe) => ({ ...fe, budget_type: '', budget_type_other: '' }))
+                    setForm((f) => ({ ...f, budget_type: e.target.value }))
+                  }}
+                  className={`${INPUT} ${fieldErrors.budget_type ? 'border-red-400 dark:border-red-500' : ''}`}
+                  style={INPUT_TEXT_STYLE}
+                >
                   <option value="">Select type</option>
                   {BUDGET_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
+                {fieldErrors.budget_type && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.budget_type}</p>}
                 {form.budget_type === 'Other' && (
-                  <input
-                    type="text"
-                    value={form.budget_type_other}
-                    onChange={(e) => setForm((f) => ({ ...f, budget_type_other: e.target.value }))}
-                    className={`${INPUT} mt-2`}
-                    style={INPUT_TEXT_STYLE}
-                    placeholder="Please specify the budget type"
-                    maxLength={100}
-                  />
+                  <>
+                    <input
+                      type="text"
+                      value={form.budget_type_other}
+                      onChange={(e) => {
+                        setFieldErrors((fe) => ({ ...fe, budget_type_other: '' }))
+                        setForm((f) => ({ ...f, budget_type_other: e.target.value }))
+                      }}
+                      className={`${INPUT} mt-2 ${fieldErrors.budget_type_other ? 'border-red-400 dark:border-red-500' : ''}`}
+                      style={INPUT_TEXT_STYLE}
+                      placeholder="Please specify the budget type"
+                      maxLength={100}
+                    />
+                    {fieldErrors.budget_type_other && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.budget_type_other}</p>}
+                  </>
                 )}
               </div>
             </div>
@@ -828,47 +893,108 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
 
           {!isEditing && (
             <div>
-              <label className={LABEL}>Budget Name</label>
-              <input type="text" value={form.budget_name} onChange={(e) => setForm((f) => ({ ...f, budget_name: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="e.g. IT Infrastructure FY2026" />
+              <label className={LABEL}>Budget Name <span className="text-red-500">*</span></label>
+              <input
+                type="text"
+                value={form.budget_name}
+                onChange={(e) => {
+                  setFieldErrors((fe) => ({ ...fe, budget_name: '' }))
+                  setForm((f) => ({ ...f, budget_name: e.target.value }))
+                }}
+                className={`${INPUT} ${fieldErrors.budget_name ? 'border-red-400 dark:border-red-500' : ''}`}
+                style={INPUT_TEXT_STYLE}
+                placeholder="e.g. IT Infrastructure FY2026"
+              />
+              {fieldErrors.budget_name && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.budget_name}</p>}
             </div>
           )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Allocated Amount</label>
-              <input type="number" value={form.allocated_amount} onChange={(e) => setForm((f) => ({ ...f, allocated_amount: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="0.00" />
+              <label className={LABEL}>Allocated Amount <span className="text-red-500">*</span></label>
+              <input
+                type="number"
+                min="0.01"
+                step="any"
+                value={form.allocated_amount}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setFieldErrors((fe) => ({ ...fe, allocated_amount: '' }))
+                  setForm((f) => ({ ...f, allocated_amount: val }))
+                  if (val === '') {
+                    setAmountError('')
+                  } else if (Number(val) < 0) {
+                    setAmountError('Allocated amount cannot be negative.')
+                  } else if (Number(val) === 0) {
+                    setAmountError('Allocated amount must be greater than zero.')
+                  } else {
+                    setAmountError('')
+                  }
+                }}
+                className={`${INPUT} ${(amountError || fieldErrors.allocated_amount) ? 'border-red-400 dark:border-red-500' : ''}`}
+                style={INPUT_TEXT_STYLE}
+                placeholder="0.00"
+              />
+              {(amountError || fieldErrors.allocated_amount) && (
+                <p className="mt-1 text-xs text-red-500 dark:text-red-400">{amountError || fieldErrors.allocated_amount}</p>
+              )}
             </div>
             <div>
               <label className={LABEL}>Warning % (optional)</label>
-              <input type="number" min="1" max="100" value={form.warning_percentage} onChange={(e) => setForm((f) => ({ ...f, warning_percentage: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="e.g. 80" />
+              <input
+                type="number"
+                min="1"
+                max="100"
+                value={form.warning_percentage}
+                onChange={(e) => {
+                  setFieldErrors((fe) => ({ ...fe, warning_percentage: '' }))
+                  setForm((f) => ({ ...f, warning_percentage: e.target.value }))
+                }}
+                className={`${INPUT} ${fieldErrors.warning_percentage ? 'border-red-400 dark:border-red-500' : ''}`}
+                style={INPUT_TEXT_STYLE}
+                placeholder="e.g. 80"
+              />
+              {fieldErrors.warning_percentage && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.warning_percentage}</p>}
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Start Date</label>
+              <label className={LABEL}>Start Date <span className="text-red-500">*</span></label>
               <input
                 type="date"
                 value={form.start_date}
-                min={dateBounds.min}
+                min="2017-01-01"
                 max={dateBounds.max}
                 onChange={(e) => handleStartDateChange(e.target.value)}
-                className={`${INPUT} scheme-light dark:scheme-dark`}
+                onBlur={(e) => validateDate('start_date', e.target.value)}
+                className={`${INPUT} scheme-light dark:scheme-dark ${(fieldErrors.start_date || dateErrors.start_date) ? 'border-red-400 dark:border-red-500' : ''}`}
                 style={INPUT_TEXT_STYLE}
               />
-              <p className="mt-1 text-[11px] text-muted">Must fall within fiscal year {isEditing ? modalMode.fiscal_year : (form.fiscal_year || '—')}.</p>
+              {(fieldErrors.start_date || dateErrors.start_date) ? (
+                <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.start_date || dateErrors.start_date}</p>
+              ) : (
+                <p className="mt-1 text-[11px] text-muted">Must fall within fiscal year {isEditing ? modalMode.fiscal_year : (form.fiscal_year || '—')}.</p>
+              )}
             </div>
             <div>
-              <label className={LABEL}>End Date</label>
+              <label className={LABEL}>End Date <span className="text-red-500">*</span></label>
               <input
                 type="date"
                 value={form.end_date}
-                min={form.start_date || dateBounds.min}
+                min="2017-01-01"
                 max={dateBounds.max}
-                onChange={(e) => setForm((f) => ({ ...f, end_date: e.target.value }))}
-                className={`${INPUT} scheme-light dark:scheme-dark`}
+                onChange={(e) => {
+                  setFieldErrors((fe) => ({ ...fe, end_date: '' }))
+                  setForm((f) => ({ ...f, end_date: e.target.value }))
+                }}
+                onBlur={(e) => validateDate('end_date', e.target.value)}
+                className={`${INPUT} scheme-light dark:scheme-dark ${(fieldErrors.end_date || dateErrors.end_date) ? 'border-red-400 dark:border-red-500' : ''}`}
                 style={INPUT_TEXT_STYLE}
               />
+              {(fieldErrors.end_date || dateErrors.end_date) && (
+                <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.end_date || dateErrors.end_date}</p>
+              )}
             </div>
           </div>
 
@@ -946,8 +1072,8 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
               </div>
             )}
 
-            {(isEditing ? editPlanFileError : planFileError) && (
-              <p className="mt-1 text-xs text-red-600 dark:text-red-400">{isEditing ? editPlanFileError : planFileError}</p>
+            {(fieldErrors.plan_file || (isEditing ? editPlanFileError : planFileError)) && (
+              <p className="mt-1 text-xs text-red-600 dark:text-red-400">{fieldErrors.plan_file || (isEditing ? editPlanFileError : planFileError)}</p>
             )}
 
             <p className="mt-1 text-xs text-muted">

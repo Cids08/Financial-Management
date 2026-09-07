@@ -199,7 +199,26 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
   const [modalMode,    setModalMode]    = useState(null)
   const [form,         setForm]         = useState(EMPTY_FORM)
   const [formError,    setFormError]    = useState('')
+  const [fieldErrors,  setFieldErrors]  = useState({})
+  const [dateErrors,   setDateErrors]   = useState({ collection_date: '' })
   const [submitting,   setSubmitting]   = useState(false)
+
+  const validateDate = (field, value) => {
+    if (!value) {
+      setDateErrors((e) => ({ ...e, [field]: '' }))
+      return
+    }
+    const d = new Date(value)
+    const min = new Date('2017-01-01')
+    const max = new Date(`${new Date().getFullYear() + 1}-12-31`)
+    if (isNaN(d.getTime())) {
+      setDateErrors((e) => ({ ...e, [field]: 'Invalid date.' }))
+    } else if (d < min || d > max) {
+      setDateErrors((e) => ({ ...e, [field]: 'Date is out of range.' }))
+    } else {
+      setDateErrors((e) => ({ ...e, [field]: '' }))
+    }
+  }
   const [detailRecord, setDetailRecord] = useState(null)
   const [confirmTarget,setConfirmTarget]= useState(null)
   const [cancelTarget, setCancelTarget] = useState(null)
@@ -247,6 +266,8 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
       cash_account_id: cashAccounts[0]?._key ?? '',
     })
     setFormError('')
+    setFieldErrors({})
+    setDateErrors({ collection_date: '' })
     setModalMode('add')
   }
 
@@ -264,10 +285,12 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
       remarks:          c.remarks          ?? '',
     })
     setFormError('')
+    setFieldErrors({})
+    setDateErrors({ collection_date: '' })
     setModalMode(c)
   }
 
-  const closeModal  = () => { setModalMode(null); setFormError('') }
+  const closeModal  = () => { setModalMode(null); setFormError(''); setFieldErrors({}); setDateErrors({ collection_date: '' }) }
   const openDetail  = (c) => setDetailRecord(c)
   const closeDetail = () => setDetailRecord(null)
   const openConfirm = (c) => { setConfirmTarget(c); setActionError('') }
@@ -280,22 +303,29 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
   // -------------------------------------------------------------------------
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!form.ar_id) { setFormError('Please select an invoice.'); return }
-    if (!form.collector_id) { setFormError('Please select a collector.'); return }
-    if (!form.cash_account_id) { setFormError('Please select a cash account.'); return }
-    if (!form.receipt_number.trim()) { setFormError('Receipt number is required.'); return }
-    if (!form.collection_date) { setFormError('Collection date is required.'); return }
-    if (!form.amount_received) { setFormError('Amount received is required.'); return }
-
-    const payload = {
-      ...form,
-      ar_id:           Number(form.ar_id),
-      collector_id:    Number(form.collector_id),
-      cash_account_id: Number(form.cash_account_id),
-      amount_received: Number(form.amount_received),
+    const errors = {}
+    if (!form.ar_id) errors.ar_id = 'Please select an invoice.'
+    if (!form.collector_id) errors.collector_id = 'Please select a collector.'
+    if (!form.cash_account_id) errors.cash_account_id = 'Please select a cash account.'
+    if (!form.receipt_number.trim()) errors.receipt_number = 'Receipt number is required.'
+    if (!form.collection_date) {
+      errors.collection_date = 'Collection date is required.'
+    } else if (form.collection_date < '2017-01-01') {
+      errors.collection_date = 'Date is out of range.'
     }
 
-    setSubmitting(true)
+    const amt = Number(form.amount_received)
+    if (!form.amount_received) {
+      errors.amount_received = 'Amount received is required.'
+    } else if (amt <= 0) {
+      errors.amount_received = 'Amount received must be greater than zero.'
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors)
+      return
+    }
+    setFieldErrors({})
     setFormError('')
     try {
       const isAdd = modalMode === 'add'
@@ -601,8 +631,12 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
           <div className="grid grid-cols-2 gap-3">
             {/* Invoice — uses _key (= ar_id) as option value */}
             <div>
-              <label className={LABEL}>Invoice</label>
-              <select value={form.ar_id} onChange={(e) => setForm((f) => ({ ...f, ar_id: e.target.value }))} className={INPUT}>
+              <label className={LABEL}>Invoice <span className="text-red-500 dark:text-red-400">*</span></label>
+              <select
+                value={form.ar_id}
+                onChange={(e) => { setForm((f) => ({ ...f, ar_id: e.target.value })); setFieldErrors((fe) => ({ ...fe, ar_id: '' })) }}
+                className={`${INPUT} ${fieldErrors.ar_id ? 'border-red-400 dark:border-red-500' : ''}`}
+              >
                 <option value="">Select invoice…</option>
                 {arRecords.map((a) => (
                   <option key={a._key} value={a._key}>
@@ -610,12 +644,17 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                   </option>
                 ))}
               </select>
+              {fieldErrors.ar_id && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.ar_id}</p>}
             </div>
 
             {/* Collector — uses _key (= collector_id) as option value */}
             <div>
-              <label className={LABEL}>Collector</label>
-              <select value={form.collector_id} onChange={(e) => setForm((f) => ({ ...f, collector_id: e.target.value }))} className={INPUT}>
+              <label className={LABEL}>Collector <span className="text-red-500 dark:text-red-400">*</span></label>
+              <select
+                value={form.collector_id}
+                onChange={(e) => { setForm((f) => ({ ...f, collector_id: e.target.value })); setFieldErrors((fe) => ({ ...fe, collector_id: '' })) }}
+                className={`${INPUT} ${fieldErrors.collector_id ? 'border-red-400 dark:border-red-500' : ''}`}
+              >
                 <option value="">Select collector…</option>
                 {collectors.map((c) => (
                   <option key={c._key} value={c._key}>
@@ -623,24 +662,61 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                   </option>
                 ))}
               </select>
+              {fieldErrors.collector_id && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.collector_id}</p>}
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Receipt Number</label>
-              <input type="text" value={form.receipt_number} onChange={(e) => setForm((f) => ({ ...f, receipt_number: e.target.value }))} className={INPUT} placeholder="OR-10021" />
+              <label className={LABEL}>Receipt Number <span className="text-red-500 dark:text-red-400">*</span></label>
+              <input
+                type="text"
+                value={form.receipt_number}
+                onChange={(e) => { setForm((f) => ({ ...f, receipt_number: e.target.value })); setFieldErrors((fe) => ({ ...fe, receipt_number: '' })) }}
+                className={`${INPUT} ${fieldErrors.receipt_number ? 'border-red-400 dark:border-red-500' : ''}`}
+                placeholder="OR-10021"
+              />
+              {fieldErrors.receipt_number && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.receipt_number}</p>}
             </div>
             <div>
-              <label className={LABEL}>Collection Date</label>
-              <input type="date" value={form.collection_date} onChange={(e) => setForm((f) => ({ ...f, collection_date: e.target.value }))} className={INPUT} />
+              <label className={LABEL}>Collection Date <span className="text-red-500 dark:text-red-400">*</span></label>
+              <input
+                type="date"
+                min="2017-01-01"
+                max={`${new Date().getFullYear() + 1}-12-31`}
+                value={form.collection_date}
+                onChange={(e) => { setForm((f) => ({ ...f, collection_date: e.target.value })); setFieldErrors((fe) => ({ ...fe, collection_date: '' })) }}
+                onBlur={(e) => validateDate('collection_date', e.target.value)}
+                className={`${INPUT} scheme-light dark:scheme-dark ${dateErrors.collection_date || fieldErrors.collection_date ? 'border-red-400 dark:border-red-500' : ''}`}
+              />
+              {(dateErrors.collection_date || fieldErrors.collection_date) && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{dateErrors.collection_date || fieldErrors.collection_date}</p>}
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Amount Received</label>
-              <input type="number" min="0.01" step="0.01" value={form.amount_received} onChange={(e) => setForm((f) => ({ ...f, amount_received: e.target.value }))} className={INPUT} placeholder="0.00" />
+              <label className={LABEL}>Amount Received <span className="text-red-500 dark:text-red-400">*</span></label>
+              <input
+                type="number"
+                min="0.01"
+                step="any"
+                value={form.amount_received}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setForm((f) => ({ ...f, amount_received: val }))
+                  setFieldErrors((fe) => ({ ...fe, amount_received: '' }))
+                  if (val === '') {
+                    setFieldErrors((fe) => ({ ...fe, amount_received: '' }))
+                  } else if (Number(val) < 0) {
+                    setFieldErrors((fe) => ({ ...fe, amount_received: 'Amount received cannot be negative.' }))
+                  } else if (Number(val) === 0) {
+                    setFieldErrors((fe) => ({ ...fe, amount_received: 'Amount received must be greater than zero.' }))
+                  }
+                }}
+                className={`${INPUT} ${fieldErrors.amount_received ? 'border-red-400 dark:border-red-500' : ''}`}
+                placeholder="0.00"
+              />
+              {fieldErrors.amount_received && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.amount_received}</p>}
             </div>
             <div>
               <label className={LABEL}>Payment Method</label>
@@ -653,8 +729,12 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
           <div className="grid grid-cols-2 gap-3">
             {/* Cash account — uses _key (= id) as option value */}
             <div>
-              <label className={LABEL}>Deposit To (Cash Account)</label>
-              <select value={form.cash_account_id} onChange={(e) => setForm((f) => ({ ...f, cash_account_id: e.target.value }))} className={INPUT}>
+              <label className={LABEL}>Deposit To (Cash Account) <span className="text-red-500 dark:text-red-400">*</span></label>
+              <select
+                value={form.cash_account_id}
+                onChange={(e) => { setForm((f) => ({ ...f, cash_account_id: e.target.value })); setFieldErrors((fe) => ({ ...fe, cash_account_id: '' })) }}
+                className={`${INPUT} ${fieldErrors.cash_account_id ? 'border-red-400 dark:border-red-500' : ''}`}
+              >
                 <option value="">Select account…</option>
                 {cashAccounts.map((a) => (
                   <option key={a._key} value={a._key}>
@@ -662,6 +742,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                   </option>
                 ))}
               </select>
+              {fieldErrors.cash_account_id && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.cash_account_id}</p>}
             </div>
             <div>
               <label className={LABEL}>Reference Number</label>

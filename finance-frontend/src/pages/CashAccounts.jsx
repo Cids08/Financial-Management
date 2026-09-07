@@ -66,6 +66,7 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
   const [modalMode, setModalMode] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [formError, setFormError] = useState('')
+  const [balanceError, setBalanceError] = useState('')
 
   const [revealedIds, setRevealedIds] = useState(new Set())
   const toggleReveal = (id) => {
@@ -81,7 +82,7 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
   const totalBalanceThisPage = accounts.filter((a) => a.status === 'Active').reduce((sum, a) => sum + a.current_balance, 0)
   const inactiveThisPage = accounts.filter((a) => a.status === 'Inactive').length
 
-  const openAdd = () => { setForm(EMPTY_FORM); setFormError(''); setModalMode('add') }
+  const openAdd = () => { setForm(EMPTY_FORM); setFormError(''); setBalanceError(''); setModalMode('add') }
   const openEdit = (a) => {
     setForm({
       account_name: a.account_name,
@@ -92,9 +93,10 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
       status: a.status,
     })
     setFormError('')
+    setBalanceError('')
     setModalMode(a)
   }
-  const closeModal = () => { setModalMode(null); setFormError('') }
+  const closeModal = () => { setModalMode(null); setFormError(''); setBalanceError('') }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -332,7 +334,24 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
             </div>
             <div>
               <label className={LABEL}>Current Balance</label>
-              <input type="number" value={form.current_balance} onChange={(e) => setForm((f) => ({ ...f, current_balance: e.target.value }))} className={INPUT} placeholder="0.00" />
+              <input
+                type="number"
+                min="0"
+                step="any"
+                value={form.current_balance}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setForm((f) => ({ ...f, current_balance: val }))
+                  if (val !== '' && Number(val) < 0) {
+                    setBalanceError('Current balance cannot be negative.')
+                  } else {
+                    setBalanceError('')
+                  }
+                }}
+                className={`${INPUT} ${balanceError ? 'border-red-400 dark:border-red-500' : ''}`}
+                placeholder="0.00"
+              />
+              {balanceError && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{balanceError}</p>}
             </div>
           </div>
           <div>

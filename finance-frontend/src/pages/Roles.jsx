@@ -68,7 +68,7 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
   // Add/Edit modal: null = closed, 'add' = create mode, or the role object being edited
   const [modalMode, setModalMode] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
-  const [formValidationError, setFormValidationError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState({})
 
   // Archive confirmation modal (restoring is a direct one-click action below,
   // no confirmation needed since it's non-destructive)
@@ -141,29 +141,26 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
 
   const openAddModal = () => {
     setForm(EMPTY_FORM)
-    setFormValidationError('')
+    setFieldErrors({})
     setModalMode('add')
   }
 
   const openEditModal = (role) => {
     setForm({ role_name: role.role_name, description: role.description || '' })
-    setFormValidationError('')
+    setFieldErrors({})
     setModalMode(role)
   }
 
   const closeModal = () => {
     setModalMode(null)
-    setFormValidationError('')
+    setFieldErrors({})
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    setFormValidationError('')
-
-    if (!form.role_name.trim()) {
-      setFormValidationError('Role name is required.')
-      return
-    }
+    const errors = {}
+    if (!form.role_name.trim()) errors.role_name = 'Role name is required.'
+    if (Object.keys(errors).length) { setFieldErrors(errors); return }
 
     const payload = {
       role_name: form.role_name.trim(),
@@ -348,21 +345,22 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
         }
       >
         <form onSubmit={handleSubmit} className="space-y-4">
-          {(formValidationError || formError) && (
+          {formError && (
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
-              {formValidationError || formError}
+              {formError}
             </div>
           )}
 
           <div>
-            <label className={LABEL}>Role Name</label>
+            <label className={LABEL}>Role Name <span className="text-red-500">*</span></label>
             <input
               type="text"
               value={form.role_name}
-              onChange={(e) => setForm((f) => ({ ...f, role_name: e.target.value }))}
-              className={INPUT}
+              onChange={(e) => { setForm((f) => ({ ...f, role_name: e.target.value })); setFieldErrors((fe) => ({ ...fe, role_name: '' })) }}
+              className={`${INPUT} ${fieldErrors.role_name ? 'border-red-400 dark:border-red-500' : ''}`}
               placeholder="e.g. Accountant"
             />
+            {fieldErrors.role_name && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.role_name}</p>}
           </div>
 
           <div>

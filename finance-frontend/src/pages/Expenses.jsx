@@ -134,6 +134,8 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
   const [modalMode, setModalMode] = useState(null) // 'add' | expense object | null
   const [form, setForm] = useState(EMPTY_FORM)
   const [formError, setFormError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState({})
+  const [dateErrors, setDateErrors] = useState({ expense_date: '' })
   const [detailRecord, setDetailRecord] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [rejectTarget, setRejectTarget] = useState(null)
@@ -142,7 +144,24 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
   const [receiptHistoryTarget, setReceiptHistoryTarget] = useState(null) // expense whose receipt history is open
   const [receiptNotice, setReceiptNotice] = useState('') // survives modal close, e.g. "downloaded instead of previewed"
 
-  const openAdd = () => { setForm(EMPTY_FORM); setFormError(''); setModalMode('add') }
+  const validateDate = (field, value) => {
+    if (!value) {
+      setDateErrors((e) => ({ ...e, [field]: '' }))
+      return
+    }
+    const d = new Date(value)
+    const min = new Date('2017-01-01')
+    const max = new Date(`${new Date().getFullYear() + 1}-12-31`)
+    if (isNaN(d.getTime())) {
+      setDateErrors((e) => ({ ...e, [field]: 'Invalid date.' }))
+    } else if (d < min || d > max) {
+      setDateErrors((e) => ({ ...e, [field]: 'Date is out of range.' }))
+    } else {
+      setDateErrors((e) => ({ ...e, [field]: '' }))
+    }
+  }
+
+  const openAdd = () => { setForm(EMPTY_FORM); setFormError(''); setFieldErrors({}); setDateErrors({ expense_date: '' }); setModalMode('add') }
   const openEdit = (x) => {
     setForm({
       budget_id: x.budget_id,
@@ -156,9 +175,11 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
       supplier_id: x.supplier_id || '',
     })
     setFormError('')
+    setFieldErrors({})
+    setDateErrors({ expense_date: '' })
     setModalMode(x)
   }
-  const closeModal = () => { setModalMode(null); setFormError('') }
+  const closeModal = () => { setModalMode(null); setFormError(''); setFieldErrors({}); setDateErrors({ expense_date: '' }) }
   const isModalOpen = modalMode !== null
   const isEditing = modalMode !== null && modalMode !== 'add'
 
@@ -182,10 +203,31 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!form.description.trim() || !form.expense_date || !form.expense_amount || !form.budget_id || !form.expense_category_id || !form.expense_source.trim()) {
-      setFormError('Budget, category, date, amount, source, and description are required.')
+    const errors = {}
+    if (!form.budget_id) errors.budget_id = 'Please select a budget.'
+    if (!form.expense_category_id) errors.expense_category_id = 'Please select a category.'
+    if (!form.description.trim()) errors.description = 'Description is required.'
+    if (!form.expense_date) {
+      errors.expense_date = 'Expense date is required.'
+    } else if (form.expense_date < '2017-01-01') {
+      errors.expense_date = 'Date is out of range.'
+    }
+    if (!form.expense_source.trim()) errors.expense_source = 'Source is required.'
+
+    const amt = Number(form.expense_amount)
+    if (!form.expense_amount) {
+      errors.expense_amount = 'Amount is required.'
+    } else if (amt <= 0) {
+      errors.expense_amount = 'Amount must be greater than zero.'
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors)
       return
     }
+    setFieldErrors({})
+    setFormError('')
+
     const payload = {
       ...form,
       budget_id: Number(form.budget_id),
@@ -563,15 +605,26 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
           )}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Budget</label>
-              <select value={form.budget_id} onChange={(e) => setForm((f) => ({ ...f, budget_id: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE}>
+              <label className={LABEL}>Budget <span className="text-red-500 dark:text-red-400">*</span></label>
+              <select
+                value={form.budget_id}
+                onChange={(e) => { setForm((f) => ({ ...f, budget_id: e.target.value })); setFieldErrors((fe) => ({ ...fe, budget_id: '' })) }}
+                className={`${INPUT} ${fieldErrors.budget_id ? 'border-red-400 dark:border-red-500' : ''}`}
+                style={INPUT_TEXT_STYLE}
+              >
                 <option value="">Select budget</option>
                 {budgets.map((b) => <option key={b.budget_id} value={b.budget_id}>{b.budget_name}</option>)}
               </select>
+              {fieldErrors.budget_id && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.budget_id}</p>}
             </div>
             <div>
-              <label className={LABEL}>Category</label>
-              <select value={form.expense_category_id} onChange={(e) => setForm((f) => ({ ...f, expense_category_id: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE}>
+              <label className={LABEL}>Category <span className="text-red-500 dark:text-red-400">*</span></label>
+              <select
+                value={form.expense_category_id}
+                onChange={(e) => { setForm((f) => ({ ...f, expense_category_id: e.target.value })); setFieldErrors((fe) => ({ ...fe, expense_category_id: '' })) }}
+                className={`${INPUT} ${fieldErrors.expense_category_id ? 'border-red-400 dark:border-red-500' : ''}`}
+                style={INPUT_TEXT_STYLE}
+              >
                 <option value="">Select category</option>
                 {categoryOptionsForForm.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -579,26 +632,74 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                   </option>
                 ))}
               </select>
+              {fieldErrors.expense_category_id && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.expense_category_id}</p>}
             </div>
           </div>
           <div>
-            <label className={LABEL}>Description</label>
-            <input type="text" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="What this expense was for" />
+            <label className={LABEL}>Description <span className="text-red-500 dark:text-red-400">*</span></label>
+            <input
+              type="text"
+              value={form.description}
+              onChange={(e) => { setForm((f) => ({ ...f, description: e.target.value })); setFieldErrors((fe) => ({ ...fe, description: '' })) }}
+              className={`${INPUT} ${fieldErrors.description ? 'border-red-400 dark:border-red-500' : ''}`}
+              style={INPUT_TEXT_STYLE}
+              placeholder="What this expense was for"
+            />
+            {fieldErrors.description && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.description}</p>}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Expense Date</label>
-              <input type="date" value={form.expense_date} onChange={(e) => setForm((f) => ({ ...f, expense_date: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} />
+              <label className={LABEL}>Expense Date <span className="text-red-500 dark:text-red-400">*</span></label>
+              <input
+                type="date"
+                min="2017-01-01"
+                max={`${new Date().getFullYear() + 1}-12-31`}
+                value={form.expense_date}
+                onChange={(e) => { setForm((f) => ({ ...f, expense_date: e.target.value })); setFieldErrors((fe) => ({ ...fe, expense_date: '' })) }}
+                onBlur={(e) => validateDate('expense_date', e.target.value)}
+                className={`${INPUT} scheme-light dark:scheme-dark ${dateErrors.expense_date || fieldErrors.expense_date ? 'border-red-400 dark:border-red-500' : ''}`}
+                style={INPUT_TEXT_STYLE}
+              />
+              {(dateErrors.expense_date || fieldErrors.expense_date) && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{dateErrors.expense_date || fieldErrors.expense_date}</p>}
             </div>
             <div>
-              <label className={LABEL}>Amount</label>
-              <input type="number" step="0.01" value={form.expense_amount} onChange={(e) => setForm((f) => ({ ...f, expense_amount: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="0.00" />
+              <label className={LABEL}>Amount <span className="text-red-500 dark:text-red-400">*</span></label>
+              <input
+                type="number"
+                min="0.01"
+                step="any"
+                value={form.expense_amount}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setForm((f) => ({ ...f, expense_amount: val }))
+                  setFieldErrors((fe) => ({ ...fe, expense_amount: '' }))
+                  if (val === '') {
+                    setFieldErrors((fe) => ({ ...fe, expense_amount: '' }))
+                  } else if (Number(val) < 0) {
+                    setFieldErrors((fe) => ({ ...fe, expense_amount: 'Amount cannot be negative.' }))
+                  } else if (Number(val) === 0) {
+                    setFieldErrors((fe) => ({ ...fe, expense_amount: 'Amount must be greater than zero.' }))
+                  }
+                }}
+                className={`${INPUT} ${fieldErrors.expense_amount ? 'border-red-400 dark:border-red-500' : ''}`}
+                style={INPUT_TEXT_STYLE}
+                placeholder="0.00"
+              />
+              {fieldErrors.expense_amount && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.expense_amount}</p>}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Source</label>
-              <input type="text" value={form.expense_source} onChange={(e) => setForm((f) => ({ ...f, expense_source: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="e.g. Petty Cash, Company Card" />
+              <label className={LABEL}>Source <span className="text-red-500 dark:text-red-400">*</span></label>
+              <input
+                type="text"
+                value={form.expense_source}
+                onChange={(e) => { setForm((f) => ({ ...f, expense_source: e.target.value })); setFieldErrors((fe) => ({ ...fe, expense_source: '' })) }}
+                className={`${INPUT} ${fieldErrors.expense_source ? 'border-red-400 dark:border-red-500' : ''}`}
+                style={INPUT_TEXT_STYLE}
+                placeholder="e.g. Petty Cash, Company Card"
+              />
+              {fieldErrors.expense_source && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.expense_source}</p>}
             </div>
             <div>
               <label className={LABEL}>Receipt Number</label>

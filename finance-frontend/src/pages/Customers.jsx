@@ -79,6 +79,7 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
   const [modalMode, setModalMode] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [formError, setFormError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState({})
   const [saving, setSaving] = useState(false)
 
   // Controls visibility of contact number and email together per row
@@ -179,7 +180,7 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
     }
   }
 
-  const openAdd = () => { setForm(EMPTY_FORM); setFormError(''); setModalMode('add') }
+  const openAdd = () => { setForm(EMPTY_FORM); setFormError(''); setFieldErrors({}); setModalMode('add') }
   const openEdit = (c) => {
     setForm({
       customer_name: c.customer_name,
@@ -192,24 +193,25 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
       credit_limit: String(c.credit_limit ?? 0),
     })
     setFormError('')
+    setFieldErrors({})
     setModalMode(c)
   }
-  const closeModal = () => { setModalMode(null); setFormError('') }
+  const closeModal = () => { setModalMode(null); setFormError(''); setFieldErrors({}) }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!form.customer_name.trim() || !form.contact_person.trim() || !form.email.trim()) {
-      setFormError('Company name, contact person, and email are required.')
-      return
-    }
-    if (!/^\S+@\S+\.\S+$/.test(form.email)) {
-      setFormError('Enter a valid email address.')
-      return
+    const errors = {}
+    if (!form.customer_name.trim()) errors.customer_name = 'Company name is required.'
+    if (!form.contact_person.trim()) errors.contact_person = 'Contact person is required.'
+    if (!form.email.trim()) {
+      errors.email = 'Email is required.'
+    } else if (!/^\S+@\S+\.\S+$/.test(form.email)) {
+      errors.email = 'Enter a valid email address.'
     }
     if (form.credit_limit !== '' && (isNaN(Number(form.credit_limit)) || Number(form.credit_limit) < 0)) {
-      setFormError('Credit limit must be a valid non-negative number.')
-      return
+      errors.credit_limit = 'Credit limit must be a valid non-negative number.'
     }
+    if (Object.keys(errors).length) { setFieldErrors(errors); return }
 
     setSaving(true)
     setFormError('')
@@ -428,8 +430,9 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{formError}</div>
           )}
           <div>
-            <label className={LABEL}>Company Name</label>
-            <input type="text" value={form.customer_name} onChange={(e) => setForm((f) => ({ ...f, customer_name: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="Delacruz Trading Corp." />
+            <label className={LABEL}>Company Name <span className="text-red-500">*</span></label>
+            <input type="text" value={form.customer_name} onChange={(e) => { setForm((f) => ({ ...f, customer_name: e.target.value })); setFieldErrors((fe) => ({ ...fe, customer_name: '' })) }} className={`${INPUT} ${fieldErrors.customer_name ? 'border-red-400 dark:border-red-500' : ''}`} style={INPUT_TEXT_STYLE} placeholder="Delacruz Trading Corp." />
+            {fieldErrors.customer_name && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.customer_name}</p>}
           </div>
           <div>
             <label className={LABEL}>Company Address</label>
@@ -437,8 +440,9 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Contact Person</label>
-              <input type="text" value={form.contact_person} onChange={(e) => setForm((f) => ({ ...f, contact_person: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="Juan Delacruz" />
+              <label className={LABEL}>Contact Person <span className="text-red-500">*</span></label>
+              <input type="text" value={form.contact_person} onChange={(e) => { setForm((f) => ({ ...f, contact_person: e.target.value })); setFieldErrors((fe) => ({ ...fe, contact_person: '' })) }} className={`${INPUT} ${fieldErrors.contact_person ? 'border-red-400 dark:border-red-500' : ''}`} style={INPUT_TEXT_STYLE} placeholder="Juan Delacruz" />
+              {fieldErrors.contact_person && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.contact_person}</p>}
             </div>
             <div>
               <label className={LABEL}>Position</label>
@@ -451,8 +455,9 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
               <input type="text" value={form.contact_number} onChange={(e) => setForm((f) => ({ ...f, contact_number: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="0917 234 5678" />
             </div>
             <div>
-              <label className={LABEL}>Email Address</label>
-              <input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="accounts@company.com" />
+              <label className={LABEL}>Email Address <span className="text-red-500">*</span></label>
+              <input type="email" value={form.email} onChange={(e) => { setForm((f) => ({ ...f, email: e.target.value })); setFieldErrors((fe) => ({ ...fe, email: '' })) }} className={`${INPUT} ${fieldErrors.email ? 'border-red-400 dark:border-red-500' : ''}`} style={INPUT_TEXT_STYLE} placeholder="accounts@company.com" />
+              {fieldErrors.email && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.email}</p>}
             </div>
           </div>
           <div>
@@ -461,19 +466,24 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
           </div>
           <div>
             <label className={LABEL}>Credit Limit</label>
-            <div className="flex items-center gap-2 rounded-lg border border-border bg-bg px-3 py-2 focus-within:border-primary focus-within:bg-white transition-colors duration-150">
+            <div className={`flex items-center gap-2 rounded-lg border bg-bg px-3 py-2 transition-colors duration-150 ${fieldErrors.credit_limit ? 'border-red-400 dark:border-red-500' : 'border-border focus-within:border-primary focus-within:bg-surface'}`}>
               <Wallet size={15} className="text-muted shrink-0" />
               <input
                 type="number"
                 min="0"
-                step="0.01"
+                step="any"
                 value={form.credit_limit}
-                onChange={(e) => setForm((f) => ({ ...f, credit_limit: e.target.value }))}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setForm((f) => ({ ...f, credit_limit: val }))
+                  setFieldErrors((fe) => ({ ...fe, credit_limit: val !== '' && Number(val) < 0 ? 'Credit limit cannot be negative.' : '' }))
+                }}
                 placeholder="0.00"
                 style={INPUT_TEXT_STYLE}
                 className="w-full text-sm bg-transparent outline-none border-0"
               />
             </div>
+            {fieldErrors.credit_limit && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.credit_limit}</p>}
             {isEditing && (
               <p className="mt-1.5 text-[11px] text-muted">
                 Current balance: {formatCurrency(modalMode?.current_balance, currency)} (updates automatically from receivables, not editable here)

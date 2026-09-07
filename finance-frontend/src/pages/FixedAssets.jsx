@@ -81,8 +81,34 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
   const [modalMode, setModalMode] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [formError, setFormError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState({})
+  const [dateErrors, setDateErrors] = useState({ purchase_date: '' })
+  const [costErrors, setCostErrors] = useState({ purchase_cost: '', salvage_value: '', useful_life_years: '' })
 
-  const openAdd = () => { setForm(EMPTY_FORM); setFormError(''); setModalMode('add') }
+  const validateDate = (field, value) => {
+    if (!value) {
+      setDateErrors((e) => ({ ...e, [field]: '' }))
+      return
+    }
+    const d = new Date(value)
+    const min = new Date('2017-01-01')
+    if (isNaN(d.getTime())) {
+      setDateErrors((e) => ({ ...e, [field]: 'Invalid date.' }))
+    } else if (d < min) {
+      setDateErrors((e) => ({ ...e, [field]: 'Date is out of range.' }))
+    } else {
+      setDateErrors((e) => ({ ...e, [field]: '' }))
+    }
+  }
+
+  const openAdd = () => {
+    setForm(EMPTY_FORM)
+    setFormError('')
+    setFieldErrors({})
+    setDateErrors({ purchase_date: '' })
+    setCostErrors({ purchase_cost: '', salvage_value: '', useful_life_years: '' })
+    setModalMode('add')
+  }
   const openEdit = (a) => {
     setForm({
       asset_code: a.asset_code,
@@ -101,16 +127,48 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
       remarks: a.remarks || '',
     })
     setFormError('')
+    setFieldErrors({})
+    setDateErrors({ purchase_date: '' })
+    setCostErrors({ purchase_cost: '', salvage_value: '', useful_life_years: '' })
     setModalMode(a)
   }
-  const closeModal = () => { setModalMode(null); setFormError('') }
+  const closeModal = () => {
+    setModalMode(null)
+    setFormError('')
+    setFieldErrors({})
+    setDateErrors({ purchase_date: '' })
+    setCostErrors({ purchase_cost: '', salvage_value: '', useful_life_years: '' })
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!form.asset_code.trim() || !form.asset_name.trim() || !form.purchase_date) {
-      setFormError('Asset code, asset name, and purchase date are required.')
+    setFormError('')
+    const errors = {}
+
+    if (!form.asset_code?.trim()) {
+      errors.asset_code = 'Asset code is required.'
+    }
+    if (!form.asset_name?.trim()) {
+      errors.asset_name = 'Asset name is required.'
+    }
+    if (!form.purchase_date) {
+      errors.purchase_date = 'Purchase date is required.'
+    }
+    if (form.useful_life_years !== '' && (isNaN(Number(form.useful_life_years)) || Number(form.useful_life_years) < 1)) {
+      errors.useful_life_years = 'Useful life must be at least 1 year.'
+    }
+    if (form.purchase_cost !== '' && Number(form.purchase_cost) < 0) {
+      errors.purchase_cost = 'Purchase cost cannot be negative.'
+    }
+    if (form.salvage_value !== '' && Number(form.salvage_value) < 0) {
+      errors.salvage_value = 'Salvage value cannot be negative.'
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors)
       return
     }
+    setFieldErrors({})
 
     const payload = {
       asset_code: form.asset_code,
@@ -339,8 +397,18 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
           )}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Asset Code</label>
-              <input type="text" value={form.asset_code} onChange={(e) => setForm((f) => ({ ...f, asset_code: e.target.value }))} className={INPUT} placeholder="FA-1001" />
+              <label className={LABEL}>Asset Code <span className="text-red-500">*</span></label>
+              <input
+                type="text"
+                value={form.asset_code}
+                onChange={(e) => {
+                  setFieldErrors((fe) => ({ ...fe, asset_code: '' }))
+                  setForm((f) => ({ ...f, asset_code: e.target.value }))
+                }}
+                className={`${INPUT} ${fieldErrors.asset_code ? 'border-red-400 dark:border-red-500' : ''}`}
+                placeholder="FA-1001"
+              />
+              {fieldErrors.asset_code && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.asset_code}</p>}
             </div>
             <div>
               <label className={LABEL}>Category</label>
@@ -350,8 +418,18 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
             </div>
           </div>
           <div>
-            <label className={LABEL}>Asset Name</label>
-            <input type="text" value={form.asset_name} onChange={(e) => setForm((f) => ({ ...f, asset_name: e.target.value }))} className={INPUT} placeholder="Mobile Crane Unit A" />
+            <label className={LABEL}>Asset Name <span className="text-red-500">*</span></label>
+            <input
+              type="text"
+              value={form.asset_name}
+              onChange={(e) => {
+                setFieldErrors((fe) => ({ ...fe, asset_name: '' }))
+                setForm((f) => ({ ...f, asset_name: e.target.value }))
+              }}
+              className={`${INPUT} ${fieldErrors.asset_name ? 'border-red-400 dark:border-red-500' : ''}`}
+              placeholder="Mobile Crane Unit A"
+            />
+            {fieldErrors.asset_name && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.asset_name}</p>}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -382,22 +460,94 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Purchase Date</label>
-              <input type="date" value={form.purchase_date} onChange={(e) => setForm((f) => ({ ...f, purchase_date: e.target.value }))} className={INPUT} />
+              <label className={LABEL}>Purchase Date <span className="text-red-500">*</span></label>
+              <input
+                type="date"
+                value={form.purchase_date}
+                min="2017-01-01"
+                onChange={(e) => {
+                  setFieldErrors((fe) => ({ ...fe, purchase_date: '' }))
+                  setForm((f) => ({ ...f, purchase_date: e.target.value }))
+                }}
+                onBlur={(e) => validateDate('purchase_date', e.target.value)}
+                className={`${INPUT} scheme-light dark:scheme-dark ${(fieldErrors.purchase_date || dateErrors.purchase_date) ? 'border-red-400 dark:border-red-500' : ''}`}
+              />
+              {(fieldErrors.purchase_date || dateErrors.purchase_date) && (
+                <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.purchase_date || dateErrors.purchase_date}</p>
+              )}
             </div>
             <div>
               <label className={LABEL}>Useful Life (years)</label>
-              <input type="number" value={form.useful_life_years} onChange={(e) => setForm((f) => ({ ...f, useful_life_years: e.target.value }))} className={INPUT} placeholder="10" />
+              <input
+                type="number"
+                min="1"
+                value={form.useful_life_years}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setFieldErrors((fe) => ({ ...fe, useful_life_years: '' }))
+                  setForm((f) => ({ ...f, useful_life_years: val }))
+                  if (val !== '' && (isNaN(Number(val)) || Number(val) < 1)) {
+                    setCostErrors((ce) => ({ ...ce, useful_life_years: 'Useful life must be at least 1 year.' }))
+                  } else {
+                    setCostErrors((ce) => ({ ...ce, useful_life_years: '' }))
+                  }
+                }}
+                className={`${INPUT} ${(costErrors.useful_life_years || fieldErrors.useful_life_years) ? 'border-red-400 dark:border-red-500' : ''}`}
+                placeholder="10"
+              />
+              {(costErrors.useful_life_years || fieldErrors.useful_life_years) && (
+                <p className="mt-1 text-xs text-red-500 dark:text-red-400">{costErrors.useful_life_years || fieldErrors.useful_life_years}</p>
+              )}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={LABEL}>Purchase Cost</label>
-              <input type="number" value={form.purchase_cost} onChange={(e) => setForm((f) => ({ ...f, purchase_cost: e.target.value }))} className={INPUT} placeholder="8500000" />
+              <input
+                type="number"
+                min="0"
+                step="any"
+                value={form.purchase_cost}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setFieldErrors((fe) => ({ ...fe, purchase_cost: '' }))
+                  setForm((f) => ({ ...f, purchase_cost: val }))
+                  if (val !== '' && Number(val) < 0) {
+                    setCostErrors((ce) => ({ ...ce, purchase_cost: 'Purchase cost cannot be negative.' }))
+                  } else {
+                    setCostErrors((ce) => ({ ...ce, purchase_cost: '' }))
+                  }
+                }}
+                className={`${INPUT} ${(costErrors.purchase_cost || fieldErrors.purchase_cost) ? 'border-red-400 dark:border-red-500' : ''}`}
+                placeholder="8500000"
+              />
+              {(costErrors.purchase_cost || fieldErrors.purchase_cost) && (
+                <p className="mt-1 text-xs text-red-500 dark:text-red-400">{costErrors.purchase_cost || fieldErrors.purchase_cost}</p>
+              )}
             </div>
             <div>
               <label className={LABEL}>Salvage Value</label>
-              <input type="number" value={form.salvage_value} onChange={(e) => setForm((f) => ({ ...f, salvage_value: e.target.value }))} className={INPUT} placeholder="850000" />
+              <input
+                type="number"
+                min="0"
+                step="any"
+                value={form.salvage_value}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setFieldErrors((fe) => ({ ...fe, salvage_value: '' }))
+                  setForm((f) => ({ ...f, salvage_value: val }))
+                  if (val !== '' && Number(val) < 0) {
+                    setCostErrors((ce) => ({ ...ce, salvage_value: 'Salvage value cannot be negative.' }))
+                  } else {
+                    setCostErrors((ce) => ({ ...ce, salvage_value: '' }))
+                  }
+                }}
+                className={`${INPUT} ${(costErrors.salvage_value || fieldErrors.salvage_value) ? 'border-red-400 dark:border-red-500' : ''}`}
+                placeholder="850000"
+              />
+              {(costErrors.salvage_value || fieldErrors.salvage_value) && (
+                <p className="mt-1 text-xs text-red-500 dark:text-red-400">{costErrors.salvage_value || fieldErrors.salvage_value}</p>
+              )}
             </div>
           </div>
           <div>

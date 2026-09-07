@@ -56,6 +56,7 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
   const [modalMode, setModalMode] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [formError, setFormError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState({})
   const [saving, setSaving] = useState(false)
 
   // Global search (SearchBar.jsx) navigates here with a highlightId (and,
@@ -150,7 +151,7 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
     }
   }
 
-  const openAdd = () => { setForm(EMPTY_FORM); setFormError(''); setModalMode('add') }
+  const openAdd = () => { setForm(EMPTY_FORM); setFormError(''); setFieldErrors({}); setModalMode('add') }
   const openEdit = (s) => {
     setForm({
       supplier_name: s.supplier_name,
@@ -163,20 +164,22 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
       status: s.status,
     })
     setFormError('')
+    setFieldErrors({})
     setModalMode(s)
   }
-  const closeModal = () => { setModalMode(null); setFormError('') }
+  const closeModal = () => { setModalMode(null); setFormError(''); setFieldErrors({}) }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!form.supplier_name.trim() || !form.contact_person.trim() || !form.email.trim()) {
-      setFormError('Supplier name, contact person, and email are required.')
-      return
+    const errors = {}
+    if (!form.supplier_name.trim()) errors.supplier_name = 'Supplier name is required.'
+    if (!form.contact_person.trim()) errors.contact_person = 'Contact person is required.'
+    if (!form.email.trim()) {
+      errors.email = 'Email is required.'
+    } else if (!/^\S+@\S+\.\S+$/.test(form.email)) {
+      errors.email = 'Enter a valid email address.'
     }
-    if (!/^\S+@\S+\.\S+$/.test(form.email)) {
-      setFormError('Enter a valid email address.')
-      return
-    }
+    if (Object.keys(errors).length) { setFieldErrors(errors); return }
 
     setSaving(true)
     setFormError('')
@@ -370,13 +373,15 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{formError}</div>
           )}
           <div>
-            <label className={LABEL}>Supplier Name</label>
-            <input type="text" value={form.supplier_name} onChange={(e) => setForm((f) => ({ ...f, supplier_name: e.target.value }))} className={INPUT} placeholder="Northgate Supplies Inc." />
+            <label className={LABEL}>Supplier Name <span className="text-red-500">*</span></label>
+            <input type="text" value={form.supplier_name} onChange={(e) => { setForm((f) => ({ ...f, supplier_name: e.target.value })); setFieldErrors((fe) => ({ ...fe, supplier_name: '' })) }} className={`${INPUT} ${fieldErrors.supplier_name ? 'border-red-400 dark:border-red-500' : ''}`} placeholder="Northgate Supplies Inc." />
+            {fieldErrors.supplier_name && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.supplier_name}</p>}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Contact Person</label>
-              <input type="text" value={form.contact_person} onChange={(e) => setForm((f) => ({ ...f, contact_person: e.target.value }))} className={INPUT} placeholder="Rico Alvarado" />
+              <label className={LABEL}>Contact Person <span className="text-red-500">*</span></label>
+              <input type="text" value={form.contact_person} onChange={(e) => { setForm((f) => ({ ...f, contact_person: e.target.value })); setFieldErrors((fe) => ({ ...fe, contact_person: '' })) }} className={`${INPUT} ${fieldErrors.contact_person ? 'border-red-400 dark:border-red-500' : ''}`} placeholder="Rico Alvarado" />
+              {fieldErrors.contact_person && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.contact_person}</p>}
             </div>
             <div>
               <label className={LABEL}>Position</label>
@@ -389,13 +394,14 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
               <input type="text" value={form.contact_number} onChange={(e) => setForm((f) => ({ ...f, contact_number: e.target.value }))} className={INPUT} placeholder="0917 111 2233" />
             </div>
             <div>
-              <label className={LABEL}>Email</label>
-              <input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className={INPUT} placeholder="sales@company.com" />
+              <label className={LABEL}>Email <span className="text-red-500">*</span></label>
+              <input type="email" value={form.email} onChange={(e) => { setForm((f) => ({ ...f, email: e.target.value })); setFieldErrors((fe) => ({ ...fe, email: '' })) }} className={`${INPUT} ${fieldErrors.email ? 'border-red-400 dark:border-red-500' : ''}`} placeholder="sales@company.com" />
+              {fieldErrors.email && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.email}</p>}
             </div>
           </div>
           <div>
             <label className={LABEL}>Website</label>
-            <div className="flex items-center gap-2 rounded-lg border border-border bg-bg px-3 py-2 focus-within:border-primary focus-within:bg-white transition-colors duration-150">
+            <div className="flex items-center gap-2 rounded-lg border border-border bg-bg px-3 py-2 focus-within:border-primary focus-within:bg-surface transition-colors duration-150">
               <Globe size={15} className="text-muted shrink-0" />
               <input
                 type="text"

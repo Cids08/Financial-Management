@@ -41,10 +41,11 @@ export default function ExpenseCategories({ title = 'Expense Categories', crumbs
   const [modalMode, setModalMode] = useState(null) // 'add' | category object | null
   const [form, setForm] = useState(EMPTY_FORM)
   const [formError, setFormError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState({})
   const isModalOpen = modalMode !== null
   const isEditing = modalMode !== null && modalMode !== 'add'
 
-  const openAdd = () => { setForm(EMPTY_FORM); setFormError(''); setModalMode('add') }
+  const openAdd = () => { setForm(EMPTY_FORM); setFormError(''); setFieldErrors({}); setModalMode('add') }
   const openEdit = (c) => {
     setForm({
       category_code: c.category_code,
@@ -53,16 +54,18 @@ export default function ExpenseCategories({ title = 'Expense Categories', crumbs
       is_active: c.is_active,
     })
     setFormError('')
+    setFieldErrors({})
     setModalMode(c)
   }
-  const closeModal = () => { setModalMode(null); setFormError('') }
+  const closeModal = () => { setModalMode(null); setFormError(''); setFieldErrors({}) }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!form.category_code.trim() || !form.category_name.trim()) {
-      setFormError('Category code and name are required.')
-      return
-    }
+    const errors = {}
+    if (!form.category_code.trim()) errors.category_code = 'Category code is required.'
+    if (!form.category_name.trim()) errors.category_name = 'Category name is required.'
+    if (Object.keys(errors).length) { setFieldErrors(errors); return }
+
     const result = isEditing
       ? await updateCategory(modalMode.id, form)
       : await createCategory(form)
@@ -218,12 +221,14 @@ export default function ExpenseCategories({ title = 'Expense Categories', crumbs
           )}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Category Code</label>
-              <input type="text" value={form.category_code} onChange={(e) => setForm((f) => ({ ...f, category_code: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="e.g. TAX, UTIL" />
+              <label className={LABEL}>Category Code <span className="text-red-500">*</span></label>
+              <input type="text" value={form.category_code} onChange={(e) => { setForm((f) => ({ ...f, category_code: e.target.value })); setFieldErrors((fe) => ({ ...fe, category_code: '' })) }} className={`${INPUT} ${fieldErrors.category_code ? 'border-red-400 dark:border-red-500' : ''}`} style={INPUT_TEXT_STYLE} placeholder="e.g. TAX, UTIL" />
+              {fieldErrors.category_code && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.category_code}</p>}
             </div>
             <div>
-              <label className={LABEL}>Category Name</label>
-              <input type="text" value={form.category_name} onChange={(e) => setForm((f) => ({ ...f, category_name: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="e.g. Utilities" />
+              <label className={LABEL}>Category Name <span className="text-red-500">*</span></label>
+              <input type="text" value={form.category_name} onChange={(e) => { setForm((f) => ({ ...f, category_name: e.target.value })); setFieldErrors((fe) => ({ ...fe, category_name: '' })) }} className={`${INPUT} ${fieldErrors.category_name ? 'border-red-400 dark:border-red-500' : ''}`} style={INPUT_TEXT_STYLE} placeholder="e.g. Utilities" />
+              {fieldErrors.category_name && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.category_name}</p>}
             </div>
           </div>
           <div>

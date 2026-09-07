@@ -16,6 +16,11 @@ const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const MAX_IMAGE_MB = 8
 const PAGE_SIZE = 10
 
+// Hide the edit button for settled invoices. Only 'Paid' is considered
+// locked — Cancelled records can still be edited (e.g. to correct a mistake).
+// NOTE: this is a UX-layer guard only; authoritative enforcement lives in Laravel.
+const LOCKED_STATUSES = ['Paid', 'Cancelled']
+
 const EMPTY_FORM = { customer_id: '', collector_id: '', invoice_number: '', invoice_date: '', due_date: '', original_amount: '', balance: '', payment_method: 'Bank Transfer', payment_terms: 'Net 30', purchase_order_no: '', reference_no: '', penalty_rate: '', remarks: '', status: 'Pending' }
 
 const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
@@ -33,6 +38,10 @@ const STATUS_STYLES = {
   Cancelled: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
 }
 
+function isLocked(record) {
+  return LOCKED_STATUSES.includes(record.status)
+}
+
 function formatDate(value) {
   if (!value) return '—'
   return new Date(value).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })
@@ -48,6 +57,14 @@ function addDaysISO(days) {
   d.setDate(d.getDate() + days)
   return d.toISOString().slice(0, 10)
 }
+
+// Reusable date-range constants for the form's date inputs.
+// MIN_DATE prevents absurd historical dates (pre-2000).
+// MAX_INVOICE_DATE caps invoice date at today (can't invoice the future).
+// MAX_DUE_DATE allows due dates up to 10 years ahead (generous but sane).
+const MIN_DATE = '2017-01-01'
+const MAX_INVOICE_DATE = new Date().toISOString().slice(0, 10)
+const MAX_DUE_DATE = addDaysISO(365 * 10)
 
 /**
  * Lightweight fetch-on-mount lookups for the form's dropdowns — same
@@ -237,7 +254,31 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
 
   const [modalMode, setModalMode] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
-  const [formError, setFormError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState({})
+  const [serverError, setServerError] = useState('')
+  const [dateErrors, setDateErrors] = useState({ invoice_date: '', due_date: '' })
+
+  const validateDate = (field, value) => {
+    if (!value) {
+      setDateErrors((e) => ({ ...e, [field]: 'Please enter a valid date.' }))
+      return
+    }
+    const d = new Date(value)
+    const min = new Date(MIN_DATE)
+    const maxInvoice = new Date(MAX_INVOICE_DATE)
+    const maxDue = new Date(MAX_DUE_DATE)
+    if (isNaN(d.getTime())) {
+      setDateErrors((e) => ({ ...e, [field]: 'Invalid date.' }))
+    } else if (d < min) {
+      setDateErrors((e) => ({ ...e, [field]: 'Date is out of range.' }))
+    } else if (field === 'invoice_date' && d > maxInvoice) {
+      setDateErrors((e) => ({ ...e, [field]: 'Invoice date cannot be in the future.' }))
+    } else if (field === 'due_date' && d > maxDue) {
+      setDateErrors((e) => ({ ...e, [field]: 'Due date is too far in the future.' }))
+    } else {
+      setDateErrors((e) => ({ ...e, [field]: '' }))
+    }
+  }
 
   const [detailRecord, setDetailRecord] = useState(null)
 
@@ -305,15 +346,22 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
 
   const openAdd = () => {
     setForm({ ...EMPTY_FORM, customer_id: customers[0]?.customer_id ?? '' })
-    setFormError('')
+    setFieldErrors({})
+    setServerError('')
     setModalMode('add')
   }
   const openEdit = (r) => {
+    // Belt-and-suspenders: the Edit button is already hidden/disabled for
+    // locked records (see isLocked/LOCKED_STATUSES above), but guard here
+    // too in case openEdit is ever wired up elsewhere.
+    if (isLocked(r)) return
     setForm({ customer_id: r.customer_id, collector_id: r.collector_id || '', invoice_number: r.invoice_number, invoice_date: r.invoice_date, due_date: r.due_date, original_amount: r.original_amount, balance: r.balance, payment_method: r.payment_method, payment_terms: r.payment_terms, purchase_order_no: r.purchase_order_no, reference_no: r.reference_no, penalty_rate: r.penalty_rate, remarks: r.remarks, status: r.status })
-    setFormError('')
+    setFieldErrors({})
+    setServerError('')
+    setDateErrors({ invoice_date: '', due_date: '' })
     setModalMode(r)
   }
-  const closeModal = () => { setModalMode(null); setFormError('') }
+  const closeModal = () => { setModalMode(null); setFieldErrors({}); setServerError(''); setDateErrors({ invoice_date: '', due_date: '' }) }
   const openDetail = (r) => setDetailRecord(r)
   const closeDetail = () => setDetailRecord(null)
 
@@ -392,11 +440,24 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!form.customer_id || !form.invoice_number.trim() || !form.due_date || !form.original_amount) {
-      setFormError('Customer, invoice number, due date, and original amount are required.')
+    const errors = {}
+    if (!form.customer_id) errors.customer_id = 'Please select a customer.'
+    if (!form.invoice_number.trim()) errors.invoice_number = 'Invoice number is required.'
+    if (!form.due_date) errors.due_date = 'Due date is required.'
+    if (!form.original_amount) {
+      errors.original_amount = 'Original amount is required.'
+    } else if (Number(form.original_amount) <= 0) {
+      errors.original_amount = 'Original amount must be greater than zero.'
+    }
+    if (form.balance !== '' && Number(form.balance) < 0) {
+      errors.balance = 'Balance cannot be negative.'
+    }
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors)
       return
     }
-    setFormError('')
+    setFieldErrors({})
+    setServerError('')
 
     const payload = {
       customer_id: Number(form.customer_id),
@@ -420,7 +481,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
       : await updateRecord(modalMode.ar_id, payload)
 
     if (!result.success) {
-      setFormError(result.message || 'Failed to save invoice.')
+      setServerError(result.message || 'Failed to save invoice.')
       return
     }
     closeModal()
@@ -514,7 +575,9 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
               {loading && (
                 <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-muted">Loading invoices…</td></tr>
               )}
-              {!loading && paginated.map((r) => (
+              {!loading && paginated.map((r) => {
+                const locked = isLocked(r)
+                return (
                 <tr
                   key={r.ar_id}
                   data-row-id={r.ar_id}
@@ -564,9 +627,10 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                           <Printer size={15} />
                         </button>
                       </Tooltip>
-                      {/* Edit and Archive/Restore both hit ar.manage-gated
-                          routes — hidden for view-only roles like Collector. */}
-                      {canManage && (
+                      {/* Edit hits an ar.manage-gated route — hidden for
+                          view-only roles (Collector) and also hidden once a
+                          record is Paid/Cancelled (locked status). */}
+                      {canManage && !locked && (
                         <Tooltip label="Edit invoice" align="start">
                           <button type="button" onClick={() => openEdit(r)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                             <Pencil size={15} />
@@ -583,7 +647,8 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                     </div>
                   </td>
                 </tr>
-              ))}
+                )
+              })}
               {!loading && filtered.length === 0 && (
                 <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-muted">No invoices match your filters.</td></tr>
               )}
@@ -624,9 +689,9 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
       </div>
 
       {/* Add / Edit modal — editable business fields only. Only ever
-          reachable via openAdd/openEdit, both of which are now behind
-          canManage-gated buttons — kept unconditionally rendered here
-          since Modal's own `open` prop already controls visibility. */}
+          reachable via openAdd/openEdit; openEdit itself now no-ops for
+          locked (Paid/Cancelled) records as a second layer of defense,
+          on top of the disabled Edit button in the table above. */}
       <Modal
         open={isModalOpen}
         onClose={closeModal}
@@ -639,23 +704,36 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
         }
       >
         <form onSubmit={handleSubmit} className="space-y-4">
-          {formError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{formError}</div>
+          {/* Server-side error fallback (only shows when the API itself fails) */}
+          {serverError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{serverError}</div>
           )}
 
           {!isEditing && <InvoiceScanUpload onScanned={handleScanned} />}
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Customer</label>
-              <select value={form.customer_id} onChange={(e) => setForm((f) => ({ ...f, customer_id: e.target.value }))} className={INPUT}>
+              <label className={LABEL}>Customer <span className="text-red-500 dark:text-red-400">*</span></label>
+              <select
+                value={form.customer_id}
+                onChange={(e) => { setForm((f) => ({ ...f, customer_id: e.target.value })); setFieldErrors((fe) => ({ ...fe, customer_id: '' })) }}
+                className={`${INPUT} ${fieldErrors.customer_id ? 'border-red-400 dark:border-red-500' : ''}`}
+              >
                 <option value="">Select customer</option>
                 {customers.map((c) => <option key={c.customer_id} value={c.customer_id}>{c.customer_name}</option>)}
               </select>
+              {fieldErrors.customer_id && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.customer_id}</p>}
             </div>
             <div>
-              <label className={LABEL}>Invoice Number</label>
-              <input type="text" value={form.invoice_number} onChange={(e) => setForm((f) => ({ ...f, invoice_number: e.target.value }))} className={INPUT} placeholder="INV-2026-0001" />
+              <label className={LABEL}>Invoice Number <span className="text-red-500 dark:text-red-400">*</span></label>
+              <input
+                type="text"
+                value={form.invoice_number}
+                onChange={(e) => { setForm((f) => ({ ...f, invoice_number: e.target.value })); setFieldErrors((fe) => ({ ...fe, invoice_number: '' })) }}
+                className={`${INPUT} ${fieldErrors.invoice_number ? 'border-red-400 dark:border-red-500' : ''}`}
+                placeholder="INV-2026-0001"
+              />
+              {fieldErrors.invoice_number && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.invoice_number}</p>}
             </div>
           </div>
           <div>
@@ -668,21 +746,79 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={LABEL}>Invoice Date</label>
-              <input type="date" value={form.invoice_date} onChange={(e) => setForm((f) => ({ ...f, invoice_date: e.target.value }))} className={INPUT} />
+              <input
+                type="date"
+                required
+                min={MIN_DATE}
+                max={MAX_INVOICE_DATE}
+                value={form.invoice_date}
+                onChange={(e) => setForm((f) => ({ ...f, invoice_date: e.target.value }))}
+                onBlur={(e) => validateDate('invoice_date', e.target.value)}
+                className={`${INPUT} scheme-light dark:scheme-dark ${dateErrors.invoice_date ? 'border-red-400 focus:ring-red-300 focus:border-red-400 dark:border-red-500 dark:focus:ring-red-500/30 dark:focus:border-red-500' : ''}`}
+              />
+              {dateErrors.invoice_date && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{dateErrors.invoice_date}</p>}
             </div>
             <div>
-              <label className={LABEL}>Due Date</label>
-              <input type="date" value={form.due_date} onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))} className={INPUT} />
+              <label className={LABEL}>Due Date <span className="text-red-500 dark:text-red-400">*</span></label>
+              <input
+                type="date"
+                required
+                min={MIN_DATE}
+                max={MAX_DUE_DATE}
+                value={form.due_date}
+                onChange={(e) => { setForm((f) => ({ ...f, due_date: e.target.value })); setFieldErrors((fe) => ({ ...fe, due_date: '' })) }}
+                onBlur={(e) => validateDate('due_date', e.target.value)}
+                className={`${INPUT} scheme-light dark:scheme-dark ${dateErrors.due_date || fieldErrors.due_date ? 'border-red-400 focus:ring-red-300 focus:border-red-400 dark:border-red-500 dark:focus:ring-red-500/30 dark:focus:border-red-500' : ''}`}
+              />
+              {(dateErrors.due_date || fieldErrors.due_date) && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{dateErrors.due_date || fieldErrors.due_date}</p>}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Original Amount</label>
-              <input type="number" value={form.original_amount} onChange={(e) => setForm((f) => ({ ...f, original_amount: e.target.value }))} className={INPUT} placeholder="0.00" />
+              <label className={LABEL}>Original Amount <span className="text-red-500 dark:text-red-400">*</span></label>
+              <input
+                type="number"
+                min="0.01"
+                step="any"
+                value={form.original_amount}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setForm((f) => ({ ...f, original_amount: val }))
+                  if (val === '') {
+                    setFieldErrors((fe) => ({ ...fe, original_amount: '' }))
+                  } else if (Number(val) < 0) {
+                    setFieldErrors((fe) => ({ ...fe, original_amount: 'Original amount cannot be negative.' }))
+                  } else if (Number(val) === 0) {
+                    setFieldErrors((fe) => ({ ...fe, original_amount: 'Original amount must be greater than zero.' }))
+                  } else {
+                    setFieldErrors((fe) => ({ ...fe, original_amount: '' }))
+                  }
+                }}
+                className={`${INPUT} ${fieldErrors.original_amount ? 'border-red-400 dark:border-red-500' : ''}`}
+                placeholder="0.00"
+              />
+              {fieldErrors.original_amount && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.original_amount}</p>}
             </div>
             <div>
               <label className={LABEL}>Balance</label>
-              <input type="number" value={form.balance} onChange={(e) => setForm((f) => ({ ...f, balance: e.target.value }))} className={INPUT} placeholder="0.00" />
+              <input
+                type="number"
+                min="0"
+                step="any"
+                value={form.balance}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setForm((f) => ({ ...f, balance: val }))
+                  if (val !== '' && Number(val) < 0) {
+                    setFieldErrors((fe) => ({ ...fe, balance: 'Balance cannot be negative.' }))
+                  } else {
+                    setFieldErrors((fe) => ({ ...fe, balance: '' }))
+                  }
+                }}
+                className={`${INPUT} ${fieldErrors.balance ? 'border-red-400 dark:border-red-500' : ''}`}
+                placeholder="0.00"
+              />
+              {fieldErrors.balance && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.balance}</p>}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -710,7 +846,24 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={LABEL}>Penalty Rate (%)</label>
-              <input type="number" step="0.1" value={form.penalty_rate} onChange={(e) => setForm((f) => ({ ...f, penalty_rate: e.target.value }))} className={INPUT} placeholder="0" />
+              <input
+                type="number"
+                min="0"
+                step="0.1"
+                value={form.penalty_rate}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setForm((f) => ({ ...f, penalty_rate: val }))
+                  if (val !== '' && Number(val) < 0) {
+                    setFieldErrors((fe) => ({ ...fe, penalty_rate: 'Penalty rate cannot be negative.' }))
+                  } else {
+                    setFieldErrors((fe) => ({ ...fe, penalty_rate: '' }))
+                  }
+                }}
+                className={`${INPUT} ${fieldErrors.penalty_rate ? 'border-red-400 dark:border-red-500' : ''}`}
+                placeholder="0"
+              />
+              {fieldErrors.penalty_rate && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.penalty_rate}</p>}
             </div>
             <div>
               <label className={LABEL}>Status</label>

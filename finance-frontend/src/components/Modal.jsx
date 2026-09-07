@@ -32,8 +32,8 @@ export default function Modal({ open, onClose, title, children, footer, maxWidth
         role="dialog"
         aria-modal="true"
         className={`relative flex w-full ${maxWidth} max-h-[92vh] sm:max-h-[85vh] flex-col
-          rounded-t-2xl border border-border bg-surface shadow-dropdown animate-fadeIn
-          sm:rounded-xl`}
+          rounded-t-2xl border border-b-0 border-border bg-surface shadow-dropdown animate-fadeIn
+          sm:rounded-xl sm:border-b sm:border-border`}
       >
         <div className="flex shrink-0 items-center justify-between border-b border-border px-5 py-4">
           <h2 className="text-sm font-semibold text-ink">{title}</h2>
@@ -50,7 +50,7 @@ export default function Modal({ open, onClose, title, children, footer, maxWidth
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
 
         {footer && (
-          <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border bg-surface px-5 py-4">
+          <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border bg-surface px-5 py-4 rounded-b-none sm:rounded-b-xl">
             {footer}
           </div>
         )}

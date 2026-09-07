@@ -363,7 +363,7 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
               type="date"
               value={dateFrom}
               onChange={(e) => { setDatePreset('custom'); setDateFrom(e.target.value) }}
-              className={INPUT}
+              className={`${INPUT} scheme-light dark:scheme-dark`}
               style={INPUT_TEXT_STYLE}
             />
           </div>
@@ -373,7 +373,7 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
               type="date"
               value={dateTo}
               onChange={(e) => { setDatePreset('custom'); setDateTo(e.target.value) }}
-              className={INPUT}
+              className={`${INPUT} scheme-light dark:scheme-dark`}
               style={INPUT_TEXT_STYLE}
             />
           </div>

@@ -13,7 +13,7 @@ export default function PlaceholderPage({ title, crumbs }) {
         <h1 className="text-2xl font-bold text-ink mt-1.5 tracking-tight capitalize">{pageTitle}</h1>
       </div>
 
-      <div className="bg-white rounded-xl border border-border shadow-card p-12 flex flex-col items-center justify-center text-center">
+      <div className="bg-surface rounded-xl border border-border shadow-card p-12 flex flex-col items-center justify-center text-center">
         <div className="w-14 h-14 rounded-xl bg-primary/15 flex items-center justify-center mb-4">
           <Construction size={26} className="text-primary-dark" />
         </div>

@@ -23,7 +23,7 @@ const MAX_IMAGE_MB = 8
 // ceiling catches typos that a same-field cross-check (due_date vs.
 // invoice_date) can't, since both fields can still agree with each other
 // on a nonsense year.
-const MIN_BILL_DATE = '2000-01-01'
+const MIN_BILL_DATE = '2017-01-01'
 const MAX_BILL_DATE = `${new Date().getFullYear() + 5}-12-31`
 
 const EMPTY_FORM = {
@@ -244,7 +244,26 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
   const [modalMode, setModalMode] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [formValidationError, setFormValidationError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState({})
+  const [dateErrors, setDateErrors] = useState({ invoice_date: '', due_date: '' })
   const [detailRecord, setDetailRecord] = useState(null)
+
+  const validateDate = (field, value) => {
+    if (!value) {
+      setDateErrors((e) => ({ ...e, [field]: '' }))
+      return
+    }
+    const d = new Date(value)
+    const min = new Date(MIN_BILL_DATE)
+    const max = new Date(MAX_BILL_DATE)
+    if (isNaN(d.getTime())) {
+      setDateErrors((e) => ({ ...e, [field]: 'Invalid date.' }))
+    } else if (d < min || d > max) {
+      setDateErrors((e) => ({ ...e, [field]: 'Date is out of range.' }))
+    } else {
+      setDateErrors((e) => ({ ...e, [field]: '' }))
+    }
+  }
   const [auditLogs, setAuditLogs] = useState([])
   const [auditLogsLoading, setAuditLogsLoading] = useState(false)
   const [auditLogsError, setAuditLogsError] = useState(null)
@@ -288,6 +307,8 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
   const openAdd = () => {
     setForm({ ...EMPTY_FORM, supplier_id: suppliers[0]?.supplier_id ?? '', account_id: accounts[0]?.id ?? '' })
     setFormValidationError('')
+    setFieldErrors({})
+    setDateErrors({ invoice_date: '', due_date: '' })
     setModalMode('add')
   }
   const openEdit = (r) => {
@@ -306,9 +327,11 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
       purchase_order_no: r.purchase_order_no || '',
     })
     setFormValidationError('')
+    setFieldErrors({})
+    setDateErrors({ invoice_date: '', due_date: '' })
     setModalMode(r)
   }
-  const closeModal = () => { setModalMode(null); setFormValidationError('') }
+  const closeModal = () => { setModalMode(null); setFormValidationError(''); setFieldErrors({}); setDateErrors({ invoice_date: '', due_date: '' }) }
   const openDetail = (r) => {
     setDetailRecord(r)
     setAuditLogs([])
@@ -396,35 +419,36 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
   const handleSubmit = async (e) => {
     e.preventDefault()
     setFormValidationError('')
-    if (!form.invoice_number.trim() || !form.due_date || !form.amount) {
-      setFormValidationError('Invoice number, due date, and amount are required.')
-      return
+    const errors = {}
+
+    if (!form.invoice_number.trim()) errors.invoice_number = 'Invoice number is required.'
+    if (!form.account_id) errors.account_id = 'Select an account.'
+    if (!form.due_date) {
+      errors.due_date = 'Due date is required.'
+    } else if (form.due_date < MIN_BILL_DATE || form.due_date > MAX_BILL_DATE) {
+      errors.due_date = 'Due date is out of range.'
+    } else if (form.invoice_date && form.due_date < form.invoice_date) {
+      errors.due_date = 'Due date must be on or after invoice date.'
     }
-    if (!form.account_id) {
-      setFormValidationError('Select which account this bill should post against.')
-      return
-    }
+
     if (form.invoice_date && (form.invoice_date < MIN_BILL_DATE || form.invoice_date > MAX_BILL_DATE)) {
-      setFormValidationError(`Invoice date must be between ${MIN_BILL_DATE} and ${MAX_BILL_DATE}.`)
-      return
+      errors.invoice_date = 'Invoice date is out of range.'
     }
-    if (form.due_date < MIN_BILL_DATE || form.due_date > MAX_BILL_DATE) {
-      setFormValidationError(`Due date must be between ${MIN_BILL_DATE} and ${MAX_BILL_DATE}.`)
-      return
-    }
-    if (form.invoice_date && form.due_date < form.invoice_date) {
-      setFormValidationError('Due date must be on or after the invoice date.')
-      return
-    }
+
     const parsedAmount = Number(form.amount)
-    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-      setFormValidationError('Enter a valid amount greater than 0.')
+    if (!form.amount) {
+      errors.amount = 'Original amount is required.'
+    } else if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      errors.amount = 'Amount must be greater than zero.'
+    } else if (isEditing && parsedAmount < Number(modalMode.paid_amount || 0)) {
+      errors.amount = `Amount cannot be less than paid amount (${formatCurrency(modalMode.paid_amount)}).`
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors)
       return
     }
-    if (isEditing && parsedAmount < Number(modalMode.paid_amount || 0)) {
-      setFormValidationError(`Amount cannot be less than what's already paid (${formatCurrency(modalMode.paid_amount)}).`)
-      return
-    }
+    setFieldErrors({})
 
     const payload = {
       supplier_id: Number(form.supplier_id),
@@ -674,19 +698,12 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Supplier</label>
+              <label className={LABEL}>Supplier <span className="text-red-500 dark:text-red-400">*</span></label>
               <select
                 value={form.supplier_id}
                 onChange={(e) => {
                   const newSupplierId = e.target.value
                   setForm((f) => {
-                    // ASSUMPTION: supplier records may include a
-                    // billing_address field — I don't have SupplierController
-                    // to confirm the real shape, so this is a best-effort
-                    // auto-fill: only applies when that field actually
-                    // exists on the record, and only when the user hasn't
-                    // already typed their own billing address (never
-                    // overwrites something they entered on purpose).
                     const supplier = suppliers.find((s) => s.supplier_id === Number(newSupplierId))
                     const shouldAutoFill = !f.billing_address.trim() && supplier?.billing_address
                     return {
@@ -702,33 +719,84 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
               </select>
             </div>
             <div>
-              <label className={LABEL}>Invoice Number</label>
-              <input type="text" value={form.invoice_number} onChange={(e) => setForm((f) => ({ ...f, invoice_number: e.target.value }))} className={INPUT} placeholder="SUP-INV-3301" />
+              <label className={LABEL}>Invoice Number <span className="text-red-500 dark:text-red-400">*</span></label>
+              <input
+                type="text"
+                value={form.invoice_number}
+                onChange={(e) => { setForm((f) => ({ ...f, invoice_number: e.target.value })); setFieldErrors((fe) => ({ ...fe, invoice_number: '' })) }}
+                className={`${INPUT} ${fieldErrors.invoice_number ? 'border-red-400 dark:border-red-500' : ''}`}
+                placeholder="SUP-INV-3301"
+              />
+              {fieldErrors.invoice_number && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.invoice_number}</p>}
             </div>
           </div>
           <div>
-            <label className={LABEL}>Account (what this bill debits)</label>
-            <select value={form.account_id} onChange={(e) => setForm((f) => ({ ...f, account_id: e.target.value }))} className={INPUT}>
+            <label className={LABEL}>Account (what this bill debits) <span className="text-red-500 dark:text-red-400">*</span></label>
+            <select
+              value={form.account_id}
+              onChange={(e) => { setForm((f) => ({ ...f, account_id: e.target.value })); setFieldErrors((fe) => ({ ...fe, account_id: '' })) }}
+              className={`${INPUT} ${fieldErrors.account_id ? 'border-red-400 dark:border-red-500' : ''}`}
+            >
               <option value="" disabled>Select an account…</option>
               {(accounts ?? []).map((a) => (
                 <option key={a.id} value={a.id}>{a.account_code} — {a.account_name}</option>
               ))}
             </select>
+            {fieldErrors.account_id && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.account_id}</p>}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={LABEL}>Invoice Date</label>
-              <input type="date" value={form.invoice_date} min={MIN_BILL_DATE} max={MAX_BILL_DATE} onChange={(e) => setForm((f) => ({ ...f, invoice_date: e.target.value }))} className={INPUT} />
+              <input
+                type="date"
+                value={form.invoice_date}
+                min={MIN_BILL_DATE}
+                max={MAX_BILL_DATE}
+                onChange={(e) => { setForm((f) => ({ ...f, invoice_date: e.target.value })); setFieldErrors((fe) => ({ ...fe, invoice_date: '' })) }}
+                onBlur={(e) => validateDate('invoice_date', e.target.value)}
+                className={`${INPUT} scheme-light dark:scheme-dark ${dateErrors.invoice_date || fieldErrors.invoice_date ? 'border-red-400 dark:border-red-500' : ''}`}
+              />
+              {(dateErrors.invoice_date || fieldErrors.invoice_date) && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{dateErrors.invoice_date || fieldErrors.invoice_date}</p>}
             </div>
             <div>
-              <label className={LABEL}>Due Date</label>
-              <input type="date" value={form.due_date} min={MIN_BILL_DATE} max={MAX_BILL_DATE} onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))} className={INPUT} />
+              <label className={LABEL}>Due Date <span className="text-red-500 dark:text-red-400">*</span></label>
+              <input
+                type="date"
+                required
+                value={form.due_date}
+                min={form.invoice_date || MIN_BILL_DATE}
+                max={MAX_BILL_DATE}
+                onChange={(e) => { setForm((f) => ({ ...f, due_date: e.target.value })); setFieldErrors((fe) => ({ ...fe, due_date: '' })) }}
+                onBlur={(e) => validateDate('due_date', e.target.value)}
+                className={`${INPUT} scheme-light dark:scheme-dark ${dateErrors.due_date || fieldErrors.due_date ? 'border-red-400 dark:border-red-500' : ''}`}
+              />
+              {(dateErrors.due_date || fieldErrors.due_date) && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{dateErrors.due_date || fieldErrors.due_date}</p>}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Original Amount</label>
-              <input type="number" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} className={INPUT} placeholder="0.00" />
+              <label className={LABEL}>Original Amount <span className="text-red-500 dark:text-red-400">*</span></label>
+              <input
+                type="number"
+                min="0.01"
+                step="any"
+                value={form.amount}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setForm((f) => ({ ...f, amount: val }))
+                  setFieldErrors((fe) => ({ ...fe, amount: '' }))
+                  if (val === '') {
+                    setFieldErrors((fe) => ({ ...fe, amount: '' }))
+                  } else if (Number(val) < 0) {
+                    setFieldErrors((fe) => ({ ...fe, amount: 'Amount cannot be negative.' }))
+                  } else if (Number(val) === 0) {
+                    setFieldErrors((fe) => ({ ...fe, amount: 'Amount must be greater than zero.' }))
+                  }
+                }}
+                className={`${INPUT} ${fieldErrors.amount ? 'border-red-400 dark:border-red-500' : ''}`}
+                placeholder="0.00"
+              />
+              {fieldErrors.amount && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.amount}</p>}
             </div>
             <div>
               <label className={LABEL}>Payment Method</label>

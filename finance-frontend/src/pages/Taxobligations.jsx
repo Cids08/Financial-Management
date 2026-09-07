@@ -165,8 +165,27 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
   const [modalMode, setModalMode] = useState(null)
   const [form, setForm] = useState(buildEmptyForm)
   const [formError, setFormError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState({})
+  const [dateErrors, setDateErrors] = useState({ due_date: '', payment_date: '' })
+  const [amountError, setAmountError] = useState('')
   const [detailRecord, setDetailRecord] = useState(null)
   const [refTouched, setRefTouched] = useState(false)
+
+  const validateDate = (field, value) => {
+    if (!value) {
+      setDateErrors((e) => ({ ...e, [field]: '' }))
+      return
+    }
+    const d = new Date(value)
+    const min = new Date('2017-01-01')
+    if (isNaN(d.getTime())) {
+      setDateErrors((e) => ({ ...e, [field]: 'Invalid date.' }))
+    } else if (d < min) {
+      setDateErrors((e) => ({ ...e, [field]: 'Date is out of range.' }))
+    } else {
+      setDateErrors((e) => ({ ...e, [field]: '' }))
+    }
+  }
 
   // Supporting document upload/history — same uploadTarget/historyTarget
   // pattern as Budgets.jsx's plan attach/history, just without a has_plan
@@ -217,7 +236,15 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
     })
   }
 
-  const openAdd = () => { setForm(buildEmptyForm()); setFormError(''); setRefTouched(false); setModalMode('add') }
+  const openAdd = () => {
+    setForm(buildEmptyForm())
+    setFormError('')
+    setFieldErrors({})
+    setDateErrors({ due_date: '', payment_date: '' })
+    setAmountError('')
+    setRefTouched(false)
+    setModalMode('add')
+  }
   const openEdit = (o) => {
     const { period_year, period_month, period_quarter } = parsePeriod(o.tax_type, o.tax_period)
     setForm({
@@ -227,10 +254,19 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
       is_paid: o.status === 'Paid', payment_date: o.payment_date || '', reference_number: o.reference_number || '', remarks: o.remarks || '',
     })
     setFormError('')
+    setFieldErrors({})
+    setDateErrors({ due_date: '', payment_date: '' })
+    setAmountError('')
     setRefTouched(!!o.reference_number)
     setModalMode(o)
   }
-  const closeModal = () => { setModalMode(null); setFormError('') }
+  const closeModal = () => {
+    setModalMode(null)
+    setFormError('')
+    setFieldErrors({})
+    setDateErrors({ due_date: '', payment_date: '' })
+    setAmountError('')
+  }
   const openDetail = (o) => setDetailRecord(o)
   const closeDetail = () => setDetailRecord(null)
 
@@ -252,14 +288,35 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!form.taxable_amount) {
-      setFormError('Taxable amount is required.')
-      return
+    setFormError('')
+    const errors = {}
+
+    if (!form.taxable_amount && form.taxable_amount !== 0) {
+      errors.taxable_amount = 'Taxable amount is required.'
+    } else if (Number(form.taxable_amount) < 0) {
+      errors.taxable_amount = 'Taxable amount cannot be negative.'
+    } else if (Number(form.taxable_amount) === 0) {
+      errors.taxable_amount = 'Taxable amount must be greater than zero.'
     }
+
+    if (form.tax_rate !== '' && Number(form.tax_rate) < 0) {
+      errors.tax_rate = 'Tax rate cannot be negative.'
+    }
+
+    if (!form.due_date) {
+      errors.due_date = 'Due date is required.'
+    }
+
     if (form.is_paid && !form.payment_date) {
-      setFormError('Payment date is required when marking as paid.')
+      errors.payment_date = 'Payment date is required when marking as paid.'
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors)
       return
     }
+    setFieldErrors({})
+
     const payload = {
       tax_type: form.tax_type,
       tax_period: form.tax_period,
@@ -735,15 +792,23 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
               <input type="text" value={form.tax_period} readOnly className={`${INPUT} bg-bg cursor-not-allowed`} style={INPUT_TEXT_STYLE} />
             </div>
             <div>
-              <label className={LABEL}>Due Date</label>
+              <label className={LABEL}>Due Date <span className="text-red-500">*</span></label>
               <input
                 type="date"
                 value={form.due_date}
-                onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))}
-                className={INPUT}
+                min="2017-01-01"
+                onChange={(e) => {
+                  setFieldErrors((fe) => ({ ...fe, due_date: '' }))
+                  setForm((f) => ({ ...f, due_date: e.target.value }))
+                }}
+                onBlur={(e) => validateDate('due_date', e.target.value)}
+                className={`${INPUT} scheme-light dark:scheme-dark ${(fieldErrors.due_date || dateErrors.due_date) ? 'border-red-400 dark:border-red-500' : ''}`}
                 style={INPUT_TEXT_STYLE}
                 disabled={isLockedObligation}
               />
+              {(fieldErrors.due_date || dateErrors.due_date) && (
+                <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.due_date || dateErrors.due_date}</p>
+              )}
             </div>
           </div>
 
@@ -753,16 +818,34 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
               value of record. */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Taxable Amount</label>
+              <label className={LABEL}>Taxable Amount <span className="text-red-500">*</span></label>
               <input
                 type="number"
+                min="0.01"
+                step="any"
                 value={form.taxable_amount}
-                onChange={(e) => setForm((f) => ({ ...f, taxable_amount: e.target.value }))}
-                className={INPUT}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setFieldErrors((fe) => ({ ...fe, taxable_amount: '' }))
+                  setForm((f) => ({ ...f, taxable_amount: val }))
+                  if (val === '') {
+                    setAmountError('')
+                  } else if (Number(val) < 0) {
+                    setAmountError('Taxable amount cannot be negative.')
+                  } else if (Number(val) === 0) {
+                    setAmountError('Taxable amount must be greater than zero.')
+                  } else {
+                    setAmountError('')
+                  }
+                }}
+                className={`${INPUT} ${(amountError || fieldErrors.taxable_amount) ? 'border-red-400 dark:border-red-500' : ''}`}
                 style={INPUT_TEXT_STYLE}
                 placeholder="0.00"
                 disabled={isLockedObligation}
               />
+              {(amountError || fieldErrors.taxable_amount) && (
+                <p className="mt-1 text-xs text-red-500 dark:text-red-400">{amountError || fieldErrors.taxable_amount}</p>
+              )}
             </div>
             <div>
               <label className={LABEL}>Tax Rate (%)</label>
@@ -770,12 +853,18 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                 type="number"
                 step="0.01"
                 value={form.tax_rate}
-                onChange={(e) => setForm((f) => ({ ...f, tax_rate: e.target.value }))}
-                className={INPUT}
+                onChange={(e) => {
+                  setFieldErrors((fe) => ({ ...fe, tax_rate: '' }))
+                  setForm((f) => ({ ...f, tax_rate: e.target.value }))
+                }}
+                className={`${INPUT} ${fieldErrors.tax_rate ? 'border-red-400 dark:border-red-500' : ''}`}
                 style={INPUT_TEXT_STYLE}
                 placeholder="12"
                 disabled={isLockedObligation}
               />
+              {fieldErrors.tax_rate && (
+                <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.tax_rate}</p>
+              )}
             </div>
           </div>
           <div className="rounded-lg border border-border bg-bg px-3 py-2 flex items-center justify-between">
@@ -798,8 +887,22 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
           {form.is_paid && (
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className={LABEL}>Payment Date</label>
-                <input type="date" value={form.payment_date} onChange={(e) => setForm((f) => ({ ...f, payment_date: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} />
+                <label className={LABEL}>Payment Date <span className="text-red-500">*</span></label>
+                <input
+                  type="date"
+                  value={form.payment_date}
+                  min="2017-01-01"
+                  onChange={(e) => {
+                    setFieldErrors((fe) => ({ ...fe, payment_date: '' }))
+                    setForm((f) => ({ ...f, payment_date: e.target.value }))
+                  }}
+                  onBlur={(e) => validateDate('payment_date', e.target.value)}
+                  className={`${INPUT} scheme-light dark:scheme-dark ${(fieldErrors.payment_date || dateErrors.payment_date) ? 'border-red-400 dark:border-red-500' : ''}`}
+                  style={INPUT_TEXT_STYLE}
+                />
+                {(fieldErrors.payment_date || dateErrors.payment_date) && (
+                  <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.payment_date || dateErrors.payment_date}</p>
+                )}
               </div>
               <div>
                 <label className={LABEL}>Reference Number</label>

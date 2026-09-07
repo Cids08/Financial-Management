@@ -299,6 +299,7 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
   const [modalMode, setModalMode] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [formError, setFormError] = useState('')
+  const [targetErrors, setTargetErrors] = useState({ monthly_target: '', commission_rate: '' })
   const [efficiencyTarget, setEfficiencyTarget] = useState(null)
 
   const isModalOpen = modalMode !== null
@@ -333,7 +334,7 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
     inactive: collectors.filter((c) => !c.is_active).length,
   }
 
-  const openAdd = () => { setForm(EMPTY_FORM); setFormError(''); setModalMode('add') }
+  const openAdd = () => { setForm(EMPTY_FORM); setFormError(''); setTargetErrors({ monthly_target: '', commission_rate: '' }); setModalMode('add') }
   const openEdit = (c) => {
     setForm({
       employee_no: c.employee_no,
@@ -349,9 +350,10 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
       user_id: c.user_id || '',
     })
     setFormError('')
+    setTargetErrors({ monthly_target: '', commission_rate: '' })
     setModalMode(c)
   }
-  const closeModal = () => { setModalMode(null); setFormError('') }
+  const closeModal = () => { setModalMode(null); setFormError(''); setTargetErrors({ monthly_target: '', commission_rate: '' }) }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -641,11 +643,45 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className={LABEL}>Monthly Target</label>
-              <input type="number" value={form.monthly_target} onChange={(e) => setForm((f) => ({ ...f, monthly_target: e.target.value }))} className={INPUT} placeholder="250000" />
+              <input
+                type="number"
+                min="0"
+                step="any"
+                value={form.monthly_target}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setForm((f) => ({ ...f, monthly_target: val }))
+                  if (val !== '' && Number(val) < 0) {
+                    setTargetErrors((te) => ({ ...te, monthly_target: 'Target cannot be negative.' }))
+                  } else {
+                    setTargetErrors((te) => ({ ...te, monthly_target: '' }))
+                  }
+                }}
+                className={`${INPUT} ${targetErrors.monthly_target ? 'border-red-400 dark:border-red-500' : ''}`}
+                placeholder="250000"
+              />
+              {targetErrors.monthly_target && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{targetErrors.monthly_target}</p>}
             </div>
             <div>
               <label className={LABEL}>Commission %</label>
-              <input type="number" step="0.1" value={form.commission_rate} onChange={(e) => setForm((f) => ({ ...f, commission_rate: e.target.value }))} className={INPUT} placeholder="2.5" />
+              <input
+                type="number"
+                min="0"
+                step="0.1"
+                value={form.commission_rate}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setForm((f) => ({ ...f, commission_rate: val }))
+                  if (val !== '' && Number(val) < 0) {
+                    setTargetErrors((te) => ({ ...te, commission_rate: 'Commission cannot be negative.' }))
+                  } else {
+                    setTargetErrors((te) => ({ ...te, commission_rate: '' }))
+                  }
+                }}
+                className={`${INPUT} ${targetErrors.commission_rate ? 'border-red-400 dark:border-red-500' : ''}`}
+                placeholder="2.5"
+              />
+              {targetErrors.commission_rate && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{targetErrors.commission_rate}</p>}
             </div>
             <div>
               <label className={LABEL}>Status</label>
