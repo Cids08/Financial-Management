@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreDisbursementRequest extends FormRequest
 {
@@ -28,7 +29,12 @@ class StoreDisbursementRequest extends FormRequest
             'amount_paid' => ['required', 'numeric', 'min:0.01'],
             'currency' => ['required', 'string', 'max:10'],
             'payment_method' => ['required', 'string', 'max:50'],
-            'reference_number' => ['nullable', 'string', 'max:100'],
+            'reference_number' => [
+                'nullable',
+                'string',
+                'max:100',
+                Rule::unique('disbursements', 'reference_number')->whereNull('deleted_at'),
+            ],
             'remarks' => ['nullable', 'string', 'max:2000'],
         ];
     }

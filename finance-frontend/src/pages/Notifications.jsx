@@ -46,7 +46,7 @@ export default function Notifications({ title = 'Notifications', crumbs = ['Noti
 
   const handleOpen = async (n) => {
     if (!n.is_read) await markAsRead(n.id)
-    navigate(n.route ?? notificationTypeMeta(n.type).route)
+    navigate(n.route ?? notificationTypeMeta(n.type, n).route)
   }
 
   const handleMarkAllRead = async () => {
@@ -120,7 +120,7 @@ export default function Notifications({ title = 'Notifications', crumbs = ['Noti
               <p className="px-4 pt-3 pb-1 text-xs font-semibold uppercase tracking-wide text-muted">{group.label}</p>
               <div className="divide-y divide-border">
                 {group.items.map((n) => {
-                  const meta = notificationTypeMeta(n.type)
+                  const meta = notificationTypeMeta(n.type, n)
                   const Icon = meta.icon
                   return (
                     <button

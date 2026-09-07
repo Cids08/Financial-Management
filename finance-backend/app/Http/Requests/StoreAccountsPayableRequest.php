@@ -51,7 +51,12 @@ class StoreAccountsPayableRequest extends FormRequest
             'payment_method' => ['nullable', 'string', 'max:255'],
             'billing_address' => ['nullable', 'string', 'max:1000'],
             'description' => ['nullable', 'string', 'max:1000'],
-            'reference_number' => ['nullable', 'string', 'max:255'],
+            'reference_number' => [
+                'nullable',
+                'string',
+                'max:255',
+                Rule::unique('accounts_payable', 'reference_number')->whereNull('deleted_at'),
+            ],
             'purchase_order_no' => ['nullable', 'string', 'max:255'],
             'has_attachment' => ['nullable', 'boolean'],
             // UNCONFIRMED: accounts_payable may have its own CHECK

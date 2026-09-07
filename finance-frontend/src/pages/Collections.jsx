@@ -41,6 +41,25 @@ const INPUT     = `w-full h-9 px-3 rounded-lg border border-border bg-bg text-sm
   transition-all duration-150`
 const LABEL = 'block text-xs font-medium text-muted mb-1.5'
 
+function getNextReferenceNo(collections = []) {
+  const existingRefs = new Set(
+    collections.map((c) => (c.reference_number || '').trim().toLowerCase())
+  )
+  let maxNum = 0
+  collections.forEach((c) => {
+    const match = (c.reference_number || '').match(/REF-COL-(\d+)/i)
+    if (match) {
+      const num = parseInt(match[1], 10)
+      if (num > maxNum) maxNum = num
+    }
+  })
+  let nextNum = maxNum > 0 ? maxNum + 1 : (collections.length + 1)
+  while (existingRefs.has(`ref-col-${String(nextNum).padStart(3, '0')}`)) {
+    nextNum++
+  }
+  return `REF-COL-${String(nextNum).padStart(3, '0')}`
+}
+
 function formatDate(value) {
   if (!value) return '—'
   return new Date(value).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })
@@ -114,7 +133,7 @@ function useLookups() {
         .then((j) => {
           if (!j.success) throw new Error(j.message || 'Failed to load cash accounts.')
           const data = Array.isArray(j.data) ? j.data : j.data?.data ?? []
-          setCashAccounts(data.map((a) => ({ ...a, _key: a.id })))
+          setCashAccounts(data.map((a) => ({ ...a, _key: a.cash_account_id ?? a.id })))
         })
         .catch((e) => errors.push(`cash accounts: ${e.message}`)),
 
@@ -203,6 +222,18 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
   const [dateErrors,   setDateErrors]   = useState({ collection_date: '' })
   const [submitting,   setSubmitting]   = useState(false)
 
+  // Auto-populate first options as soon as lookups finish loading if currently adding
+  useEffect(() => {
+    if (modalMode === 'add') {
+      setForm((f) => ({
+        ...f,
+        ar_id: (f.ar_id && f.ar_id !== 'undefined') ? f.ar_id : (arRecords[0]?._key ?? ''),
+        collector_id: (f.collector_id && f.collector_id !== 'undefined') ? f.collector_id : (collectors[0]?._key ?? ''),
+        cash_account_id: (f.cash_account_id && f.cash_account_id !== 'undefined') ? f.cash_account_id : (cashAccounts[0]?._key ?? ''),
+      }))
+    }
+  }, [arRecords, collectors, cashAccounts, modalMode])
+
   const validateDate = (field, value) => {
     if (!value) {
       setDateErrors((e) => ({ ...e, [field]: '' }))
@@ -210,10 +241,12 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
     }
     const d = new Date(value)
     const min = new Date('2017-01-01')
-    const max = new Date(`${new Date().getFullYear() + 1}-12-31`)
+    const todayStr = new Date().toISOString().split('T')[0]
     if (isNaN(d.getTime())) {
       setDateErrors((e) => ({ ...e, [field]: 'Invalid date.' }))
-    } else if (d < min || d > max) {
+    } else if (field === 'collection_date' && value > todayStr) {
+      setDateErrors((e) => ({ ...e, [field]: 'Collection date cannot be in the future.' }))
+    } else if (d < min) {
       setDateErrors((e) => ({ ...e, [field]: 'Date is out of range.' }))
     } else {
       setDateErrors((e) => ({ ...e, [field]: '' }))
@@ -223,9 +256,12 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
   const [confirmTarget,setConfirmTarget]= useState(null)
   const [cancelTarget, setCancelTarget] = useState(null)
   const [cancelRemarks,setCancelRemarks]= useState('')
-  const [actionError,  setActionError]  = useState('')
   const [actioning,    setActioning]    = useState(false)
+  const [actionError,  setActionError]  = useState('')
   const [proofTarget,  setProofTarget]  = useState(null)
+  const [auditLogs,    setAuditLogs]    = useState([])
+  const [auditLogsLoading, setAuditLogsLoading] = useState(false)
+  const [auditLogsError,   setAuditLogsError]   = useState(null)
 
   const filtered = useMemo(() => collections.filter((c) => {
     if (statusFilter !== 'all' && c.status !== statusFilter) return false
@@ -264,6 +300,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
       ar_id:           arRecords[0]?._key    ?? '',
       collector_id:    collectors[0]?._key   ?? '',
       cash_account_id: cashAccounts[0]?._key ?? '',
+      reference_number: getNextReferenceNo(collections),
     })
     setFormError('')
     setFieldErrors({})
@@ -273,14 +310,14 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
 
   const openEdit = (c) => {
     setForm({
-      ar_id:            c.ar_id,
-      collector_id:     c.collector_id,
+      ar_id:            c.ar_id ?? '',
+      collector_id:     c.collector_id ?? '',
       receipt_number:   c.receipt_number   ?? '',
       collection_date:  c.collection_date  ?? '',
       amount_received:  c.amount_received  ?? '',
       payment_method:   c.payment_method   ?? 'Cash',
       reference_number: c.reference_number ?? '',
-      cash_account_id:  c.cash_account_id,
+      cash_account_id:  c.cash_account_id ?? '',
       status:           c.status,
       remarks:          c.remarks          ?? '',
     })
@@ -291,8 +328,21 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
   }
 
   const closeModal  = () => { setModalMode(null); setFormError(''); setFieldErrors({}); setDateErrors({ collection_date: '' }) }
-  const openDetail  = (c) => setDetailRecord(c)
-  const closeDetail = () => setDetailRecord(null)
+  const openDetail  = (c) => {
+    setDetailRecord(c)
+    setAuditLogs([])
+    setAuditLogsError(null)
+    setAuditLogsLoading(true)
+    apiFetch(`/api/audit-logs?module=Collections&record_id=${c.id}`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success) setAuditLogs(json.data ?? [])
+        else setAuditLogsError(json.message)
+      })
+      .catch((err) => setAuditLogsError(err.message))
+      .finally(() => setAuditLogsLoading(false))
+  }
+  const closeDetail = () => { setDetailRecord(null); setAuditLogs([]); setAuditLogsError(null) }
   const openConfirm = (c) => { setConfirmTarget(c); setActionError('') }
   const closeConfirm= () => { setConfirmTarget(null); setActionError('') }
   const openCancel  = (c) => { setCancelTarget(c); setCancelRemarks(''); setActionError('') }
@@ -304,21 +354,56 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
   const handleSubmit = async (e) => {
     e.preventDefault()
     const errors = {}
-    if (!form.ar_id) errors.ar_id = 'Please select an invoice.'
-    if (!form.collector_id) errors.collector_id = 'Please select a collector.'
-    if (!form.cash_account_id) errors.cash_account_id = 'Please select a cash account.'
-    if (!form.receipt_number.trim()) errors.receipt_number = 'Receipt number is required.'
+
+    const arId = Number(form.ar_id)
+    if (!form.ar_id || isNaN(arId) || arId <= 0) {
+      errors.ar_id = 'Please select an invoice.'
+    }
+
+    const collectorId = Number(form.collector_id)
+    if (!form.collector_id || isNaN(collectorId) || collectorId <= 0) {
+      errors.collector_id = 'Please select a collector.'
+    }
+
+    const cashAccId = Number(form.cash_account_id)
+    if (!form.cash_account_id || isNaN(cashAccId) || cashAccId <= 0) {
+      errors.cash_account_id = 'Please select a cash account.'
+    }
+
+    if (!form.receipt_number?.trim()) {
+      errors.receipt_number = 'Receipt number is required.'
+    }
+
+    const todayStr = new Date().toISOString().split('T')[0]
     if (!form.collection_date) {
       errors.collection_date = 'Collection date is required.'
     } else if (form.collection_date < '2017-01-01') {
       errors.collection_date = 'Date is out of range.'
+    } else if (form.collection_date > todayStr) {
+      errors.collection_date = 'Collection date cannot be in the future.'
     }
 
     const amt = Number(form.amount_received)
+    const selectedAr = arInfo(arId)
+    const maxBalance = selectedAr ? Number(selectedAr.balance ?? selectedAr.remaining_balance ?? Infinity) : Infinity
+
     if (!form.amount_received) {
       errors.amount_received = 'Amount received is required.'
-    } else if (amt <= 0) {
+    } else if (isNaN(amt) || amt <= 0) {
       errors.amount_received = 'Amount received must be greater than zero.'
+    } else if (amt > maxBalance) {
+      errors.amount_received = `Amount received exceeds invoice remaining balance of ₱${maxBalance.toLocaleString('en-PH', { minimumFractionDigits: 2 })}.`
+    }
+
+    if (form.reference_number && form.reference_number.trim()) {
+      const trimmedRef = form.reference_number.trim().toLowerCase()
+      const dup = collections.find((c) => {
+        if (modalMode !== 'add' && c.id === modalMode?.id) return false
+        return (c.reference_number || '').trim().toLowerCase() === trimmedRef
+      })
+      if (dup) {
+        errors.reference_number = `Reference number is already used by collection receipt ${dup.receipt_number}.`
+      }
     }
 
     if (Object.keys(errors).length > 0) {
@@ -329,12 +414,34 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
     setFormError('')
     try {
       const isAdd = modalMode === 'add'
-      const res  = await apiFetch(
+      const payload = {
+        ar_id: arId,
+        collector_id: collectorId,
+        cash_account_id: cashAccId,
+        receipt_number: form.receipt_number.trim(),
+        collection_date: form.collection_date,
+        amount_received: Number(form.amount_received),
+        payment_method: form.payment_method,
+        reference_number: form.reference_number?.trim() || null,
+        remarks: form.remarks?.trim() || null,
+      }
+      if (!isAdd && form.status) {
+        payload.status = form.status
+      }
+
+      const res = await apiFetch(
         isAdd ? '/api/collections' : `/api/collections/${modalMode.id}`,
         { method: isAdd ? 'POST' : 'PUT', body: JSON.stringify(payload) }
       )
       const json = await res.json()
       if (!json.success) {
+        if (json.errors) {
+          const fe = {}
+          for (const [k, v] of Object.entries(json.errors)) {
+            fe[k] = Array.isArray(v) ? v[0] : v
+          }
+          setFieldErrors(fe)
+        }
         setFormError(json.errors ? Object.values(json.errors)[0]?.[0] : json.message || 'Something went wrong.')
         return
       }
@@ -538,7 +645,17 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                 return (
                   <tr key={c.id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
                     <td className="px-4 py-3.5">
-                      <p className="font-medium text-ink">{c.receipt_number}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-ink">{c.receipt_number}</p>
+                        <button
+                          type="button"
+                          onClick={() => setProofTarget(c)}
+                          className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-primary bg-primary/10 hover:bg-primary/20 transition-colors"
+                          title="View / Upload Proof of Receipt"
+                        >
+                          <Paperclip size={11} /> Proof
+                        </button>
+                      </div>
                       <p className="text-xs text-muted">{formatDate(c.collection_date)} · {c.cash_account_name || accountName(c.cash_account_id)}</p>
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
@@ -634,15 +751,27 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
               <label className={LABEL}>Invoice <span className="text-red-500 dark:text-red-400">*</span></label>
               <select
                 value={form.ar_id}
-                onChange={(e) => { setForm((f) => ({ ...f, ar_id: e.target.value })); setFieldErrors((fe) => ({ ...fe, ar_id: '' })) }}
+                onChange={(e) => {
+                  const arId = e.target.value
+                  const selectedAr = arInfo(arId)
+                  setForm((f) => ({
+                    ...f,
+                    ar_id: arId,
+                    collector_id: (selectedAr?.collector_id && selectedAr.collector_id > 0) ? String(selectedAr.collector_id) : f.collector_id,
+                  }))
+                  setFieldErrors((fe) => ({ ...fe, ar_id: '', collector_id: '' }))
+                }}
                 className={`${INPUT} ${fieldErrors.ar_id ? 'border-red-400 dark:border-red-500' : ''}`}
               >
                 <option value="">Select invoice…</option>
-                {arRecords.map((a) => (
-                  <option key={a._key} value={a._key}>
-                    {a.invoice_number} — {a.customer_name}
-                  </option>
-                ))}
+                {arRecords.map((a) => {
+                  const bal = a.balance ?? a.remaining_balance
+                  return (
+                    <option key={a._key} value={a._key}>
+                      {a.invoice_number} — {a.customer_name} {bal !== undefined ? `(Bal: ₱${Number(bal).toLocaleString('en-PH', { minimumFractionDigits: 2 })})` : ''}
+                    </option>
+                  )
+                })}
               </select>
               {fieldErrors.ar_id && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.ar_id}</p>}
             </div>
@@ -683,7 +812,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
               <input
                 type="date"
                 min="2017-01-01"
-                max={`${new Date().getFullYear() + 1}-12-31`}
+                max={new Date().toISOString().split('T')[0]}
                 value={form.collection_date}
                 onChange={(e) => { setForm((f) => ({ ...f, collection_date: e.target.value })); setFieldErrors((fe) => ({ ...fe, collection_date: '' })) }}
                 onBlur={(e) => validateDate('collection_date', e.target.value)}
@@ -695,28 +824,55 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Amount Received <span className="text-red-500 dark:text-red-400">*</span></label>
-              <input
-                type="number"
-                min="0.01"
-                step="any"
-                value={form.amount_received}
-                onChange={(e) => {
-                  const val = e.target.value
-                  setForm((f) => ({ ...f, amount_received: val }))
-                  setFieldErrors((fe) => ({ ...fe, amount_received: '' }))
-                  if (val === '') {
-                    setFieldErrors((fe) => ({ ...fe, amount_received: '' }))
-                  } else if (Number(val) < 0) {
-                    setFieldErrors((fe) => ({ ...fe, amount_received: 'Amount received cannot be negative.' }))
-                  } else if (Number(val) === 0) {
-                    setFieldErrors((fe) => ({ ...fe, amount_received: 'Amount received must be greater than zero.' }))
-                  }
-                }}
-                className={`${INPUT} ${fieldErrors.amount_received ? 'border-red-400 dark:border-red-500' : ''}`}
-                placeholder="0.00"
-              />
-              {fieldErrors.amount_received && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.amount_received}</p>}
+              {(() => {
+                const currentAr = arInfo(form.ar_id)
+                const currentBal = currentAr ? Number(currentAr.balance ?? currentAr.remaining_balance ?? 0) : null
+                return (
+                  <>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-medium text-muted">Amount Received <span className="text-red-500 dark:text-red-400">*</span></label>
+                      {currentBal !== null && currentBal > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setForm((f) => ({ ...f, amount_received: String(currentBal) }))
+                            setFieldErrors((fe) => ({ ...fe, amount_received: '' }))
+                          }}
+                          className="text-[11px] font-medium text-primary hover:underline"
+                        >
+                          Pay Full (₱{currentBal.toLocaleString('en-PH', { minimumFractionDigits: 2 })})
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="any"
+                      value={form.amount_received}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        setForm((f) => ({ ...f, amount_received: val }))
+                        setFieldErrors((fe) => ({ ...fe, amount_received: '' }))
+                        if (val === '') {
+                          setFieldErrors((fe) => ({ ...fe, amount_received: '' }))
+                        } else if (Number(val) < 0) {
+                          setFieldErrors((fe) => ({ ...fe, amount_received: 'Amount received cannot be negative.' }))
+                        } else if (Number(val) === 0) {
+                          setFieldErrors((fe) => ({ ...fe, amount_received: 'Amount received must be greater than zero.' }))
+                        } else if (currentBal !== null && Number(val) > currentBal) {
+                          setFieldErrors((fe) => ({
+                            ...fe,
+                            amount_received: `Amount exceeds invoice balance (₱${currentBal.toLocaleString('en-PH', { minimumFractionDigits: 2 })}).`,
+                          }))
+                        }
+                      }}
+                      className={`${INPUT} ${fieldErrors.amount_received ? 'border-red-400 dark:border-red-500' : ''}`}
+                      placeholder="0.00"
+                    />
+                    {fieldErrors.amount_received && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.amount_received}</p>}
+                  </>
+                )
+              })()}
             </div>
             <div>
               <label className={LABEL}>Payment Method</label>
@@ -743,10 +899,58 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                 ))}
               </select>
               {fieldErrors.cash_account_id && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.cash_account_id}</p>}
+              {cashAccounts.length === 0 && (
+                <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                  No cash accounts found. Please add a cash account in Master Data &gt; Cash Accounts first.
+                </p>
+              )}
             </div>
             <div>
-              <label className={LABEL}>Reference Number</label>
-              <input type="text" value={form.reference_number} onChange={(e) => setForm((f) => ({ ...f, reference_number: e.target.value }))} className={INPUT} placeholder="REF-COL-001" />
+              <div className="flex items-center justify-between mb-1.5">
+                <label className={LABEL}>Reference Number</label>
+                {modalMode === 'add' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextRef = getNextReferenceNo(collections)
+                      setForm((f) => ({ ...f, reference_number: nextRef }))
+                      setFieldErrors((fe) => ({ ...fe, reference_number: '' }))
+                    }}
+                    className="text-[11px] font-medium text-primary hover:underline"
+                  >
+                    Auto-generate
+                  </button>
+                )}
+              </div>
+              <input
+                type="text"
+                value={form.reference_number}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setForm((f) => ({ ...f, reference_number: val }))
+                  const trimmed = val.trim().toLowerCase()
+                  if (trimmed) {
+                    const dup = collections.find((c) => {
+                      if (modalMode !== 'add' && c.id === modalMode?.id) return false
+                      return (c.reference_number || '').trim().toLowerCase() === trimmed
+                    })
+                    if (dup) {
+                      setFieldErrors((fe) => ({ ...fe, reference_number: `Reference number is already used by collection receipt ${dup.receipt_number}.` }))
+                    } else {
+                      setFieldErrors((fe) => ({ ...fe, reference_number: '' }))
+                    }
+                  } else {
+                    setFieldErrors((fe) => ({ ...fe, reference_number: '' }))
+                  }
+                }}
+                className={`${INPUT} ${fieldErrors.reference_number ? 'border-red-400 dark:border-red-500' : ''}`}
+                placeholder="REF-COL-001"
+              />
+              {fieldErrors.reference_number && (
+                <p className="mt-1 text-xs text-red-500 dark:text-red-400">
+                  {fieldErrors.reference_number}
+                </p>
+              )}
             </div>
           </div>
 
@@ -788,6 +992,20 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
         footer={
           <>
             <Button variant="secondary" size="md" onClick={closeDetail}>Close</Button>
+            {detailRecord && (
+              <Button
+                variant="secondary"
+                size="md"
+                icon={Paperclip}
+                onClick={() => {
+                  const target = detailRecord
+                  closeDetail()
+                  setProofTarget(target)
+                }}
+              >
+                Proof of Receipt
+              </Button>
+            )}
             {detailRecord && <Button variant="primary" size="md" icon={Printer} onClick={() => handlePrint(detailRecord)}>Print Receipt</Button>}
           </>
         }
@@ -801,6 +1019,32 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
               </div>
               <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[detailRecord.status] ?? 'bg-slate-100 text-slate-600'}`}>{detailRecord.status}</span>
             </div>
+
+            {/* Proof of Receipt preview banner in details */}
+            <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-slate-50 dark:bg-slate-900/40">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <Paperclip size={16} />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-ink">Proof of Receipt</p>
+                  <p className="text-[11px] text-muted">View attached files or upload new proof</p>
+                </div>
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={Paperclip}
+                onClick={() => {
+                  const target = detailRecord
+                  closeDetail()
+                  setProofTarget(target)
+                }}
+              >
+                View Proof
+              </Button>
+            </div>
+
             <div className="rounded-lg border border-border divide-y divide-border">
               <div className="px-3 py-2">
                 <DetailRow label="Invoice"         value={detailRecord.invoice_number || arInfo(detailRecord.ar_id)?.invoice_number} />
@@ -828,6 +1072,42 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                 )}
               </div>
             </div>
+
+            {/* Related Activity & Audit Trail */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-xs font-semibold text-ink">Related Activity & Audit Trail</p>
+                <span className="text-[11px] text-muted">
+                  {auditLogsLoading ? 'Loading…' : `${auditLogs.length} event${auditLogs.length === 1 ? '' : 's'}`}
+                </span>
+              </div>
+              <div className="rounded-lg border border-border divide-y divide-border max-h-48 overflow-y-auto bg-slate-50/50 dark:bg-slate-900/30">
+                {auditLogsLoading && (
+                  <p className="px-3 py-3 text-xs text-muted text-center">Loading audit history…</p>
+                )}
+                {!auditLogsLoading && auditLogsError && (
+                  <p className="px-3 py-3 text-xs text-red-500 text-center">{auditLogsError}</p>
+                )}
+                {!auditLogsLoading && !auditLogsError && auditLogs.length === 0 && (
+                  <p className="px-3 py-3 text-xs text-muted text-center">No audit logs recorded for this collection.</p>
+                )}
+                {!auditLogsLoading && !auditLogsError && auditLogs.map((log) => (
+                  <div key={log.id} className="px-3 py-2 text-xs">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-medium text-ink leading-relaxed">
+                        {log.activity_description || log.action}
+                      </span>
+                      <span className="text-[11px] text-muted shrink-0 tabular-nums">
+                        {formatDateTime(log.created_at)}
+                      </span>
+                    </div>
+                    {log.user_name && (
+                      <p className="text-[11px] text-muted mt-0.5">by <span className="font-medium text-ink">{log.user_name}</span></p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
       </Modal>
@@ -837,6 +1117,17 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
         footer={
           <>
             <Button variant="secondary" size="md" onClick={closeConfirm} disabled={actioning}>Back</Button>
+            {confirmTarget && (
+              <Button
+                variant="secondary"
+                size="md"
+                icon={Paperclip}
+                onClick={() => setProofTarget(confirmTarget)}
+                disabled={actioning}
+              >
+                View Proof
+              </Button>
+            )}
             <Button variant="primary"   size="md" onClick={handleConfirm} disabled={actioning}>
               {actioning ? 'Confirming…' : 'Confirm Collection'}
             </Button>

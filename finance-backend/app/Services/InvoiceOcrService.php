@@ -51,9 +51,28 @@ class InvoiceOcrService
     ];
 
     /**
+     * Technical diagrams, database schemas, ERDs, code screenshots, etc.
+     * Often contain column names like "invoice_number", "amount", "date",
+     * which fools naive keyword matching.
+     */
+    protected const DIAGRAM_EXCLUSION_KEYWORDS = [
+        'varchar', 'primary key', 'foreign key', 'database', 'schema',
+        'diagram', 'erd', 'entity relationship', 'table ', 'tables',
+        'auto_increment', 'decimal(', 'int(', 'bigint', 'tinyint', 'references ',
+        'boolean', 'nullable', 'char(', 'timestamp', 'datatype', 'data type',
+        'one-to-many', 'many-to-many', 'one to many', 'many to many', 'crow\'s foot',
+        'class diagram', 'flowchart', 'foreign_key', 'primary_key', 'create table',
+        'drop table', 'alter table', 'foreign keys', 'primary keys', 'erd diagram',
+        'drawsql', 'dbdiagram', 'lucidchart', 'dbeaver', 'phpmyadmin', 'navicat',
+        'workbench', 'cardinality', 'attributes', 'identifying relationship',
+        'mysql', 'postgresql', 'sqlite', 'sql server', 'mariadb', 'migration',
+    ];
+
+    /**
      * Returns:
      *   [
      *     'is_receipt' => bool,
+     *     'message' => ?string,
      *     'raw_text' => string,
      *     'invoice_number' => ?string,
      *     'date' => ?string,        // Y-m-d if found
@@ -66,40 +85,25 @@ class InvoiceOcrService
     {
         $ocr = new TesseractOCR($image->getRealPath());
 
-        // On Windows dev machines, tesseract is often not resolvable from
-        // the PATH the web server process actually runs under (Apache/
-        // XAMPP loads its env at service start, not from later PATH edits).
-        // Setting TESSERACT_PATH in .env sidesteps that entirely. On
-        // Linux/prod this env var is typically unset, so the package falls
-        // back to plain `tesseract`, resolved via the system PATH as usual.
         if ($executable = config('services.tesseract.executable')) {
             $ocr->executable($executable);
         }
 
-        // Guards against a pathological image (or a stuck/misbehaving
-        // Tesseract process) hanging the request indefinitely. 20s is
-        // generous for a single receipt/invoice photo at the 6000px cap
-        // enforced in InvoiceScanController; real scans finish in a
-        // fraction of that.
         $ocr->timeout(20);
 
         try {
             $text = $ocr->lang('eng')->run();
         } catch (\Exception $e) {
-            // The tesseract_ocr package throws rather than returning ""
-            // both when it finds no text at all (e.g. a photo with no
-            // text in it, like a cat pic) AND when the timeout above is
-            // hit. Either way, that's not a real error for our purposes —
-            // treat it the same as "not a receipt" rather than a 500.
             $text = '';
         }
 
         $normalized = strtolower($text);
 
-        $matches = 0;
-        foreach (self::RECEIPT_KEYWORDS as $keyword) {
-            if (str_contains($normalized, $keyword)) {
-                $matches++;
+        $looksLikeDiagram = false;
+        foreach (self::DIAGRAM_EXCLUSION_KEYWORDS as $keyword) {
+            if (str_contains($normalized, strtolower($keyword))) {
+                $looksLikeDiagram = true;
+                break;
             }
         }
 
@@ -111,22 +115,42 @@ class InvoiceOcrService
             }
         }
 
+        $matches = 0;
+        foreach (self::RECEIPT_KEYWORDS as $keyword) {
+            if (str_contains($normalized, $keyword)) {
+                $matches++;
+            }
+        }
+
         $invoiceNumber = $this->extractInvoiceNumber($text);
         $date = $this->extractDate($text);
         $amount = $this->extractAmount($text);
 
-        // Keyword count alone is too easy to satisfy by accident — bank
-        // transfer confirmations and payment receipts use the same
-        // "total"/"amount"/"reference number" vocabulary as real invoices.
-        // Require an actual invoice number to be extracted (the one field
-        // transfer/payment screens essentially never have), AND reject
-        // outright if transfer-specific wording is present.
-        $isReceipt = $matches >= self::MIN_KEYWORD_MATCHES
-            && $invoiceNumber !== null
-            && ! $looksLikeTransfer;
+        $hasCoreKeyword = str_contains($normalized, 'invoice')
+            || str_contains($normalized, 'receipt')
+            || str_contains($normalized, 'bill')
+            || str_contains($normalized, 'total');
+
+        $isReceipt = false;
+        $message = null;
+
+        if ($looksLikeDiagram) {
+            $message = "This image appears to be a database schema or technical diagram, not a valid invoice or receipt.";
+        } elseif ($looksLikeTransfer) {
+            $message = "This image appears to be an e-wallet or bank transfer confirmation, not an official vendor invoice.";
+        } elseif ($matches < self::MIN_KEYWORD_MATCHES || ! $hasCoreKeyword) {
+            $message = "This doesn't look like an invoice or receipt — please upload a clearer photo or bill.";
+        } elseif ($invoiceNumber === null) {
+            $message = "No valid invoice or receipt number could be detected on this document.";
+        } elseif ($amount === null && $date === null) {
+            $message = "Could not detect billing amount or transaction date. Please fill in the details manually.";
+        } else {
+            $isReceipt = true;
+        }
 
         return [
             'is_receipt' => $isReceipt,
+            'message' => $message,
             'raw_text' => $text,
             'invoice_number' => $isReceipt ? $invoiceNumber : null,
             'date' => $isReceipt ? $date : null,
@@ -138,13 +162,30 @@ class InvoiceOcrService
 
     protected function extractInvoiceNumber(string $text): ?string
     {
-        // Matches things like "INV-2026-0001", "Invoice No: 12345", "SUP-INV-4471"
+        $candidate = null;
+
+        // Matches structured invoice codes like "INV-2026-0001", "SUP-INV-4471", "OR-12345"
         if (preg_match('/\b([A-Z]{2,6}-?\d{2,4}-?\d{3,6})\b/', $text, $m)) {
-            return $m[1];
+            $candidate = $m[1];
+        } elseif (preg_match('/invoice\s*(?:no\.?|number|#)?\s*[:\-]?\s*([A-Za-z0-9\-]{3,25})/i', $text, $m)) {
+            $candidate = trim($m[1]);
         }
-        if (preg_match('/invoice\s*(?:no\.?|number|#)?\s*[:\-]?\s*([A-Za-z0-9\-]{4,20})/i', $text, $m)) {
-            return trim($m[1]);
+
+        if ($candidate) {
+            $lower = strtolower($candidate);
+            $invalidTokens = [
+                'varchar', 'string', 'text', 'integer', 'number', 'boolean', 'table',
+                'select', 'update', 'delete', 'insert', 'create', 'column', 'primary',
+                'foreign', 'schema', 'entity', 'model', 'class', 'float', 'double',
+                'nullable', 'char', 'date', 'timestamp', 'bigint', 'tinyint', 'int',
+            ];
+            // An invoice number MUST contain at least one digit, must not match SQL types (even with lengths like varchar255 or int11), and not be a keyword
+            $isSqlType = (bool) preg_match('/^(?:varchar|string|text|integer|int|tinyint|bigint|boolean|table|column|primary|foreign|schema|entity|nullable|char|timestamp|datetime)\d*$/i', $candidate);
+            if (preg_match('/\d/', $candidate) && ! in_array($lower, $invalidTokens, true) && ! $isSqlType) {
+                return $candidate;
+            }
         }
+
         return null;
     }
 

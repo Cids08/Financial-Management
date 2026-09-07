@@ -24,6 +24,9 @@ export function ProfileProvider({ children }) {
       const json = await res.json()
       if (!res.ok || !json.success) throw new Error(json.message || 'Failed to load profile.')
       setProfile(json.data)
+      if (json.data?.must_change_password) {
+        window.dispatchEvent(new Event('auth:must-change-password'))
+      }
     } catch (err) {
       setError(err.message)
     } finally {

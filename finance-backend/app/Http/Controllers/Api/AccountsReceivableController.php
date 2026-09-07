@@ -89,6 +89,13 @@ class AccountsReceivableController extends Controller
      */
     public function toggleArchive(Request $request, AccountsReceivable $accountsReceivable): JsonResponse
     {
+        if (! $request->user()->hasAnyRole(['admin', 'super-admin'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only administrators are authorized to archive or restore invoices.',
+            ], 403);
+        }
+
         $ar = $this->service->toggleArchive($request->user(), $accountsReceivable);
 
         return response()->json([

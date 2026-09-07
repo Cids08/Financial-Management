@@ -62,6 +62,25 @@ function getSourceType(d) {
   return d.source_type === 'payroll' ? 'payroll' : 'ap'
 }
 
+function getNextReferenceNo(disbursements = []) {
+  const existingRefs = new Set(
+    disbursements.map((d) => (d.reference_number || '').trim().toLowerCase())
+  )
+  let maxNum = 0
+  disbursements.forEach((d) => {
+    const match = (d.reference_number || '').match(/REF-DIS-(\d+)/i)
+    if (match) {
+      const num = parseInt(match[1], 10)
+      if (num > maxNum) maxNum = num
+    }
+  })
+  let nextNum = maxNum > 0 ? maxNum + 1 : (disbursements.length + 1)
+  while (existingRefs.has(`ref-dis-${String(nextNum).padStart(3, '0')}`)) {
+    nextNum++
+  }
+  return `REF-DIS-${String(nextNum).padStart(3, '0')}`
+}
+
 function formatDate(value) {
   if (!value) return '—'
   return new Date(value).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })
@@ -219,7 +238,11 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
     // Default Payment Date to today — there's nothing bill-specific to
     // derive it from (bills only carry invoice_date/due_date), and most
     // disbursements are being recorded as happening now.
-    setDForm({ ...EMPTY_DISBURSEMENT_FORM, payment_date: new Date().toISOString().slice(0, 10) })
+    setDForm({
+      ...EMPTY_DISBURSEMENT_FORM,
+      payment_date: new Date().toISOString().slice(0, 10),
+      reference_number: getNextReferenceNo(disbursements),
+    })
     setDFormError('')
     setFieldErrors({})
     setDateErrors({ payment_date: '' })
@@ -360,6 +383,17 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
       errors.amount_paid = 'Amount paid is required.'
     } else if (amt <= 0) {
       errors.amount_paid = 'Amount must be greater than zero.'
+    }
+
+    if (dForm.reference_number && dForm.reference_number.trim()) {
+      const trimmedRef = dForm.reference_number.trim().toLowerCase()
+      const dup = disbursements.find((d) => {
+        if (dModalMode !== 'add' && d.disbursement_id === dModalMode?.disbursement_id) return false
+        return (d.reference_number || '').trim().toLowerCase() === trimmedRef
+      })
+      if (dup) {
+        errors.reference_number = `Reference number is already used by disbursement voucher ${dup.voucher_number}.`
+      }
     }
 
     if (Object.keys(errors).length > 0) {
@@ -839,8 +873,52 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Reference Number</label>
-              <input type="text" value={dForm.reference_number} onChange={(e) => setDForm((f) => ({ ...f, reference_number: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="REF-DIS-001" />
+              <div className="flex items-center justify-between mb-1.5">
+                <label className={LABEL}>Reference Number</label>
+                {dModalMode === 'add' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextRef = getNextReferenceNo(disbursements)
+                      setDForm((f) => ({ ...f, reference_number: nextRef }))
+                      setFieldErrors((fe) => ({ ...fe, reference_number: '' }))
+                    }}
+                    className="text-[11px] font-medium text-primary hover:underline"
+                  >
+                    Auto-generate
+                  </button>
+                )}
+              </div>
+              <input
+                type="text"
+                value={dForm.reference_number}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setDForm((f) => ({ ...f, reference_number: val }))
+                  const trimmed = val.trim().toLowerCase()
+                  if (trimmed) {
+                    const dup = disbursements.find((d) => {
+                      if (dModalMode !== 'add' && d.disbursement_id === dModalMode?.disbursement_id) return false
+                      return (d.reference_number || '').trim().toLowerCase() === trimmed
+                    })
+                    if (dup) {
+                      setFieldErrors((fe) => ({ ...fe, reference_number: `Reference number is already used by disbursement voucher ${dup.voucher_number}.` }))
+                    } else {
+                      setFieldErrors((fe) => ({ ...fe, reference_number: '' }))
+                    }
+                  } else {
+                    setFieldErrors((fe) => ({ ...fe, reference_number: '' }))
+                  }
+                }}
+                className={`${INPUT} ${fieldErrors.reference_number ? 'border-red-400 dark:border-red-500' : ''}`}
+                style={INPUT_TEXT_STYLE}
+                placeholder="REF-DIS-001"
+              />
+              {fieldErrors.reference_number && (
+                <p className="mt-1 text-xs text-red-500 dark:text-red-400">
+                  {fieldErrors.reference_number}
+                </p>
+              )}
             </div>
             <div>
               <label className={LABEL}>Currency</label>

@@ -60,6 +60,7 @@ class AuthController extends Controller
             'message' => 'Logged in successfully.',
             'data'    => [
                 'requiresTwoFactor' => false,
+                'mustChangePassword' => (bool) $result['user']->must_change_password,
                 'token' => $result['token'],
                 'user'  => new ProfileResource($result['user']),
             ],
@@ -88,6 +89,7 @@ class AuthController extends Controller
             'success' => true,
             'message' => 'Logged in successfully.',
             'data'    => [
+                'mustChangePassword' => (bool) $result['user']->must_change_password,
                 'token' => $result['token'],
                 'user'  => new ProfileResource($result['user']),
             ],

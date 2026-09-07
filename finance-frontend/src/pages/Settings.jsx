@@ -33,6 +33,7 @@ import Tooltip from '../components/Tooltip'
 import { useCompany } from '../context/CompanyContext'
 import { useAccountSecurity } from '../hooks/useAccountSecurity'
 import { usePermissions } from '../context/PermissionsContext'
+import OtpInput from '../components/OtpInput'
 
 const ACTIVITY_ICON = {
   Login: CheckCircle2,
@@ -971,15 +972,14 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
             <InlineError message={security.twoFAError} />
             <div>
               <label className={LABEL}>6-digit verification code</label>
-              <input
-                type="text"
-                inputMode="numeric"
-                maxLength={6}
+              <OtpInput
+                length={6}
                 value={verifyCode}
-                onChange={(e) => setVerifyCode(e.target.value.replace(/\D/g, ''))}
-                placeholder="000000"
+                onChange={setVerifyCode}
+                onComplete={confirmEnable2FA}
+                disabled={security.twoFABusy}
+                hasError={Boolean(security.twoFAError)}
                 autoFocus
-                className={`${INPUT} tracking-[0.4em] text-center font-mono`}
               />
             </div>
             <button

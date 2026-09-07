@@ -21,11 +21,16 @@ class StoreCollectionRequest extends FormRequest
             'cash_account_id'  => ['required', 'integer', 'exists:cash_accounts,id'],
             'receipt_number'   => ['required', 'string', 'max:255', 'unique:collections,receipt_number'],
             'or_number'        => ['nullable', 'string', 'max:255'],
-            'collection_date'  => ['required', 'date'],
+            'collection_date'  => ['required', 'date', 'before_or_equal:today'],
             'deposit_date'     => ['nullable', 'date', 'after_or_equal:collection_date'],
             'amount_received'  => ['required', 'numeric', 'min:0.01'],
             'payment_method'   => ['required', 'string', 'max:255'],
-            'reference_number' => ['nullable', 'string', 'max:255'],
+            'reference_number' => [
+                'nullable',
+                'string',
+                'max:255',
+                Rule::unique('collections', 'reference_number')->whereNull('deleted_at'),
+            ],
             'remarks'          => ['nullable', 'string'],
 
             // Status is optional on create — service forces STATUS_PENDING

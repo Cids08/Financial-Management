@@ -17,6 +17,7 @@ class EnsurePasswordChanged
     protected const ALLOWED_PATHS = [
         'PUT api/settings/password',
         'POST api/logout',
+        'GET api/profile',
     ];
 
     public function handle(Request $request, Closure $next)

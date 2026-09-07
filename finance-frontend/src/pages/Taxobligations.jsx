@@ -311,6 +311,17 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
       errors.payment_date = 'Payment date is required when marking as paid.'
     }
 
+    if (form.is_paid && form.reference_number && form.reference_number.trim()) {
+      const trimmedRef = form.reference_number.trim().toLowerCase()
+      const dup = obligations.find((o) => {
+        if (modalMode !== 'add' && o.tax_id === modalMode?.tax_id) return false
+        return (o.reference_number || '').trim().toLowerCase() === trimmedRef
+      })
+      if (dup) {
+        errors.reference_number = `Reference number is already used by ${dup.tax_type} (${dup.tax_period}).`
+      }
+    }
+
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors)
       return
@@ -905,15 +916,52 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                 )}
               </div>
               <div>
-                <label className={LABEL}>Reference Number</label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className={LABEL}>Reference Number</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const suggested = suggestReference(form.tax_type, form.due_date)
+                      setRefTouched(true)
+                      setForm((f) => ({ ...f, reference_number: suggested }))
+                      setFieldErrors((fe) => ({ ...fe, reference_number: '' }))
+                    }}
+                    className="text-[11px] font-medium text-primary hover:underline"
+                  >
+                    Auto-generate
+                  </button>
+                </div>
                 <input
                   type="text"
                   value={form.reference_number}
-                  onChange={(e) => { setRefTouched(true); setForm((f) => ({ ...f, reference_number: e.target.value })) }}
-                  className={INPUT}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    setRefTouched(true)
+                    setForm((f) => ({ ...f, reference_number: val }))
+                    const trimmed = val.trim().toLowerCase()
+                    if (trimmed) {
+                      const dup = obligations.find((o) => {
+                        if (modalMode !== 'add' && o.tax_id === modalMode?.tax_id) return false
+                        return (o.reference_number || '').trim().toLowerCase() === trimmed
+                      })
+                      if (dup) {
+                        setFieldErrors((fe) => ({ ...fe, reference_number: `Reference number is already used by ${dup.tax_type} (${dup.tax_period}).` }))
+                      } else {
+                        setFieldErrors((fe) => ({ ...fe, reference_number: '' }))
+                      }
+                    } else {
+                      setFieldErrors((fe) => ({ ...fe, reference_number: '' }))
+                    }
+                  }}
+                  className={`${INPUT} ${fieldErrors.reference_number ? 'border-red-400 dark:border-red-500' : ''}`}
                   style={INPUT_TEXT_STYLE}
                   placeholder={suggestReference(form.tax_type, form.due_date)}
                 />
+                {fieldErrors.reference_number && (
+                  <p className="mt-1 text-xs text-red-500 dark:text-red-400">
+                    {fieldErrors.reference_number}
+                  </p>
+                )}
               </div>
             </div>
           )}

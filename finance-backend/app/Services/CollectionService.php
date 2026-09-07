@@ -43,6 +43,10 @@ class CollectionService
             ->forCollector($filters['collector_id'] ?? null)
             ->status($filters['status'] ?? null);
 
+        if (! empty($filters['ar_id'])) {
+            $query->where('ar_id', $filters['ar_id']);
+        }
+
         return $query
             ->orderByDesc('collection_date')
             ->orderByDesc('id')
@@ -80,8 +84,13 @@ class CollectionService
                 ]);
             }
 
+            $referenceNumber = !empty($data['reference_number'])
+                ? $data['reference_number']
+                : self::generateReferenceNumber();
+
             $collection = Collection::create([
                 ...$data,
+                'reference_number' => $referenceNumber,
                 'status'     => Collection::STATUS_PENDING,
                 'created_by' => $creator->id,
             ]);
@@ -96,6 +105,30 @@ class CollectionService
                 'ip_address'           => request()->ip(),
                 'user_agent'           => request()->userAgent(),
             ]);
+
+            $collection->loadMissing(['collector', 'creator']);
+            $collectorName = $collection->collector
+                ? trim("{$collection->collector->first_name} {$collection->collector->last_name}")
+                : trim("{$creator->first_name} {$creator->last_name}");
+            if (empty($collectorName)) {
+                $collectorName = 'Collector';
+            }
+            $formattedAmount = number_format((float) $collection->amount_received, 2);
+            $receiptNo = $collection->receipt_number ?? $collection->reference_number ?? (string) $collection->id;
+
+            $this->notifyStakeholders(
+                $collection,
+                'New Collection Recorded',
+                sprintf(
+                    '%s recorded a collection of ₱%s for invoice %s (Receipt #%s). Pending confirmation.',
+                    $collectorName,
+                    $formattedAmount,
+                    $ar->invoice_number,
+                    $receiptNo
+                ),
+                'Info',
+                false
+            );
 
             return $collection;
         });
@@ -179,12 +212,39 @@ class CollectionService
             // the Collections page auto-refreshes without a manual reload.
             CollectionStatusChanged::dispatch($collection->refresh());
 
-            $this->notifyCreator($collection, 'Collection confirmed', sprintf(
-                'Your collection #%d (%.2f against invoice %s) was confirmed.',
-                $collection->id,
-                (float) $collection->amount_received,
-                $ar->invoice_number
-            ), true);
+            $collection->loadMissing(['collector', 'creator', 'accountsReceivable']);
+            $collectorName = $collection->collector
+                ? trim("{$collection->collector->first_name} {$collection->collector->last_name}")
+                : ($collection->creator ? trim("{$collection->creator->first_name} {$collection->creator->last_name}") : 'Collector');
+            if (empty($collectorName)) {
+                $collectorName = 'Collector';
+            }
+
+            $formattedAmount = number_format((float) $collection->amount_received, 2);
+            $invoiceNo = $ar->invoice_number ?? 'Invoice';
+            $isPaidInFull = bccomp($newRemaining, '0', 2) <= 0;
+
+            if ($isPaidInFull) {
+                $confirmTitle = 'Invoice Collected in Full';
+                $confirmMessage = sprintf(
+                    '%s successfully collected ₱%s for invoice %s — the invoice is now PAID IN FULL!',
+                    $collectorName,
+                    $formattedAmount,
+                    $invoiceNo
+                );
+            } else {
+                $remainingFormatted = number_format(max(0, (float) $newRemaining), 2);
+                $confirmTitle = 'Collection Confirmed';
+                $confirmMessage = sprintf(
+                    '%s successfully collected ₱%s for invoice %s. Remaining balance: ₱%s.',
+                    $collectorName,
+                    $formattedAmount,
+                    $invoiceNo,
+                    $remainingFormatted
+                );
+            }
+
+            $this->notifyStakeholders($collection, $confirmTitle, $confirmMessage, 'Success', true);
 
             AuditLog::create([
                 'user_id'              => $confirmedBy->id,
@@ -238,11 +298,30 @@ class CollectionService
             // Broadcast so other users see the cancellation immediately.
             CollectionStatusChanged::dispatch($collection->refresh());
 
-            $this->notifyCreator($collection, 'Collection cancelled', sprintf(
-                'Your collection #%d was cancelled.%s',
-                $collection->id,
-                $remarks ? " Reason: {$remarks}" : ''
-            ), false);
+            $collection->loadMissing(['collector', 'creator', 'accountsReceivable']);
+            $collectorName = $collection->collector
+                ? trim("{$collection->collector->first_name} {$collection->collector->last_name}")
+                : 'Collector';
+            $actorName = trim("{$actor->first_name} {$actor->last_name}") ?: 'Admin';
+            $formattedAmount = number_format((float) $collection->amount_received, 2);
+            $invoiceNo = $collection->accountsReceivable?->invoice_number ?? 'Invoice';
+            $receiptNo = $collection->receipt_number ?? $collection->reference_number ?? (string) $collection->id;
+
+            $this->notifyStakeholders(
+                $collection,
+                'Collection Cancelled',
+                sprintf(
+                    'Collection receipt #%s for invoice %s (₱%s) by %s was cancelled by %s.%s',
+                    $receiptNo,
+                    $invoiceNo,
+                    $formattedAmount,
+                    $collectorName,
+                    $actorName,
+                    $remarks ? " Reason: {$remarks}" : ''
+                ),
+                'Warning',
+                true
+            );
 
             AuditLog::create([
                 'user_id'              => $actor->id,
@@ -548,18 +627,82 @@ class CollectionService
      * NOTIFICATION_TYPE_META, or (b) add a separate module column to the
      * notifications table and use that for routing instead of type.
      */
-    private function notifyCreator(Collection $collection, string $title, string $message, bool $confirmed = true): void
-    {
-        if (! $collection->created_by) {
-            return;
+    /**
+     * Notifies collection stakeholders (creator, assigned collector, and system admins).
+     *
+     * notifications.type has a DB CHECK constraint limiting it to:
+     * 'Info', 'Success', 'Warning', 'Error'.
+     */
+    private function notifyStakeholders(
+        Collection $collection,
+        string $title,
+        string $message,
+        string $type = 'Success',
+        bool $notifyCreator = true
+    ): void {
+        $collection->loadMissing('collector');
+
+        $recipientIds = [];
+
+        if ($notifyCreator && $collection->created_by) {
+            $recipientIds[] = (int) $collection->created_by;
         }
 
-        Notification::create([
-            'user_id' => $collection->created_by,
-            'title'   => $title,
-            'message' => $message,
-            'type'    => $confirmed ? 'Success' : 'Warning',
-            'is_read' => false,
-        ]);
+        if ($collection->collector?->user_id) {
+            $recipientIds[] = (int) $collection->collector->user_id;
+        }
+
+        $adminIds = User::whereHas('role', function ($query) {
+            $query->whereIn('name', ['admin', 'super-admin']);
+        })->pluck('id')->all();
+
+        foreach ($adminIds as $adminId) {
+            $recipientIds[] = (int) $adminId;
+        }
+
+        $recipientIds = array_unique(array_filter($recipientIds));
+
+        foreach ($recipientIds as $userId) {
+            Notification::create([
+                'user_id' => $userId,
+                'title'   => $title,
+                'message' => $message,
+                'type'    => $type,
+                'is_read' => false,
+            ]);
+        }
+    }
+
+    private function notifyCreator(Collection $collection, string $title, string $message, bool $confirmed = true): void
+    {
+        $this->notifyStakeholders(
+            $collection,
+            $title,
+            $message,
+            $confirmed ? 'Success' : 'Warning',
+            true
+        );
+    }
+
+    public static function generateReferenceNumber(): string
+    {
+        $last = Collection::withTrashed()
+            ->where('reference_number', 'like', 'REF-COL-%')
+            ->orderByDesc('id')
+            ->value('reference_number');
+
+        $nextNum = 1;
+        if ($last && preg_match('/REF-COL-(\d+)/i', $last, $matches)) {
+            $nextNum = (int) $matches[1] + 1;
+        } else {
+            $count = Collection::withTrashed()->count();
+            $nextNum = $count + 1;
+        }
+
+        while (Collection::withTrashed()->where('reference_number', sprintf('REF-COL-%03d', $nextNum))->exists()) {
+            $nextNum++;
+        }
+
+        return sprintf('REF-COL-%03d', $nextNum);
     }
 }

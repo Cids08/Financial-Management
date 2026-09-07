@@ -47,6 +47,25 @@ const STATUS_STYLES = {
   Cancelled: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
 }
 
+function getNextReferenceNo(records = []) {
+  const existingRefs = new Set(
+    records.map((r) => (r.reference_number || '').trim().toLowerCase())
+  )
+  let maxNum = 0
+  records.forEach((r) => {
+    const match = (r.reference_number || '').match(/REF-AP-(\d+)/i)
+    if (match) {
+      const num = parseInt(match[1], 10)
+      if (num > maxNum) maxNum = num
+    }
+  })
+  let nextNum = maxNum > 0 ? maxNum + 1 : (records.length + 1)
+  while (existingRefs.has(`ref-ap-${String(nextNum).padStart(3, '0')}`)) {
+    nextNum++
+  }
+  return `REF-AP-${String(nextNum).padStart(3, '0')}`
+}
+
 function formatDate(value) {
   if (!value) return '—'
   return new Date(value).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })
@@ -305,7 +324,12 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
   }, [sourceList, search, statusFilter, suppliers])
 
   const openAdd = () => {
-    setForm({ ...EMPTY_FORM, supplier_id: suppliers[0]?.supplier_id ?? '', account_id: accounts[0]?.id ?? '' })
+    setForm({
+      ...EMPTY_FORM,
+      supplier_id: suppliers[0]?.supplier_id ?? '',
+      account_id: accounts[0]?.id ?? '',
+      reference_number: getNextReferenceNo(records),
+    })
     setFormValidationError('')
     setFieldErrors({})
     setDateErrors({ invoice_date: '', due_date: '' })
@@ -354,7 +378,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
       invoice_date: f.invoice_date || extracted.invoice_date,
       due_date: f.due_date || extracted.due_date,
       amount: f.amount || extracted.amount,
-      reference_number: f.reference_number || extracted.reference_number,
+      reference_number: extracted.reference_number || f.reference_number,
     }))
   }
 
@@ -442,6 +466,17 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
       errors.amount = 'Amount must be greater than zero.'
     } else if (isEditing && parsedAmount < Number(modalMode.paid_amount || 0)) {
       errors.amount = `Amount cannot be less than paid amount (${formatCurrency(modalMode.paid_amount)}).`
+    }
+
+    if (form.reference_number && form.reference_number.trim()) {
+      const trimmedRef = form.reference_number.trim().toLowerCase()
+      const dup = records.find((r) => {
+        if (isEditing && r.ap_id === modalMode?.ap_id) return false
+        return (r.reference_number || '').trim().toLowerCase() === trimmedRef
+      })
+      if (dup) {
+        errors.reference_number = `Reference number is already used by bill ${dup.invoice_number}.`
+      }
     }
 
     if (Object.keys(errors).length > 0) {
@@ -811,8 +846,51 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
               <input type="text" value={form.purchase_order_no} onChange={(e) => setForm((f) => ({ ...f, purchase_order_no: e.target.value }))} className={INPUT} placeholder="PO-2026-0142" />
             </div>
             <div>
-              <label className={LABEL}>Reference Number</label>
-              <input type="text" value={form.reference_number} onChange={(e) => setForm((f) => ({ ...f, reference_number: e.target.value }))} className={INPUT} placeholder="REF-AP-001" />
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-medium text-muted">Reference Number</label>
+                {modalMode === 'add' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextRef = getNextReferenceNo(records)
+                      setForm((f) => ({ ...f, reference_number: nextRef }))
+                      setFieldErrors((fe) => ({ ...fe, reference_number: '' }))
+                    }}
+                    className="text-[11px] font-medium text-primary hover:underline"
+                  >
+                    Auto-generate
+                  </button>
+                )}
+              </div>
+              <input
+                type="text"
+                value={form.reference_number}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setForm((f) => ({ ...f, reference_number: val }))
+                  const trimmed = val.trim().toLowerCase()
+                  if (trimmed) {
+                    const dup = records.find((r) => {
+                      if (isEditing && r.ap_id === modalMode?.ap_id) return false
+                      return (r.reference_number || '').trim().toLowerCase() === trimmed
+                    })
+                    if (dup) {
+                      setFieldErrors((fe) => ({ ...fe, reference_number: `Reference number is already used by bill ${dup.invoice_number}.` }))
+                    } else {
+                      setFieldErrors((fe) => ({ ...fe, reference_number: '' }))
+                    }
+                  } else {
+                    setFieldErrors((fe) => ({ ...fe, reference_number: '' }))
+                  }
+                }}
+                className={`${INPUT} ${fieldErrors.reference_number ? 'border-red-400 dark:border-red-500' : ''}`}
+                placeholder="REF-AP-001"
+              />
+              {fieldErrors.reference_number && (
+                <p className="mt-1 text-xs text-red-500 dark:text-red-400">
+                  {fieldErrors.reference_number}
+                </p>
+              )}
             </div>
           </div>
           <div>

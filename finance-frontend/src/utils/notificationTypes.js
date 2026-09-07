@@ -94,6 +94,55 @@ export const DEFAULT_NOTIFICATION_TYPE_META = {
   bg:    'bg-slate-100 dark:bg-slate-800',
 }
 
-export function notificationTypeMeta(type) {
-  return NOTIFICATION_TYPE_META[type] ?? DEFAULT_NOTIFICATION_TYPE_META
+export function notificationTypeMeta(type, item = null) {
+  const base = NOTIFICATION_TYPE_META[type] ?? DEFAULT_NOTIFICATION_TYPE_META
+
+  if (item && (item.title || item.message)) {
+    const text = `${item.title ?? ''} ${item.message ?? ''}`.toLowerCase()
+
+    if (text.includes('collection') || text.includes('collected') || text.includes('receipt') || text.includes('invoice')) {
+      return {
+        ...base,
+        route: '/transactions/collections',
+      }
+    }
+    if (text.includes('expense')) {
+      return {
+        ...base,
+        route: '/transactions/expenses',
+      }
+    }
+    if (text.includes('disbursement')) {
+      return {
+        ...base,
+        route: '/transactions/disbursements',
+      }
+    }
+    if (text.includes('budget')) {
+      return {
+        ...base,
+        route: '/transactions/budgets',
+      }
+    }
+    if (text.includes('payable') || text.includes('bill') || text.includes('supplier')) {
+      return {
+        ...base,
+        route: '/transactions/payable',
+      }
+    }
+    if (text.includes('receivable')) {
+      return {
+        ...base,
+        route: '/transactions/receivable',
+      }
+    }
+    if (text.includes('forecast')) {
+      return {
+        ...base,
+        route: '/analytics/forecasting',
+      }
+    }
+  }
+
+  return base
 }

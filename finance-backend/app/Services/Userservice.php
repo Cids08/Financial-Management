@@ -9,8 +9,11 @@ use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use App\Mail\WelcomeNewUserMail;
 
 class UserService
 {
@@ -50,16 +53,18 @@ class UserService
 
         return DB::transaction(function () use ($actor, $data) {
             $employeeNo = $this->generateEmployeeNo();
+            $temporaryPassword = "Alibaton@{$employeeNo}";
 
-            $user = User::create([
+            $user = new User([
                 'role_id' => $data['role_id'],
                 'employee_no' => $employeeNo,
                 'first_name' => $data['first_name'],
                 'last_name' => $data['last_name'],
                 'email' => $data['email'],
-                'password' => Hash::make("Alibaton@{$employeeNo}"),
+                'password' => Hash::make($temporaryPassword),
                 'status' => $data['status'],
             ]);
+            $user->forceFill(['must_change_password' => true])->save();
 
             AuditLog::create([
                 'user_id' => $actor->id,
@@ -80,6 +85,14 @@ class UserService
             // creation rolls back too, rather than leaving a Collector-role
             // user account with no matching collectors row.
             $this->syncCollectorRecord($actor, $user);
+
+            // Send welcome email with credentials; caught gracefully so email
+            // issues don't abort user account creation.
+            try {
+                Mail::to($user->email)->send(new WelcomeNewUserMail($user, $temporaryPassword));
+            } catch (\Throwable $e) {
+                Log::warning("Failed to send welcome email to {$user->email}: " . $e->getMessage());
+            }
 
             return $user->load('role');
         });

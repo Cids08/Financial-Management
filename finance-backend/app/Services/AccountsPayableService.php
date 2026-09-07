@@ -82,7 +82,7 @@ class AccountsPayableService
                 'paid_amount' => $paidAmount,
                 'remaining_balance' => $originalAmount - $paidAmount,
                 'payment_method' => $data['payment_method'] ?? null,
-                'reference_number' => $data['reference_number'] ?? null,
+                'reference_number' => !empty($data['reference_number']) ? $data['reference_number'] : self::generateReferenceNumber(),
                 'status' => $data['status'] ?? 'Pending',
                 'remarks' => $data['description'] ?? null,
                 'created_by' => $actor->id,
@@ -456,5 +456,27 @@ class AccountsPayableService
                 $doc->has_file = (bool) $doc->storage_path;
                 return $doc;
             });
+    }
+
+    public static function generateReferenceNumber(): string
+    {
+        $last = AccountsPayable::withTrashed()
+            ->where('reference_number', 'like', 'REF-AP-%')
+            ->orderByDesc('id')
+            ->value('reference_number');
+
+        $nextNum = 1;
+        if ($last && preg_match('/REF-AP-(\d+)/i', $last, $matches)) {
+            $nextNum = (int) $matches[1] + 1;
+        } else {
+            $count = AccountsPayable::withTrashed()->count();
+            $nextNum = $count + 1;
+        }
+
+        while (AccountsPayable::withTrashed()->where('reference_number', sprintf('REF-AP-%03d', $nextNum))->exists()) {
+            $nextNum++;
+        }
+
+        return sprintf('REF-AP-%03d', $nextNum);
     }
 }

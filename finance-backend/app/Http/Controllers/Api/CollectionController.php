@@ -26,6 +26,7 @@ class CollectionController extends Controller
 
         $paginated = $this->collections->list([
             'search'       => $request->query('search'),
+            'ar_id'        => $request->query('ar_id'),
             'collector_id' => $request->query('collector_id'),
             'status'       => $request->query('status'),
             'trashed'      => $request->boolean('trashed'),

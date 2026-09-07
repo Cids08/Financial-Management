@@ -39,15 +39,23 @@ class TaxObligationSeeder extends Seeder
             $archived = $row['archived'];
             unset($row['archived']);
 
-            $obligation = TaxObligation::create([
-                ...$row,
-                'tax_amount' => round($row['taxable_amount'] * ($row['tax_rate'] / 100), 2),
-                'created_by' => $userId,
-            ]);
+            $obligation = TaxObligation::withTrashed()->updateOrCreate(
+                [
+                    'tax_type'   => $row['tax_type'],
+                    'tax_period' => $row['tax_period'],
+                ],
+                [
+                    ...$row,
+                    'tax_amount' => round($row['taxable_amount'] * ($row['tax_rate'] / 100), 2),
+                    'created_by' => $userId,
+                ]
+            );
 
-            if ($archived) {
+            if ($archived && ! $obligation->trashed()) {
                 $obligation->update(['deleted_by' => $userId]);
                 $obligation->delete();
+            } elseif (! $archived && $obligation->trashed()) {
+                $obligation->restore();
             }
         }
     }

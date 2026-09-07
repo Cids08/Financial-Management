@@ -1,34 +1,26 @@
 <?php
 
-namespace App\Mail;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
 
-use App\Models\User;
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Mail\Mailable;
-use Illuminate\Queue\SerializesModels;
-
-class WelcomeNewUserMail extends Mailable implements ShouldQueue
+return new class extends Migration
 {
-    use Queueable, SerializesModels;
-
-    public function __construct(
-        protected User $user,
-        protected string $temporaryPassword,
-    ) {
-    }
-
-    public function build(): self
+    public function up(): void
     {
-        return $this->subject('Your account has been created')
-            ->view('emails.welcome-new-user')
-            ->with([
-                'firstName' => $this->user->first_name,
-                'employeeNo' => $this->user->employee_no,
-                'email' => $this->user->email,
-                'temporaryPassword' => $this->temporaryPassword,
-                'loginUrl' => rtrim(config('app.frontend_url'), '/') . '/login',
-                'companyName' => config('app.company_name', config('app.name')),
-            ]);
+        Schema::table('users', function (Blueprint $table) {
+            if (! Schema::hasColumn('users', 'must_change_password')) {
+                $table->boolean('must_change_password')->default(false)->after('status');
+            }
+        });
     }
-}
+
+    public function down(): void
+    {
+        Schema::table('users', function (Blueprint $table) {
+            if (Schema::hasColumn('users', 'must_change_password')) {
+                $table->dropColumn('must_change_password');
+            }
+        });
+    }
+};

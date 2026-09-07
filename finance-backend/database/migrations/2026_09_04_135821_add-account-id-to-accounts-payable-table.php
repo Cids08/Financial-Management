@@ -16,13 +16,15 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('accounts_payable', function (Blueprint $table) {
-            $table->foreignId('account_id')
-                ->nullable()
-                ->after('supplier_id')
-                ->constrained('chart_of_accounts')
-                ->nullOnDelete();
-        });
+        if (! Schema::hasColumn('accounts_payable', 'account_id')) {
+            Schema::table('accounts_payable', function (Blueprint $table) {
+                $table->foreignId('account_id')
+                    ->nullable()
+                    ->after('supplier_id')
+                    ->constrained('chart_of_accounts')
+                    ->nullOnDelete();
+            });
+        }
     }
 
     public function down(): void

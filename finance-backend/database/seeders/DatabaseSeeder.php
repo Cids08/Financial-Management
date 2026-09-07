@@ -9,25 +9,31 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call([
-            SuperAdminSeeder::class,
-            DepartmentSeeder::class,
+            // 1. Core Auth, Roles & Permissions
             RolesAndPermissionsSeeder::class,
-            AccountsReceivableSeeder::class,
-            JournalEntrySeeder::class,
-            ChartOfAccountSeeder::class,
-            TaxObligationSeeder::class,
-            ExpenseCategorySeeder::class,
-            ServiceAreaSeeder::class,
-            CollectionSeeder::class,
-            CollectorSeeder::class,
+            SuperAdminSeeder::class,
             MissingPermissionsSeeder::class,
-            ExpenseSeeder::class,
+
+            // 2. Foundational Organizational Units & Entities
+            DepartmentSeeder::class,
+            ServiceAreaSeeder::class,
+            CustomerSeeder::class,
+            SupplierSeeder::class,
+
+            // 3. Accounting Structure & Accounts
+            ChartOfAccountSeeder::class,
             CashAccountSeeder::class,
+            CollectorSeeder::class,
+            ExpenseCategorySeeder::class,
             BudgetSeeder::class,
-            AccountsPayableSeeder::class,
-            DisbursementSeeder::class,
+
+            // 4. Invoices, Payables & Transactions (Depend on previous entities)
+            AccountsReceivableSeeder::class,
+            CollectionSeeder::class,
+            ExpenseSeeder::class,
+            TaxObligationSeeder::class,
+            JournalEntrySeeder::class,
             DisbursementPayrollDemoSeeder::class,
-            // ...other seeders (RoleSeeder, DepartmentSeeder, etc.) go here
         ]);
     }
 }

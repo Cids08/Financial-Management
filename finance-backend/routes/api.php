@@ -42,7 +42,7 @@ Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,
 Route::post('/login/verify-two-factor', [AuthController::class, 'verifyTwoFactor'])->middleware('throttle:5,1', 'honeypot');
 Route::post('/login/resend-two-factor', [AuthController::class, 'resendTwoFactor'])->middleware('throttle:5,1');
 
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', 'require.password.change'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
 
     // Profile

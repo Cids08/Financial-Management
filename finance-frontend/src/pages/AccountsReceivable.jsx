@@ -8,6 +8,7 @@ import { formatCurrency } from '../utils/formatters'
 import { useAccountsReceivable } from '../hooks/useAccountsReceivable'
 import { apiFetch } from '../utils/api'
 import { usePermissions } from '../context/PermissionsContext'
+import { useProfileContext } from '../context/ProfileContext'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 
 const PAYMENT_METHODS = ['Bank Transfer', 'Check', 'Cash', 'Credit Card', 'GCash']
@@ -40,6 +41,25 @@ const STATUS_STYLES = {
 
 function isLocked(record) {
   return LOCKED_STATUSES.includes(record.status)
+}
+
+function getNextReferenceNo(records = []) {
+  const existingRefs = new Set(
+    records.map((r) => (r.reference_no || '').trim().toLowerCase())
+  )
+  let maxNum = 0
+  records.forEach((r) => {
+    const match = (r.reference_no || '').match(/REF-AR-(\d+)/i)
+    if (match) {
+      const num = parseInt(match[1], 10)
+      if (num > maxNum) maxNum = num
+    }
+  })
+  let nextNum = maxNum > 0 ? maxNum + 1 : (records.length + 1)
+  while (existingRefs.has(`ref-ar-${String(nextNum).padStart(3, '0')}`)) {
+    nextNum++
+  }
+  return `REF-AR-${String(nextNum).padStart(3, '0')}`
 }
 
 function formatDate(value) {
@@ -222,9 +242,11 @@ function InvoiceScanUpload({ onScanned }) {
 export default function AccountsReceivable({ title = 'Accounts Receivable', crumbs = ['Financial Transactions', 'Accounts Receivable'] }) {
   const { records, loading, saving, error, fetchRecords, createRecord, updateRecord, toggleArchive } = useAccountsReceivable()
   const { hasPermission } = usePermissions()
-  // Backend gates POST/PUT/toggle-archive on accounts-receivable behind
-  // ar.manage — Collector only has ar.view (see RolesAndPermissionsSeeder),
-  // so Add/Edit/Archive buttons are hidden rather than shown-then-403ing.
+  const { profile } = useProfileContext()
+  // Admin-only gate for archiving/restoring invoices: in corporate finance systems,
+  // destructive status actions (archiving/unarchiving financial records) are restricted
+  // strictly to Admin and Super Admin roles. Non-admin users (Staff, Collectors) cannot archive.
+  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
   const canManage = hasPermission('ar.manage')
   const customers = useLookup('/api/customers')
   const users = useLookup('/api/users')
@@ -257,6 +279,10 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
   const [fieldErrors, setFieldErrors] = useState({})
   const [serverError, setServerError] = useState('')
   const [dateErrors, setDateErrors] = useState({ invoice_date: '', due_date: '' })
+  const [invoiceCollections, setInvoiceCollections] = useState([])
+  const [invoiceCollectionsLoading, setInvoiceCollectionsLoading] = useState(false)
+  const [invoiceAuditLogs, setInvoiceAuditLogs] = useState([])
+  const [invoiceAuditLogsLoading, setInvoiceAuditLogsLoading] = useState(false)
 
   const validateDate = (field, value) => {
     if (!value) {
@@ -345,7 +371,11 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
   }
 
   const openAdd = () => {
-    setForm({ ...EMPTY_FORM, customer_id: customers[0]?.customer_id ?? '' })
+    setForm({
+      ...EMPTY_FORM,
+      customer_id: customers[0]?.customer_id ?? '',
+      reference_no: getNextReferenceNo(records),
+    })
     setFieldErrors({})
     setServerError('')
     setModalMode('add')
@@ -362,8 +392,34 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
     setModalMode(r)
   }
   const closeModal = () => { setModalMode(null); setFieldErrors({}); setServerError(''); setDateErrors({ invoice_date: '', due_date: '' }) }
-  const openDetail = (r) => setDetailRecord(r)
-  const closeDetail = () => setDetailRecord(null)
+  const openDetail = (r) => {
+    setDetailRecord(r)
+    setInvoiceCollections([])
+    setInvoiceCollectionsLoading(true)
+    setInvoiceAuditLogs([])
+    setInvoiceAuditLogsLoading(true)
+
+    apiFetch(`/api/collections?ar_id=${r.ar_id}&per_page=100`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success) setInvoiceCollections(json.data ?? [])
+      })
+      .catch(() => {})
+      .finally(() => setInvoiceCollectionsLoading(false))
+
+    apiFetch(`/api/audit-logs?module=${encodeURIComponent('Accounts Receivable')}&record_id=${r.ar_id}`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success) setInvoiceAuditLogs(json.data ?? [])
+      })
+      .catch(() => {})
+      .finally(() => setInvoiceAuditLogsLoading(false))
+  }
+  const closeDetail = () => {
+    setDetailRecord(null)
+    setInvoiceCollections([])
+    setInvoiceAuditLogs([])
+  }
 
   // Merges scanned fields into the form without clobbering anything the user
   // already typed by hand.
@@ -376,7 +432,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
       original_amount: f.original_amount || extracted.original_amount,
       balance: f.balance || extracted.balance,
       payment_terms: f.payment_terms || extracted.payment_terms,
-      reference_no: f.reference_no || extracted.reference_no,
+      reference_no: extracted.reference_no || f.reference_no,
     }))
   }
 
@@ -451,6 +507,19 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
     }
     if (form.balance !== '' && Number(form.balance) < 0) {
       errors.balance = 'Balance cannot be negative.'
+    }
+    if (form.penalty_rate !== '' && (isNaN(Number(form.penalty_rate)) || Number(form.penalty_rate) < 0)) {
+      errors.penalty_rate = 'Penalty rate cannot be negative.'
+    }
+    if (form.reference_no && form.reference_no.trim()) {
+      const trimmedRef = form.reference_no.trim().toLowerCase()
+      const dup = records.find((r) => {
+        if (modalMode !== 'add' && r.ar_id === modalMode?.ar_id) return false
+        return (r.reference_no || '').trim().toLowerCase() === trimmedRef
+      })
+      if (dup) {
+        errors.reference_no = `Reference number is already used by invoice ${dup.invoice_number}.`
+      }
     }
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors)
@@ -637,7 +706,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                           </button>
                         </Tooltip>
                       )}
-                      {canManage && (
+                      {isAdmin && (
                         <Tooltip label={r.is_archived ? 'Restore invoice' : 'Archive invoice'} align="end">
                           <button type="button" onClick={() => handleToggleArchive(r.ar_id)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                             {r.is_archived ? <RotateCcw size={15} /> : <Archive size={15} />}
@@ -839,8 +908,51 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
               <input type="text" value={form.purchase_order_no} onChange={(e) => setForm((f) => ({ ...f, purchase_order_no: e.target.value }))} className={INPUT} placeholder="PO-5521" />
             </div>
             <div>
-              <label className={LABEL}>Reference No.</label>
-              <input type="text" value={form.reference_no} onChange={(e) => setForm((f) => ({ ...f, reference_no: e.target.value }))} className={INPUT} placeholder="REF-AR-001" />
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-medium text-muted">Reference No.</label>
+                {modalMode === 'add' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextRef = getNextReferenceNo(records)
+                      setForm((f) => ({ ...f, reference_no: nextRef }))
+                      setFieldErrors((fe) => ({ ...fe, reference_no: '' }))
+                    }}
+                    className="text-[11px] font-medium text-primary hover:underline"
+                  >
+                    Auto-generate
+                  </button>
+                )}
+              </div>
+              <input
+                type="text"
+                value={form.reference_no}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setForm((f) => ({ ...f, reference_no: val }))
+                  const trimmed = val.trim().toLowerCase()
+                  if (trimmed) {
+                    const dup = records.find((r) => {
+                      if (modalMode !== 'add' && r.ar_id === modalMode?.ar_id) return false
+                      return (r.reference_no || '').trim().toLowerCase() === trimmed
+                    })
+                    if (dup) {
+                      setFieldErrors((fe) => ({ ...fe, reference_no: `Reference number is already used by invoice ${dup.invoice_number}.` }))
+                    } else {
+                      setFieldErrors((fe) => ({ ...fe, reference_no: '' }))
+                    }
+                  } else {
+                    setFieldErrors((fe) => ({ ...fe, reference_no: '' }))
+                  }
+                }}
+                className={`${INPUT} ${fieldErrors.reference_no ? 'border-red-400 dark:border-red-500' : ''}`}
+                placeholder="REF-AR-001"
+              />
+              {fieldErrors.reference_no && (
+                <p className="mt-1 text-xs text-red-500 dark:text-red-400">
+                  {fieldErrors.reference_no}
+                </p>
+              )}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -851,10 +963,15 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                 min="0"
                 step="0.1"
                 value={form.penalty_rate}
+                onKeyDown={(e) => {
+                  if (e.key === '-' || e.key === 'e' || e.key === '+') {
+                    e.preventDefault()
+                  }
+                }}
                 onChange={(e) => {
                   const val = e.target.value
                   setForm((f) => ({ ...f, penalty_rate: val }))
-                  if (val !== '' && Number(val) < 0) {
+                  if (val !== '' && (isNaN(Number(val)) || Number(val) < 0)) {
                     setFieldErrors((fe) => ({ ...fe, penalty_rate: 'Penalty rate cannot be negative.' }))
                   } else {
                     setFieldErrors((fe) => ({ ...fe, penalty_rate: '' }))
@@ -948,6 +1065,71 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                     <DetailRow label="Archived at" value={formatDateTime(detailRecord.archived_at)} />
                   </>
                 )}
+              </div>
+            </div>
+
+            {/* Related Collections / Payment History */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-xs font-semibold text-ink">Payment & Collection History</p>
+                <span className="text-[11px] text-muted">
+                  {invoiceCollectionsLoading ? 'Loading…' : `${invoiceCollections.length} record${invoiceCollections.length === 1 ? '' : 's'}`}
+                </span>
+              </div>
+              <div className="rounded-lg border border-border divide-y divide-border max-h-48 overflow-y-auto bg-slate-50/50 dark:bg-slate-900/30">
+                {invoiceCollectionsLoading && (
+                  <p className="px-3 py-3 text-xs text-muted text-center">Loading collections…</p>
+                )}
+                {!invoiceCollectionsLoading && invoiceCollections.length === 0 && (
+                  <p className="px-3 py-3 text-xs text-muted text-center">No collections recorded against this invoice yet.</p>
+                )}
+                {!invoiceCollectionsLoading && invoiceCollections.map((col) => (
+                  <div key={col.id} className="px-3 py-2 text-xs flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-ink">{col.receipt_number}</p>
+                      <p className="text-[11px] text-muted">{formatDate(col.collection_date)} · {col.payment_method}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold text-ink tabular-nums">{formatCurrency(col.amount_received)}</p>
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${STATUS_STYLES[col.status] ?? 'bg-slate-100 text-slate-600'}`}>
+                        {col.status}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Related Activity & Audit Trail */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-xs font-semibold text-ink">Activity & Audit Trail</p>
+                <span className="text-[11px] text-muted">
+                  {invoiceAuditLogsLoading ? 'Loading…' : `${invoiceAuditLogs.length} event${invoiceAuditLogs.length === 1 ? '' : 's'}`}
+                </span>
+              </div>
+              <div className="rounded-lg border border-border divide-y divide-border max-h-48 overflow-y-auto bg-slate-50/50 dark:bg-slate-900/30">
+                {invoiceAuditLogsLoading && (
+                  <p className="px-3 py-3 text-xs text-muted text-center">Loading audit history…</p>
+                )}
+                {!invoiceAuditLogsLoading && invoiceAuditLogs.length === 0 && (
+                  <p className="px-3 py-3 text-xs text-muted text-center">No audit trail recorded for this invoice.</p>
+                )}
+                {!invoiceAuditLogsLoading && invoiceAuditLogs.map((log) => (
+                  <div key={log.id} className="px-3 py-2 text-xs">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-medium text-ink leading-relaxed">
+                        {log.activity_description || log.action}
+                      </span>
+                      <span className="text-[11px] text-muted shrink-0 tabular-nums">
+                        {formatDateTime(log.created_at)}
+                      </span>
+                    </div>
+                    {log.user_name && (
+                      <p className="text-[11px] text-muted mt-0.5">by <span className="font-medium text-ink">{log.user_name}</span></p>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           </div>

@@ -19,6 +19,7 @@ class ProfileResource extends JsonResource
             'suffix'      => $this->suffix,
             'email'       => $this->email,
             'phone'       => $this->phone_number,
+            'must_change_password' => (bool) $this->must_change_password,
 
             // roles.name is stored as a slug ('super-admin'); Str::headline()
             // renders it for display ('Super Admin') without needing a

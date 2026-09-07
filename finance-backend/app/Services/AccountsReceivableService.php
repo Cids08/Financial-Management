@@ -62,6 +62,10 @@ class AccountsReceivableService
                 ? round(($data['original_amount'] * $penaltyRate) / 100, 2)
                 : 0;
 
+            $referenceNo = !empty($data['reference_no'])
+                ? $data['reference_no']
+                : self::generateReferenceNo();
+
             $ar = AccountsReceivable::create([
                 'customer_id' => $data['customer_id'],
                 'collector_id' => $data['collector_id'] ?? null,
@@ -74,7 +78,7 @@ class AccountsReceivableService
                 'payment_method' => $data['payment_method'] ?? null,
                 'payment_terms' => $data['payment_terms'] ?? null,
                 'purchase_order_no' => $data['purchase_order_no'] ?? null,
-                'reference_no' => $data['reference_no'] ?? null,
+                'reference_no' => $referenceNo,
                 'penalty_rate' => $penaltyRate,
                 'penalty_amount' => $penaltyAmount,
                 'remarks' => $data['remarks'] ?? null,
@@ -171,5 +175,27 @@ class AccountsReceivableService
 
             return $ar->load(['customer', 'collector']);
         });
+    }
+
+    public static function generateReferenceNo(): string
+    {
+        $last = AccountsReceivable::withTrashed()
+            ->where('reference_no', 'like', 'REF-AR-%')
+            ->orderByDesc('id')
+            ->value('reference_no');
+
+        $nextNum = 1;
+        if ($last && preg_match('/REF-AR-(\d+)/i', $last, $matches)) {
+            $nextNum = (int) $matches[1] + 1;
+        } else {
+            $count = AccountsReceivable::withTrashed()->count();
+            $nextNum = $count + 1;
+        }
+
+        while (AccountsReceivable::withTrashed()->where('reference_no', sprintf('REF-AR-%03d', $nextNum))->exists()) {
+            $nextNum++;
+        }
+
+        return sprintf('REF-AR-%03d', $nextNum);
     }
 }

@@ -158,8 +158,13 @@ class DisbursementService
                 ]);
             }
 
+            $referenceNumber = !empty($data['reference_number'])
+                ? $data['reference_number']
+                : self::generateReferenceNumber();
+
             $disbursement = Disbursement::create([
                 ...$data,
+                'reference_number' => $referenceNumber,
                 'voucher_number' => $this->generateVoucherNumber(),
                 'source_type' => 'ap',
                 'status' => 'Pending',
@@ -744,5 +749,27 @@ class DisbursementService
             'type' => $type,
             'is_read' => false,
         ]);
+    }
+
+    public static function generateReferenceNumber(): string
+    {
+        $last = Disbursement::withTrashed()
+            ->where('reference_number', 'like', 'REF-DIS-%')
+            ->orderByDesc('id')
+            ->value('reference_number');
+
+        $nextNum = 1;
+        if ($last && preg_match('/REF-DIS-(\d+)/i', $last, $matches)) {
+            $nextNum = (int) $matches[1] + 1;
+        } else {
+            $count = Disbursement::withTrashed()->count();
+            $nextNum = $count + 1;
+        }
+
+        while (Disbursement::withTrashed()->where('reference_number', sprintf('REF-DIS-%03d', $nextNum))->exists()) {
+            $nextNum++;
+        }
+
+        return sprintf('REF-DIS-%03d', $nextNum);
     }
 }

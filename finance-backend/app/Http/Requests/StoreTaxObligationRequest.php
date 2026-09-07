@@ -19,6 +19,8 @@ class StoreTaxObligationRequest extends FormRequest
 
     public function rules(): array
     {
+        $id = $this->route('taxObligation')?->id;
+
         return [
             'tax_type'   => ['required', Rule::in([
                 'VAT', 'Withholding Tax', 'Percentage Tax',
@@ -33,7 +35,14 @@ class StoreTaxObligationRequest extends FormRequest
             'taxable_amount'    => ['required', 'numeric', 'min:0'],
             'is_paid'           => ['sometimes', 'boolean'],
             'payment_date'      => ['required_if:is_paid,true', 'nullable', 'date'],
-            'reference_number'  => ['nullable', 'string', 'max:255'],
+            'reference_number'  => [
+                'nullable',
+                'string',
+                'max:255',
+                Rule::unique('tax_obligations', 'reference_number')
+                    ->ignore($id)
+                    ->whereNull('deleted_at'),
+            ],
             'remarks'           => ['nullable', 'string'],
         ];
     }

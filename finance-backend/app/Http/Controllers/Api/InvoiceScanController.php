@@ -35,7 +35,7 @@ class InvoiceScanController extends Controller
         if (! $result['is_receipt']) {
             return response()->json([
                 'success' => false,
-                'message' => "This doesn't look like an invoice or receipt — please upload a clearer photo, or fill in the details manually.",
+                'message' => $result['message'] ?? "This doesn't look like an invoice or receipt — please upload a clearer photo, or fill in the details manually.",
                 'data' => null,
             ], 422);
         }

@@ -21,10 +21,15 @@ class CustomerSeeder extends Seeder
             $archived = $data['archived'] ?? false;
             unset($data['archived']);
 
-            $customer = Customer::create($data);
+            $customer = Customer::withTrashed()->updateOrCreate(
+                ['email' => $data['email']],
+                $data
+            );
 
-            if ($archived) {
-                $customer->delete(); // soft delete, matches the "Archived" row from the original mock data
+            if ($archived && ! $customer->trashed()) {
+                $customer->delete();
+            } elseif (! $archived && $customer->trashed()) {
+                $customer->restore();
             }
         }
     }

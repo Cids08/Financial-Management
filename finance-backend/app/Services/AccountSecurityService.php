@@ -32,7 +32,7 @@ class AccountSecurityService
 
         $currentTokenId = optional($user->currentAccessToken())->id;
 
-        $user->update([
+        $user->forceFill([
             'password' => $new,
             // Clears the forced-change flag, if set — this is the exit
             // point for both a normal password change AND the
@@ -40,7 +40,7 @@ class AccountSecurityService
             // funnel through this same method.
             'must_change_password' => false,
             'updated_by' => $user->id,
-        ]);
+        ])->save();
 
         $user->tokens()->when($currentTokenId, fn ($q) => $q->where('id', '!=', $currentTokenId))->delete();
 

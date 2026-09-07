@@ -21,10 +21,15 @@ class SupplierSeeder extends Seeder
             $archived = $data['archived'] ?? false;
             unset($data['archived']);
 
-            $supplier = Supplier::create($data);
+            $supplier = Supplier::withTrashed()->updateOrCreate(
+                ['email' => $data['email']],
+                $data
+            );
 
-            if ($archived) {
+            if ($archived && ! $supplier->trashed()) {
                 $supplier->delete();
+            } elseif (! $archived && $supplier->trashed()) {
+                $supplier->restore();
             }
         }
     }

@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class UpdateDisbursementRequest extends FormRequest
 {
@@ -15,6 +16,8 @@ class UpdateDisbursementRequest extends FormRequest
 
     public function rules(): array
     {
+        $disbursement = $this->route('disbursement');
+
         return [
             'cash_account_id' => ['required', 'integer', 'exists:cash_accounts,id'],
             'payee' => ['required', 'string', 'max:255'],
@@ -22,7 +25,14 @@ class UpdateDisbursementRequest extends FormRequest
             'amount_paid' => ['required', 'numeric', 'min:0.01'],
             'currency' => ['required', 'string', 'max:10'],
             'payment_method' => ['required', 'string', 'max:50'],
-            'reference_number' => ['nullable', 'string', 'max:100'],
+            'reference_number' => [
+                'nullable',
+                'string',
+                'max:100',
+                Rule::unique('disbursements', 'reference_number')
+                    ->ignore($disbursement?->id)
+                    ->whereNull('deleted_at'),
+            ],
             'remarks' => ['nullable', 'string', 'max:2000'],
         ];
     }

@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { LogIn, Mail, Lock, Eye, EyeOff, AlertCircle, Sun, Moon, ShieldCheck, ArrowLeft } from 'lucide-react'
+import { LogIn, Mail, Lock, Eye, EyeOff, AlertCircle, Sun, Moon, ShieldCheck, ArrowLeft, ShieldOff, AlertTriangle } from 'lucide-react'
 import Button from '../components/Button'
+import OtpInput from '../components/OtpInput'
 import { useAuth } from '../hooks/useAuth'
 import { useTheme } from '../context/ThemeContext'
 import logo from '../assets/logo.svg'
@@ -13,7 +14,7 @@ export default function Login() {
     twoFactorPending, verifyTwoFactor, resendTwoFactor, cancelTwoFactor,
   } = useAuth()
   const { theme, toggleTheme } = useTheme()
-  const [form, setForm] = useState({ email: '', password: '', remember: false, website: '' })
+  const [form, setForm] = useState({ email: '', password: '', website: '' })
   const [showPassword, setShowPassword] = useState(false)
   const [code, setCode] = useState('')
   const [resendMessage, setResendMessage] = useState('')
@@ -23,10 +24,7 @@ export default function Login() {
   const [formRenderedAt] = useState(() => Math.floor(Date.now() / 1000))
 
   const handleChange = (field) => (e) =>
-    setForm((f) => ({
-      ...f,
-      [field]: e.target.type === 'checkbox' ? e.target.checked : e.target.value,
-    }))
+    setForm((f) => ({ ...f, [field]: e.target.value }))
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -135,16 +133,44 @@ export default function Login() {
               </div>
             )}
 
-            {error && !accountLockedFor && (
-              <div className="flex items-center gap-2 mt-5 px-3 py-2 rounded-lg bg-red-50/70 border border-red-200/70 text-xs text-red-600 backdrop-blur-sm dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
-                <AlertCircle size={14} className="shrink-0" />
-                <span>
-                  {retryAfter > 0
-                    ? `Too many attempts. Try again in ${retryAfter}s.`
-                    : error}
-                </span>
-              </div>
-            )}
+            {error && !accountLockedFor && (() => {
+              // Detect message type to show the right visual treatment
+              const isWarning = error.toLowerCase().includes('remaining')
+              const isInactive = error.toLowerCase().includes('not active')
+              const isExpired = error.toLowerCase().includes('expired') || error.toLowerCase().includes('sign in again')
+
+              if (isWarning) {
+                return (
+                  <div className="flex items-start gap-2 mt-5 px-3 py-2.5 rounded-lg bg-amber-50/70 border border-amber-300/70 text-xs text-amber-700 backdrop-blur-sm dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-400">
+                    <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                    <span>{retryAfter > 0 ? `Too many attempts. Try again in ${retryAfter}s.` : error}</span>
+                  </div>
+                )
+              }
+
+              if (isInactive) {
+                return (
+                  <div className="flex items-start gap-2 mt-5 px-3 py-2.5 rounded-lg bg-slate-100/70 border border-slate-300/70 text-xs text-slate-600 backdrop-blur-sm dark:border-slate-500/25 dark:bg-slate-500/10 dark:text-slate-400">
+                    <ShieldOff size={14} className="shrink-0 mt-0.5" />
+                    <span>{error}</span>
+                  </div>
+                )
+              }
+
+              // Generic wrong credentials / expired 2FA session / other
+              return (
+                <div className="flex items-start gap-2 mt-5 px-3 py-2.5 rounded-lg bg-red-50/70 border border-red-200/70 text-xs text-red-600 backdrop-blur-sm dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+                  <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                  <span>
+                    {retryAfter > 0
+                      ? `Too many attempts. Try again in ${retryAfter}s.`
+                      : isExpired
+                        ? error
+                        : 'Incorrect email or password. Please try again.'}
+                  </span>
+                </div>
+              )
+            })()}
 
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">
               {/*
@@ -170,12 +196,12 @@ export default function Login() {
               </div>
 
               <label className="block">
-                <span className="text-xs font-medium text-muted mb-1 block">Email</span>
-                <div className="flex items-center gap-2 rounded-lg border border-white/50 dark:border-white/10
-                  px-3 py-2 bg-white/30 dark:bg-white/5 backdrop-blur-sm
-                  focus-within:border-primary focus-within:bg-white/60 dark:focus-within:bg-white/10
-                  transition-colors duration-150">
-                  <Mail size={15} className="text-muted shrink-0" />
+                <span className="text-xs font-semibold text-ink/80 dark:text-muted mb-1.5 block">Email</span>
+                <div className="flex items-center gap-2 rounded-xl border border-slate-300 dark:border-slate-700
+                  px-3.5 py-2.5 bg-white/80 dark:bg-slate-900/60 backdrop-blur-sm shadow-xs
+                  focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/25 focus-within:bg-white dark:focus-within:bg-slate-900
+                  transition-all duration-150">
+                  <Mail size={16} className="text-muted shrink-0" />
                   <input
                     type="email"
                     required
@@ -189,12 +215,12 @@ export default function Login() {
               </label>
 
               <label className="block">
-                <span className="text-xs font-medium text-muted mb-1 block">Password</span>
-                <div className="flex items-center gap-2 rounded-lg border border-white/50 dark:border-white/10
-                  px-3 py-2 bg-white/30 dark:bg-white/5 backdrop-blur-sm
-                  focus-within:border-primary focus-within:bg-white/60 dark:focus-within:bg-white/10
-                  transition-colors duration-150">
-                  <Lock size={15} className="text-muted shrink-0" />
+                <span className="text-xs font-semibold text-ink/80 dark:text-muted mb-1.5 block">Password</span>
+                <div className="flex items-center gap-2 rounded-xl border border-slate-300 dark:border-slate-700
+                  px-3.5 py-2.5 bg-white/80 dark:bg-slate-900/60 backdrop-blur-sm shadow-xs
+                  focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/25 focus-within:bg-white dark:focus-within:bg-slate-900
+                  transition-all duration-150">
+                  <Lock size={16} className="text-muted shrink-0" />
                   <input
                     type={showPassword ? 'text' : 'password'}
                     required
@@ -208,9 +234,9 @@ export default function Login() {
                     type="button"
                     onClick={() => setShowPassword((v) => !v)}
                     aria-label={showPassword ? 'Hide password' : 'Show password'}
-                    className="text-muted hover:text-ink transition-colors duration-150"
+                    className="text-muted hover:text-ink transition-colors duration-150 p-0.5 rounded"
                   >
-                    {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
               </label>
@@ -261,19 +287,14 @@ export default function Login() {
             )}
 
             <form onSubmit={handleVerify} className="mt-6 space-y-4">
-              <input
-                type="text"
-                inputMode="numeric"
-                maxLength={6}
-                autoFocus
-                required
+              <OtpInput
+                length={6}
                 value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-                placeholder="000000"
-                className="w-full h-11 rounded-lg border border-white/50 dark:border-white/10
-                  bg-white/30 dark:bg-white/5 backdrop-blur-sm text-center font-mono text-lg tracking-[0.4em]
-                  text-ink focus:outline-none focus:border-primary focus:bg-white/60 dark:focus:bg-white/10
-                  transition-colors duration-150"
+                onChange={setCode}
+                onComplete={(completedCode) => verifyTwoFactor(completedCode)}
+                disabled={loading || retryAfter > 0}
+                hasError={Boolean(error)}
+                autoFocus
               />
 
               <Button

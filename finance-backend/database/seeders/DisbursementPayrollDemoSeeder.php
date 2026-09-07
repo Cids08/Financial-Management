@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\CashAccount;
 use App\Models\Department;
+use App\Models\Disbursement;
 use App\Models\User;
 use App\Services\DisbursementService;
 use Illuminate\Database\Seeder;
@@ -30,6 +31,11 @@ class DisbursementPayrollDemoSeeder extends Seeder
 {
     public function run(): void
     {
+        if (Disbursement::where('source_type', 'payroll')->exists()) {
+            $this->command?->info('Payroll demo disbursements already exist — skipping.');
+            return;
+        }
+
         $department = Department::first();
         $cashAccount = CashAccount::first();
         $requester = User::first();

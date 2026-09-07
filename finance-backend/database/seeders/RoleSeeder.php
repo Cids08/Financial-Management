@@ -1,36 +1,16 @@
 <?php
 
-namespace App\Models;
+namespace Database\Seeders;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Seeder;
 
-class Role extends Model
+class RoleSeeder extends Seeder
 {
-    use HasFactory, SoftDeletes;
-
-    protected $fillable = [
-        'name',
-        'display_name',
-        'description',
-        'is_active',
-    ];
-
-    protected function casts(): array
+    /**
+     * Delegates to the canonical RolesAndPermissionsSeeder.
+     */
+    public function run(): void
     {
-        return [
-            'is_active' => 'boolean',
-        ];
-    }
-
-    public function users()
-    {
-        return $this->hasMany(User::class);
-    }
-
-    public function permissions()
-    {
-        return $this->belongsToMany(Permission::class, 'role_permissions');
+        $this->call(RolesAndPermissionsSeeder::class);
     }
 }

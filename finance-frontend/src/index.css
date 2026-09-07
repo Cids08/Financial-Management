@@ -90,6 +90,17 @@ body {
   outline-offset: 2px;
 }
 
+/* Prevent double outline on form inputs that manage their own borders and focus rings */
+input:focus,
+input:focus-visible,
+textarea:focus,
+textarea:focus-visible,
+select:focus,
+select:focus-visible {
+  outline: none !important;
+  outline-offset: 0 !important;
+}
+
 .scrollbar-none::-webkit-scrollbar { display: none; }
 .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
 

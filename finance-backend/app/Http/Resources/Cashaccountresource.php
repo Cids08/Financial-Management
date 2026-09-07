@@ -14,6 +14,7 @@ class CashAccountResource extends JsonResource
             // deleted_at -> is_archived. `status` is already 'Active'/'Inactive'
             // on both sides, so it passes through unchanged (no is_active mapping
             // needed here, unlike collectors).
+            'id'              => $this->id,
             'cash_account_id' => $this->id,
             'account_code'    => $this->account_code,
             'account_name'    => $this->account_name,

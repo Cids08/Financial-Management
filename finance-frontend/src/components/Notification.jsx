@@ -71,7 +71,7 @@ export default function Notification() {
       fetchUnreadCount()
     }
     setOpen(false)
-    navigate(n.route ?? notificationTypeMeta(n.type).route)
+    navigate(n.route ?? notificationTypeMeta(n.type, n).route)
   }
 
   const handleMarkAllRead = async (e) => {
@@ -134,7 +134,7 @@ export default function Notification() {
           ) : (
             <ul className="max-h-80 overflow-y-auto">
               {preview.map((n) => {
-                const meta = notificationTypeMeta(n.type)
+                const meta = notificationTypeMeta(n.type, n)
                 const Icon = meta.icon
                 return (
                   <li
@@ -147,10 +147,13 @@ export default function Notification() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
-                        <p className="text-sm text-ink leading-snug truncate">{n.title}</p>
+                        <p className={`text-sm leading-snug truncate ${!n.is_read ? 'font-semibold text-ink' : 'font-medium text-ink'}`}>{n.title}</p>
                         {!n.is_read && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
                       </div>
-                      <p className="text-xs text-muted mt-0.5">{formatRelativeTime(n.created_at)}</p>
+                      {n.message && (
+                        <p className="text-xs text-muted line-clamp-2 mt-0.5">{n.message}</p>
+                      )}
+                      <p className="text-[11px] text-muted/70 mt-1">{formatRelativeTime(n.created_at)}</p>
                     </div>
                   </li>
                 )

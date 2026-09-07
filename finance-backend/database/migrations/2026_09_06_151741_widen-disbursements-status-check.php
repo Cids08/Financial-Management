@@ -15,7 +15,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        DB::statement('ALTER TABLE disbursements DROP CONSTRAINT disbursements_status_check');
+        DB::statement('ALTER TABLE disbursements DROP CONSTRAINT IF EXISTS disbursements_status_check');
 
         DB::statement(
             "ALTER TABLE disbursements ADD CONSTRAINT disbursements_status_check

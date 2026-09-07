@@ -26,11 +26,18 @@ class UpdateCollectionRequest extends FormRequest
                 Rule::unique('collections', 'receipt_number')->ignore($collection?->id),
             ],
             'or_number'        => ['nullable', 'string', 'max:255'],
-            'collection_date'  => ['sometimes', 'required', 'date'],
+            'collection_date'  => ['sometimes', 'required', 'date', 'before_or_equal:today'],
             'deposit_date'     => ['nullable', 'date', 'after_or_equal:collection_date'],
             'amount_received'  => ['sometimes', 'required', 'numeric', 'min:0.01'],
             'payment_method'   => ['sometimes', 'required', 'string', 'max:255'],
-            'reference_number' => ['nullable', 'string', 'max:255'],
+            'reference_number' => [
+                'nullable',
+                'string',
+                'max:255',
+                Rule::unique('collections', 'reference_number')
+                    ->ignore($collection?->id)
+                    ->whereNull('deleted_at'),
+            ],
             'remarks'          => ['nullable', 'string'],
 
             // Status changes via the edit form are restricted to the

@@ -113,6 +113,9 @@ export function useAuth() {
       }
 
       setToken(json.data.token)
+      if (json.data?.mustChangePassword) {
+        window.dispatchEvent(new Event('auth:must-change-password'))
+      }
       navigate('/dashboard')
       return { success: true }
     } catch (err) {
@@ -148,11 +151,27 @@ export function useAuth() {
       }
 
       if (!res.ok || !json.success) {
-        throw new Error(json.message || 'That code is incorrect or has expired.')
+        // If the pending login session has fully expired (backend deleted it from
+        // cache), there's no point staying on the 2FA screen — the pendingToken
+        // is dead and even Resend will fail. Auto-cancel back to the credential
+        // form and surface the expiry message there so the user knows to re-login.
+        const msg = json.message || 'That code is incorrect or has expired.'
+        if (
+          msg.toLowerCase().includes('expired') ||
+          msg.toLowerCase().includes('sign in again')
+        ) {
+          setTwoFactorPending(null)
+          setError(msg)
+          return { success: false, message: msg }
+        }
+        throw new Error(msg)
       }
 
       setToken(json.data.token)
       setTwoFactorPending(null)
+      if (json.data?.mustChangePassword) {
+        window.dispatchEvent(new Event('auth:must-change-password'))
+      }
       navigate('/dashboard')
       return { success: true }
     } catch (err) {
@@ -179,7 +198,17 @@ export function useAuth() {
       const json = await res.json()
 
       if (!res.ok || !json.success) {
-        throw new Error(json.message || 'Could not resend the code.')
+        const msg = json.message || 'Could not resend the code.'
+        // If the session already expired, auto-cancel back to the credential form.
+        if (
+          msg.toLowerCase().includes('expired') ||
+          msg.toLowerCase().includes('sign in again')
+        ) {
+          setTwoFactorPending(null)
+          setError(msg)
+          return { success: false, message: msg }
+        }
+        throw new Error(msg)
       }
 
       setTwoFactorPending((p) => ({ ...p, maskedEmail: json.data.maskedEmail }))

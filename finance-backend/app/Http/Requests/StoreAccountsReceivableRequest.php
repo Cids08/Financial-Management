@@ -34,7 +34,12 @@ class StoreAccountsReceivableRequest extends FormRequest
             'payment_method' => ['nullable', 'string', Rule::in(self::PAYMENT_METHODS)],
             'payment_terms' => ['nullable', 'string', 'max:255'],
             'purchase_order_no' => ['nullable', 'string', 'max:255'],
-            'reference_no' => ['nullable', 'string', 'max:255'],
+            'reference_no' => [
+                'nullable',
+                'string',
+                'max:255',
+                Rule::unique('accounts_receivable', 'reference_no')->whereNull('deleted_at'),
+            ],
             'penalty_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'remarks' => ['nullable', 'string'],
             'status' => ['required', 'string', Rule::in(self::STATUSES)],

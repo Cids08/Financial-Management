@@ -21,14 +21,16 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('collectors', function (Blueprint $table) {
-            $table->foreignId('user_id')
-                ->nullable()
-                ->unique()
-                ->after('id')
-                ->constrained('users')
-                ->nullOnDelete();
-        });
+        if (! Schema::hasColumn('collectors', 'user_id')) {
+            Schema::table('collectors', function (Blueprint $table) {
+                $table->foreignId('user_id')
+                    ->nullable()
+                    ->unique()
+                    ->after('id')
+                    ->constrained('users')
+                    ->nullOnDelete();
+            });
+        }
     }
 
     public function down(): void
