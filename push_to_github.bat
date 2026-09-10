@@ -48,8 +48,20 @@ echo Current staged files:
 git status --short
 
 echo.
-echo [4/4] Committing and pushing to origin main...
+echo [4/4] Committing local changes...
 git commit -m "Update financial management features, workflow sorting, GL sentence case, and table layouts"
+
+echo.
+echo Syncing with remote repository...
+git pull --rebase origin main
+if %errorlevel% neq 0 (
+    echo [INFO] Resolving merge with remote...
+    git rebase --abort 2>nul
+    git pull origin main --no-rebase -m "Merge remote changes"
+)
+
+echo.
+echo Pushing to origin main...
 git push origin main
 
 echo.
