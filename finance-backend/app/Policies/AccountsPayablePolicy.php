@@ -66,9 +66,21 @@ class AccountsPayablePolicy
             return false; // already approved — idempotency guard
         }
 
-        // Segregation of duties: the person who created the bill
-        // shouldn't be the one approving it.
-        if ($bill->created_by === $user->id) {
+        // Segregation of duties: non-admin creators cannot approve their own bills.
+        // Admin and Super Admin can self-approve to support small-team & administrative workflows.
+        $isAdminTier = $user->hasAnyRole(['super-admin', 'admin'])
+            || in_array(strtolower($user->role?->name ?? ''), ['super admin', 'super-admin', 'admin'], true);
+
+        if ($bill->created_by === $user->id && ! $isAdminTier) {
+            return false;
+        }
+
+        return $user->hasPermission('ap.approve');
+    }
+
+    public function reject(User $user, AccountsPayable $bill): bool
+    {
+        if ($bill->approved_by !== null || in_array($bill->status, ['Paid', 'Cancelled'], true)) {
             return false;
         }
 
@@ -77,15 +89,12 @@ class AccountsPayablePolicy
 
     public function archive(User $user, AccountsPayable $bill): bool
     {
-        // An approved bill has a real journal entry posted against it
-        // (see AccountsPayableService::approve() / postApprovalJournalEntry()).
-        // Archiving is a soft-delete on the AP row only — it has no way to
-        // reverse that ledger entry, so letting an approved bill be
-        // archived would leave a permanent, untraceable expense sitting
-        // in the general ledger with no corresponding active bill.
-        // A real void/reversal flow would need to exist before this is
-        // safe to allow; until then, block it outright.
-        if ($bill->approved_by !== null) {
+        // Only completed or settled bills (Paid or Cancelled) can be archived.
+        // In-flight bills (Pending, Partially Paid, Overdue) represent active debts
+        // that must remain in the operational queue until resolved.
+        // Archiving a Paid bill is an operational cleanup action — the General
+        // Ledger journal entries remain permanently posted and intact.
+        if (! in_array($bill->status, ['Paid', 'Cancelled'], true)) {
             return false;
         }
 

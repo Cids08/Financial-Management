@@ -90,13 +90,29 @@ export function useDisbursements() {
   }, [fetchList, fetchStats])
 
   const createDisbursement = useCallback(async (payload) => {
+    const isFormData = payload instanceof FormData
     const res = await apiFetch('/api/disbursements', {
+      method: 'POST',
+      headers: isFormData ? {} : { 'Content-Type': 'application/json' },
+      body: isFormData ? payload : JSON.stringify(payload),
+    })
+    const json = await res.json()
+    if (!res.ok || !json.success) throw new Error(json.message || 'Failed to create disbursement.')
+    await refresh()
+    return json.data
+  }, [refresh])
+
+  const createPayrollDisbursement = useCallback(async (payload) => {
+    const res = await apiFetch('/api/disbursements/payroll', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     })
-    const json = await res.json()
-    if (!res.ok || !json.success) throw new Error(json.message || 'Failed to create disbursement.')
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok || !json.success) {
+      const firstError = json.errors ? Object.values(json.errors).flat()[0] : null
+      throw new Error(firstError || json.message || 'Failed to submit payroll request.')
+    }
     await refresh()
     return json.data
   }, [refresh])
@@ -135,8 +151,11 @@ export function useDisbursements() {
 
   const releaseDisbursement = useCallback(async (id) => {
     const res = await apiFetch(`/api/disbursements/${id}/release`, { method: 'PATCH' })
-    const json = await res.json()
-    if (!res.ok || !json.success) throw new Error(json.message || 'Failed to release disbursement.')
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok || !json.success) {
+      const firstError = json.errors ? Object.values(json.errors).flat()[0] : null
+      throw new Error(firstError || json.message || 'Failed to release disbursement.')
+    }
     await refresh()
     return json.data
   }, [refresh])
@@ -152,10 +171,66 @@ export function useDisbursements() {
       body: formData,
     })
     const json = await res.json()
-    if (!res.ok || !json.success) throw new Error(json.message || 'Failed to attach proof of release.')
+    if (!res.ok || !json.success) throw new Error(json.message || 'Failed to attach proof of payment.')
     await refresh()
     return json.data
   }, [refresh])
+
+  const fetchProofHistory = useCallback(async (id) => {
+    try {
+      const res = await apiFetch(`/api/disbursements/${id}/proof`)
+      const json = await res.json()
+      if (!res.ok || !json.success) {
+        return { success: false, data: [], message: json.message || 'Failed to load proof history.' }
+      }
+      return { success: true, data: json.data || [], message: '' }
+    } catch (err) {
+      return { success: false, data: [], message: err.message || 'Failed to load proof history.' }
+    }
+  }, [])
+
+  const viewProof = useCallback(async (disbursementId, documentId, targetWindow) => {
+    try {
+      const res = await apiFetch(`/api/disbursements/${disbursementId}/proof/${documentId}/view`)
+      if (!res.ok) {
+        let msg = 'Failed to load proof document.'
+        try {
+          const j = await res.json()
+          msg = j.message || msg
+        } catch {}
+        targetWindow?.close()
+        return { success: false, message: msg }
+      }
+      const blob = await res.blob()
+      const mime = res.headers.get('content-type') || blob.type || ''
+      const url = URL.createObjectURL(blob)
+
+      if (mime.includes('pdf') || mime.startsWith('image/')) {
+        if (targetWindow) targetWindow.location.href = url
+        return { success: true, viewedInline: true }
+      }
+      targetWindow?.close()
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `disbursement-proof-${disbursementId}`
+      a.click()
+      URL.revokeObjectURL(url)
+      return { success: true, viewedInline: false }
+    } catch (err) {
+      targetWindow?.close()
+      return { success: false, message: err.message || 'Failed to open document.' }
+    }
+  }, [])
+
+  const viewLatestProof = useCallback(async (disbursementId, targetWindow) => {
+    const history = await fetchProofHistory(disbursementId)
+    if (!history.success || !history.data.length) {
+      targetWindow?.close()
+      return { success: false, message: 'No proof of payment found for this disbursement.' }
+    }
+    const latest = history.data[0]
+    return viewProof(disbursementId, latest.id, targetWindow)
+  }, [fetchProofHistory, viewProof])
 
   // Preview only — see DisbursementService::previewNextVoucherNumber()'s
   // own comment: this shows what the next voucher number will probably
@@ -196,9 +271,10 @@ export function useDisbursements() {
     dDateTo, setDDateTo, dHasDateFilter, clearDDateFilter,
     dPage, setDPage,
     // actions
-    refresh, createDisbursement, updateDisbursement,
+    refresh, createDisbursement, createPayrollDisbursement, updateDisbursement,
     approveDisbursement, rejectDisbursement, releaseDisbursement,
-    uploadProof, archiveDisbursement, restoreDisbursement,
+    uploadProof, fetchProofHistory, viewProof, viewLatestProof,
+    archiveDisbursement, restoreDisbursement,
     fetchNextVoucherNumber,
   }
 }

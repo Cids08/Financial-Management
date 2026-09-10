@@ -4,17 +4,24 @@ namespace App\Services;
 
 use App\Models\AccountsPayable;
 use App\Models\AuditLog;
+use App\Models\CashAccount;
 use App\Models\ChartOfAccount;
+use App\Models\Disbursement;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
 use App\Models\Notification;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 class AccountsPayableService
 {
+    public function __construct(protected DisbursementService $disbursementService)
+    {
+    }
+
     public function list(bool $withArchived = false): Collection
     {
         $query = AccountsPayable::query()->with(['supplier', 'account', 'creator', 'approver'])->latest('invoice_date');
@@ -98,6 +105,8 @@ class AccountsPayableService
                 'ip_address' => request()->ip(),
                 'user_agent' => request()->userAgent(),
             ]);
+
+            $this->notifyApproversOfNewBill($bill, $actor);
 
             return $bill->load('supplier');
         });
@@ -201,7 +210,50 @@ class AccountsPayableService
                 'user_agent' => request()->userAgent(),
             ]);
 
-            $this->notifyCreator($bill, approved: true);
+            $this->notifyStakeholdersOnApproval($bill, $actor);
+
+            return $bill->load(['supplier', 'account', 'creator', 'approver']);
+        });
+    }
+
+    /**
+     * Rejects an unapproved bill.
+     * Sets status to Cancelled and logs the rejection in the audit trail and sends notification.
+     */
+    public function reject(User $actor, AccountsPayable $bill, ?string $reason = null): AccountsPayable
+    {
+        return DB::transaction(function () use ($actor, $bill, $reason) {
+            if ($bill->approved_by !== null) {
+                throw new RuntimeException("Bill {$bill->invoice_number} is already approved and cannot be rejected.");
+            }
+
+            if (in_array($bill->status, ['Paid', 'Cancelled'], true)) {
+                throw new RuntimeException("Bill {$bill->invoice_number} has status '{$bill->status}' and cannot be rejected.");
+            }
+
+            $oldRemarks = $bill->remarks;
+            $newRemarks = $reason
+                ? ($oldRemarks ? "{$oldRemarks}\n[Rejection reason: {$reason}]" : "Rejection reason: {$reason}")
+                : $oldRemarks;
+
+            $bill->update([
+                'status' => 'Cancelled',
+                'remarks' => $newRemarks,
+            ]);
+
+            AuditLog::create([
+                'user_id' => $actor->id,
+                'module' => 'Accounts Payable',
+                'action' => 'reject',
+                'record_id' => $bill->id,
+                'activity_description' => $reason
+                    ? "Rejected bill {$bill->invoice_number}. Reason: {$reason}"
+                    : "Rejected bill {$bill->invoice_number}.",
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+            ]);
+
+            $this->notifyStakeholdersOnRejection($bill, $actor, $reason);
 
             return $bill->load(['supplier', 'account', 'creator', 'approver']);
         });
@@ -216,10 +268,17 @@ class AccountsPayableService
      */
     private function postApprovalJournalEntry(User $actor, AccountsPayable $bill): void
     {
-        if ($bill->account_id === null) {
-            throw new RuntimeException(
-                "Bill {$bill->invoice_number} has no expense account set — cannot post journal entry."
-            );
+        $debitAccountId = $bill->account_id;
+        if ($debitAccountId === null) {
+            $defaultExpenseAccount = ChartOfAccount::where('account_type', 'Expense')->first();
+            if ($defaultExpenseAccount) {
+                $debitAccountId = $defaultExpenseAccount->id;
+                $bill->update(['account_id' => $debitAccountId]);
+            } else {
+                throw new RuntimeException(
+                    "Bill {$bill->invoice_number} has no expense account set and no Expense chart of accounts row exists."
+                );
+            }
         }
 
         $apLiabilityAccount = $this->resolveAccountsPayableLedgerAccount();
@@ -241,7 +300,7 @@ class AccountsPayableService
 
         JournalEntryLine::create([
             'journal_entry_id' => $entry->id,
-            'account_id' => $bill->account_id,
+            'account_id' => $debitAccountId,
             'debit' => $bill->original_amount,
             'credit' => 0,
             'reference_type' => 'Accounts Payable',
@@ -280,9 +339,19 @@ class AccountsPayableService
         $account = $accountId ? ChartOfAccount::find($accountId) : null;
 
         if ($account === null) {
+            $account = ChartOfAccount::where('account_name', 'Accounts Payable')
+                ->orWhere('account_code', '2000')
+                ->first();
+        }
+
+        if ($account === null) {
+            $account = ChartOfAccount::where('account_type', 'Liability')->first();
+        }
+
+        if ($account === null) {
             throw new RuntimeException(
-                "No chart_of_accounts row found for Accounts Payable (id: {$accountId}). "
-                . "Check config('accounting.accounts.accounts_payable_control')."
+                "No chart_of_accounts row found for Accounts Payable. "
+                . "Please ensure an Accounts Payable (code 2000) or Liability account exists in chart_of_accounts."
             );
         }
 
@@ -361,21 +430,80 @@ class AccountsPayableService
      * what that mechanism really is before assuming AP notifications
      * link anywhere useful once clicked.
      */
-    private function notifyCreator(AccountsPayable $bill, bool $approved): void
-    {
-        if (! $bill->created_by) {
-            return;
-        }
 
-        Notification::create([
-            'user_id' => $bill->created_by,
-            'title' => $approved ? 'Bill approved' : 'Bill rejected',
-            'message' => $approved
-                ? sprintf('Your bill %s was approved.', $bill->invoice_number)
-                : sprintf('Your bill %s was rejected.', $bill->invoice_number),
-            'type' => $approved ? 'Success' : 'Warning',
-            'is_read' => false,
-        ]);
+    /**
+     * Notify approvers (Admins, Super Admins, CEO) when a new bill is created by Finance
+     * so they know an Accounts Payable bill requires approval.
+     */
+     private function notifyApproversOfNewBill(AccountsPayable $bill, User $creator): void
+     {
+         $adminIds = User::whereHas('role', function ($query) {
+             $query->whereIn('name', ['admin', 'super-admin', 'Super Admin', 'Admin']);
+         })->where('id', '!=', $creator->id)->pluck('id')->all();
+
+         $bill->loadMissing('supplier');
+         $supplierName = $bill->supplier?->supplier_name ?? 'Supplier';
+         $formattedAmount = number_format((float) $bill->original_amount, 2);
+
+         foreach ($adminIds as $adminId) {
+             Notification::create([
+                 'user_id' => $adminId,
+                 'title' => 'Bill awaiting approval',
+                 'message' => "Bill {$bill->invoice_number} ({$supplierName}) for ₱{$formattedAmount} was submitted by {$creator->fullName()} and is awaiting approval.",
+                 'type' => 'Info',
+                 'is_read' => false,
+             ]);
+         }
+     }
+
+    /**
+     * Notify creator and stakeholders when a bill has been approved and posted to the General Ledger.
+     */
+    private function notifyStakeholdersOnApproval(AccountsPayable $bill, User $actor): void
+    {
+        $bill->loadMissing('supplier');
+        $supplierName = $bill->supplier?->supplier_name ?? 'Supplier';
+        $formattedAmount = number_format((float) $bill->original_amount, 2);
+
+        // Notify the creator (Finance person) that their bill was approved
+        if ($bill->created_by && $bill->created_by !== $actor->id) {
+            Notification::create([
+                'user_id' => $bill->created_by,
+                'title' => 'Bill approved',
+                'message' => "Your bill {$bill->invoice_number} ({$supplierName}) for ₱{$formattedAmount} was approved by {$actor->fullName()} and posted to the General Ledger.",
+                'type' => 'Success',
+                'is_read' => false,
+            ]);
+        } elseif ($bill->created_by) {
+            Notification::create([
+                'user_id' => $bill->created_by,
+                'title' => 'Bill approved',
+                'message' => "Bill {$bill->invoice_number} ({$supplierName}) for ₱{$formattedAmount} was approved and posted to the General Ledger.",
+                'type' => 'Success',
+                'is_read' => false,
+            ]);
+        }
+    }
+
+    /**
+     * Notify the creator when a bill has been rejected.
+     */
+    private function notifyStakeholdersOnRejection(AccountsPayable $bill, User $actor, ?string $reason = null): void
+    {
+        $bill->loadMissing('supplier');
+        $supplierName = $bill->supplier?->supplier_name ?? 'Supplier';
+
+        if ($bill->created_by) {
+            Notification::create([
+                'user_id' => $bill->created_by,
+                'title' => 'Bill rejected',
+                'message' => $reason
+                    ? "Your bill {$bill->invoice_number} ({$supplierName}) was rejected by {$actor->fullName()}. Reason: {$reason}"
+                    : "Your bill {$bill->invoice_number} ({$supplierName}) was rejected by {$actor->fullName()}.",
+                'type' => 'Warning',
+                'is_read' => false,
+            ]);
+        }
     }
 
     /**
@@ -478,5 +606,234 @@ class AccountsPayableService
         }
 
         return sprintf('REF-AP-%03d', $nextNum);
+    }
+
+    // -------------------------------------------------------------------------
+    // AP Payment Wizard — Automated Batch Payment Run
+    // -------------------------------------------------------------------------
+
+    /**
+     * Build a list of approved bills that are eligible for payment, together
+     * with any pending disbursements so the caller knows how much is still
+     * safe to pay on each bill without double-paying.
+     *
+     * @param  array{
+     *   horizon?: int,           // days from today (null/0 = all)
+     *   supplier_id?: int|null,
+     *   department_id?: int|null,
+     * } $filters
+     * @return array{ proposals: array, totals: array }
+     */
+    public function getPaymentProposals(array $filters = []): array
+    {
+        $today = Carbon::today();
+
+        $query = AccountsPayable::with(['supplier', 'account'])
+            ->whereNotNull('approved_by')
+            ->whereNotIn('status', ['Paid', 'Cancelled'])
+            ->where('remaining_balance', '>', 0);
+
+        // Horizon filter: only bills due within N days
+        if (!empty($filters['horizon'])) {
+            $query->whereDate('due_date', '<=', $today->copy()->addDays((int) $filters['horizon']));
+        }
+
+        // Optional supplier filter
+        if (!empty($filters['supplier_id'])) {
+            $query->where('supplier_id', $filters['supplier_id']);
+        }
+
+        // Optional department filter (stored as metadata / notes — skip if column absent)
+        // Only filter if the column actually exists to avoid query errors on older schemas
+        if (!empty($filters['department_id'])) {
+            $query->where('department_id', $filters['department_id']);
+        }
+
+        $bills = $query->orderBy('due_date')->get();
+
+        $proposals = $bills->map(function (AccountsPayable $bill) use ($today) {
+            // Sum of existing Pending/Approved disbursements so we don't suggest double-pay
+            $pendingTotal = Disbursement::where('ap_id', $bill->id)
+                ->whereIn('status', ['Pending', 'Approved'])
+                ->sum('amount_paid');
+
+            $availableToPay = max(0, (float) $bill->remaining_balance - (float) $pendingTotal);
+
+            $dueDate = Carbon::parse($bill->due_date);
+            $daysLeft = $today->diffInDays($dueDate, false); // negative = overdue
+
+            if ($daysLeft < 0) {
+                $urgency = 'Overdue';
+                $urgencyDays = abs((int) $daysLeft);
+            } elseif ($daysLeft === 0) {
+                $urgency = 'Due Today';
+                $urgencyDays = 0;
+            } else {
+                $urgency = 'Due in ' . (int) $daysLeft . ' days';
+                $urgencyDays = (int) $daysLeft;
+            }
+
+            return [
+                'ap_id'                    => $bill->id,
+                'invoice_number'           => $bill->invoice_number,
+                'reference_number'         => $bill->reference_number,
+                'supplier_id'              => $bill->supplier_id,
+                'supplier_name'            => $bill->supplier?->supplier_name ?? $bill->supplier?->name ?? '—',
+                'invoice_date'             => $bill->invoice_date?->toDateString(),
+                'due_date'                 => $bill->due_date?->toDateString(),
+                'original_amount'          => (float) $bill->original_amount,
+                'paid_amount'              => (float) $bill->paid_amount,
+                'remaining_balance'        => (float) $bill->remaining_balance,
+                'pending_disbursements'    => (float) $pendingTotal,
+                'available_to_pay'         => $availableToPay,
+                'amount_to_pay'            => $availableToPay,  // default — UI can override per-row
+                'urgency'                  => $urgency,
+                'urgency_days'             => $urgencyDays,
+                'status'                   => $bill->status,
+                'has_attachment'           => (bool) $bill->has_attachment,
+            ];
+        })->filter(fn ($p) => $p['available_to_pay'] > 0)->values();
+
+        // Split into eligible (with invoice docs) and withheld (no docs).
+        // "No Document, No Payment" policy: only bills that have a supporting
+        // invoice/delivery receipt attached can be included in a payment run.
+        $eligible = $proposals->filter(fn ($p) => $p['has_attachment'])->values();
+        $withheld = $proposals->filter(fn ($p) => !$p['has_attachment'])->values();
+
+        $totals = [
+            'count'                    => $eligible->count(),
+            'total_available'          => round($eligible->sum('available_to_pay'), 2),
+            'total_overdue'            => $eligible->where('urgency', 'Overdue')->count(),
+            'attachment_missing_count' => $withheld->count(),
+            'withheld_invoices'        => $withheld->pluck('invoice_number')->filter()->values()->toArray(),
+        ];
+
+        return [
+            'proposals' => $eligible->toArray(),
+            'totals'    => $totals,
+        ];
+    }
+
+    /**
+     * Execute a Payment Run: create a Pending disbursement for each selected
+     * proposal via DisbursementService::create(). All-or-nothing transaction.
+     * The disbursements still need to be Released through the normal workflow.
+     *
+     * @param  User  $user
+     * @param  array{
+     *   cash_account_id: int,
+     *   payment_method: string,
+     *   payment_date: string,
+     *   department_id?: int|null,
+     *   proposals: array<array{ap_id: int, amount_to_pay: float}>
+     * } $data
+     * @return array{ disbursements: array, total_amount: float, count: int }
+     */
+    public function executePaymentRun(User $user, array $data): array
+    {
+        // 1. Load and lock cash account to check balance
+        $cashAccount = CashAccount::lockForUpdate()->findOrFail($data['cash_account_id']);
+
+        $totalProposed = collect($data['proposals'])->sum('amount_to_pay');
+
+        if ((float) $totalProposed > (float) $cashAccount->current_balance) {
+            throw new RuntimeException(
+                sprintf(
+                    'Insufficient cash account balance. Available: ₱%s, Required: ₱%s.',
+                    number_format($cashAccount->current_balance, 2),
+                    number_format($totalProposed, 2)
+                )
+            );
+        }
+
+        $created = [];
+
+        DB::transaction(function () use ($user, $data, &$created) {
+            foreach ($data['proposals'] as $proposal) {
+                $bill = AccountsPayable::findOrFail($proposal['ap_id']);
+
+                // "No Document, No Payment" — enforce at execution time as well,
+                // even if the wizard already filtered the proposal list, to guard
+                // against any direct API calls that bypass the UI.
+                if (! $bill->has_attachment) {
+                    throw new RuntimeException(
+                        "Bill \"{$bill->invoice_number}\" cannot be included in a payment run: "
+                        . 'a supporting invoice or delivery receipt document must be attached to the bill first.'
+                    );
+                }
+
+                $disbursement = $this->disbursementService->create([
+                    'ap_id'           => $bill->id,
+                    'source_type'     => 'ap',
+                    'cash_account_id' => $data['cash_account_id'],
+                    'payee'           => $bill->supplier?->supplier_name ?? $bill->supplier?->name ?? 'Unknown',
+                    'amount_paid'     => $proposal['amount_to_pay'],
+                    'payment_method'  => $data['payment_method'],
+                    'payment_date'    => $data['payment_date'],
+                    'department_id'   => $data['department_id'] ?? null,
+                    'remarks'         => 'Created via Payment Run on ' . now()->toDateString(),
+                ], $user->id);
+
+                $created[] = [
+                    'disbursement_id' => $disbursement->id,
+                    'voucher_number'  => $disbursement->voucher_number,
+                    'ap_id'           => $bill->id,
+                    'invoice_number'  => $bill->invoice_number,
+                    'payee'           => $disbursement->payee,
+                    'amount_paid'     => (float) $disbursement->amount_paid,
+                    'status'          => $disbursement->status,
+                ];
+            }
+
+            $firstDisbursementId = !empty($created) ? $created[0]['disbursement_id'] : (int) $data['cash_account_id'];
+            $totalAmountPaid = (float) collect($created)->sum('amount_paid');
+            $billsCount = count($created);
+
+            AuditLog::create([
+                'user_id'              => $user->id,
+                'module'               => 'Accounts Payable',
+                'action'               => 'payment_run',
+                'record_id'            => $firstDisbursementId,
+                'activity_description' => "Executed batch payment run of {$billsCount} bills totaling ₱" . number_format($totalAmountPaid, 2) . ".",
+                'old_values'           => null,
+                'new_values'           => [
+                    'cash_account_id' => $data['cash_account_id'],
+                    'payment_method'  => $data['payment_method'],
+                    'total_amount'    => $totalAmountPaid,
+                    'bills_count'     => $billsCount,
+                    'vouchers'        => collect($created)->pluck('voucher_number')->toArray(),
+                ],
+                'ip_address'           => request()->ip(),
+                'user_agent'           => request()->userAgent(),
+            ]);
+
+            // Notify disbursement approvers and administrators of the batch payment run
+            try {
+                $recipientIds = User::whereHas('role.permissions', function ($q) {
+                    $q->whereIn('name', ['disbursements.approve', 'disbursements.manage']);
+                })->orWhereHas('role', function ($q) {
+                    $q->whereIn('name', ['admin', 'super-admin', 'Super Admin', 'Admin', 'Finance Manager']);
+                })->pluck('id')->push($user->id)->unique()->filter()->all();
+
+                $formattedTotal = number_format($totalAmountPaid, 2);
+                foreach ($recipientIds as $recipientId) {
+                    Notification::create([
+                        'user_id' => $recipientId,
+                        'title'   => 'Payment Run Executed',
+                        'message' => "Batch payment run settled {$billsCount} bills for a total of ₱{$formattedTotal}. Generated vouchers are pending release in Disbursements.",
+                        'type'    => 'Info',
+                        'is_read' => false,
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning("Failed to dispatch payment run notification: {$e->getMessage()}");
+            }
+        });
+
+        return [
+            'disbursements' => $created,
+            'total_amount'  => collect($created)->sum('amount_paid'),
+            'count'         => count($created),
+        ];
     }
 }

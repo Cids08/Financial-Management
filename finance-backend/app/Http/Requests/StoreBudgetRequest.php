@@ -9,14 +9,14 @@ class StoreBudgetRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()->can('create', Budget::class);
+        return $this->user()?->can('create', Budget::class) ?? false;
     }
 
     public function rules(): array
     {
         return [
             'department_id' => ['required', 'integer', 'exists:departments,id'],
-            'budget_code' => ['required', 'string', 'max:50', 'unique:budgets,budget_code'],
+            'budget_code' => ['nullable', 'string', 'max:50', 'unique:budgets,budget_code'],
             'budget_name' => ['required', 'string', 'max:255'],
             'budget_type' => ['required', 'string', 'max:100'],
             // Fix: 'min:2000' was a static floor from a quarter-century ago
@@ -54,6 +54,43 @@ class StoreBudgetRequest extends FormRequest
                     'start_date',
                     "Start date must fall within fiscal year {$fiscalYear}."
                 );
+            }
+
+            // Prevent duplicate budgets of the same type for the same department and fiscal year
+            $departmentId = $this->input('department_id');
+            $budgetType = $this->input('budget_type');
+            if ($departmentId && $fiscalYear && $budgetType) {
+                $existing = Budget::query()
+                    ->where('department_id', $departmentId)
+                    ->where('fiscal_year', (int) $fiscalYear)
+                    ->where('budget_type', 'ilike', trim($budgetType))
+                    ->whereIn('status', [Budget::STATUS_ACTIVE, Budget::STATUS_DRAFT, Budget::STATUS_CLOSED])
+                    ->whereNull('deleted_at')
+                    ->first();
+
+                if ($existing) {
+                    $validator->errors()->add(
+                        'budget_type',
+                        "A {$existing->budget_type} budget for this department for fiscal year {$fiscalYear} already exists ({$existing->budget_name} [{$existing->budget_code}] - Status: {$existing->status}). A department can have different budget types (e.g. Operational, Capital, Project), but cannot duplicate the same budget type in the same fiscal year."
+                    );
+                }
+            }
+
+            // Also prevent duplicate budget names for the same fiscal year
+            $budgetName = $this->input('budget_name');
+            if ($budgetName && $fiscalYear) {
+                $nameConflict = Budget::query()
+                    ->where('fiscal_year', (int) $fiscalYear)
+                    ->where('budget_name', 'ilike', trim($budgetName))
+                    ->whereNull('deleted_at')
+                    ->first();
+
+                if ($nameConflict) {
+                    $validator->errors()->add(
+                        'budget_name',
+                        "A budget named '{$nameConflict->budget_name}' already exists for fiscal year {$fiscalYear} ({$nameConflict->budget_code}). Budget names must be unique per fiscal year."
+                    );
+                }
             }
         });
     }

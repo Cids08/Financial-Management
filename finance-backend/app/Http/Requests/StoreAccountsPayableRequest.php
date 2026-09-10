@@ -67,6 +67,17 @@ class StoreAccountsPayableRequest extends FormRequest
             // so this doesn't silently reject a valid value; tighten to
             // Rule::in([...]) once confirmed.
             'status' => ['nullable', 'string', 'max:255'],
+            'document' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'document.required' => 'A supporting document (invoice or bill scan/PDF) is strictly required to create a bill.',
+            'document.file' => 'The supporting document must be a valid file.',
+            'document.mimes' => 'The supporting document must be a file of type: pdf, jpg, jpeg, png, webp.',
+            'document.max' => 'The supporting document cannot exceed 10MB in size.',
         ];
     }
 }

@@ -51,7 +51,16 @@ class AuditLogQueryService
         $query->with('user')->latest('created_at');
 
         if (! empty($filters['module'])) {
-            $query->where('module', $filters['module']);
+            $module = $filters['module'];
+            $normalized = str_replace(' ', '', strtolower($module));
+            $query->where(function ($q) use ($module, $normalized) {
+                $q->where('module', $module)
+                    ->orWhereRaw("REPLACE(LOWER(module), ' ', '') = ?", [$normalized]);
+            });
+        }
+
+        if (! empty($filters['record_id'])) {
+            $query->where('record_id', $filters['record_id']);
         }
 
         if (! empty($filters['action'])) {

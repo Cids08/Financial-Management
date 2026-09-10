@@ -3,6 +3,9 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\BatchRecordTaxPaymentRequest;
+use App\Http\Requests\GenerateTaxScheduleRequest;
+use App\Http\Requests\RecordTaxPaymentRequest;
 use App\Http\Requests\StoreTaxObligationRequest;
 use App\Http\Requests\UpdateTaxObligationRequest;
 use App\Http\Requests\UploadTaxObligationDocumentRequest;
@@ -43,6 +46,40 @@ class TaxObligationController extends Controller
                 'per_page'     => $paginated->perPage(),
                 'total'        => $paginated->total(),
             ],
+        ]);
+    }
+
+    /**
+     * GET /api/tax-obligations/calculate-base?tax_type=VAT&period_year=2026&period_month=3&period_quarter=1
+     */
+    public function calculateBase(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'tax_type'       => ['required', 'string'],
+            'period_year'    => ['required', 'integer', 'min:2000', 'max:2100'],
+            'period_month'   => ['nullable', 'integer', 'min:1', 'max:12'],
+            'period_quarter' => ['nullable', 'integer', 'min:1', 'max:4'],
+        ]);
+
+        try {
+            $data = $this->taxObligationService->calculateBase(
+                $validated['tax_type'],
+                (int) $validated['period_year'],
+                isset($validated['period_month']) ? (int) $validated['period_month'] : null,
+                isset($validated['period_quarter']) ? (int) $validated['period_quarter'] : null
+            );
+        } catch (ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'errors'  => $e->errors(),
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Tax base auto-calculated successfully from system transactions.',
+            'data'    => $data,
         ]);
     }
 
@@ -210,6 +247,95 @@ class TaxObligationController extends Controller
 
         return response()->file($fullPath, [
             'Content-Type' => $document->mime_type ?? 'application/octet-stream',
+        ]);
+    }
+
+    /**
+     * POST /api/tax-obligations/{taxObligation}/pay
+     */
+    public function recordPayment(RecordTaxPaymentRequest $request, TaxObligation $taxObligation): JsonResponse
+    {
+        try {
+            $taxObligation = $this->taxObligationService->recordPayment(
+                $request->user(),
+                $taxObligation,
+                $request->validated(),
+                $request->file('document')
+            );
+        } catch (ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'errors'  => $e->errors(),
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Tax payment recorded successfully. General Ledger journal entry and cash account deduction posted.',
+            'data'    => new TaxObligationResource($taxObligation),
+        ]);
+    }
+
+    /**
+     * POST /api/tax-obligations/batch-pay
+     */
+    public function batchRecordPayment(BatchRecordTaxPaymentRequest $request): JsonResponse
+    {
+        try {
+            $result = $this->taxObligationService->batchRecordPayment(
+                $request->user(),
+                $request->validated(),
+                $request->file('document')
+            );
+        } catch (ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'errors'  => $e->errors(),
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => sprintf(
+                'Successfully recorded batch payment for %d tax obligation(s) totalling ₱%s.',
+                $result['count'],
+                number_format($result['total_amount'], 2)
+            ),
+            'data'    => [
+                'count'        => $result['count'],
+                'total_amount' => $result['total_amount'],
+                'obligations'  => TaxObligationResource::collection($result['obligations']),
+            ],
+        ]);
+    }
+
+    /**
+     * POST /api/tax-obligations/generate-schedule
+     *
+     * Auto-generates periodic tax filing obligations for a fiscal year / quarter.
+     */
+    public function generateSchedule(GenerateTaxScheduleRequest $request): JsonResponse
+    {
+        try {
+            $result = $this->taxObligationService->generateSchedule($request->user(), $request->validated());
+        } catch (ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'errors'  => $e->errors(),
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => sprintf(
+                'Successfully generated %d tax obligation schedule(s) (%d already existed and were skipped).',
+                $result['created_count'],
+                $result['skipped_count']
+            ),
+            'data'    => $result,
         ]);
     }
 }

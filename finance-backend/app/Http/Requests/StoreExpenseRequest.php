@@ -25,17 +25,15 @@ class StoreExpenseRequest extends FormRequest
             'expense_date' => ['required', 'date'],
             'receipt_number' => ['nullable', 'string', 'max:100'],
             'expense_amount' => ['required', 'numeric', 'min:0.01'],
-            'expense_source' => ['required', 'string', 'in:' . implode(',', [
-                Expense::SOURCE_CASH,
-                Expense::SOURCE_BANK,
-                Expense::SOURCE_PETTY_CASH,
-            ])],
+            'cash_account_id' => ['required', 'integer', 'exists:cash_accounts,id'],
+            'expense_source' => ['nullable', 'string', 'max:50'],
             'receipt_status' => ['nullable', 'in:' . implode(',', [
                 Expense::RECEIPT_PENDING,
                 Expense::RECEIPT_UPLOADED,
                 Expense::RECEIPT_MISSING,
             ])],
             'description' => ['required', 'string'],
+            'receipt' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
         ];
     }
 
@@ -46,6 +44,12 @@ class StoreExpenseRequest extends FormRequest
             'expense_category_id.exists' => 'Selected expense category does not exist.',
             'supplier_id.exists' => 'Selected supplier does not exist.',
             'expense_amount.min' => 'Expense amount must be greater than zero.',
+            'cash_account_id.required' => 'Please select a cash account for this expense.',
+            'cash_account_id.exists' => 'Selected cash account does not exist.',
+            'receipt.required' => 'A receipt document (official receipt scan or PDF) is strictly required to record an expense.',
+            'receipt.file' => 'The receipt must be a valid file.',
+            'receipt.mimes' => 'The receipt must be a file of type: pdf, jpg, jpeg, png, webp.',
+            'receipt.max' => 'The receipt cannot exceed 10MB in size.',
         ];
     }
 
@@ -76,10 +80,21 @@ class StoreExpenseRequest extends FormRequest
             $user = $this->user();
             $isAdminOverride = $user?->hasAnyRole(['super-admin', 'admin']) ?? false;
 
-            if ($budgetId && ! $isAdminOverride) {
+            if ($budgetId) {
                 $budget = Budget::find($budgetId);
 
-                if ($budget && $user && $budget->department_id !== $user->department_id) {
+                if ($budget && $budget->status !== Budget::STATUS_ACTIVE) {
+                    $validator->errors()->add(
+                        'budget_id',
+                        sprintf(
+                            'Budget "%s" cannot be charged because its status is "%s". Only Active budgets can be charged for expenses.',
+                            $budget->budget_name,
+                            $budget->status
+                        )
+                    );
+                }
+
+                if ($budget && $user && ! $isAdminOverride && $budget->department_id !== $user->department_id) {
                     $budgetDept = Department::find($budget->department_id)?->department_name ?? 'an unassigned department';
                     $userDept = Department::find($user->department_id)?->department_name ?? 'no department';
 
@@ -104,6 +119,20 @@ class StoreExpenseRequest extends FormRequest
                     $validator->errors()->add(
                         'expense_category_id',
                         'This expense category is inactive and can no longer be used for new expenses.'
+                    );
+                }
+            }
+
+            $cashAccountId = $this->input('cash_account_id');
+            $amount = (float) $this->input('expense_amount', 0);
+
+            if ($cashAccountId && $amount > 0) {
+                $cashAccount = \App\Models\CashAccount::find($cashAccountId);
+
+                if ($cashAccount && $amount > (float) $cashAccount->current_balance) {
+                    $validator->errors()->add(
+                        'expense_amount',
+                        'Amount exceeds available funds in the selected cash account.'
                     );
                 }
             }

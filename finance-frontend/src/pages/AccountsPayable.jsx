@@ -1,5 +1,5 @@
-import { useMemo, useRef, useState } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, FileText, Wallet, AlertTriangle, Info, Printer, CheckCircle2, Paperclip, Upload, ScanLine, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Search, Plus, Pencil, Archive, RotateCcw, FileText, Wallet, AlertTriangle, Info, Printer, CheckCircle2, XCircle, Paperclip, Upload, ScanLine, X, Sparkles } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
@@ -8,13 +8,18 @@ import { formatCurrency } from '../utils/formatters'
 import { useAccountsPayable } from '../hooks/useAccountsPayable'
 import { apiFetch } from '../utils/api'
 import AccountsPayableDocumentModal from '../components/AccountsPayableDocumentModal'
+import PaymentWizardModal from '../components/PaymentWizardModal'
+import { usePermissions } from '../context/PermissionsContext'
+
 
 const PAYMENT_METHODS = ['Bank Transfer', 'Check', 'Cash', 'Credit Card', 'GCash']
 // Confirmed via pg_get_constraintdef on accounts_payable_status_check —
 // same allowed set as accounts_receivable.
 const STATUS_OPTIONS = ['Pending', 'Partially Paid', 'Paid', 'Overdue', 'Cancelled']
 const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+const ACCEPTED_DOCUMENT_TYPES = [...ACCEPTED_IMAGE_TYPES, 'application/pdf']
 const MAX_IMAGE_MB = 8
+const MAX_DOC_MB = 10
 
 // Sanity bounds for invoice/due date pickers — nothing previously stopped
 // a fat-fingered year (e.g. "1111" instead of "2026") from being typed
@@ -37,10 +42,11 @@ const PANEL_PAD = 'p-4'
 const INPUT = `w-full h-9 px-3 rounded-lg border border-border bg-bg text-sm text-ink
   placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary
   transition-all duration-150`
+const INPUT_TEXT_STYLE = { color: 'var(--color-ink, #0f172a)', caretColor: 'var(--color-ink, #0f172a)', outline: 'none' }
 const LABEL = 'block text-xs font-medium text-muted mb-1.5'
 
 const STATUS_STYLES = {
-  Pending: 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400',
+  Pending: 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400',
   'Partially Paid': 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400',
   Paid: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
   Overdue: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
@@ -108,7 +114,7 @@ function DetailRow({ label, value }) {
 // as AccountsReceivable's InvoiceScanUpload, adapted for bills. Owns its own
 // image/drag-state; calls onScanned(fields) once the real OCR scan resolves
 // so the parent form can be auto-filled.
-function BillScanUpload({ onScanned }) {
+function BillScanUpload({ onScanned, onFileSelected, onClear }) {
   const [preview, setPreview] = useState(null)
   const [dragOver, setDragOver] = useState(false)
   const [error, setError] = useState('')
@@ -117,15 +123,20 @@ function BillScanUpload({ onScanned }) {
 
   const processFile = (file) => {
     if (!file) return
-    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
-      setError('Please upload a JPG, PNG, or WEBP photo or scan of the bill.')
+    if (!ACCEPTED_DOCUMENT_TYPES.includes(file.type)) {
+      setError('Please upload a JPG, PNG, WEBP, or PDF document.')
       return
     }
-    if (file.size > MAX_IMAGE_MB * 1024 * 1024) {
-      setError(`Image must be under ${MAX_IMAGE_MB}MB.`)
+    if (file.size > MAX_DOC_MB * 1024 * 1024) {
+      setError(`File must be under ${MAX_DOC_MB}MB.`)
       return
     }
     setError('')
+    if (file.type === 'application/pdf') {
+      setPreview('pdf')
+      runScan(file)
+      return
+    }
     setStatus('idle')
     const reader = new FileReader()
     reader.onload = () => {
@@ -145,14 +156,15 @@ function BillScanUpload({ onScanned }) {
       const json = await res.json()
 
       if (!res.ok || !json.success) {
-        // Real rejection from the OCR service (no receipt-like text found),
-        // not a random guess.
-        setError(json.message || "Couldn't read this image. Please fill in the details manually.")
+        setError(json.message || "Couldn't read this document. Please upload a valid invoice or receipt.")
         setStatus('idle')
         setPreview(null)
+        if (inputRef.current) inputRef.current.value = ''
+        onClear?.()
         return
       }
 
+      onFileSelected?.(file)
       onScanned({
         invoice_number: json.data.invoice_number || '',
         invoice_date: json.data.invoice_date || '',
@@ -162,9 +174,11 @@ function BillScanUpload({ onScanned }) {
       })
       setStatus('done')
     } catch (err) {
-      setError('Failed to reach the scan service. Please fill in the details manually.')
+      setError('Failed to reach the scan service. Please try again.')
       setStatus('idle')
       setPreview(null)
+      if (inputRef.current) inputRef.current.value = ''
+      onClear?.()
     }
   }
 
@@ -173,13 +187,17 @@ function BillScanUpload({ onScanned }) {
     setStatus('idle')
     setError('')
     if (inputRef.current) inputRef.current.value = ''
+    onClear?.()
   }
 
   return (
     <div className="rounded-lg border border-dashed border-primary/40 bg-primary/5 p-3 space-y-2.5">
       <div className="flex items-center gap-2">
         <ScanLine size={15} className="text-primary-dark shrink-0" />
-        <p className="text-xs font-semibold text-ink">Upload bill photo to auto-fill this form</p>
+        <p className="text-xs font-semibold text-ink">
+          Supporting Document <span className="text-red-500 dark:text-red-400">*</span>
+          <span className="font-normal text-muted ml-1">— upload image or PDF to auto-fill</span>
+        </p>
       </div>
 
       {!preview ? (
@@ -195,12 +213,18 @@ function BillScanUpload({ onScanned }) {
           <p className="text-xs text-ink font-medium">
             Drag & drop, or <span className="text-primary-dark underline">browse</span>
           </p>
-          <p className="text-[11px] text-muted">JPG, PNG or WEBP, up to {MAX_IMAGE_MB}MB</p>
-          <input ref={inputRef} type="file" accept={ACCEPTED_IMAGE_TYPES.join(',')} onChange={(e) => processFile(e.target.files?.[0])} className="hidden" />
+          <p className="text-[11px] text-muted">JPG, PNG, WEBP or PDF, up to {MAX_DOC_MB}MB</p>
+          <input ref={inputRef} type="file" accept={ACCEPTED_DOCUMENT_TYPES.join(',')} onChange={(e) => processFile(e.target.files?.[0])} className="hidden" />
         </div>
       ) : (
         <div className="flex items-center gap-3 rounded-lg border border-border bg-bg p-2">
-          <img src={preview} alt="Bill preview" className="h-14 w-14 rounded-md object-cover shrink-0 border border-border" />
+          {preview === 'pdf' ? (
+            <div className="h-14 w-14 rounded-md shrink-0 border border-border bg-red-50 dark:bg-red-500/10 flex items-center justify-center">
+              <FileText size={24} className="text-red-500 dark:text-red-400" />
+            </div>
+          ) : (
+            <img src={preview} alt="Bill preview" className="h-14 w-14 rounded-md object-cover shrink-0 border border-border" />
+          )}
           <div className="min-w-0 flex-1">
             {status === 'scanning' && (
               <p className="flex items-center gap-1.5 text-xs text-muted">
@@ -209,16 +233,16 @@ function BillScanUpload({ onScanned }) {
                   <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.15s]" />
                   <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce" />
                 </span>
-                Reading bill details...
+                {preview === 'pdf' ? 'Inspecting PDF document...' : 'Reading bill details...'}
               </p>
             )}
             {status === 'done' && (
               <p className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-                <CheckCircle2 size={13} /> Fields filled below — please review before saving
+                <CheckCircle2 size={13} /> {preview === 'pdf' ? 'PDF verified & fields filled below — please review' : 'Fields filled below — please review before saving'}
               </p>
             )}
           </div>
-          <button type="button" onClick={clearImage} aria-label="Remove image" className="shrink-0 flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-surface hover:text-ink transition-colors duration-150">
+          <button type="button" onClick={clearImage} aria-label="Remove file" className="shrink-0 flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-surface hover:text-ink transition-colors duration-150">
             <X size={14} />
           </button>
         </div>
@@ -249,12 +273,21 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
     archiveBill,
     restoreBill,
     approveBill,
+    rejectBill,
     fetchBillAuditLogs,
     attachDocument,
     fetchDocumentHistory,
     viewDocument,
+    fetchPaymentProposals,
+    executePaymentRun,
     refetch,
   } = useAccountsPayable()
+
+  const { hasPermission } = usePermissions()
+  const canApprove = hasPermission('ap.approve')
+  const canManage = hasPermission('ap.manage')
+  // Payment Wizard execution requires elevated permission — staff with only ap.manage cannot access it
+  const canExecutePayments = hasPermission('ap.approve') || hasPermission('disbursements.approve')
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -266,8 +299,114 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
   const [fieldErrors, setFieldErrors] = useState({})
   const [dateErrors, setDateErrors] = useState({ invoice_date: '', due_date: '' })
   const [detailRecord, setDetailRecord] = useState(null)
+  const [successMessage, setSuccessMessage] = useState('')
+  const [rejectTarget, setRejectTarget] = useState(null)
+  const [rejectReason, setRejectReason] = useState('')
+  const [rejectSubmitting, setRejectSubmitting] = useState(false)
+  const [attachmentFile, setAttachmentFile] = useState(null)
+  const fileInputRef = useRef(null)
+
+  // Payment Wizard & Direct Pay state
+  const [showPaymentWizard, setShowPaymentWizard] = useState(false)
+  const [wizardCashAccounts, setWizardCashAccounts] = useState([])
+
+  // Single Bill Payment Modal state (for paying Approved / Partially Paid bills directly)
+  const [payTarget, setPayTarget] = useState(null)
+  const [payForm, setPayForm] = useState({
+    cash_account_id: '',
+    payment_method: 'Bank Transfer',
+    payment_date: new Date().toISOString().split('T')[0],
+    amount_to_pay: '',
+    remarks: '',
+  })
+  const [paySubmitting, setPaySubmitting] = useState(false)
+  const [payError, setPayError] = useState('')
+
+  const loadCashAccounts = async () => {
+    if (wizardCashAccounts.length > 0) return wizardCashAccounts
+    try {
+      const res = await apiFetch('/api/cash-accounts?per_page=200')
+      const json = await res.json()
+      if (res.ok && json.success) {
+        const list = Array.isArray(json.data) ? json.data : (json.data?.data ?? [])
+        setWizardCashAccounts(list)
+        return list
+      }
+    } catch {}
+    return []
+  }
+
+  const openPaymentWizard = async () => {
+    await loadCashAccounts()
+    setShowPaymentWizard(true)
+  }
+
+  const openPayBill = async (bill) => {
+    const list = await loadCashAccounts()
+    setPayTarget(bill)
+    const rem = Number(bill.remaining_balance ?? bill.amount ?? 0)
+    setPayForm({
+      cash_account_id: list[0]?.id ? String(list[0].id) : '',
+      payment_method: bill.payment_method || 'Bank Transfer',
+      payment_date: new Date().toISOString().split('T')[0],
+      amount_to_pay: rem > 0 ? String(rem) : '',
+      remarks: '',
+    })
+    setPayError('')
+  }
+
+  const handleConfirmPayBill = async (e) => {
+    if (e?.preventDefault) e.preventDefault()
+    if (!payTarget) return
+
+    const amt = Number(payForm.amount_to_pay)
+    if (!payForm.cash_account_id) {
+      setPayError('Please select a payment cash or bank account.')
+      return
+    }
+    if (!amt || amt <= 0) {
+      setPayError('Payment amount must be greater than zero.')
+      return
+    }
+    const maxPayable = Number(payTarget.remaining_balance ?? payTarget.amount ?? 0)
+    if (amt > maxPayable) {
+      setPayError(`Payment amount cannot exceed the remaining balance (${formatCurrency(maxPayable)}).`)
+      return
+    }
+    const selectedAcc = wizardCashAccounts.find((a) => String(a.id) === String(payForm.cash_account_id))
+    if (selectedAcc && amt > Number(selectedAcc.current_balance)) {
+      setPayError(`Insufficient funds in ${selectedAcc.account_name}. Available: ${formatCurrency(selectedAcc.current_balance)}.`)
+      return
+    }
+
+    setPaySubmitting(true)
+    setPayError('')
+    const res = await executePaymentRun({
+      cash_account_id: Number(payForm.cash_account_id),
+      payment_method: payForm.payment_method,
+      payment_date: payForm.payment_date,
+      proposals: [{
+        ap_id: payTarget.ap_id,
+        amount_to_pay: amt,
+        remarks: payForm.remarks || null,
+      }],
+    })
+    setPaySubmitting(false)
+
+    if (res.success) {
+      setSuccessMessage(`Disbursement voucher created for ${formatCurrency(amt)} (bill ${payTarget.invoice_number}). Go to Disbursements → Approve → Release to complete payment and mark bill as Paid.`)
+      setTimeout(() => setSuccessMessage(''), 10000)
+      setPayTarget(null)
+      if (detailRecord?.ap_id === payTarget.ap_id) {
+        setDetailRecord(null)
+      }
+    } else {
+      setPayError(res.message || 'Payment recording failed.')
+    }
+  }
 
   const validateDate = (field, value) => {
+
     if (!value) {
       setDateErrors((e) => ({ ...e, [field]: '' }))
       return
@@ -283,6 +422,8 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
       setDateErrors((e) => ({ ...e, [field]: '' }))
     }
   }
+  const [billDisbursements, setBillDisbursements] = useState([])
+  const [billDisbursementsLoading, setBillDisbursementsLoading] = useState(false)
   const [auditLogs, setAuditLogs] = useState([])
   const [auditLogsLoading, setAuditLogsLoading] = useState(false)
   const [auditLogsError, setAuditLogsError] = useState(null)
@@ -297,13 +438,11 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
   // or whose status is Paid/Cancelled, can't be edited (goes through a
   // corrective/void flow instead). Keeping this in sync with the backend
   // means the Edit button doesn't show for a bill the save would 403 on.
-  const canEditBill = (r) => !r.approved_by && !['Paid', 'Cancelled'].includes(r.status)
-  // Mirrors AccountsPayablePolicy::archive() — an approved bill has a
-  // real journal entry posted with no reversal flow, so archiving it is
-  // blocked server-side. Restoring is unaffected (only applies to
-  // already-archived rows, which can't have gotten here approved anyway
-  // since approval was blocked from ever archiving them in the first place).
-  const canArchiveBill = (r) => !r.approved_by
+  const canEditBill = (r) => canManage && !r.approved_by && !['Paid', 'Cancelled'].includes(r.status)
+  // Mirrors AccountsPayablePolicy::archive() — only completed/settled bills
+  // (Paid or Cancelled) can be archived. In-flight bills (Pending, Partially Paid, Overdue)
+  // must remain in the active operational queue until fully resolved.
+  const canArchiveBill = (r) => canManage && ['Paid', 'Cancelled'].includes(r.status)
 
   const sourceList = showArchived ? archivedBills : bills
 
@@ -323,18 +462,32 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceList, search, statusFilter, suppliers])
 
+  const allBills = useMemo(() => [...bills, ...(archivedBills || [])], [bills, archivedBills])
+
   const openAdd = () => {
     setForm({
       ...EMPTY_FORM,
       supplier_id: suppliers[0]?.supplier_id ?? '',
       account_id: accounts[0]?.id ?? '',
-      reference_number: getNextReferenceNo(records),
+      reference_number: getNextReferenceNo(allBills),
     })
     setFormValidationError('')
     setFieldErrors({})
     setDateErrors({ invoice_date: '', due_date: '' })
     setModalMode('add')
   }
+
+  // Populate first available options if lookups resolve while Add modal is open
+  useEffect(() => {
+    if (modalMode === 'add') {
+      setForm((f) => ({
+        ...f,
+        supplier_id: f.supplier_id || (suppliers[0]?.supplier_id ?? ''),
+        account_id: f.account_id || (accounts[0]?.id ?? ''),
+      }))
+    }
+  }, [suppliers, accounts, modalMode])
+
   const openEdit = (r) => {
     setForm({
       supplier_id: r.supplier_id,
@@ -355,18 +508,33 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
     setDateErrors({ invoice_date: '', due_date: '' })
     setModalMode(r)
   }
-  const closeModal = () => { setModalMode(null); setFormValidationError(''); setFieldErrors({}); setDateErrors({ invoice_date: '', due_date: '' }) }
+  const closeModal = () => { setModalMode(null); setFormValidationError(''); setFieldErrors({}); setDateErrors({ invoice_date: '', due_date: '' }); setAttachmentFile(null) }
   const openDetail = (r) => {
     setDetailRecord(r)
+    setBillDisbursements([])
+    setBillDisbursementsLoading(true)
     setAuditLogs([])
     setAuditLogsError(null)
     setAuditLogsLoading(true)
+
+    apiFetch(`/api/disbursements?ap_id=${r.ap_id}&per_page=100`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success) setBillDisbursements(json.data ?? [])
+      })
+      .catch(() => {})
+      .finally(() => setBillDisbursementsLoading(false))
+
     fetchBillAuditLogs(r.ap_id)
       .then(setAuditLogs)
       .catch((err) => setAuditLogsError(err.message))
       .finally(() => setAuditLogsLoading(false))
   }
-  const closeDetail = () => setDetailRecord(null)
+  const closeDetail = () => {
+    setDetailRecord(null)
+    setBillDisbursements([])
+    setAuditLogs([])
+  }
 
   // Merges scanned fields into the form without clobbering anything the
   // user already typed by hand — same merge pattern as AccountsReceivable's
@@ -470,13 +638,18 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
 
     if (form.reference_number && form.reference_number.trim()) {
       const trimmedRef = form.reference_number.trim().toLowerCase()
-      const dup = records.find((r) => {
+      const dup = allBills.find((r) => {
         if (isEditing && r.ap_id === modalMode?.ap_id) return false
         return (r.reference_number || '').trim().toLowerCase() === trimmedRef
       })
       if (dup) {
         errors.reference_number = `Reference number is already used by bill ${dup.invoice_number}.`
       }
+    }
+
+    // Supporting document is strictly required when creating a new bill.
+    if (modalMode === 'add' && !attachmentFile) {
+      errors.document = 'A supporting document (invoice scan or PDF) is required.'
     }
 
     if (Object.keys(errors).length > 0) {
@@ -500,9 +673,16 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
       purchase_order_no: form.purchase_order_no.trim(),
     }
 
-    const result = modalMode === 'add'
-      ? await createBill(payload)
-      : await updateBill(modalMode.ap_id, payload)
+    let result
+    if (modalMode === 'add') {
+      // Send as multipart so the required document file can be included.
+      const fd = new FormData()
+      Object.entries(payload).forEach(([k, v]) => { if (v != null) fd.append(k, v) })
+      fd.append('document', attachmentFile)
+      result = await createBill(fd)
+    } else {
+      result = await updateBill(modalMode.ap_id, payload)
+    }
 
     if (result.success) closeModal()
   }
@@ -524,14 +704,40 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
 
   const handleApprove = async (r) => {
     const result = await approveBill(r.ap_id)
-    if (result.success && detailRecord?.ap_id === r.ap_id) {
-      setDetailRecord(result.bill)
+    if (result.success) {
+      setSuccessMessage(`Bill ${r.invoice_number} approved successfully and posted to General Ledger.`)
+      setTimeout(() => setSuccessMessage(''), 5000)
+      if (detailRecord?.ap_id === r.ap_id) {
+        setDetailRecord(result.bill)
+      }
+    }
+  }
+
+  const openReject = (r) => {
+    setRejectTarget(r)
+    setRejectReason('')
+  }
+
+  const handleConfirmReject = async (e) => {
+    if (e?.preventDefault) e.preventDefault()
+    if (!rejectTarget) return
+    setRejectSubmitting(true)
+    const result = await rejectBill(rejectTarget.ap_id, rejectReason)
+    setRejectSubmitting(false)
+    if (result.success) {
+      setSuccessMessage(`Bill ${rejectTarget.invoice_number} was rejected.`)
+      setTimeout(() => setSuccessMessage(''), 5000)
+      if (detailRecord?.ap_id === rejectTarget.ap_id) {
+        setDetailRecord(result.bill)
+      }
+      setRejectTarget(null)
+      setRejectReason('')
     }
   }
 
   const statCards = [
     { key: 'total', label: 'Total Bills', value: stats.total, icon: FileText, iconBg: 'bg-primary/15', iconColor: 'text-primary-dark', isActive: statusFilter === 'all' && !showArchived, onClick: () => { setStatusFilter('all'); setShowArchived(false) } },
-    { key: 'payable', label: 'Payable Amount', value: formatCurrency(stats.payable), icon: Wallet, iconBg: 'bg-blue-50 dark:bg-blue-500/10', iconColor: 'text-blue-600 dark:text-blue-400', isActive: false, onClick: () => { setStatusFilter('all'); setShowArchived(false) } },
+    { key: 'payable', label: 'Payable Amount', value: formatCurrency(stats.payable), icon: Wallet, iconBg: 'bg-primary/10 dark:bg-primary/15', iconColor: 'text-primary-dark dark:text-primary', isActive: false, onClick: () => { setStatusFilter('all'); setShowArchived(false) } },
     { key: 'overdue', label: 'Overdue', value: stats.overdue, icon: AlertTriangle, iconBg: 'bg-red-50 dark:bg-red-500/10', iconColor: 'text-red-600 dark:text-red-400', isActive: statusFilter === 'Overdue' && !showArchived, onClick: () => { setStatusFilter('Overdue'); setShowArchived(false) } },
     { key: 'archived', label: 'Archived', value: stats.archived, icon: Archive, iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-500 dark:text-slate-400', isActive: showArchived, onClick: () => setShowArchived(true) },
   ]
@@ -548,8 +754,26 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
           <h1 className="text-xl font-bold tracking-tight text-ink">{title}</h1>
           <p className="mt-1 text-xs text-muted">Track supplier bills and amounts owed.</p>
         </div>
-        <Button variant="primary" size="sm" icon={Plus} onClick={openAdd} disabled={suppliersLoading || accountsLoading}>Add Bill</Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button variant="secondary" size="sm" icon={Sparkles} onClick={openPaymentWizard}>Payment Wizard</Button>
+          {canManage && (
+            <Button variant="primary" size="sm" icon={Plus} onClick={openAdd} disabled={suppliersLoading || accountsLoading}>Add Bill</Button>
+          )}
+        </div>
+
       </div>
+
+      {successMessage && (
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400 animate-fadeIn">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span>{successMessage}</span>
+          </div>
+          <button type="button" onClick={() => setSuccessMessage('')} className="text-emerald-600 hover:text-emerald-800 dark:text-emerald-400">
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
       {billsError && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
@@ -565,12 +789,12 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
               key={card.key}
               type="button"
               onClick={card.onClick}
-              className={`${PANEL} ${PANEL_PAD} flex items-center gap-3 text-left cursor-pointer
+              className={`${PANEL} ${PANEL_PAD} flex items-center gap-2.5 text-left cursor-pointer
                 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0
                 ${card.isActive ? 'ring-2 ring-primary/50 border-primary/50' : ''}`}
             >
-              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${card.iconBg}`}>
-                <Icon size={18} className={card.iconColor} />
+              <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${card.iconBg}`}>
+                <Icon size={15} className={card.iconColor} />
               </div>
               <div className="min-w-0">
                 <p className="text-xs text-muted">{card.label}</p>
@@ -597,16 +821,16 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
       </div>
 
       <div className={PANEL}>
-        <div className="overflow-x-auto overflow-y-auto max-h-[70vh] rounded-t-xl">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-surface">
+        <div className="overflow-hidden rounded-t-xl">
+          <table className="w-full text-sm table-fixed">
+            <thead className="bg-surface">
               <tr className="border-b border-border">
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Bill</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Supplier</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Due Date</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Amount Due</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Status</th>
-                <th className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Actions</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2.5 py-3 w-[18%] whitespace-nowrap">Bill</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[16%] whitespace-nowrap">Supplier</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[12%] whitespace-nowrap">Due Date</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[14%] whitespace-nowrap">Amount Due</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[12%] whitespace-nowrap">Status</th>
+                <th className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wider px-2.5 py-3 w-[28%] whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -616,91 +840,148 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
 
               {!billsLoading && filtered.map((r) => (
                 <tr key={r.ap_id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
-                  <td className="px-4 py-3.5">
-                    <div className="flex items-center gap-1.5">
-                      <p className="font-medium text-ink">{r.invoice_number}</p>
-                      {r.has_attachment && <Paperclip size={12} className="text-muted shrink-0" />}
+                  <td className="px-2.5 py-2 min-w-0">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => openDetail(r)}
+                        className="font-semibold text-xs sm:text-sm text-ink hover:text-primary transition-colors text-left truncate block shrink-0"
+                        title="Click to view bill details"
+                      >
+                        {r.invoice_number}
+                      </button>
+                      {r.has_attachment && (
+                        <Tooltip label="Document attached">
+                          <Paperclip size={12} className="text-primary-dark shrink-0" />
+                        </Tooltip>
+                      )}
                     </div>
-                    <p className="text-xs text-muted truncate max-w-55">{r.description}</p>
+                    <p className="text-[11px] text-muted truncate" title={r.description || undefined}>
+                      {r.description || '—'}
+                    </p>
                   </td>
-                  <td className="px-4 py-3.5 text-ink whitespace-nowrap">{r.supplier_name || supplierName(r.supplier_id)}</td>
-                  <td className="px-4 py-3.5 whitespace-nowrap text-ink">{formatDate(r.due_date)}</td>
-                  <td className="px-4 py-3.5 whitespace-nowrap tabular-nums">
-                    <span className="text-ink font-medium">{formatCurrency(r.remaining_balance)}</span>
+                  <td className="px-2 py-2 min-w-0">
+                    <p className="font-medium text-xs text-ink truncate" title={r.supplier_name || supplierName(r.supplier_id)}>
+                      {r.supplier_name || supplierName(r.supplier_id)}
+                    </p>
+                  </td>
+                  <td className="px-2 py-2 whitespace-nowrap text-ink text-xs">{formatDate(r.due_date)}</td>
+                  <td className="px-2 py-2 whitespace-nowrap text-left tabular-nums">
+                    <span className="text-ink font-semibold text-xs sm:text-sm">{formatCurrency(r.remaining_balance)}</span>
                     {r.paid_amount > 0 && (
-                      <span className="block text-xs text-muted line-through">{formatCurrency(r.amount)}</span>
+                      <span className="block text-[10px] text-muted line-through">{formatCurrency(r.amount)}</span>
                     )}
                   </td>
-                  <td className="px-4 py-3.5 whitespace-nowrap">
-                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[r.status] || 'bg-gray-100 text-muted'}`}>{r.status}</span>
+                  <td className="px-2 py-2 whitespace-nowrap text-left">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[r.status] || 'bg-gray-100 text-muted'}`}>{r.status}</span>
                   </td>
-                  <td className="px-4 py-3.5 whitespace-nowrap text-right">
-                    <div className="flex items-center justify-end gap-3">
-                      <Tooltip label="View full record" align="start">
-                        <button type="button" onClick={() => openDetail(r)} className="inline-flex items-center justify-center bg-transparent border-0 p-0 m-0 leading-none cursor-pointer text-ink/60 hover:text-ink transition-colors duration-150">
-                          <Info size={16} />
+                  <td className="px-2.5 py-2 whitespace-nowrap text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      {/* Workflow decision buttons — Approve / Reject (Pending only) */}
+                      {canApprove && !r.is_archived && !r.approved_by && r.status !== 'Cancelled' && (
+                        <div className="flex items-center gap-1 mr-1 pr-1 border-r border-border shrink-0">
+                          <Tooltip label="Approve bill & post to General Ledger" align="start">
+                            <button
+                              type="button"
+                              onClick={() => handleApprove(r)}
+                              disabled={actionBusyId === r.ap_id}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-md bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-xs transition-all duration-150 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                            >
+                              <CheckCircle2 size={12} className={actionBusyId === r.ap_id ? 'animate-spin' : ''} />
+                              <span>{actionBusyId === r.ap_id ? 'Approving…' : 'Approve'}</span>
+                            </button>
+                          </Tooltip>
+                          <Tooltip label="Reject bill" align="start">
+                            <button
+                              type="button"
+                              onClick={() => openReject(r)}
+                              disabled={actionBusyId === r.ap_id}
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs font-semibold rounded-md border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20 shadow-xs transition-all duration-150 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                            >
+                              <XCircle size={12} />
+                              <span>Reject</span>
+                            </button>
+                          </Tooltip>
+                        </div>
+                      )}
+
+                      {/* Pay Button for any Approved / Partially Paid / Overdue bill with remaining balance */}
+                      {!r.is_archived && r.status !== 'Cancelled' && (r.approved_by || r.status === 'Partially Paid') && Number(r.remaining_balance) > 0 && (
+                        <div className="flex items-center mr-1 pr-1 border-r border-border shrink-0">
+                          <Tooltip label={`Pay remaining balance (${formatCurrency(r.remaining_balance)})`} align="start">
+                            <button
+                              type="button"
+                              onClick={() => openPayBill(r)}
+                              disabled={actionBusyId === r.ap_id}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-md bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-xs transition-all duration-150 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                            >
+                              <Wallet size={12} />
+                              <span>Pay</span>
+                            </button>
+                          </Tooltip>
+                        </div>
+                      )}
+
+                      {/* Standard Utilities (present on every row) */}
+                      <Tooltip label="View details" align="start">
+                        <button type="button" onClick={() => openDetail(r)} className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                          <Info size={14} />
                         </button>
                       </Tooltip>
-                      <Tooltip label="Print bill" align="start">
-                        <button type="button" onClick={() => handlePrint(r)} className="inline-flex items-center justify-center bg-transparent border-0 p-0 m-0 leading-none cursor-pointer text-ink/60 hover:text-ink transition-colors duration-150">
-                          <Printer size={16} />
+
+                      <Tooltip label="Print bill voucher" align="start">
+                        <button type="button" onClick={() => handlePrint(r)} className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                          <Printer size={14} />
                         </button>
                       </Tooltip>
-                      <Tooltip label={r.has_attachment ? 'Supporting document attached' : 'Attach supporting document'} align="start">
+
+                      <Tooltip label={r.has_attachment ? 'Supporting document attached (click to view/manage)' : 'Attach supporting document'} align="start">
                         <button
                           type="button"
                           onClick={() => setDocumentTarget(r)}
-                          className={`inline-flex items-center justify-center bg-transparent border-0 p-0 m-0 leading-none cursor-pointer transition-colors duration-150 ${
+                          className={`flex h-7 w-7 items-center justify-center rounded-lg transition-colors duration-150 ${
                             r.has_attachment
-                              ? 'text-primary-dark hover:text-primary'
-                              : 'text-ink/60 hover:text-ink'
+                              ? 'text-primary-dark bg-primary/10 hover:bg-primary/20'
+                              : 'text-muted hover:bg-bg hover:text-ink'
                           }`}
                         >
-                          <Paperclip size={16} fill={r.has_attachment ? 'currentColor' : 'none'} fillOpacity={r.has_attachment ? 0.15 : 0} />
+                          <Paperclip size={14} fill={r.has_attachment ? 'currentColor' : 'none'} fillOpacity={r.has_attachment ? 0.2 : 0} />
                         </button>
                       </Tooltip>
-                      {r.has_attachment && (
-                        <Tooltip label="View current document" align="start">
-                          <button
-                            type="button"
-                            onClick={() => handleViewLatestDocument(r)}
-                            className="inline-flex items-center justify-center bg-transparent border-0 p-0 m-0 leading-none cursor-pointer text-ink/60 hover:text-ink transition-colors duration-150"
-                          >
-                            <FileText size={16} />
-                          </button>
-                        </Tooltip>
-                      )}
-                      {!r.is_archived && !r.approved_by && (
-                        <Tooltip label="Approve bill" align="start">
-                          <button
-                            type="button"
-                            onClick={() => handleApprove(r)}
-                            disabled={actionBusyId === r.ap_id}
-                            className="inline-flex items-center justify-center bg-transparent border-0 p-0 m-0 leading-none cursor-pointer text-ink/60 hover:text-emerald-500 transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <CheckCircle2 size={16} />
-                          </button>
-                        </Tooltip>
-                      )}
+
+                      {/* Edit bill — only rendered when bill is editable */}
                       {!r.is_archived && canEditBill(r) && (
                         <Tooltip label="Edit bill" align="start">
-                          <button type="button" onClick={() => openEdit(r)} className="inline-flex items-center justify-center bg-transparent border-0 p-0 m-0 leading-none cursor-pointer text-ink/60 hover:text-ink transition-colors duration-150">
-                            <Pencil size={16} />
+                          <button type="button" onClick={() => openEdit(r)} className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                            <Pencil size={14} />
                           </button>
                         </Tooltip>
                       )}
-                      {(r.is_archived || canArchiveBill(r)) && (
-                        <Tooltip label={r.is_archived ? 'Restore bill' : 'Archive bill'} align="end">
+
+                      {/* Archive / Restore bill — only rendered when actionable */}
+                      {r.is_archived ? (
+                        <Tooltip label="Restore bill" align="end">
                           <button
                             type="button"
-                            onClick={() => (r.is_archived ? restoreBill(r.ap_id) : archiveBill(r.ap_id))}
+                            onClick={() => restoreBill(r.ap_id)}
                             disabled={actionBusyId === r.ap_id}
-                            className="inline-flex items-center justify-center bg-transparent border-0 p-0 m-0 leading-none cursor-pointer text-ink/60 hover:text-ink transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
                           >
-                            {r.is_archived ? <RotateCcw size={16} /> : <Archive size={16} />}
+                            <RotateCcw size={14} />
                           </button>
                         </Tooltip>
-                      )}
+                      ) : canArchiveBill(r) ? (
+                        <Tooltip label="Archive bill" align="end">
+                          <button
+                            type="button"
+                            onClick={() => archiveBill(r.ap_id)}
+                            disabled={actionBusyId === r.ap_id}
+                            className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            <Archive size={14} />
+                          </button>
+                        </Tooltip>
+                      ) : null}
                     </div>
                   </td>
                 </tr>
@@ -729,7 +1010,18 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{formValidationError || formError}</div>
           )}
 
-          {!isEditing && <BillScanUpload onScanned={handleScanned} />}
+          {!isEditing && (
+            <>
+              <BillScanUpload
+                onScanned={handleScanned}
+                onFileSelected={(f) => { setAttachmentFile(f); setFieldErrors((fe) => ({ ...fe, document: '' })) }}
+                onClear={() => setAttachmentFile(null)}
+              />
+              {fieldErrors.document && (
+                <p className="text-xs text-red-500 dark:text-red-400 -mt-2">{fieldErrors.document}</p>
+              )}
+            </>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -852,7 +1144,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                   <button
                     type="button"
                     onClick={() => {
-                      const nextRef = getNextReferenceNo(records)
+                      const nextRef = getNextReferenceNo(allBills)
                       setForm((f) => ({ ...f, reference_number: nextRef }))
                       setFieldErrors((fe) => ({ ...fe, reference_number: '' }))
                     }}
@@ -870,7 +1162,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                   setForm((f) => ({ ...f, reference_number: val }))
                   const trimmed = val.trim().toLowerCase()
                   if (trimmed) {
-                    const dup = records.find((r) => {
+                    const dup = allBills.find((r) => {
                       if (isEditing && r.ap_id === modalMode?.ap_id) return false
                       return (r.reference_number || '').trim().toLowerCase() === trimmed
                     })
@@ -935,16 +1227,37 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
         footer={
           <>
             <Button variant="secondary" size="md" onClick={closeDetail}>Close</Button>
-            {detailRecord && !detailRecord.approved_by && !detailRecord.is_archived && (
-              <Button
-                variant="secondary"
-                size="md"
-                icon={CheckCircle2}
-                loading={actionBusyId === detailRecord.ap_id}
-                onClick={() => handleApprove(detailRecord)}
+            {detailRecord && !detailRecord.approved_by && !detailRecord.is_archived && detailRecord.status !== 'Cancelled' && (
+              <>
+                <button
+                  type="button"
+                  disabled={actionBusyId === detailRecord.ap_id}
+                  onClick={() => handleApprove(detailRecord)}
+                  className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all duration-150 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <CheckCircle2 size={16} className={actionBusyId === detailRecord.ap_id ? 'animate-spin' : ''} />
+                  {actionBusyId === detailRecord.ap_id ? 'Approving…' : 'Approve Bill'}
+                </button>
+                <button
+                  type="button"
+                  disabled={actionBusyId === detailRecord.ap_id}
+                  onClick={() => openReject(detailRecord)}
+                  className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20 shadow-sm transition-all duration-150 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <XCircle size={16} />
+                  Reject Bill
+                </button>
+              </>
+            )}
+            {detailRecord && !detailRecord.is_archived && detailRecord.status !== 'Cancelled' && (detailRecord.approved_by || detailRecord.status === 'Partially Paid') && Number(detailRecord.remaining_balance) > 0 && (
+              <button
+                type="button"
+                onClick={() => { const target = detailRecord; closeDetail(); openPayBill(target) }}
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-sm transition-all duration-150 active:scale-95"
               >
-                Approve
-              </Button>
+                <Wallet size={16} />
+                Pay Bill ({formatCurrency(detailRecord.remaining_balance)})
+              </button>
             )}
             {detailRecord && <Button variant="primary" size="md" icon={Printer} onClick={() => handlePrint(detailRecord)}>Print Bill</Button>}
           </>
@@ -952,6 +1265,39 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
       >
         {detailRecord && (
           <div className="space-y-4">
+            {!detailRecord.approved_by && !detailRecord.is_archived && detailRecord.status !== 'Cancelled' && (
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3.5 rounded-xl border border-amber-300/80 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/10 animate-fadeIn">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0">
+                    <AlertTriangle size={19} />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-amber-900 dark:text-amber-200">Awaiting CEO Approval</p>
+                    <p className="text-[11px] text-amber-700 dark:text-amber-300">This bill requires approval before disbursements or payments can proceed.</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    disabled={actionBusyId === detailRecord.ap_id}
+                    onClick={() => handleApprove(detailRecord)}
+                    className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow transition-all duration-150 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <CheckCircle2 size={13} className={actionBusyId === detailRecord.ap_id ? 'animate-spin' : ''} />
+                    {actionBusyId === detailRecord.ap_id ? 'Approving…' : 'Approve Bill'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={actionBusyId === detailRecord.ap_id}
+                    onClick={() => openReject(detailRecord)}
+                    className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-red-200 bg-white hover:bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-surface dark:text-red-400 dark:hover:bg-red-500/10 shadow-sm transition-all duration-150 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <XCircle size={13} />
+                    Reject
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-semibold text-ink">{detailRecord.invoice_number}</p>
@@ -986,25 +1332,69 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
               </div>
             </div>
 
+            {/* Related Disbursements / Payment History */}
             <div>
-              <p className="text-xs font-medium text-muted mb-1.5">Activity Log</p>
-              <div className="rounded-lg border border-border divide-y divide-border max-h-48 overflow-y-auto">
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-xs font-semibold text-ink">Payment & Disbursement History</p>
+                <span className="text-[11px] text-muted">
+                  {billDisbursementsLoading ? 'Loading…' : `${billDisbursements.length} record${billDisbursements.length === 1 ? '' : 's'}`}
+                </span>
+              </div>
+              <div className="rounded-lg border border-border divide-y divide-border max-h-48 overflow-y-auto bg-slate-50/50 dark:bg-slate-900/30">
+                {billDisbursementsLoading && (
+                  <p className="px-3 py-3 text-xs text-muted text-center">Loading disbursements…</p>
+                )}
+                {!billDisbursementsLoading && billDisbursements.length === 0 && (
+                  <p className="px-3 py-3 text-xs text-muted text-center">No disbursements recorded against this bill yet.</p>
+                )}
+                {!billDisbursementsLoading && billDisbursements.map((d) => (
+                  <div key={d.disbursement_id || d.id} className="px-3 py-2 text-xs flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-ink">{d.voucher_number}</p>
+                      <p className="text-[11px] text-muted">{formatDate(d.payment_date)} · {d.payment_method || '—'}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold text-ink tabular-nums">{formatCurrency(d.amount_paid)}</p>
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${STATUS_STYLES[d.status] ?? 'bg-slate-100 text-slate-600'}`}>
+                        {d.status}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Related Activity & Audit Trail */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-xs font-semibold text-ink">Activity & Audit Trail</p>
+                <span className="text-[11px] text-muted">
+                  {auditLogsLoading ? 'Loading…' : `${auditLogs.length} event${auditLogs.length === 1 ? '' : 's'}`}
+                </span>
+              </div>
+              <div className="rounded-lg border border-border divide-y divide-border max-h-48 overflow-y-auto bg-slate-50/50 dark:bg-slate-900/30">
                 {auditLogsLoading && (
-                  <p className="px-3 py-3 text-xs text-muted text-center">Loading activity…</p>
+                  <p className="px-3 py-3 text-xs text-muted text-center">Loading audit history…</p>
                 )}
                 {!auditLogsLoading && auditLogsError && (
-                  <p className="px-3 py-3 text-xs text-red-600">{auditLogsError}</p>
+                  <p className="px-3 py-3 text-xs text-red-600 text-center">{auditLogsError}</p>
                 )}
                 {!auditLogsLoading && !auditLogsError && auditLogs.length === 0 && (
-                  <p className="px-3 py-3 text-xs text-muted text-center">No activity recorded.</p>
+                  <p className="px-3 py-3 text-xs text-muted text-center">No audit trail recorded for this bill.</p>
                 )}
                 {!auditLogsLoading && !auditLogsError && auditLogs.map((log) => (
-                  <div key={log.id} className="px-3 py-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-xs font-medium text-ink">{log.activity_description || log.action}</span>
-                      <span className="text-xs text-muted shrink-0">{formatDateTime(log.created_at)}</span>
+                  <div key={log.id} className="px-3 py-2 text-xs">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-medium text-ink leading-relaxed">
+                        {log.activity_description || log.action}
+                      </span>
+                      <span className="text-[11px] text-muted shrink-0 tabular-nums">
+                        {formatDateTime(log.created_at)}
+                      </span>
                     </div>
-                    {log.user_name && <p className="text-xs text-muted mt-0.5">by {log.user_name}</p>}
+                    {log.user_name && (
+                      <p className="text-[11px] text-muted mt-0.5">by <span className="font-medium text-ink">{log.user_name}</span></p>
+                    )}
                   </div>
                 ))}
               </div>
@@ -1021,6 +1411,239 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
         onUpload={(file) => attachDocument(documentTarget.ap_id, file)}
         onView={viewDocument}
         onUploaded={refetch}
+      />
+
+      <Modal
+        open={!!rejectTarget}
+        onClose={() => setRejectTarget(null)}
+        title="Reject Bill"
+        footer={
+          <>
+            <Button variant="secondary" size="md" onClick={() => setRejectTarget(null)} disabled={rejectSubmitting}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              size="md"
+              icon={XCircle}
+              loading={rejectSubmitting}
+              onClick={handleConfirmReject}
+            >
+              Confirm Rejection
+            </Button>
+          </>
+        }
+      >
+        {rejectTarget && (
+          <form onSubmit={handleConfirmReject} className="space-y-3">
+            <p className="text-xs text-ink">
+              Are you sure you want to reject bill <span className="font-semibold text-ink">{rejectTarget.invoice_number}</span> ({formatCurrency(rejectTarget.amount)})?
+            </p>
+            <p className="text-[11px] text-muted">
+              Rejecting will mark this bill as Cancelled, prevent any disbursements, and send an alert to the creator.
+            </p>
+            <div>
+              <label className={LABEL}>Reason for Rejection (Optional)</label>
+              <textarea
+                rows={3}
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                className={`${INPUT} h-auto py-2 resize-none`}
+                placeholder="e.g. Inaccurate billing amount, duplicate invoice, supplier verification needed..."
+              />
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      {/* Pay Single Bill Modal (Direct payment for Approved / Partially Paid bills) */}
+      <Modal
+        open={!!payTarget}
+        onClose={() => { if (!paySubmitting) setPayTarget(null) }}
+        title={payTarget ? `Record Payment — ${payTarget.invoice_number}` : 'Record Bill Payment'}
+        footer={
+          <>
+            <Button variant="secondary" size="md" onClick={() => setPayTarget(null)} disabled={paySubmitting}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
+              icon={Wallet}
+              loading={paySubmitting}
+              onClick={handleConfirmPayBill}
+            >
+              Confirm Payment
+            </Button>
+          </>
+        }
+      >
+        {payTarget && (
+          <form onSubmit={handleConfirmPayBill} className="space-y-4">
+            {payError && (
+              <div className="rounded-lg border border-red-200 bg-red-50 dark:border-red-500/20 dark:bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-400">
+                {payError}
+              </div>
+            )}
+
+            {/* Bill Summary Box */}
+            <div className="rounded-xl border border-border bg-bg/50 p-3.5 space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-semibold text-ink">{payTarget.invoice_number}</span>
+                  <p className="text-xs text-muted">{payTarget.supplier_name || supplierName(payTarget.supplier_id)}</p>
+                </div>
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[payTarget.status] || ''}`}>
+                  {payTarget.status}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 pt-2 border-t border-border/60 text-xs">
+                <div>
+                  <span className="text-muted block text-[11px]">Original Amount</span>
+                  <span className="font-semibold text-ink">{formatCurrency(payTarget.amount)}</span>
+                </div>
+                <div>
+                  <span className="text-muted block text-[11px]">Already Paid</span>
+                  <span className="font-semibold text-ink">{formatCurrency(payTarget.paid_amount || 0)}</span>
+                </div>
+                <div>
+                  <span className="text-muted block text-[11px]">Remaining Due</span>
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(payTarget.remaining_balance)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Payment Amount */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-medium text-muted">
+                  Payment Amount (₱) <span className="text-red-500 dark:text-red-400">*</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPayForm((f) => ({ ...f, amount_to_pay: String(payTarget.remaining_balance) }))}
+                    className="text-[11px] font-medium text-primary hover:underline"
+                  >
+                    Pay Full ({formatCurrency(payTarget.remaining_balance)})
+                  </button>
+                  {Number(payTarget.remaining_balance) > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setPayForm((f) => ({ ...f, amount_to_pay: (Number(payTarget.remaining_balance) / 2).toFixed(2) }))}
+                      className="text-[11px] font-medium text-muted hover:text-ink hover:underline"
+                    >
+                      Pay 50%
+                    </button>
+                  )}
+                </div>
+              </div>
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                max={payTarget.remaining_balance}
+                value={payForm.amount_to_pay}
+                onChange={(e) => {
+                  setPayForm((f) => ({ ...f, amount_to_pay: e.target.value }))
+                  setPayError('')
+                }}
+                className={INPUT}
+                style={INPUT_TEXT_STYLE}
+                placeholder="0.00"
+                required
+              />
+              <p className="text-[11px] text-muted mt-1">
+                Enter the full balance to settle the bill, or a partial amount to record an installment payment.
+              </p>
+            </div>
+
+            {/* Cash Account */}
+            <div>
+              <label className={LABEL}>
+                Disburse From Cash / Bank Account <span className="text-red-500 dark:text-red-400">*</span>
+              </label>
+              <select
+                value={payForm.cash_account_id}
+                onChange={(e) => {
+                  setPayForm((f) => ({ ...f, cash_account_id: e.target.value }))
+                  setPayError('')
+                }}
+                className={INPUT}
+                style={INPUT_TEXT_STYLE}
+                required
+              >
+                <option value="">Select cash / bank account...</option>
+                {wizardCashAccounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.account_name} {a.bank_name ? `(${a.bank_name})` : ''} — Balance: {formatCurrency(a.current_balance)}
+                  </option>
+                ))}
+              </select>
+              {(() => {
+                const selectedAcc = wizardCashAccounts.find((a) => String(a.id) === String(payForm.cash_account_id))
+                if (selectedAcc && Number(payForm.amount_to_pay) > Number(selectedAcc.current_balance)) {
+                  return (
+                    <p className="text-xs text-red-500 dark:text-red-400 mt-1 font-medium">
+                      Warning: Payment amount exceeds available funds in {selectedAcc.account_name} ({formatCurrency(selectedAcc.current_balance)}).
+                    </p>
+                  )
+                }
+                return null
+              })()}
+            </div>
+
+            {/* Method and Date */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={LABEL}>Payment Method <span className="text-red-500 dark:text-red-400">*</span></label>
+                <select
+                  value={payForm.payment_method}
+                  onChange={(e) => setPayForm((f) => ({ ...f, payment_method: e.target.value }))}
+                  className={INPUT}
+                  style={INPUT_TEXT_STYLE}
+                >
+                  {PAYMENT_METHODS.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={LABEL}>Payment Date <span className="text-red-500 dark:text-red-400">*</span></label>
+                <input
+                  type="date"
+                  value={payForm.payment_date}
+                  onChange={(e) => setPayForm((f) => ({ ...f, payment_date: e.target.value }))}
+                  className={`${INPUT} scheme-light dark:scheme-dark`}
+                  style={INPUT_TEXT_STYLE}
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Remarks / Reference */}
+            <div>
+              <label className={LABEL}>Payment Note / Reference (Optional)</label>
+              <input
+                type="text"
+                value={payForm.remarks}
+                onChange={(e) => setPayForm((f) => ({ ...f, remarks: e.target.value }))}
+                className={INPUT}
+                style={INPUT_TEXT_STYLE}
+                placeholder="e.g. 2nd partial payment via online transfer ref #12345"
+              />
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      <PaymentWizardModal
+        open={showPaymentWizard}
+        onClose={() => setShowPaymentWizard(false)}
+        suppliers={suppliers}
+        cashAccounts={wizardCashAccounts}
+        fetchPaymentProposals={fetchPaymentProposals}
+        executePaymentRun={executePaymentRun}
       />
     </div>
   )

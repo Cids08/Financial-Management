@@ -39,6 +39,7 @@ class Expense extends Model
         'budget_id',
         'expense_category_id',
         'supplier_id',
+        'cash_account_id',
         'expense_date',
         'receipt_number',
         'expense_amount',
@@ -49,6 +50,10 @@ class Expense extends Model
         'status',
         'rejection_remarks',
         'created_by',
+        'approved_by',
+        'approved_at',
+        'rejected_by',
+        'rejected_at',
     ];
 
     protected $casts = [
@@ -58,6 +63,8 @@ class Expense extends Model
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
         'deleted_at' => 'datetime',
+        'approved_at' => 'datetime',
+        'rejected_at' => 'datetime',
     ];
 
     // Mirrors Budget's $appends = ['has_plan'] pattern exactly — has_receipt
@@ -91,6 +98,11 @@ class Expense extends Model
         return $this->belongsTo(Supplier::class);
     }
 
+    public function cashAccount(): BelongsTo
+    {
+        return $this->belongsTo(CashAccount::class);
+    }
+
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
@@ -99,6 +111,16 @@ class Expense extends Model
     public function deleter(): BelongsTo
     {
         return $this->belongsTo(User::class, 'deleted_by');
+    }
+
+    public function approver(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    public function rejector(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'rejected_by');
     }
 
     /**

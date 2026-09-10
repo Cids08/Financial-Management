@@ -77,6 +77,9 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
     })
   }
 
+  // Global balance visibility toggle — balances are hidden by default for privacy
+  const [revealBalances, setRevealBalances] = useState(false)
+
   // "This page" totals only — see Collectors.jsx for the same caveat.
   // meta.total (used in the Total Accounts card) IS global/accurate.
   const totalBalanceThisPage = accounts.filter((a) => a.status === 'Active').reduce((sum, a) => sum + a.current_balance, 0)
@@ -127,7 +130,7 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
 
   const statCards = [
     { key: 'total', label: 'Total Accounts', value: meta.total, icon: Wallet, iconBg: 'bg-primary/15', iconColor: 'text-primary-dark', isActive: typeFilter === 'all' && !showArchived, onClick: () => { setTypeFilter('all'); setShowArchived(false) } },
-    { key: 'balance', label: 'Balance (this page)', value: formatCurrency(totalBalanceThisPage), icon: PiggyBank, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: false, onClick: () => { setTypeFilter('all'); setShowArchived(false) } },
+    { key: 'balance', label: 'Balance (this page)', value: revealBalances ? formatCurrency(totalBalanceThisPage) : '₱ ••••••', icon: PiggyBank, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: false, onClick: () => { setTypeFilter('all'); setShowArchived(false) } },
     { key: 'inactive', label: 'Inactive (this page)', value: inactiveThisPage, icon: Landmark, iconBg: 'bg-red-50 dark:bg-red-500/10', iconColor: 'text-red-600 dark:text-red-400', isActive: false, onClick: () => setShowArchived(false) },
     { key: 'archived', label: 'Archived', value: showArchived ? meta.total : '—', icon: Archive, iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-500 dark:text-slate-400', isActive: showArchived, onClick: () => setShowArchived(true) },
   ]
@@ -144,7 +147,18 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
           <h1 className="text-xl font-bold tracking-tight text-ink">{title}</h1>
           <p className="mt-1 text-xs text-muted">Manage bank and cash accounts used for collections and disbursements.</p>
         </div>
-        <Button variant="primary" size="sm" icon={Plus} onClick={openAdd}>Add Cash Account</Button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setRevealBalances(r => !r)}
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs text-muted hover:text-ink transition-colors duration-150"
+            title={revealBalances ? 'Hide balances' : 'Show balances'}
+          >
+            {revealBalances ? <EyeOff size={13} /> : <Eye size={13} />}
+            {revealBalances ? 'Hide Balances' : 'Show Balances'}
+          </button>
+          <Button variant="primary" size="sm" icon={Plus} onClick={openAdd}>Add Cash Account</Button>
+        </div>
       </div>
 
       {error && (
@@ -159,12 +173,12 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
               key={card.key}
               type="button"
               onClick={card.onClick}
-              className={`${PANEL} ${PANEL_PAD} flex items-center gap-3 text-left cursor-pointer
+              className={`${PANEL} ${PANEL_PAD} flex items-center gap-2.5 text-left cursor-pointer
                 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0
                 ${card.isActive ? 'ring-2 ring-primary/50 border-primary/50' : ''}`}
             >
-              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${card.iconBg}`}>
-                <Icon size={18} className={card.iconColor} />
+              <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${card.iconBg}`}>
+                <Icon size={15} className={card.iconColor} />
               </div>
               <div className="min-w-0">
                 <p className="text-xs text-muted">{card.label}</p>
@@ -191,9 +205,9 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
       </div>
 
       <div className={PANEL}>
-        <div className="overflow-x-auto overflow-y-auto max-h-[70vh] rounded-t-xl">
+        <div className="overflow-hidden rounded-t-xl">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-surface" border-border rounded-lg>
+            <thead className="bg-surface">
               <tr className="border-b border-border">
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Account</th>
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Type</th>
@@ -244,7 +258,9 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
                       </div>
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap text-ink">{a.account_type}</td>
-                    <td className="px-4 py-3.5 whitespace-nowrap font-medium tabular-nums text-ink">{formatCurrency(a.current_balance)}</td>
+                    <td className="px-4 py-3.5 whitespace-nowrap font-medium tabular-nums text-ink">
+                      {revealBalances ? formatCurrency(a.current_balance) : '₱ ••••••'}
+                    </td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[a.status]}`}>{a.status}</span>
                     </td>

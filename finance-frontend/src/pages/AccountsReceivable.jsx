@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, Receipt, Wallet, AlertTriangle, Info, Printer, Upload, ScanLine, X, CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, Receipt, Wallet, AlertTriangle, Info, Printer, Upload, ScanLine, X, CheckCircle2, ChevronLeft, ChevronRight, FileText, Paperclip } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
@@ -10,11 +10,15 @@ import { apiFetch } from '../utils/api'
 import { usePermissions } from '../context/PermissionsContext'
 import { useProfileContext } from '../context/ProfileContext'
 import { useHighlightRow } from '../hooks/useHighlightRow'
+import AccountsReceivableDocumentModal from '../components/AccountsReceivableDocumentModal'
+import StatementOfAccountModal from '../components/StatementOfAccountModal'
 
 const PAYMENT_METHODS = ['Bank Transfer', 'Check', 'Cash', 'Credit Card', 'GCash']
 const STATUS_OPTIONS = ['Pending', 'Partially Paid', 'Paid', 'Overdue', 'Cancelled']
 const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+const ACCEPTED_DOCUMENT_TYPES = [...ACCEPTED_IMAGE_TYPES, 'application/pdf']
 const MAX_IMAGE_MB = 8
+const MAX_DOC_MB = 10
 const PAGE_SIZE = 10
 
 // Hide the edit button for settled invoices. Only 'Paid' is considered
@@ -119,7 +123,7 @@ function DetailRow({ label, value }) {
 // Upload + scan panel shown at the top of the Add/Edit form. Owns its own
 // image/drag-state; calls onScanned(fields) once the "scan" resolves so the
 // parent form can be auto-filled.
-function InvoiceScanUpload({ onScanned }) {
+function InvoiceScanUpload({ onScanned, onFileSelected, onClear }) {
   const [preview, setPreview] = useState(null)
   const [dragOver, setDragOver] = useState(false)
   const [error, setError] = useState('')
@@ -128,15 +132,20 @@ function InvoiceScanUpload({ onScanned }) {
 
   const processFile = (file) => {
     if (!file) return
-    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
-      setError('Please upload a JPG, PNG, or WEBP photo or scan of the invoice.')
+    if (!ACCEPTED_DOCUMENT_TYPES.includes(file.type)) {
+      setError('Please upload a JPG, PNG, WEBP, or PDF document.')
       return
     }
-    if (file.size > MAX_IMAGE_MB * 1024 * 1024) {
-      setError(`Image must be under ${MAX_IMAGE_MB}MB.`)
+    if (file.size > MAX_DOC_MB * 1024 * 1024) {
+      setError(`File must be under ${MAX_DOC_MB}MB.`)
       return
     }
     setError('')
+    if (file.type === 'application/pdf') {
+      setPreview('pdf')
+      runScan(file)
+      return
+    }
     setStatus('idle')
     const reader = new FileReader()
     reader.onload = () => {
@@ -156,12 +165,15 @@ function InvoiceScanUpload({ onScanned }) {
       const json = await res.json()
 
       if (!res.ok || !json.success) {
-        setError(json.message || "Couldn't read this image. Please fill in the details manually.")
+        setError(json.message || "Couldn't read this document. Please upload a valid invoice or receipt.")
         setStatus('idle')
         setPreview(null)
+        if (inputRef.current) inputRef.current.value = ''
+        onClear?.()
         return
       }
 
+      onFileSelected?.(file)
       onScanned({
         invoice_number: json.data.invoice_number || '',
         invoice_date: json.data.invoice_date || '',
@@ -172,9 +184,11 @@ function InvoiceScanUpload({ onScanned }) {
       })
       setStatus('done')
     } catch (err) {
-      setError('Failed to reach the scan service. Please fill in the details manually.')
+      setError('Failed to reach the scan service. Please try again.')
       setStatus('idle')
       setPreview(null)
+      if (inputRef.current) inputRef.current.value = ''
+      onClear?.()
     }
   }
 
@@ -183,13 +197,17 @@ function InvoiceScanUpload({ onScanned }) {
     setStatus('idle')
     setError('')
     if (inputRef.current) inputRef.current.value = ''
+    onClear?.()
   }
 
   return (
     <div className="rounded-lg border border-dashed border-primary/40 bg-primary/5 p-3 space-y-2.5">
       <div className="flex items-center gap-2">
         <ScanLine size={15} className="text-primary-dark shrink-0" />
-        <p className="text-xs font-semibold text-ink">Upload invoice photo to auto-fill this form</p>
+        <p className="text-xs font-semibold text-ink">
+          Supporting Document <span className="text-red-500 dark:text-red-400">*</span>
+          <span className="font-normal text-muted ml-1">— upload image or PDF to auto-fill</span>
+        </p>
       </div>
 
       {!preview ? (
@@ -203,14 +221,20 @@ function InvoiceScanUpload({ onScanned }) {
         >
           <Upload size={18} className="text-muted" />
           <p className="text-xs text-ink font-medium">
-            Drag & drop, or <span className="text-primary-dark underline">browse</span>
+            Drag &amp; drop, or <span className="text-primary-dark underline">browse</span>
           </p>
-          <p className="text-[11px] text-muted">JPG, PNG or WEBP, up to {MAX_IMAGE_MB}MB</p>
-          <input ref={inputRef} type="file" accept={ACCEPTED_IMAGE_TYPES.join(',')} onChange={(e) => processFile(e.target.files?.[0])} className="hidden" />
+          <p className="text-[11px] text-muted">JPG, PNG, WEBP or PDF, up to {MAX_DOC_MB}MB</p>
+          <input ref={inputRef} type="file" accept={ACCEPTED_DOCUMENT_TYPES.join(',')} onChange={(e) => processFile(e.target.files?.[0])} className="hidden" />
         </div>
       ) : (
         <div className="flex items-center gap-3 rounded-lg border border-border bg-bg p-2">
-          <img src={preview} alt="Invoice preview" className="h-14 w-14 rounded-md object-cover shrink-0 border border-border" />
+          {preview === 'pdf' ? (
+            <div className="h-14 w-14 rounded-md shrink-0 border border-border bg-red-50 dark:bg-red-500/10 flex items-center justify-center">
+              <FileText size={24} className="text-red-500 dark:text-red-400" />
+            </div>
+          ) : (
+            <img src={preview} alt="Invoice preview" className="h-14 w-14 rounded-md object-cover shrink-0 border border-border" />
+          )}
           <div className="min-w-0 flex-1">
             {status === 'scanning' && (
               <p className="flex items-center gap-1.5 text-xs text-muted">
@@ -219,16 +243,16 @@ function InvoiceScanUpload({ onScanned }) {
                   <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.15s]" />
                   <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce" />
                 </span>
-                Reading invoice details...
+                {preview === 'pdf' ? 'Inspecting PDF document...' : 'Reading invoice details...'}
               </p>
             )}
             {status === 'done' && (
               <p className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-                <CheckCircle2 size={13} /> Fields filled below — please review before saving
+                <CheckCircle2 size={13} /> {preview === 'pdf' ? 'PDF verified & fields filled below — please review' : 'Fields filled below — please review before saving'}
               </p>
             )}
           </div>
-          <button type="button" onClick={clearImage} aria-label="Remove image" className="shrink-0 flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-surface hover:text-ink transition-colors duration-150">
+          <button type="button" onClick={clearImage} aria-label="Remove file" className="shrink-0 flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-surface hover:text-ink transition-colors duration-150">
             <X size={14} />
           </button>
         </div>
@@ -240,7 +264,22 @@ function InvoiceScanUpload({ onScanned }) {
 }
 
 export default function AccountsReceivable({ title = 'Accounts Receivable', crumbs = ['Financial Transactions', 'Accounts Receivable'] }) {
-  const { records, loading, saving, error, fetchRecords, createRecord, updateRecord, toggleArchive } = useAccountsReceivable()
+  const {
+    records,
+    loading,
+    saving,
+    error,
+    fetchRecords,
+    createRecord,
+    updateRecord,
+    toggleArchive,
+    attachDocument,
+    fetchDocumentHistory,
+    viewDocument,
+    fetchAgingSummary,
+    fetchCustomerSoa,
+    fetchBatchSoa,
+  } = useAccountsReceivable()
   const { hasPermission } = usePermissions()
   const { profile } = useProfileContext()
   // Admin-only gate for archiving/restoring invoices: in corporate finance systems,
@@ -283,6 +322,9 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
   const [invoiceCollectionsLoading, setInvoiceCollectionsLoading] = useState(false)
   const [invoiceAuditLogs, setInvoiceAuditLogs] = useState([])
   const [invoiceAuditLogsLoading, setInvoiceAuditLogsLoading] = useState(false)
+  const [attachmentFile, setAttachmentFile] = useState(null)
+  const [documentTarget, setDocumentTarget] = useState(null)
+  const [showSoaModal, setShowSoaModal] = useState(false)
 
   const validateDate = (field, value) => {
     if (!value) {
@@ -391,7 +433,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
     setDateErrors({ invoice_date: '', due_date: '' })
     setModalMode(r)
   }
-  const closeModal = () => { setModalMode(null); setFieldErrors({}); setServerError(''); setDateErrors({ invoice_date: '', due_date: '' }) }
+  const closeModal = () => { setModalMode(null); setFieldErrors({}); setServerError(''); setDateErrors({ invoice_date: '', due_date: '' }); setAttachmentFile(null) }
   const openDetail = (r) => {
     setDetailRecord(r)
     setInvoiceCollections([])
@@ -521,6 +563,11 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
         errors.reference_no = `Reference number is already used by invoice ${dup.invoice_number}.`
       }
     }
+
+    if (modalMode === 'add' && !attachmentFile) {
+      errors.document = 'A supporting document (signed invoice or delivery receipt scan/PDF) is required.'
+    }
+
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors)
       return
@@ -545,9 +592,15 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
       status: form.status,
     }
 
-    const result = modalMode === 'add'
-      ? await createRecord(payload)
-      : await updateRecord(modalMode.ar_id, payload)
+    let result
+    if (modalMode === 'add') {
+      const fd = new FormData()
+      Object.entries(payload).forEach(([k, v]) => { if (v != null) fd.append(k, v) })
+      fd.append('document', attachmentFile)
+      result = await createRecord(fd)
+    } else {
+      result = await updateRecord(modalMode.ar_id, payload)
+    }
 
     if (!result.success) {
       setServerError(result.message || 'Failed to save invoice.')
@@ -575,9 +628,12 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
           <h1 className="text-xl font-bold tracking-tight text-ink">{title}</h1>
           <p className="mt-1 text-xs text-muted">Track customer invoices, balances, and aging.</p>
         </div>
-        {/* Add Invoice hidden entirely for view-only roles (Collector) —
-            the backend POST route requires ar.manage, which they don't have. */}
-        {canManage && <Button variant="primary" size="sm" icon={Plus} onClick={openAdd}>Add Invoice</Button>}
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" size="sm" icon={FileText} onClick={() => setShowSoaModal(true)}>Customer Aging &amp; SOA</Button>
+          {/* Add Invoice hidden entirely for view-only roles (Collector) —
+              the backend POST route requires ar.manage, which they don't have. */}
+          {canManage && <Button variant="primary" size="sm" icon={Plus} onClick={openAdd}>Add Invoice</Button>}
+        </div>
       </div>
 
       {error && (
@@ -594,12 +650,12 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
               key={card.key}
               type="button"
               onClick={card.onClick}
-              className={`${PANEL} ${PANEL_PAD} flex items-center gap-3 text-left cursor-pointer
+              className={`${PANEL} ${PANEL_PAD} flex items-center gap-2.5 text-left cursor-pointer
                 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0
                 ${card.isActive ? 'ring-2 ring-primary/50 border-primary/50' : ''}`}
             >
-              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${card.iconBg}`}>
-                <Icon size={18} className={card.iconColor} />
+              <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${card.iconBg}`}>
+                <Icon size={15} className={card.iconColor} />
               </div>
               <div className="min-w-0">
                 <p className="text-xs text-muted">{card.label}</p>
@@ -626,9 +682,9 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
       </div>
 
       <div className={PANEL}>
-        <div className="overflow-x-auto overflow-y-auto max-h-[70vh] rounded-t-xl">
+        <div className="overflow-hidden rounded-t-xl">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-surface">
+            <thead className="bg-surface">
               <tr className="border-b border-border">
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Invoice</th>
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Customer / Collector</th>
@@ -696,6 +752,19 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                           <Printer size={15} />
                         </button>
                       </Tooltip>
+                      <Tooltip label={r.has_attachment ? 'View / manage documents' : 'Attach document'} align="start">
+                        <button
+                          type="button"
+                          onClick={() => setDocumentTarget(r)}
+                          className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors duration-150 ${
+                            r.has_attachment
+                              ? 'text-primary-dark hover:bg-primary/10'
+                              : 'text-muted hover:bg-bg hover:text-ink'
+                          }`}
+                        >
+                          <Paperclip size={15} />
+                        </button>
+                      </Tooltip>
                       {/* Edit hits an ar.manage-gated route — hidden for
                           view-only roles (Collector) and also hidden once a
                           record is Paid/Cancelled (locked status). */}
@@ -706,7 +775,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                           </button>
                         </Tooltip>
                       )}
-                      {isAdmin && (
+                      {isAdmin && (r.is_archived || ['Paid', 'Cancelled'].includes(r.status)) && (
                         <Tooltip label={r.is_archived ? 'Restore invoice' : 'Archive invoice'} align="end">
                           <button type="button" onClick={() => handleToggleArchive(r.ar_id)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                             {r.is_archived ? <RotateCcw size={15} /> : <Archive size={15} />}
@@ -778,7 +847,18 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{serverError}</div>
           )}
 
-          {!isEditing && <InvoiceScanUpload onScanned={handleScanned} />}
+          {!isEditing && (
+            <>
+              <InvoiceScanUpload
+                onScanned={handleScanned}
+                onFileSelected={(f) => { setAttachmentFile(f); setFieldErrors((fe) => ({ ...fe, document: '' })) }}
+                onClear={() => setAttachmentFile(null)}
+              />
+              {fieldErrors.document && (
+                <p className="text-xs text-red-500 dark:text-red-400 -mt-2">{fieldErrors.document}</p>
+              )}
+            </>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -995,6 +1075,12 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
           </div>
 
           {isEditing && (
+            <p className="text-xs text-muted">
+              To attach a supporting document (signed invoice or delivery receipt), use the <Paperclip size={12} className="inline" /> icon on the invoice row.
+            </p>
+          )}
+
+          {isEditing && (
             <div className="rounded-lg border border-border bg-bg px-3 py-2.5">
               <p className="text-xs font-medium text-muted mb-1">Record Info (read-only)</p>
               <DetailRow label="Created by" value={userName(modalMode.created_by)} />
@@ -1020,7 +1106,10 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
           <>
             <Button variant="secondary" size="md" onClick={closeDetail}>Close</Button>
             {detailRecord && (
-              <Button variant="primary" size="md" icon={Printer} onClick={() => handlePrint(detailRecord)}>Print Invoice</Button>
+              <>
+                <Button variant="secondary" size="md" icon={Paperclip} onClick={() => setDocumentTarget(detailRecord)}>Documents</Button>
+                <Button variant="primary" size="md" icon={Printer} onClick={() => handlePrint(detailRecord)}>Print Invoice</Button>
+              </>
             )}
           </>
         }
@@ -1135,6 +1224,24 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
           </div>
         )}
       </Modal>
+
+      <AccountsReceivableDocumentModal
+        open={Boolean(documentTarget)}
+        onClose={() => setDocumentTarget(null)}
+        invoice={documentTarget}
+        fetchHistory={fetchDocumentHistory}
+        onUpload={(f) => attachDocument(documentTarget.ar_id, f)}
+        onView={viewDocument}
+        onUploaded={fetchRecords}
+      />
+
+      <StatementOfAccountModal
+        open={showSoaModal}
+        onClose={() => setShowSoaModal(false)}
+        fetchAgingSummary={fetchAgingSummary}
+        fetchCustomerSoa={fetchCustomerSoa}
+        fetchBatchSoa={fetchBatchSoa}
+      />
     </div>
   )
 }

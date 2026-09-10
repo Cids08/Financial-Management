@@ -81,10 +81,11 @@ export function useAccountsPayable() {
     setSuppliersLoading(true)
     setSuppliersError(null)
     try {
-      const res = await apiFetch('/api/suppliers')
+      const res = await apiFetch('/api/suppliers?per_page=500')
       const json = await res.json()
       if (!res.ok || !json.success) throw new Error(json.message || 'Failed to load suppliers.')
-      setSuppliers(json.data)
+      const list = Array.isArray(json.data) ? json.data : (json.data?.data ?? [])
+      setSuppliers(list)
     } catch (err) {
       setSuppliersError(err.message)
     } finally {
@@ -139,15 +140,19 @@ export function useAccountsPayable() {
     setFormSaving(true)
     setFormError(null)
     try {
+      const isFormData = fields instanceof FormData
       const res = await apiFetch('/api/accounts-payable', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(fields),
+        ...(isFormData ? {} : { headers: { 'Content-Type': 'application/json' } }),
+        body: isFormData ? fields : JSON.stringify(fields),
       })
       const json = await res.json()
-      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to add bill.')
+      if (!res.ok || !json.success) {
+        const firstError = json.errors ? Object.values(json.errors)[0]?.[0] : json.message
+        throw new Error(firstError || json.message || 'Failed to add bill.')
+      }
       await refetchAll()
-      return { success: true }
+      return { success: true, bill: json.data }
     } catch (err) {
       setFormError(err.message)
       return { success: false, message: err.message }
@@ -232,6 +237,26 @@ export function useAccountsPayable() {
     }
   }, [fetchBills, fetchStats])
 
+  const rejectBill = useCallback(async (apId, reason = '') => {
+    setActionBusyId(apId)
+    setBillsError(null)
+    try {
+      const res = await apiFetch(`/api/accounts-payable/${apId}/reject`, {
+        method: 'PATCH',
+        body: JSON.stringify({ reason: reason || null }),
+      })
+      const json = await res.json()
+      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to reject bill.')
+      await Promise.all([fetchBills(), fetchStats()])
+      return { success: true, bill: json.data }
+    } catch (err) {
+      setBillsError(err.message)
+      return { success: false, message: err.message }
+    } finally {
+      setActionBusyId(null)
+    }
+  }, [fetchBills, fetchStats])
+
   // Attach a supporting document to a bill. multipart/form-data — apiFetch
   // must not set a Content-Type header itself (same as BillScanUpload's
   // /api/invoices/scan call) so the browser sets the multipart boundary.
@@ -286,6 +311,51 @@ export function useAccountsPayable() {
     }
   }, [])
 
+  // ---------------------------------------------------------------------------
+  // Payment Wizard — Automated Batch Payment Run
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Fetch approved bills eligible for payment.
+   * @param {{ horizon?: number, supplier_id?: number|null }} filters
+   */
+  const fetchPaymentProposals = useCallback(async (filters = {}) => {
+    try {
+      const params = new URLSearchParams()
+      if (filters.horizon) params.set('horizon', filters.horizon)
+      if (filters.supplier_id) params.set('supplier_id', filters.supplier_id)
+      const res = await apiFetch(`/api/accounts-payable/payment-proposals?${params.toString()}`)
+      const json = await res.json()
+      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to load proposals.')
+      return { success: true, data: json.data }
+    } catch (err) {
+      return { success: false, message: err.message || 'Network error.' }
+    }
+  }, [])
+
+  /**
+   * Execute a Payment Run — creates pending disbursements for selected proposals.
+   * @param {{ cash_account_id: number, payment_method: string, payment_date: string, proposals: Array }} payload
+   */
+  const executePaymentRun = useCallback(async (payload) => {
+    try {
+      const res = await apiFetch('/api/accounts-payable/execute-payment-run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const json = await res.json()
+      if (!res.ok || !json.success) {
+        const firstError = json.errors ? Object.values(json.errors)[0]?.[0] : json.message
+        throw new Error(firstError || json.message || 'Payment run failed.')
+      }
+      await refetchAll()
+      return { success: true, data: json.data, message: json.message }
+    } catch (err) {
+      return { success: false, message: err.message || 'Network error.' }
+    }
+  }, [refetchAll])
+
   return {
     bills,
     archivedBills,
@@ -307,10 +377,13 @@ export function useAccountsPayable() {
     archiveBill,
     restoreBill,
     approveBill,
+    rejectBill,
     fetchBillAuditLogs,
     attachDocument,
     fetchDocumentHistory,
     viewDocument,
+    fetchPaymentProposals,
+    executePaymentRun,
     refetch: refetchAll,
   }
 }

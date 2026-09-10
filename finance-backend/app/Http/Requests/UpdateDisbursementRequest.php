@@ -36,4 +36,24 @@ class UpdateDisbursementRequest extends FormRequest
             'remarks' => ['nullable', 'string', 'max:2000'],
         ];
     }
+
+    public function withValidator(\Illuminate\Contracts\Validation\Validator $validator): void
+    {
+        $validator->after(function ($validator) {
+            $disbursement = $this->route('disbursement');
+            $cashAccountId = $this->input('cash_account_id', $disbursement?->cash_account_id);
+            $amount = $this->has('amount_paid') ? (float) $this->input('amount_paid') : (float) ($disbursement?->amount_paid ?? 0);
+
+            if ($cashAccountId && $amount > 0) {
+                $cashAccount = \App\Models\CashAccount::find($cashAccountId);
+
+                if ($cashAccount && $amount > (float) $cashAccount->current_balance) {
+                    $validator->errors()->add(
+                        'amount_paid',
+                        'Amount exceeds available funds in the selected cash account.'
+                    );
+                }
+            }
+        });
+    }
 }

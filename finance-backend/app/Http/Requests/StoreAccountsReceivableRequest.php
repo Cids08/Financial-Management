@@ -43,6 +43,17 @@ class StoreAccountsReceivableRequest extends FormRequest
             'penalty_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'remarks' => ['nullable', 'string'],
             'status' => ['required', 'string', Rule::in(self::STATUSES)],
+            'document' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'document.required' => 'A supporting document (signed invoice or delivery receipt scan/PDF) is strictly required to create an invoice.',
+            'document.file' => 'The supporting document must be a valid file.',
+            'document.mimes' => 'The supporting document must be a file of type: pdf, jpg, jpeg, png, webp.',
+            'document.max' => 'The supporting document cannot exceed 10MB in size.',
         ];
     }
 }

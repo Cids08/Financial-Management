@@ -537,7 +537,7 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                     </PieChart>
                   </ChartPanel>
                 </div>
-              <div className="overflow-x-auto">
+              <div className="overflow-hidden rounded-t-xl">
                 <table className="w-full text-sm">
                   <tbody>
                     <tr className="border-b border-border bg-bg/60">
@@ -602,7 +602,7 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                     </ComposedChart>
                   </ChartPanel>
                 </div>
-              <div className="overflow-x-auto">
+              <div className="overflow-hidden rounded-t-xl">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border">
@@ -673,7 +673,7 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                     </PieChart>
                   </ChartPanel>
                 </div>
-              <div className="overflow-x-auto">
+              <div className="overflow-hidden rounded-t-xl">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border">
@@ -746,7 +746,7 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                     </PieChart>
                   </ChartPanel>
                 </div>
-              <div className="overflow-x-auto">
+              <div className="overflow-hidden rounded-t-xl">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border">
@@ -813,7 +813,7 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                     </PieChart>
                   </ChartPanel>
                 </div>
-              <div className="overflow-x-auto">
+              <div className="overflow-hidden rounded-t-xl">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border">

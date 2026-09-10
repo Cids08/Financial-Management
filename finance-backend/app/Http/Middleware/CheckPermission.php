@@ -29,7 +29,8 @@ class CheckPermission
             ], 401);
         }
 
-        if (! $user->hasPermission($permission)) {
+        $permissions = explode('|', $permission);
+        if (! $user->hasAnyPermission($permissions)) {
             return response()->json([
                 'success' => false,
                 'message' => 'You do not have permission to perform this action.',

@@ -29,19 +29,18 @@ class InvoiceOcrService
      * to be considered plausible — real documents are noisy/OCR is imperfect.
      */
     protected const RECEIPT_KEYWORDS = [
-        'invoice', 'receipt', 'bill', 'total', 'amount', 'due', 'date',
+        'invoice', 'receipt', 'bill', 'billing', 'total', 'amount', 'due', 'date',
         'qty', 'quantity', 'subtotal', 'vat', 'tax', 'payment', 'balance',
-        'php', '₱', 'reference', 'po no', 'purchase order',
+        'php', '₱', 'reference', 'po no', 'purchase order', 'statement of account',
+        'soa', 'sales invoice', 'official receipt', 'delivery receipt', 'remittance',
+        'description', 'unit price', 'amount due', 'vendor', 'supplier', 'customer',
     ];
 
     protected const MIN_KEYWORD_MATCHES = 2;
 
     /**
      * Phrases strongly associated with bank/e-wallet transfer confirmation
-     * screens rather than vendor invoices or receipts. These share a lot
-     * of vocabulary with real invoices (total, amount, reference number),
-     * so a keyword-only check can't tell them apart — this list catches
-     * the transfer-specific wording those screens almost always carry.
+     * screens rather than vendor invoices or receipts.
      */
     protected const TRANSFER_EXCLUSION_KEYWORDS = [
         'transfer successful', 'transfer result', 'transfer fee',
@@ -52,8 +51,6 @@ class InvoiceOcrService
 
     /**
      * Technical diagrams, database schemas, ERDs, code screenshots, etc.
-     * Often contain column names like "invoice_number", "amount", "date",
-     * which fools naive keyword matching.
      */
     protected const DIAGRAM_EXCLUSION_KEYWORDS = [
         'varchar', 'primary key', 'foreign key', 'database', 'schema',
@@ -69,14 +66,26 @@ class InvoiceOcrService
     ];
 
     /**
+     * Academic papers, resumes, essays, homework, or general documents
+     * that are clearly not invoices, bills, or official receipts.
+     */
+    protected const ACADEMIC_EXCLUSION_KEYWORDS = [
+        'curriculum vitae', 'resume', 'abstract', 'introduction', 'methodology',
+        'dissertation', 'thesis', 'literature review', 'bibliography', 'syllabus',
+        'homework', 'assignment 1', 'assignment 2', 'term paper', 'student id',
+        'course code', 'course title', 'instructor', 'professor', 'final exam',
+        'midterm exam', 'lecture notes', 'table of contents',
+    ];
+
+    /**
      * Returns:
      *   [
      *     'is_receipt' => bool,
      *     'message' => ?string,
      *     'raw_text' => string,
      *     'invoice_number' => ?string,
-     *     'date' => ?string,        // Y-m-d if found
-     *     'due_date' => ?string,    // Y-m-d if found
+     *     'date' => ?string,
+     *     'due_date' => ?string,
      *     'amount' => ?float,
      *     'reference_no' => ?string,
      *   ]
@@ -97,6 +106,39 @@ class InvoiceOcrService
             $text = '';
         }
 
+        return $this->evaluateExtractedText($text, 'image');
+    }
+
+    /**
+     * Inspect and extract text from a PDF document to determine if it's
+     * a genuine invoice, bill, or receipt.
+     */
+    public function scanPdf(UploadedFile $pdf): array
+    {
+        $text = $this->extractTextFromPdf($pdf->getRealPath());
+
+        if (empty(trim($text))) {
+            return [
+                'is_receipt' => false,
+                'message' => 'The PDF appears to be empty, encrypted, or contains no readable text or invoice image.',
+                'raw_text' => '',
+                'invoice_number' => null,
+                'date' => null,
+                'due_date' => null,
+                'amount' => null,
+                'reference_no' => null,
+            ];
+        }
+
+        return $this->evaluateExtractedText($text, 'PDF document');
+    }
+
+    /**
+     * Shared evaluation logic to verify whether extracted text represents
+     * a valid invoice, bill, or receipt, rather than unrelated content.
+     */
+    protected function evaluateExtractedText(string $text, string $docType = 'document'): array
+    {
         $normalized = strtolower($text);
 
         $looksLikeDiagram = false;
@@ -115,6 +157,14 @@ class InvoiceOcrService
             }
         }
 
+        $looksLikeAcademic = false;
+        foreach (self::ACADEMIC_EXCLUSION_KEYWORDS as $keyword) {
+            if (str_contains($normalized, strtolower($keyword))) {
+                $looksLikeAcademic = true;
+                break;
+            }
+        }
+
         $matches = 0;
         foreach (self::RECEIPT_KEYWORDS as $keyword) {
             if (str_contains($normalized, $keyword)) {
@@ -129,21 +179,24 @@ class InvoiceOcrService
         $hasCoreKeyword = str_contains($normalized, 'invoice')
             || str_contains($normalized, 'receipt')
             || str_contains($normalized, 'bill')
-            || str_contains($normalized, 'total');
+            || str_contains($normalized, 'billing')
+            || str_contains($normalized, 'total')
+            || str_contains($normalized, 'statement')
+            || str_contains($normalized, 'soa')
+            || str_contains($normalized, 'amount due')
+            || str_contains($normalized, 'delivery receipt');
 
         $isReceipt = false;
         $message = null;
 
         if ($looksLikeDiagram) {
-            $message = "This image appears to be a database schema or technical diagram, not a valid invoice or receipt.";
+            $message = "This {$docType} appears to be a database schema or technical diagram, not a valid invoice or receipt.";
         } elseif ($looksLikeTransfer) {
-            $message = "This image appears to be an e-wallet or bank transfer confirmation, not an official vendor invoice.";
+            $message = "This {$docType} appears to be an e-wallet or bank transfer confirmation, not an official vendor invoice.";
+        } elseif ($looksLikeAcademic) {
+            $message = "This {$docType} appears to be an academic paper, resume, or unrelated document, not a valid invoice or receipt.";
         } elseif ($matches < self::MIN_KEYWORD_MATCHES || ! $hasCoreKeyword) {
-            $message = "This doesn't look like an invoice or receipt — please upload a clearer photo or bill.";
-        } elseif ($invoiceNumber === null) {
-            $message = "No valid invoice or receipt number could be detected on this document.";
-        } elseif ($amount === null && $date === null) {
-            $message = "Could not detect billing amount or transaction date. Please fill in the details manually.";
+            $message = "This {$docType} does not contain invoice or receipt information (no billing keywords found). Please attach a valid supporting document.";
         } else {
             $isReceipt = true;
         }
@@ -154,10 +207,108 @@ class InvoiceOcrService
             'raw_text' => $text,
             'invoice_number' => $isReceipt ? $invoiceNumber : null,
             'date' => $isReceipt ? $date : null,
-            'due_date' => null, // rarely distinguishable from issue date via OCR alone
+            'due_date' => null,
             'amount' => $isReceipt ? $amount : null,
             'reference_no' => $isReceipt ? $this->extractReferenceNumber($text) : null,
         ];
+    }
+
+    /**
+     * Extracts text from digital and scanned PDF files in pure PHP.
+     */
+    public function extractTextFromPdf(string $pdfPath): string
+    {
+        if (! file_exists($pdfPath) || filesize($pdfPath) === 0) {
+            return '';
+        }
+
+        $content = @file_get_contents($pdfPath);
+        if ($content === false) {
+            return '';
+        }
+
+        $text = '';
+
+        // 1. Decompress and parse /FlateDecode and raw text streams
+        if (preg_match_all('/stream[\r\n]+(.*?)[\r\n]+endstream/s', $content, $streamMatches)) {
+            foreach ($streamMatches[1] as $streamData) {
+                $decompressed = @gzuncompress($streamData);
+                if ($decompressed === false) {
+                    $decompressed = $streamData;
+                }
+
+                // Extract text operators: (string) Tj, [(str)(ing)] TJ, etc.
+                if (preg_match_all('/(?:\((?:\\\\.|[^\\\\\)])*\)|\[(?:[^\]]*)\])\s*(?:Tj|TJ|\'|\")/s', $decompressed, $textMatches)) {
+                    foreach ($textMatches[0] as $match) {
+                        if (preg_match_all('/\((.*?)\)/s', $match, $strMatches)) {
+                            foreach ($strMatches[1] as $str) {
+                                $text .= ' ' . stripcslashes($str);
+                            }
+                        }
+                    }
+                }
+
+                // Also inspect text inside BT ... ET blocks
+                if (preg_match_all('/BT[\r\n]+(.*?)[\r\n]+ET/s', $decompressed, $btMatches)) {
+                    foreach ($btMatches[1] as $bt) {
+                        if (preg_match_all('/\((.*?)\)/s', $bt, $strMatches)) {
+                            foreach ($strMatches[1] as $str) {
+                                $text .= ' ' . stripcslashes($str);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Fallback for raw text strings in the PDF container
+        if (trim($text) === '') {
+            if (preg_match_all('/\(([A-Za-z0-9\s,.\-:\/₱]{3,100})\)/', $content, $rawMatches)) {
+                $text = implode(' ', $rawMatches[1]);
+            }
+        }
+
+        // 3. Fallback for scanned PDFs (embedded JPEG images)
+        if (trim($text) === '' && class_exists(TesseractOCR::class)) {
+            $extractedImage = $this->extractFirstJpegFromPdf($content);
+            if ($extractedImage) {
+                $tempPath = tempnam(sys_get_temp_dir(), 'pdf_ocr_') . '.jpg';
+                file_put_contents($tempPath, $extractedImage);
+                try {
+                    $ocr = new TesseractOCR($tempPath);
+                    if ($executable = config('services.tesseract.executable')) {
+                        $ocr->executable($executable);
+                    }
+                    $ocr->timeout(20);
+                    $text = $ocr->lang('eng')->run();
+                } catch (\Throwable $e) {
+                    // Ignore OCR errors on fallback
+                } finally {
+                    @unlink($tempPath);
+                }
+            }
+        }
+
+        return trim($text);
+    }
+
+    /**
+     * Extracts an embedded JPEG from a scanned PDF stream.
+     */
+    protected function extractFirstJpegFromPdf(string $content): ?string
+    {
+        if (preg_match('/\/Filter\s*\/DCTDecode.*?stream[\r\n]+(.*?)[\r\n]+endstream/s', $content, $m)) {
+            $data = $m[1];
+            $soi = strpos($data, "\xFF\xD8\xFF");
+            if ($soi !== false) {
+                $eoi = strrpos($data, "\xFF\xD9");
+                if ($eoi !== false && $eoi > $soi) {
+                    return substr($data, $soi, $eoi - $soi + 2);
+                }
+                return substr($data, $soi);
+            }
+        }
+        return null;
     }
 
     protected function extractInvoiceNumber(string $text): ?string

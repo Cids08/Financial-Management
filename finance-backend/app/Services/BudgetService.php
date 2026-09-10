@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Budget;
+use App\Models\Department;
 use App\Models\Notification;
 use App\Models\SupportingDocument;
 use Illuminate\Http\UploadedFile;
@@ -19,6 +20,7 @@ class BudgetService
             'total' => (clone $active)->count(),
             'pending' => (clone $active)->where('status', 'Draft')->count(),
             'allocated' => (float) (clone $active)->sum('allocated_amount'),
+            'used' => (float) (clone $active)->sum('used_amount'),
             'remaining' => (float) (clone $active)->sum('remaining_amount'),
             'archived' => Budget::onlyTrashed()->count(),
         ];
@@ -53,6 +55,14 @@ class BudgetService
             });
         }
 
+        if (! empty($filters['date_from'])) {
+            $query->whereDate('end_date', '>=', $filters['date_from']);
+        }
+
+        if (! empty($filters['date_to'])) {
+            $query->whereDate('start_date', '<=', $filters['date_to']);
+        }
+
         if (! empty($filters['archived'])) {
             $query->onlyTrashed();
         }
@@ -62,6 +72,75 @@ class BudgetService
 
     public function create(array $data, int $userId): Budget
     {
+        $existing = Budget::query()
+            ->where('department_id', $data['department_id'])
+            ->where('fiscal_year', (int) $data['fiscal_year'])
+            ->where('budget_type', 'ilike', trim($data['budget_type']))
+            ->whereIn('status', [Budget::STATUS_ACTIVE, Budget::STATUS_DRAFT, Budget::STATUS_CLOSED])
+            ->whereNull('deleted_at')
+            ->first();
+
+        if ($existing) {
+            throw ValidationException::withMessages([
+                'budget_type' => "A {$existing->budget_type} budget for this department for fiscal year {$data['fiscal_year']} already exists ({$existing->budget_name} [{$existing->budget_code}] - Status: {$existing->status}).",
+            ]);
+        }
+
+        if (empty($data['budget_code'])) {
+            $dept = Department::find($data['department_id']);
+            $abbr = 'DEPT';
+            if ($dept) {
+                $name = $dept->department_name;
+                if (stripos($name, 'finance') !== false) {
+                    $abbr = 'FIN';
+                } elseif (stripos($name, 'human') !== false || stripos($name, 'hr') !== false) {
+                    $abbr = 'HR';
+                } elseif (stripos($name, 'operation') !== false) {
+                    $abbr = 'OPS';
+                } elseif (stripos($name, 'marketing') !== false) {
+                    $abbr = 'MKT';
+                } elseif (stripos($name, 'legal') !== false) {
+                    $abbr = 'LGL';
+                } elseif (stripos($name, 'information') !== false || stripos($name, 'it') !== false) {
+                    $abbr = 'IT';
+                } elseif (stripos($name, 'accounting') !== false) {
+                    $abbr = 'ACC';
+                } elseif (stripos($name, 'admin') !== false) {
+                    $abbr = 'ADM';
+                } else {
+                    $words = preg_split('/\s+/', trim($name));
+                    $abbr = count($words) > 1
+                        ? strtoupper(substr($words[0], 0, 1) . substr($words[1], 0, 1))
+                        : strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $name), 0, 4));
+                }
+            }
+
+            $typeTag = '';
+            $bType = $data['budget_type'] ?? '';
+            if ($bType === 'Operational') {
+                $typeTag = '-OP';
+            } elseif ($bType === 'Capital') {
+                $typeTag = '-CAP';
+            } elseif ($bType === 'Project') {
+                $typeTag = '-PRJ';
+            } elseif ($bType === 'Emergency') {
+                $typeTag = '-EMG';
+            } elseif (! empty($bType)) {
+                $clean = strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $bType), 0, 3));
+                $typeTag = $clean ? "-{$clean}" : '';
+            }
+
+            $fy = $data['fiscal_year'];
+            $baseCode = "BUD-{$fy}-{$abbr}{$typeTag}";
+            $code = $baseCode;
+            $counter = 1;
+            while (Budget::where('budget_code', $code)->exists()) {
+                $code = sprintf('%s-%02d', $baseCode, $counter);
+                $counter++;
+            }
+            $data['budget_code'] = $code;
+        }
+
         return DB::transaction(fn () => Budget::create([
             ...$data,
             'used_amount' => 0,
@@ -167,6 +246,21 @@ class BudgetService
 
     public function restore(Budget $budget, int $userId): Budget
     {
+        $conflict = Budget::query()
+            ->where('department_id', $budget->department_id)
+            ->where('fiscal_year', (int) $budget->fiscal_year)
+            ->where('budget_type', 'ilike', trim($budget->budget_type))
+            ->whereIn('status', [Budget::STATUS_ACTIVE, Budget::STATUS_DRAFT, Budget::STATUS_CLOSED])
+            ->where('id', '!=', $budget->id)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if ($conflict) {
+            throw ValidationException::withMessages([
+                'budget' => "Cannot restore budget: a {$conflict->status} {$conflict->budget_type} budget for this department for fiscal year {$budget->fiscal_year} already exists ({$conflict->budget_name} [{$conflict->budget_code}]).",
+            ]);
+        }
+
         $budget->deleted_by = null;
         $budget->restore();
 

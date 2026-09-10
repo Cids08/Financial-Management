@@ -238,12 +238,12 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
               key={card.key}
               type="button"
               onClick={card.onClick}
-              className={`${PANEL} ${PANEL_PAD} flex items-center gap-3 text-left cursor-pointer
+              className={`${PANEL} ${PANEL_PAD} flex items-center gap-2.5 text-left cursor-pointer
                 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0
                 ${card.isActive ? 'ring-2 ring-primary/50 border-primary/50' : ''}`}
             >
-              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${card.iconBg}`}>
-                <Icon size={18} className={card.iconColor} />
+              <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${card.iconBg}`}>
+                <Icon size={15} className={card.iconColor} />
               </div>
               <div className="min-w-0">
                 <p className="text-xs text-muted">{card.label}</p>
@@ -274,9 +274,9 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
       )}
 
       <div className={PANEL}>
-        <div className="overflow-x-auto overflow-y-auto max-h-[70vh] rounded-t-xl">
+        <div className="overflow-hidden rounded-t-xl">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-surface">
+            <thead className="bg-surface">
               <tr className="border-b border-border">
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Supplier</th>
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Contact</th>

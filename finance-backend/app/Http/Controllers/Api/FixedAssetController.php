@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\ExecuteDepreciationRunRequest;
 use App\Http\Requests\StoreFixedAssetRequest;
 use App\Http\Requests\UpdateFixedAssetRequest;
 use App\Http\Resources\FixedAssetResource;
 use App\Models\FixedAsset;
+
 use App\Services\FixedAssetService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,6 +17,7 @@ class FixedAssetController extends Controller
 {
     public function __construct(protected FixedAssetService $fixedAssetService)
     {
+        FixedAssetService::ensureTableExists();
     }
 
     /**
@@ -91,5 +94,35 @@ class FixedAssetController extends Controller
             'message' => 'Asset restored.',
             'data'    => new FixedAssetResource($asset),
         ]);
+    }
+
+    /**
+     * GET /api/fixed-assets/depreciation-preview
+     * Preview periodic depreciation run calculations across eligible assets.
+     */
+    public function depreciationPreview(Request $request): JsonResponse
+    {
+        $preview = $this->fixedAssetService->getDepreciationPreview($request->all());
+
+        return response()->json([
+            'success' => true,
+            'message' => '',
+            'data'    => $preview,
+        ]);
+    }
+
+    /**
+     * POST /api/fixed-assets/execute-depreciation-run
+     * Execute periodic depreciation run, update assets, and post GL journal entry.
+     */
+    public function executeDepreciationRun(ExecuteDepreciationRunRequest $request): JsonResponse
+    {
+        $result = $this->fixedAssetService->executeDepreciationRun($request->user(), $request->validated());
+
+        return response()->json([
+            'success' => true,
+            'message' => "Depreciation run {$result['voucher_number']} executed successfully for {$result['assets_count']} asset(s).",
+            'data'    => $result,
+        ], 201);
     }
 }

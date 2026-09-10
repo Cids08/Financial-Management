@@ -231,6 +231,90 @@ export function useTaxObligations() {
     }
   }, [])
 
+  const calculateTaxBase = useCallback(async ({ tax_type, period_year, period_month, period_quarter }) => {
+    try {
+      const params = new URLSearchParams({
+        tax_type,
+        period_year: String(period_year),
+      })
+      if (period_month) params.set('period_month', String(period_month))
+      if (period_quarter) params.set('period_quarter', String(period_quarter))
+
+      const res = await apiFetch(`/api/tax-obligations/calculate-base?${params}`)
+      const json = await res.json()
+      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to auto-calculate tax base.')
+      return { success: true, data: json.data }
+    } catch (err) {
+      return { success: false, message: err.message }
+    }
+  }, [])
+
+  const recordTaxPayment = useCallback(async (obligationId, formData) => {
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await apiFetch(`/api/tax-obligations/${obligationId}/pay`, {
+        method: 'POST',
+        body: formData,
+      })
+      const json = await res.json()
+      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to record tax payment.')
+      await fetchObligations()
+      return { success: true, message: json.message, data: json.data }
+    } catch (err) {
+      setError(err.message)
+      return { success: false, message: err.message }
+    } finally {
+      setSaving(false)
+    }
+  }, [fetchObligations])
+
+  const generateTaxSchedule = useCallback(async (payload) => {
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await apiFetch('/api/tax-obligations/generate-schedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const json = await res.json()
+      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to generate tax schedule.')
+      await fetchObligations()
+      return { success: true, message: json.message, data: json.data }
+    } catch (err) {
+      setError(err.message)
+      return { success: false, message: err.message }
+    } finally {
+      setSaving(false)
+    }
+  }, [fetchObligations])
+
+  const batchRecordTaxPayment = useCallback(async (formData) => {
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await apiFetch('/api/tax-obligations/batch-pay', {
+        method: 'POST',
+        body: formData,
+      })
+      const json = await res.json()
+      if (!res.ok || !json.success) {
+        const msg = json.errors
+          ? Object.values(json.errors).flat()[0]
+          : json.message || 'Failed to record batch tax payment.'
+        throw new Error(msg)
+      }
+      await fetchObligations()
+      return { success: true, message: json.message, data: json.data }
+    } catch (err) {
+      setError(err.message)
+      return { success: false, message: err.message }
+    } finally {
+      setSaving(false)
+    }
+  }, [fetchObligations])
+
   return {
     obligations, meta, loading, saving, error,
     search, setSearch,
@@ -241,5 +325,6 @@ export function useTaxObligations() {
     page, setPage,
     createObligation, updateObligation, archiveObligation, restoreObligation,
     uploadDocument, fetchDocumentHistory, viewDocument,
+    calculateTaxBase, recordTaxPayment, batchRecordTaxPayment, generateTaxSchedule,
   }
 }

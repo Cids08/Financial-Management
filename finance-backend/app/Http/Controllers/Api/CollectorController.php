@@ -70,9 +70,12 @@ class CollectorController extends Controller
         $collector = $this->collectorService->create($request->user(), $request->validated());
 
         return response()->json([
-            'success' => true,
-            'message' => 'Collector added successfully.',
-            'data'    => new CollectorResource($collector),
+            'success'            => true,
+            'message'            => $collector->temporary_password
+                ? "Collector and user account added successfully."
+                : 'Collector added successfully.',
+            'data'               => new CollectorResource($collector),
+            'temporary_password' => $collector->temporary_password ?? null,
         ], 201);
     }
 

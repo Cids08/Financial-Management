@@ -135,14 +135,14 @@ const ForecastRow = memo(function ForecastRow({ forecast: f, showArchived, onVie
       onClick={() => onViewDetail(f)}
       className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150 cursor-pointer"
     >
-      <td className="px-4 py-3.5 whitespace-nowrap">
-        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${TYPE_STYLES[f.forecast_type] || 'bg-gray-100 text-muted'}`}>{f.forecast_type}</span>
+      <td className="px-2.5 py-2.5 whitespace-nowrap">
+        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${TYPE_STYLES[f.forecast_type] || 'bg-gray-100 text-muted'}`}>{f.forecast_type}</span>
       </td>
-      <td className="px-4 py-3.5 whitespace-nowrap text-ink font-medium">{f.forecast_period}</td>
-      <td className="px-4 py-3.5 whitespace-nowrap text-muted">{f.historical_period}</td>
-      <td className="px-4 py-3.5 whitespace-nowrap text-right tabular-nums text-ink">{formatCurrency(f.predicted_amount)}</td>
-      <td className={`px-4 py-3.5 whitespace-nowrap text-right tabular-nums font-medium ${confidenceColor(f.confidence_level)}`}>{f.confidence_level}%</td>
-      <td className={`px-4 py-3.5 whitespace-nowrap text-right tabular-nums ${mapeColor(f.mape)}`}>
+      <td className="px-2.5 py-2.5 whitespace-nowrap text-ink font-medium">{f.forecast_period}</td>
+      <td className="px-2.5 py-2.5 whitespace-nowrap text-muted text-xs">{f.historical_period}</td>
+      <td className="px-2.5 py-2.5 whitespace-nowrap text-right tabular-nums text-ink">{formatCurrency(f.predicted_amount)}</td>
+      <td className={`px-2.5 py-2.5 whitespace-nowrap text-right tabular-nums font-medium ${confidenceColor(f.confidence_level)}`}>{f.confidence_level}%</td>
+      <td className={`px-2.5 py-2.5 whitespace-nowrap text-right tabular-nums ${mapeColor(f.mape)}`}>
         <span className="inline-flex items-center gap-1 justify-end">
           {unreliable && (
             <Tooltip label="High error margin — treat this forecast with caution" align="end">
@@ -152,8 +152,8 @@ const ForecastRow = memo(function ForecastRow({ forecast: f, showArchived, onVie
           {f.mape != null ? `${f.mape}%` : '—'}
         </span>
       </td>
-      <td className="px-4 py-3.5 whitespace-nowrap text-muted">{f.arima_model}</td>
-      <td className="px-4 py-3.5 whitespace-nowrap text-right">
+      <td className="px-2.5 py-2.5 whitespace-nowrap text-muted text-xs">{f.arima_model}</td>
+      <td className="px-2.5 py-2.5 whitespace-nowrap text-right">
         <div className="flex items-center justify-end gap-1">
           <Tooltip label="View forecast trend" align="end">
             <button
@@ -647,18 +647,18 @@ export default function FinancialForecasting({ title = 'Financial Forecasting', 
       </div>
 
       <div className={PANEL}>
-        <div className="overflow-x-auto overflow-y-auto max-h-[70vh] rounded-t-xl">
+        <div className="overflow-hidden rounded-t-xl">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-surface">
+            <thead className="bg-surface">
               <tr className="border-b border-border">
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Type</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Forecast Period</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Historical Period</th>
-                <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Predicted Amount</th>
-                <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Confidence</th>
-                <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">MAPE</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Model</th>
-                <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Details</th>
+                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-2.5 py-2.5 whitespace-nowrap">Type</th>
+                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-2.5 py-2.5 whitespace-nowrap">Forecast Period</th>
+                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-2.5 py-2.5 whitespace-nowrap">Historical Period</th>
+                <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-2.5 py-2.5 whitespace-nowrap">Predicted Amount</th>
+                <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-2.5 py-2.5 whitespace-nowrap">Confidence</th>
+                <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-2.5 py-2.5 whitespace-nowrap">MAPE</th>
+                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-2.5 py-2.5 whitespace-nowrap">Model</th>
+                <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-2.5 py-2.5 whitespace-nowrap">Details</th>
               </tr>
             </thead>
             <tbody>

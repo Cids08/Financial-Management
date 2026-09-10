@@ -99,6 +99,12 @@ class AccountsReceivable extends Model
         return $this->hasMany(Collection::class, 'ar_id');
     }
 
+    public function supportingDocuments(): HasMany
+    {
+        return $this->hasMany(SupportingDocument::class, 'reference_id')
+            ->where('reference_type', 'accounts_receivable');
+    }
+
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');

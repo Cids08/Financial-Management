@@ -19,6 +19,7 @@ class Supplier extends Model
         'email',
         'website',
         'address',
+        'tin',
         'current_balance',
         'status',
         'updated_by',

@@ -74,7 +74,7 @@ export function useCollectors() {
       const json = await res.json()
       if (!res.ok || !json.success) throw new Error(json.message || 'Failed to add collector.')
       await fetchCollectors()
-      return { success: true }
+      return { success: true, data: json.data, temporary_password: json.temporary_password, message: json.message }
     } catch (err) {
       setError(err.message)
       return { success: false, message: err.message }

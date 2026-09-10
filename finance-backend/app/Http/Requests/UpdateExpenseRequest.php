@@ -23,11 +23,8 @@ class UpdateExpenseRequest extends FormRequest
             'expense_date' => ['sometimes', 'required', 'date'],
             'receipt_number' => ['nullable', 'string', 'max:100'],
             'expense_amount' => ['sometimes', 'required', 'numeric', 'min:0.01'],
-            'expense_source' => ['sometimes', 'required', 'string', 'in:' . implode(',', [
-                Expense::SOURCE_CASH,
-                Expense::SOURCE_BANK,
-                Expense::SOURCE_PETTY_CASH,
-            ])],
+            'cash_account_id' => ['sometimes', 'required', 'integer', 'exists:cash_accounts,id'],
+            'expense_source' => ['nullable', 'string', 'max:50'],
             'receipt_status' => ['nullable', 'in:' . implode(',', [
                 Expense::RECEIPT_PENDING,
                 Expense::RECEIPT_UPLOADED,
@@ -61,11 +58,26 @@ class UpdateExpenseRequest extends FormRequest
             /** @var Expense|null $expense */
             $expense = $this->route('expense');
 
-            if ($expense && $expense->status === Expense::STATUS_APPROVED) {
+            if ($expense && $expense->status !== Expense::STATUS_PENDING) {
                 $validator->errors()->add(
                     'status',
-                    'Approved expenses cannot be edited directly. Reject or reverse it first.'
+                    'Only Pending expenses can be edited. Reject or reverse it first.'
                 );
+            }
+
+            $budgetId = $this->input('budget_id');
+            if ($budgetId) {
+                $budget = Budget::find($budgetId);
+                if ($budget && $budget->status !== Budget::STATUS_ACTIVE) {
+                    $validator->errors()->add(
+                        'budget_id',
+                        sprintf(
+                            'Budget "%s" cannot be charged because its status is "%s". Only Active budgets can be charged for expenses.',
+                            $budget->budget_name,
+                            $budget->status
+                        )
+                    );
+                }
             }
 
             $categoryId = $this->input('expense_category_id');
@@ -77,6 +89,20 @@ class UpdateExpenseRequest extends FormRequest
                     $validator->errors()->add(
                         'expense_category_id',
                         'This expense category is inactive and can no longer be selected.'
+                    );
+                }
+            }
+
+            $cashAccountId = $this->input('cash_account_id', $expense?->cash_account_id);
+            $amount = $this->has('expense_amount') ? (float) $this->input('expense_amount') : (float) ($expense?->expense_amount ?? 0);
+
+            if ($cashAccountId && $amount > 0) {
+                $cashAccount = \App\Models\CashAccount::find($cashAccountId);
+
+                if ($cashAccount && $amount > (float) $cashAccount->current_balance) {
+                    $validator->errors()->add(
+                        'expense_amount',
+                        'Amount exceeds available funds in the selected cash account.'
                     );
                 }
             }

@@ -9,34 +9,36 @@ class BudgetPolicy
 {
     public function viewAny(User $user): bool
     {
-        return $user->can('budgets.view');
+        return $user->hasPermission('budgets.view');
+    }
+
+    public function view(User $user, Budget $budget): bool
+    {
+        return $user->hasPermission('budgets.view');
     }
 
     public function create(User $user): bool
     {
-        return $user->can('budgets.create');
+        return $user->hasPermission('budgets.manage');
     }
 
     public function update(User $user, Budget $budget): bool
     {
-        return $user->can('budgets.update') && $budget->status !== 'Approved';
+        return $user->hasPermission('budgets.manage') && $budget->status === 'Draft';
     }
 
-    // NOTE: replace 'budgets.approve' with whatever permission slug your
-    // role_permissions table actually uses for CEO-level budget approval —
-    // this project's business rules say that decision belongs to the CEO.
     public function approve(User $user, Budget $budget): bool
     {
-        return $user->can('budgets.approve');
+        return $user->hasPermission('budgets.approve');
     }
 
     public function delete(User $user, Budget $budget): bool
     {
-        return $user->can('budgets.archive');
+        return $user->hasPermission('budgets.manage');
     }
 
     public function restore(User $user, Budget $budget): bool
     {
-        return $user->can('budgets.archive');
+        return $user->hasPermission('budgets.manage');
     }
 }

@@ -28,6 +28,7 @@ class TaxObligation extends Model
         'remarks',
         'created_by',
         'expense_id',
+        'cash_account_id',
     ];
 
     protected function casts(): array
@@ -54,6 +55,11 @@ class TaxObligation extends Model
     public function expense(): BelongsTo
     {
         return $this->belongsTo(Expense::class);
+    }
+
+    public function cashAccount(): BelongsTo
+    {
+        return $this->belongsTo(CashAccount::class);
     }
 
     public function scopeSearch($query, ?string $term)

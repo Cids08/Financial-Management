@@ -24,10 +24,18 @@ class CollectionController extends Controller
     {
         $this->authorize('viewAny', Collection::class);
 
+        $user = $request->user();
+        $collectorId = $request->query('collector_id');
+
+        // If authenticated user is a collector, strictly scope to their linked profile
+        if ($user->role?->name === 'collector') {
+            $collectorId = $user->collector?->id ?? -1;
+        }
+
         $paginated = $this->collections->list([
             'search'       => $request->query('search'),
             'ar_id'        => $request->query('ar_id'),
-            'collector_id' => $request->query('collector_id'),
+            'collector_id' => $collectorId,
             'status'       => $request->query('status'),
             'trashed'      => $request->boolean('trashed'),
             'per_page'     => (int) $request->query('per_page', 15),
@@ -188,7 +196,7 @@ class CollectionController extends Controller
      */
     public function attachProof(UploadCollectionProofRequest $request, Collection $collection): JsonResponse
     {
-        $this->authorize('update', $collection);
+        $this->authorize('attachProof', $collection);
 
         try {
             $document = $this->collections->attachProof(

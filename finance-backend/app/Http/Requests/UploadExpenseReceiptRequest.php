@@ -19,7 +19,7 @@ class UploadExpenseReceiptRequest extends FormRequest
             // Receipt scan/photo — images and PDFs only, same allowed
             // types as UploadCollectionProofRequest (this is a receipt,
             // not a plan document like Budget's upload).
-            'receipt' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:10240'], // 10MB
+            'receipt' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'], // 10MB
         ];
     }
 }

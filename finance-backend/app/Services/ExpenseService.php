@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\AuditLog;
 use App\Models\Budget;
+use App\Models\CashAccount;
 use App\Models\ChartOfAccount;
 use App\Models\Department;
 use App\Models\Expense;
@@ -24,7 +25,13 @@ class ExpenseService
     public function list(array $filters): LengthAwarePaginator
     {
         $query = Expense::query()
-            ->with(['budget:id,budget_name', 'category:id,category_name', 'supplier:id,supplier_name', 'creator:id,first_name,last_name'])
+            ->with([
+                'budget:id,budget_name,remaining_amount,allocated_amount',
+                'category:id,category_name',
+                'supplier:id,supplier_name',
+                'cashAccount:id,account_name,account_code,bank_name,current_balance',
+                'creator:id,first_name,last_name'
+            ])
             // Backs Expense::getHasReceiptAttribute() — without this, the
             // has_receipt accessor falls back to a live exists() query per
             // row, N+1-ing across every expense on the page. Mirrors
@@ -76,6 +83,13 @@ class ExpenseService
     public function create(array $data, User $creator): Expense
     {
         return DB::transaction(function () use ($data, $creator) {
+            if (empty($data['expense_source']) && ! empty($data['cash_account_id'])) {
+                $cashAcc = CashAccount::find($data['cash_account_id']);
+                if ($cashAcc) {
+                    $data['expense_source'] = $cashAcc->account_name;
+                }
+            }
+
             $expense = Expense::create([
                 ...$data,
                 'receipt_status' => $data['receipt_status'] ?? Expense::RECEIPT_PENDING,
@@ -101,12 +115,12 @@ class ExpenseService
 
     public function update(Expense $expense, array $data, User $actor): Expense
     {
-        // Belt-and-suspenders: UpdateExpenseRequest already blocks this,
+        // Belt-and-suspenders: ExpensePolicy::update() already blocks this,
         // but the service must not trust that it's always called through
-        // the HTTP layer.
-        if ($expense->status === Expense::STATUS_APPROVED) {
+        // the HTTP layer. Only Pending expenses may be edited.
+        if ($expense->status !== Expense::STATUS_PENDING) {
             throw ValidationException::withMessages([
-                'status' => 'Approved expenses cannot be edited directly.',
+                'status' => 'Only Pending expenses can be edited.',
             ]);
         }
 
@@ -200,11 +214,29 @@ class ExpenseService
             ]);
         }
 
+        if (! $expense->has_receipt) {
+            throw ValidationException::withMessages([
+                'receipt' => 'This expense cannot be approved without an attached receipt document.',
+            ]);
+        }
+
         $expense->loadMissing('creator');
 
         return DB::transaction(function () use ($expense, $approver, $skipDepartmentCheck) {
-            /** @var Budget $budget */
-            $budget = Budget::query()->lockForUpdate()->findOrFail($expense->budget_id);
+            if (! $expense->budget_id) {
+                throw ValidationException::withMessages([
+                    'budget' => "Cannot approve expense #{$expense->id}: No budget is assigned to this expense.",
+                ]);
+            }
+
+            /** @var Budget|null $budget */
+            $budget = Budget::query()->lockForUpdate()->find($expense->budget_id);
+
+            if (! $budget) {
+                throw ValidationException::withMessages([
+                    'budget' => "Cannot approve expense #{$expense->id}: The assigned budget (ID: {$expense->budget_id}) does not exist or has been deleted.",
+                ]);
+            }
 
             if (! $skipDepartmentCheck && $expense->creator && $expense->creator->department_id !== $budget->department_id) {
                 $filerDeptName = Department::find($expense->creator->department_id)?->department_name;
@@ -234,14 +266,28 @@ class ExpenseService
             $newRemaining = bcsub((string) $budget->allocated_amount, $newUsed, 2);
             $isOverBudget = bccomp($newRemaining, '0', 2) < 0;
 
+            if ($isOverBudget) {
+                throw ValidationException::withMessages([
+                    'expense_amount' => sprintf(
+                        'Cannot approve expense #%d: The amount (₱%s) exceeds the remaining budget for "%s" (Available: ₱%s). Budget overrun is not permitted.',
+                        $expense->id,
+                        number_format((float) $expense->expense_amount, 2),
+                        $budget->budget_name,
+                        number_format((float) $budget->remaining_amount, 2)
+                    ),
+                ]);
+            }
+
             $budget->update([
                 'used_amount' => $newUsed,
                 'remaining_amount' => $newRemaining,
             ]);
 
             $expense->update([
-                'status' => Expense::STATUS_APPROVED,
+                'status'       => Expense::STATUS_APPROVED,
                 'is_over_budget' => $isOverBudget,
+                'approved_by'  => $approver->id,
+                'approved_at'  => now(),
             ]);
 
             $usedPercentage = bccomp((string) $budget->allocated_amount, '0', 2) > 0
@@ -291,7 +337,180 @@ class ExpenseService
         });
     }
 
-    public function reject(Expense $expense, ?string $remarks = null): Expense
+    /**
+     * Get pending expenses proposal run for the Batch Approval Wizard.
+     * Enforces "No Document, No Payment": splits into eligible (has_receipt)
+     * and withheld (no receipt attached), exactly like AP's getPaymentProposals.
+     *
+     * @param array{budget_id?:int,expense_category_id?:int,expense_date_from?:string,expense_date_to?:string} $filters
+     * @return array{proposals:array, totals:array}
+     */
+    public function getApprovalProposals(array $filters = []): array
+    {
+        $query = Expense::query()
+            ->with([
+                'budget:id,budget_name,remaining_amount,allocated_amount',
+                'category:id,category_name',
+                'supplier:id,supplier_name',
+                'cashAccount:id,account_name,account_code,bank_name,current_balance',
+                'creator:id,first_name,last_name'
+            ])
+            ->withCount(['supportingDocuments as supporting_documents_count'])
+            ->where('status', Expense::STATUS_PENDING);
+
+        if (! empty($filters['budget_id'])) {
+            $query->forBudget((int) $filters['budget_id']);
+        }
+        if (! empty($filters['expense_category_id'])) {
+            $query->forCategory((int) $filters['expense_category_id']);
+        }
+        if (! empty($filters['expense_date_from']) || ! empty($filters['expense_date_to'])) {
+            $query->expenseDateBetween($filters['expense_date_from'] ?? null, $filters['expense_date_to'] ?? null);
+        }
+
+        $expenses = $query->orderBy('expense_date')->orderBy('id')->get();
+
+        // Split into eligible (has receipt attached) and withheld (missing proof)
+        $eligible = $expenses->filter(fn (Expense $e) => $e->has_receipt)->values();
+        $withheld = $expenses->filter(fn (Expense $e) => ! $e->has_receipt)->values();
+
+        $proposals = $eligible->map(function (Expense $e) {
+            return [
+                'id'                      => $e->id,
+                'description'             => $e->description,
+                'expense_amount'          => (float) $e->expense_amount,
+                'expense_date'            => $e->expense_date?->toDateString(),
+                'receipt_number'          => $e->receipt_number,
+                'expense_source'          => $e->expense_source,
+                'budget_id'               => $e->budget_id,
+                'budget_name'             => $e->budget?->budget_name ?? '—',
+                'budget_remaining_amount' => $e->budget ? (float) $e->budget->remaining_amount : null,
+                'expense_category_id'     => $e->expense_category_id,
+                'expense_category_name'   => $e->category?->category_name ?? '—',
+                'cash_account_id'         => $e->cash_account_id,
+                'cash_account_name'       => $e->cashAccount?->account_name ?? '—',
+                'cash_account_bank'       => $e->cashAccount?->bank_name ?? $e->cashAccount?->account_code ?? '',
+                'cash_account_balance'    => $e->cashAccount ? (float) $e->cashAccount->current_balance : null,
+                'supplier_id'             => $e->supplier_id,
+                'supplier_name'           => $e->supplier?->supplier_name ?? '—',
+                'is_over_budget'          => (bool) $e->is_over_budget,
+                'has_receipt'             => true,
+            ];
+        })->toArray();
+
+        $totals = [
+            'count'                    => $eligible->count(),
+            'total_amount'             => round((float) $eligible->sum('expense_amount'), 2),
+            'attachment_missing_count' => $withheld->count(),
+            'withheld_expenses'        => $withheld->pluck('description')->take(5)->toArray(),
+        ];
+
+        return [
+            'proposals' => $proposals,
+            'totals'    => $totals,
+        ];
+    }
+
+    /**
+     * Batch approves and pays multiple pending expenses in a single atomic transaction.
+     * Enforces strict documentary controls (all must have receipts), verifies that
+     * aggregate expenditures don't exceed cash balances or departmental budgets,
+     * updates budgets, deducts cash accounts, and posts double-entry GL journal entries.
+     */
+    public function batchApprove(array $expenseIds, User $approver, bool $skipDepartmentCheck = false): array
+    {
+        return DB::transaction(function () use ($expenseIds, $approver, $skipDepartmentCheck) {
+            $expenses = Expense::whereIn('id', $expenseIds)
+                ->lockForUpdate()
+                ->get();
+
+            if ($expenses->isEmpty()) {
+                throw ValidationException::withMessages([
+                    'expense_ids' => 'No matching expenses were found.',
+                ]);
+            }
+
+            // 1. Validate all are Pending
+            $notPending = $expenses->filter(fn ($e) => $e->status !== Expense::STATUS_PENDING);
+            if ($notPending->isNotEmpty()) {
+                $ids = $notPending->pluck('id')->join(', #');
+                throw ValidationException::withMessages([
+                    'expense_ids' => "The following expense(s) are not in Pending status and cannot be approved: #{$ids}.",
+                ]);
+            }
+
+            // 2. Validate strict documentary controls ("No Document, No Payment")
+            $missingReceipt = $expenses->filter(fn ($e) => ! $e->has_receipt);
+            if ($missingReceipt->isNotEmpty()) {
+                $ids = $missingReceipt->pluck('id')->join(', #');
+                throw ValidationException::withMessages([
+                    'expense_ids' => "The following expense(s) cannot be approved because they lack an attached receipt document: #{$ids}.",
+                ]);
+            }
+
+            // 3. Check aggregate cash account balances
+            $expensesByCashAccount = $expenses->groupBy('cash_account_id');
+            foreach ($expensesByCashAccount as $cashAccountId => $group) {
+                if ($cashAccountId) {
+                    /** @var CashAccount|null $cashAccount */
+                    $cashAccount = CashAccount::lockForUpdate()->find($cashAccountId);
+                    if ($cashAccount) {
+                        $totalGroupAmount = (float) $group->sum('expense_amount');
+                        if ($totalGroupAmount > (float) $cashAccount->current_balance) {
+                            throw ValidationException::withMessages([
+                                'expense_ids' => sprintf(
+                                    'Approving this batch would overdraw cash account "%s" (Available: ₱%s, Required for batch: ₱%s).',
+                                    $cashAccount->account_name,
+                                    number_format($cashAccount->current_balance, 2),
+                                    number_format($totalGroupAmount, 2)
+                                ),
+                            ]);
+                        }
+                    }
+                }
+            }
+
+            // 4. Check aggregate budget limits
+            $expensesByBudget = $expenses->groupBy('budget_id');
+            foreach ($expensesByBudget as $budgetId => $group) {
+                if ($budgetId) {
+                    /** @var Budget|null $budget */
+                    $budget = Budget::lockForUpdate()->find($budgetId);
+                    if ($budget) {
+                        $totalGroupAmount = (string) $group->sum('expense_amount');
+                        if (bccomp($totalGroupAmount, (string) $budget->remaining_amount, 2) > 0) {
+                            throw ValidationException::withMessages([
+                                'expense_ids' => sprintf(
+                                    'Cannot approve batch: Total expense amount (₱%s) for budget "%s" exceeds its available balance (₱%s). Budget overrun is not permitted.',
+                                    number_format((float) $totalGroupAmount, 2),
+                                    $budget->budget_name,
+                                    number_format((float) $budget->remaining_amount, 2)
+                                ),
+                            ]);
+                        }
+                    }
+                }
+            }
+
+            // 5. Sequentially execute individual approval for each expense
+            $approvedExpenses = [];
+            $totalAmount = 0;
+
+            foreach ($expenses as $expense) {
+                $approved = $this->approve($expense, $approver, $skipDepartmentCheck);
+                $approvedExpenses[] = $approved;
+                $totalAmount += (float) $approved->expense_amount;
+            }
+
+            return [
+                'count'        => count($approvedExpenses),
+                'total_amount' => $totalAmount,
+                'approved_ids' => $expenses->pluck('id')->all(),
+            ];
+        });
+    }
+
+    public function reject(Expense $expense, User $actor, ?string $remarks = null): Expense
     {
         if ($expense->status !== Expense::STATUS_PENDING) {
             throw ValidationException::withMessages([
@@ -299,22 +518,29 @@ class ExpenseService
             ]);
         }
 
-        DB::transaction(function () use ($expense, $remarks) {
+        $trimmedRemarks = trim($remarks ?? '');
+        if ($trimmedRemarks === '') {
+            throw ValidationException::withMessages([
+                'remarks' => 'A reason for rejection is required.',
+            ]);
+        }
+
+        DB::transaction(function () use ($expense, $actor, $trimmedRemarks) {
             $expense->update([
-                'status' => Expense::STATUS_REJECTED,
-                'rejection_remarks' => $remarks,
+                'status'           => Expense::STATUS_REJECTED,
+                'rejection_remarks' => $trimmedRemarks,
+                'rejected_by'      => $actor->id,
+                'rejected_at'      => now(),
             ]);
 
-            $this->notifyExpenseCreator($expense, approved: false, reason: $remarks);
+            $this->notifyExpenseCreator($expense, approved: false, reason: $trimmedRemarks);
 
             AuditLog::create([
-                'user_id' => auth()->id(),
+                'user_id' => $actor->id,
                 'module' => 'Expenses',
                 'action' => 'reject',
                 'record_id' => $expense->id,
-                'activity_description' => $remarks
-                    ? "Rejected expense #{$expense->id}. Reason: {$remarks}"
-                    : "Rejected expense #{$expense->id}.",
+                'activity_description' => "Rejected expense #{$expense->id}. Reason: {$trimmedRemarks}",
                 'ip_address' => request()->ip(),
                 'user_agent' => request()->userAgent(),
             ]);
@@ -383,65 +609,104 @@ class ExpenseService
 
         Notification::create([
             'user_id' => $expense->created_by,
-            'title' => $approved ? 'Expense approved' : 'Expense rejected',
+            'title'   => $approved ? 'Expense Approved' : 'Expense Rejected',
             'message' => $approved
-                ? sprintf('Your expense #%d was approved.', $expense->id)
-                : sprintf('Your expense #%d was rejected.%s', $expense->id, $reason ? " Reason: {$reason}" : ''),
-            'type' => $approved ? 'Success' : 'Warning',
+                ? sprintf('Your expense #%d ("%s" — ₱%s) was approved.', $expense->id, $expense->description, number_format((float) $expense->expense_amount, 2))
+                : sprintf('Your expense #%d ("%s" — ₱%s) was rejected. Reason: %s', $expense->id, $expense->description, number_format((float) $expense->expense_amount, 2), $reason),
+            'type'    => $approved ? 'Success' : 'Warning',
             'is_read' => false,
         ]);
     }
 
     /**
-     * Posts Debit Expense / Credit Cash (or AP) for the approved expense.
-     *
-     * Requires FINANCE_DEFAULT_EXPENSE_ACCOUNT and FINANCE_EXPENSE_CREDIT_ACCOUNT
-     * (or a per-category override) to be configured in config/finance.php —
-     * see that file for why this can't be inferred from the schema alone.
+     * Posts Debit Expense / Credit Cash Account for the approved expense.
+     * Deducts the expense amount from the selected CashAccount's current_balance.
      */
     private function postJournalEntry(Expense $expense, User $approver): void
     {
-        $categoryCode = $expense->category?->category_code;
-        $accountMap = config('finance.expense_approval.category_accounts', []);
+        // ── Debit: pick the most specific Expense account available ──────────
+        $categoryName = $expense->category?->category_name; // e.g. 'Utilities'
 
-        $debitCode = $accountMap[$categoryCode] ?? config('finance.expense_approval.default_expense_account_code');
-        $creditCode = config('finance.expense_approval.credit_account_code');
+        // Try to match by name fragment first (e.g. 'Utilities' hits '5400 Utilities Expense')
+        $debitAccount = $categoryName
+            ? ChartOfAccount::where('account_type', 'Expense')
+                ->where('account_name', 'like', "%{$categoryName}%")
+                ->first()
+            : null;
 
-        if (! $debitCode || ! $creditCode) {
-            throw ValidationException::withMessages([
-                'finance' => 'Expense approval accounts are not configured. Set FINANCE_DEFAULT_EXPENSE_ACCOUNT and FINANCE_EXPENSE_CREDIT_ACCOUNT (see config/finance.php).',
-            ]);
+        // Fall back to the first Expense-type account (mirrors AP pattern)
+        $debitAccount ??= ChartOfAccount::where('account_type', 'Expense')->first();
+
+        if (! $debitAccount) {
+            throw new \RuntimeException(
+                "Expense #{$expense->id} cannot be approved: no Expense account exists in the Chart of Accounts. Seed ChartOfAccountSeeder first."
+            );
         }
 
-        $debitAccount = ChartOfAccount::where('account_code', $debitCode)->firstOrFail();
-        $creditAccount = ChartOfAccount::where('account_code', $creditCode)->firstOrFail();
+        // ── Credit: Selected CashAccount or fallback ─────────────────────────
+        $cashAccount = $expense->cash_account_id ? CashAccount::lockForUpdate()->find($expense->cash_account_id) : null;
+        $creditAccount = null;
 
+        if ($cashAccount) {
+            if ($expense->expense_amount > $cashAccount->current_balance) {
+                throw ValidationException::withMessages([
+                    'expense_amount' => sprintf(
+                        'Approving this expense would overdraw the selected cash account "%s" (Available balance: ₱%s, Expense: ₱%s).',
+                        $cashAccount->account_name,
+                        number_format($cashAccount->current_balance, 2),
+                        number_format((float) $expense->expense_amount, 2)
+                    ),
+                ]);
+            }
+
+            // Deduct the balance from the cash account
+            $cashAccount->update([
+                'current_balance' => $cashAccount->current_balance - $expense->expense_amount,
+            ]);
+
+            // If the cash account links directly to a GL account, credit that account
+            if ($cashAccount->chart_of_account_id) {
+                $creditAccount = ChartOfAccount::find($cashAccount->chart_of_account_id);
+            }
+        }
+
+        // Fallback credit account if no linked GL account found on the cash account
+        $creditAccount ??= ChartOfAccount::where('account_code', '1000')->first()
+            ?? ChartOfAccount::where('account_category', 'Current Asset')->first();
+
+        if (! $creditAccount) {
+            throw new \RuntimeException(
+                "Expense #{$expense->id} cannot be approved: no Cash/Asset account exists in the Chart of Accounts. Seed ChartOfAccountSeeder first."
+            );
+        }
+
+        // ── Post the double-entry ─────────────────────────────────────────────
         $entry = JournalEntry::create([
-            'transaction_no' => 'JE-EXP-' . $expense->id . '-' . now()->format('YmdHis'),
+            'transaction_no'   => 'JE-EXP-' . $expense->id . '-' . now()->format('YmdHis'),
             'transaction_date' => $expense->expense_date,
-            'description' => "Approved expense #{$expense->id}: {$expense->description}",
-            'status' => 'Posted',
-            'posted_by' => $approver->id,
-            'posted_at' => now(),
-            'created_by' => $approver->id,
+            'description'      => "Approved expense #{$expense->id}: {$expense->description}" . ($cashAccount ? " (Paid from {$cashAccount->account_name})" : ''),
+            'status'           => 'Posted',
+            'posted_by'        => $approver->id,
+            'posted_at'        => now(),
+            'created_by'       => $approver->id,
         ]);
 
         $entry->lines()->createMany([
             [
-                'account_id' => $debitAccount->id,
-                'debit' => $expense->expense_amount,
-                'credit' => 0,
-                'reference_type' => Expense::class,
-                'reference_id' => $expense->id,
-                'remarks' => 'Expense recognized',
+                'account_id'     => $debitAccount->id,
+                'debit'          => $expense->expense_amount,
+                'credit'         => 0,
+                'reference_type' => 'Expenses',
+                'reference_id'   => $expense->id,
+                'remarks'        => "Expense recognized ({$debitAccount->account_name})",
             ],
             [
-                'account_id' => $creditAccount->id,
-                'debit' => 0,
-                'credit' => $expense->expense_amount,
-                'reference_type' => Expense::class,
-                'reference_id' => $expense->id,
-                'remarks' => 'Expense settled',
+                'account_id'     => $creditAccount->id,
+                'debit'          => 0,
+                'credit'         => $expense->expense_amount,
+                'reference_type' => 'Expenses',
+                'reference_id'   => $expense->id,
+                'remarks'        => "Expense settled ({$creditAccount->account_name})" . ($cashAccount ? " [{$cashAccount->account_code}]" : ''),
             ],
         ]);
     }

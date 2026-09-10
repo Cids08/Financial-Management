@@ -30,9 +30,9 @@ class BudgetResource extends JsonResource
                 ? $this->supportingDocuments()->latest('uploaded_at')->value('original_name')
                 : null,
             'created_by' => $this->created_by,
-            'created_by_name' => $this->whenLoaded('creator', fn () => trim(($this->creator?->first_name ?? '').' '.($this->creator?->last_name ?? ''))),
+            'created_by_name' => $this->whenLoaded('creator', fn () => $this->creator ? ($this->creator->fullName() ?: $this->creator->email) : null),
             'approved_by' => $this->approved_by,
-            'approved_by_name' => $this->whenLoaded('approver', fn () => $this->approver ? trim(($this->approver->first_name ?? '').' '.($this->approver->last_name ?? '')) : null),
+            'approved_by_name' => $this->whenLoaded('approver', fn () => $this->approver ? ($this->approver->fullName() ?: $this->approver->email) : null),
             'approved_at' => $this->approved_at?->toIso8601String(),
             'deleted_at' => $this->deleted_at?->toIso8601String(),
             'created_at' => $this->created_at?->toIso8601String(),

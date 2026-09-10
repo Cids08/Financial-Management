@@ -17,7 +17,7 @@ class GeneralLedgerFilterRequest extends FormRequest
     {
         return [
             'search' => ['sometimes', 'nullable', 'string', 'max:255'],
-            'reference_type' => ['sometimes', 'nullable', 'string', 'in:Collections,Disbursements,Accounts Receivable,Accounts Payable,Expenses,Tax Obligations'],
+            'reference_type' => ['sometimes', 'nullable', 'string', 'max:100'],
             'account_id' => ['sometimes', 'nullable', 'integer', 'exists:chart_of_accounts,id'],
             'date_from' => ['sometimes', 'nullable', 'date'],
             'date_to' => ['sometimes', 'nullable', 'date', 'after_or_equal:date_from'],

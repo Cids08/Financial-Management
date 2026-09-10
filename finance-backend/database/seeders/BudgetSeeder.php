@@ -35,8 +35,8 @@ class BudgetSeeder extends Seeder
         $end = $today->copy()->endOfYear();
 
         foreach ($departments as $i => $department) {
-            $allocated = [500000, 350000, 200000, 300000, 150000][$i % 5];
-            $used = round($allocated * (random_int(20, 65) / 100), 2);
+            $allocated = [10000000.00, 8000000.00, 5000000.00, 12000000.00, 6000000.00, 4000000.00][$i % 6];
+            $used = round($allocated * (random_int(15, 45) / 100), 2);
 
             // Matched on department_id + fiscal_year rather than a
             // budget_code built from department_code — the real
@@ -46,7 +46,7 @@ class BudgetSeeder extends Seeder
                 ['department_id' => $department->id, 'fiscal_year' => $today->year],
                 [
                     'budget_code' => "BUD-{$department->id}-{$today->year}",
-                    'budget_name' => "{$department->department_name} Annual Budget {$today->year}",
+                    'budget_name' => "{$department->department_name} Annual Operational Budget {$today->year}",
                     'budget_type' => 'Operational',
                     'allocated_amount' => $allocated,
                     'used_amount' => $used,
@@ -54,8 +54,10 @@ class BudgetSeeder extends Seeder
                     'warning_percentage' => 80,
                     'start_date' => $start->toDateString(),
                     'end_date' => $end->toDateString(),
+                    'status' => 'Active',
+                    'approved_by' => $userId,
+                    'approved_at' => $start->toDateTimeString(),
                     'created_by' => $userId,
-                    // status: intentionally omitted — let the DB default ('Draft') apply.
                 ]
             );
         }

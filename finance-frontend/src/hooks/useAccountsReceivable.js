@@ -36,14 +36,16 @@ export function useAccountsReceivable() {
     setSaving(true)
     setError(null)
     try {
+      const isFormData = payload instanceof FormData
       const res = await apiFetch('/api/accounts-receivable', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        ...(isFormData ? {} : { headers: { 'Content-Type': 'application/json' } }),
+        body: isFormData ? payload : JSON.stringify(payload),
       })
       const json = await res.json()
       if (!res.ok || !json.success) {
-        throw new Error(json.message || 'Failed to create invoice.')
+        const firstError = json.errors ? Object.values(json.errors)[0]?.[0] : json.message
+        throw new Error(firstError || json.message || 'Failed to create invoice.')
       }
       setRecords((prev) => [json.data, ...prev])
       return { success: true, data: json.data }
@@ -96,6 +98,89 @@ export function useAccountsReceivable() {
     }
   }, [])
 
+  const attachDocument = useCallback(async (arId, file) => {
+    try {
+      const formData = new FormData()
+      formData.append('document', file)
+      const res = await apiFetch(`/api/accounts-receivable/${arId}/document`, { method: 'POST', body: formData })
+      const json = await res.json()
+      if (!res.ok || !json.success) {
+        const firstError = json.errors ? Object.values(json.errors)[0]?.[0] : json.message
+        return { success: false, message: firstError || 'Failed to attach document.' }
+      }
+      return { success: true, data: json.data }
+    } catch (err) {
+      return { success: false, message: err.message || 'Network error.' }
+    }
+  }, [])
+
+  const fetchDocumentHistory = useCallback(async (arId) => {
+    try {
+      const res = await apiFetch(`/api/accounts-receivable/${arId}/document`)
+      const json = await res.json()
+      if (!res.ok || !json.success) return { success: false, message: json.message || 'Failed to load document history.' }
+      return { success: true, data: json.data ?? [] }
+    } catch (err) {
+      return { success: false, message: err.message || 'Network error.' }
+    }
+  }, [])
+
+  const viewDocument = useCallback(async (arId, documentId, targetWindow) => {
+    try {
+      const res = await apiFetch(`/api/accounts-receivable/${arId}/document/${documentId}/view`)
+      if (!res.ok) {
+        targetWindow?.close()
+        return { success: false, message: 'Failed to load document.' }
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const previewable = ['application/pdf', 'image/jpeg', 'image/png'].includes(blob.type)
+      if (targetWindow) {
+        targetWindow.location = url
+      }
+      return { success: true, viewedInline: previewable }
+    } catch (err) {
+      targetWindow?.close()
+      return { success: false, message: err.message || 'Network error.' }
+    }
+  }, [])
+
+  /** Fetches the aging summary matrix (all customers with outstanding invoices). */
+  const fetchAgingSummary = useCallback(async () => {
+    try {
+      const res = await apiFetch('/api/accounts-receivable/aging-summary')
+      const json = await res.json()
+      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to load aging summary.')
+      return { success: true, data: json.data }
+    } catch (err) {
+      return { success: false, message: err.message || 'Network error.' }
+    }
+  }, [])
+
+  /** Fetches a full Statement of Account for a single customer by ID. */
+  const fetchCustomerSoa = useCallback(async (customerId) => {
+    try {
+      const res = await apiFetch(`/api/accounts-receivable/customer-soa/${customerId}`)
+      const json = await res.json()
+      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to load statement of account.')
+      return { success: true, data: json.data }
+    } catch (err) {
+      return { success: false, message: err.message || 'Network error.' }
+    }
+  }, [])
+
+  /** Fetches SOA for all customers with outstanding invoices (batch print). */
+  const fetchBatchSoa = useCallback(async () => {
+    try {
+      const res = await apiFetch('/api/accounts-receivable/soa-batch')
+      const json = await res.json()
+      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to load batch statements.')
+      return { success: true, data: json.data }
+    } catch (err) {
+      return { success: false, message: err.message || 'Network error.' }
+    }
+  }, [])
+
   return {
     records,
     loading,
@@ -105,5 +190,11 @@ export function useAccountsReceivable() {
     createRecord,
     updateRecord,
     toggleArchive,
+    attachDocument,
+    fetchDocumentHistory,
+    viewDocument,
+    fetchAgingSummary,
+    fetchCustomerSoa,
+    fetchBatchSoa,
   }
 }

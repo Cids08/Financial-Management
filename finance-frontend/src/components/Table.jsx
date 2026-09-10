@@ -21,7 +21,7 @@ function StatusBadge({ status }) {
 
 export default function Table({ columns, data, onRowClick }) {
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-hidden rounded-t-xl">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-border">

@@ -2,13 +2,20 @@
 
 namespace App\Services;
 
+use App\Mail\WelcomeNewUserMail;
+use App\Models\AuditLog;
 use App\Models\Collection as CollectionModel; // aliased — collides with Illuminate\Support\Collection
 use App\Models\Collector;
+use App\Models\Role;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection as SupportCollection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Validation\ValidationException;
 
 class CollectorService
 {
@@ -42,11 +49,66 @@ class CollectorService
     public function create(User $user, array $data): Collector
     {
         return DB::transaction(function () use ($user, $data) {
+            $temporaryPassword = null;
+
+            // Auto-create User account if no user_id is provided
+            if (empty($data['user_id'])) {
+                $collectorRole = Role::where('name', 'collector')->first();
+                if (! $collectorRole) {
+                    throw ValidationException::withMessages([
+                        'role' => ['The collector role does not exist in the system.'],
+                    ]);
+                }
+
+                $employeeNo = $data['employee_no'];
+                $temporaryPassword = "Alibaton@{$employeeNo}";
+
+                $newUser = new User([
+                    'role_id'      => $collectorRole->id,
+                    'employee_no'  => $employeeNo,
+                    'first_name'   => $data['first_name'],
+                    'middle_name'  => $data['middle_name'] ?? null,
+                    'last_name'    => $data['last_name'],
+                    'email'        => $data['email'],
+                    'phone_number' => $data['phone_number'] ?? null,
+                    'password'     => Hash::make($temporaryPassword),
+                    'status'       => ($data['is_active'] ?? true) ? 'Active' : 'Inactive',
+                ]);
+                $newUser->forceFill(['must_change_password' => true])->save();
+
+                try {
+                    AuditLog::create([
+                        'user_id' => $user->id,
+                        'module' => 'Users',
+                        'action' => 'create',
+                        'record_id' => $newUser->id,
+                        'activity_description' => "Auto-created user {$newUser->first_name} {$newUser->last_name} for collector profile.",
+                        'new_values' => $newUser->only(['role_id', 'first_name', 'last_name', 'email', 'status']),
+                        'ip_address' => request()->ip(),
+                        'user_agent' => request()->userAgent(),
+                    ]);
+                } catch (\Throwable $e) {
+                    // Non-fatal
+                }
+
+                try {
+                    Mail::to($newUser->email)->send(new WelcomeNewUserMail($newUser, $temporaryPassword));
+                } catch (\Throwable $e) {
+                    Log::warning("Failed to send welcome email to {$newUser->email}: " . $e->getMessage());
+                }
+
+                $data['user_id'] = $newUser->id;
+            }
+
             $collector = Collector::create([
                 ...$data,
                 'status'     => ($data['is_active'] ?? true) ? 'Active' : 'Inactive',
                 'updated_by' => $user->id,
             ]);
+
+            if ($temporaryPassword) {
+                $collector->temporary_password = $temporaryPassword;
+            }
 
             return $collector->load(['serviceArea', 'user']);
         });

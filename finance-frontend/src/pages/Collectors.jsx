@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, UserCheck, UserX, Phone, Mail, MapPin, Target, Eye, EyeOff, ChevronLeft, ChevronRight, Loader2, BarChart3 } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, UserCheck, UserX, Phone, Mail, MapPin, Target, Eye, EyeOff, ChevronLeft, ChevronRight, Loader2, BarChart3, Copy, Check, ShieldCheck } from 'lucide-react'
 import {
   ResponsiveContainer, ComposedChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Bar, Line, ReferenceLine,
 } from 'recharts'
@@ -301,6 +301,8 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
   const [formError, setFormError] = useState('')
   const [targetErrors, setTargetErrors] = useState({ monthly_target: '', commission_rate: '' })
   const [efficiencyTarget, setEfficiencyTarget] = useState(null)
+  const [newCredentials, setNewCredentials] = useState(null)
+  const [copied, setCopied] = useState(false)
 
   const isModalOpen = modalMode !== null
   const isEditing = modalMode !== null && modalMode !== 'add'
@@ -362,6 +364,11 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
       return
     }
 
+    if (modalMode === 'add' && !form.user_id && !form.email.trim()) {
+      setFormError('An email address is required to auto-create the collector\'s user login account.')
+      return
+    }
+
     const payload = {
       employee_no: form.employee_no,
       first_name: form.first_name,
@@ -376,6 +383,7 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
       user_id: form.user_id ? Number(form.user_id) : null,
     }
 
+    const submittedForm = { ...form }
     const result = modalMode === 'add'
       ? await createCollector(payload)
       : await updateCollector(modalMode.collector_id, payload)
@@ -385,6 +393,15 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
       return
     }
     closeModal()
+
+    if (result.temporary_password) {
+      setNewCredentials({
+        name: `${submittedForm.first_name} ${submittedForm.last_name}`.trim(),
+        employee_no: submittedForm.employee_no,
+        email: submittedForm.email,
+        password: result.temporary_password,
+      })
+    }
   }
 
   const statCards = [
@@ -418,12 +435,12 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
               key={card.key}
               type="button"
               onClick={card.onClick}
-              className={`${PANEL} ${PANEL_PAD} flex items-center gap-3 text-left cursor-pointer
+              className={`${PANEL} ${PANEL_PAD} flex items-center gap-2.5 text-left cursor-pointer
                 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0
                 ${card.isActive ? 'ring-2 ring-primary/50 border-primary/50' : ''}`}
             >
-              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${card.iconBg}`}>
-                <Icon size={18} className={card.iconColor} />
+              <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${card.iconBg}`}>
+                <Icon size={15} className={card.iconColor} />
               </div>
               <div className="min-w-0">
                 <p className="text-xs text-muted">{card.label}</p>
@@ -448,9 +465,9 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
       </div>
 
       <div className={PANEL}>
-        <div className="overflow-x-auto overflow-y-auto max-h-[70vh] rounded-t-xl">
+        <div className="overflow-hidden rounded-t-xl">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-surface">
+            <thead className="bg-surface">
               <tr className="border-b border-border">
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Collector</th>
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Assigned Area</th>
@@ -605,18 +622,22 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
             </div>
           </div>
           <div>
-            <label className={LABEL}>Email</label>
+            <label className={LABEL}>
+              Email {!isEditing && !form.user_id && <span className="text-primary font-normal">(Required for collector login)</span>}
+            </label>
             <input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className={INPUT} placeholder="ramon.torres@alibaton.test" />
           </div>
           <div>
-            <label className={LABEL}>Linked User Account</label>
+            <label className={LABEL}>{isEditing ? 'Linked User Account' : 'Linked User Account (Optional)'}</label>
             <select
               value={form.user_id}
               onChange={(e) => setForm((f) => ({ ...f, user_id: e.target.value }))}
               className={INPUT}
               disabled={usersLoading}
             >
-              <option value="">Not linked</option>
+              <option value="">
+                {isEditing ? 'Not linked' : '✨ Auto-create new User account (Role: Collector)'}
+              </option>
               {availableUsers.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.name}{u.employee_no ? ` (${u.employee_no})` : ''}
@@ -624,7 +645,11 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
               ))}
             </select>
             <p className="mt-1 text-[11px] text-muted">
-              Only shows Users with the "Collector" role who aren't already linked to another collector record.
+              {isEditing
+                ? 'Only shows Users with the "Collector" role who aren\'t already linked to another collector record.'
+                : !form.user_id
+                  ? 'A new login user account will be automatically created with the "Collector" role and a temporary password.'
+                  : 'This collector will be linked to the selected user account.'}
             </p>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -692,6 +717,67 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
             </div>
           </div>
         </form>
+      </Modal>
+
+      {/* Auto-created User Credentials Modal */}
+      <Modal
+        open={Boolean(newCredentials)}
+        onClose={() => setNewCredentials(null)}
+        title="Collector Login Credentials Created"
+        footer={
+          <Button variant="primary" size="md" onClick={() => setNewCredentials(null)}>
+            Done
+          </Button>
+        }
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 rounded-xl border border-emerald-500/20 bg-emerald-50/60 dark:bg-emerald-500/10 p-3.5 text-xs text-emerald-800 dark:text-emerald-300">
+            <ShieldCheck size={20} className="shrink-0 text-emerald-600 dark:text-emerald-400 mt-0.5" />
+            <div>
+              <p className="font-semibold text-sm mb-0.5">User Account Auto-Created</p>
+              <p>
+                A login account with the <span className="font-semibold">Collector</span> role was created and linked to <span className="font-semibold">{newCredentials?.name}</span>.
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border bg-bg p-3 space-y-2.5 text-sm">
+            <div className="flex justify-between items-center py-1 border-b border-border/50">
+              <span className="text-muted text-xs">Email / Username</span>
+              <span className="font-mono font-medium text-ink">{newCredentials?.email}</span>
+            </div>
+            <div className="flex justify-between items-center py-1 border-b border-border/50">
+              <span className="text-muted text-xs">Employee No.</span>
+              <span className="font-mono font-medium text-ink">{newCredentials?.employee_no}</span>
+            </div>
+            <div className="flex justify-between items-center py-1">
+              <span className="text-muted text-xs">Temporary Password</span>
+              <span className="font-mono font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 px-2.5 py-0.5 rounded">
+                {newCredentials?.password}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-3 pt-1">
+            <p className="text-[11px] text-muted">
+              Copy and share these credentials with the collector. They will be prompted to change their password on first login.
+            </p>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                const text = `Collector Account Credentials:\nEmail: ${newCredentials?.email}\nTemporary Password: ${newCredentials?.password}\nEmployee No: ${newCredentials?.employee_no}`
+                navigator.clipboard.writeText(text)
+                setCopied(true)
+                setTimeout(() => setCopied(false), 2000)
+              }}
+              className="shrink-0 flex items-center gap-1.5"
+            >
+              {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+              {copied ? 'Copied!' : 'Copy Credentials'}
+            </Button>
+          </div>
+        </div>
       </Modal>
 
       <EfficiencyModal collector={efficiencyTarget} onClose={() => setEfficiencyTarget(null)} getEfficiency={getEfficiency} />

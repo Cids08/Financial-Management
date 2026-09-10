@@ -26,6 +26,7 @@ class CashAccountController extends Controller
             'search'   => $request->string('search')->toString(),
             'type'     => $request->string('type')->toString(),
             'archived' => $request->boolean('archived'),
+            'per_page' => $request->input('per_page', 15),
         ]);
 
         return response()->json([

@@ -7,6 +7,7 @@ import Tooltip from '../components/Tooltip'
 import CollectionEfficiencyPanel from '../components/CollectionEfficiencyPanel'
 import CollectionProofHistoryModal from '../components/CollectionProofHistoryModal'
 import { useCollectionUpdates } from '../hooks/useCollectionUpdates'
+import { useProfile } from '../hooks/useProfile'
 import { formatCurrency } from '../utils/formatters'
 import { apiFetch } from '../utils/api'
 
@@ -213,6 +214,18 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
 
   useCollectionUpdates(refetch)
 
+  const { profile } = useProfile()
+  const isCollectorUser = profile?.role_slug === 'collector' || profile?.role?.toLowerCase() === 'collector'
+  const userCollectorId = profile?.collector_id ? String(profile.collector_id) : null
+
+  // Invoices filtered if logged-in user is a collector
+  const availableArRecords = useMemo(() => {
+    if (isCollectorUser && userCollectorId) {
+      return arRecords.filter((a) => String(a.collector_id) === String(userCollectorId))
+    }
+    return arRecords
+  }, [arRecords, isCollectorUser, userCollectorId])
+
   const [search,       setSearch]       = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [modalMode,    setModalMode]    = useState(null)
@@ -225,14 +238,23 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
   // Auto-populate first options as soon as lookups finish loading if currently adding
   useEffect(() => {
     if (modalMode === 'add') {
+      const defaultArId = (isCollectorUser && userCollectorId)
+        ? (availableArRecords[0]?._key ?? '')
+        : (arRecords[0]?._key ?? '')
+      const defaultCollectorId = (isCollectorUser && userCollectorId)
+        ? userCollectorId
+        : (collectors[0]?._key ?? '')
+
       setForm((f) => ({
         ...f,
-        ar_id: (f.ar_id && f.ar_id !== 'undefined') ? f.ar_id : (arRecords[0]?._key ?? ''),
-        collector_id: (f.collector_id && f.collector_id !== 'undefined') ? f.collector_id : (collectors[0]?._key ?? ''),
+        ar_id: (f.ar_id && f.ar_id !== 'undefined') ? f.ar_id : defaultArId,
+        collector_id: (isCollectorUser && userCollectorId)
+          ? userCollectorId
+          : ((f.collector_id && f.collector_id !== 'undefined') ? f.collector_id : defaultCollectorId),
         cash_account_id: (f.cash_account_id && f.cash_account_id !== 'undefined') ? f.cash_account_id : (cashAccounts[0]?._key ?? ''),
       }))
     }
-  }, [arRecords, collectors, cashAccounts, modalMode])
+  }, [arRecords, availableArRecords, collectors, cashAccounts, modalMode, isCollectorUser, userCollectorId])
 
   const validateDate = (field, value) => {
     if (!value) {
@@ -293,12 +315,19 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
   // Modal helpers
   // -------------------------------------------------------------------------
   const openAdd = () => {
+    const defaultArId = (isCollectorUser && userCollectorId)
+      ? (availableArRecords[0]?._key ?? '')
+      : (arRecords[0]?._key ?? '')
+    const defaultCollectorId = (isCollectorUser && userCollectorId)
+      ? userCollectorId
+      : (collectors[0]?._key ?? '')
+
     setForm({
       ...EMPTY_FORM,
       // Use _key (normalised) for the initial value so the dropdown
       // matches on first render — arRecords[0]._key is ar_id for AR.
-      ar_id:           arRecords[0]?._key    ?? '',
-      collector_id:    collectors[0]?._key   ?? '',
+      ar_id:           defaultArId,
+      collector_id:    defaultCollectorId,
       cash_account_id: cashAccounts[0]?._key ?? '',
       reference_number: getNextReferenceNo(collections),
     })
@@ -591,10 +620,10 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
           const Icon = card.icon
           return (
             <button key={card.key} type="button" onClick={card.onClick}
-              className={`${PANEL} ${PANEL_PAD} flex items-center gap-3 text-left cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 ${card.isActive ? 'ring-2 ring-primary/50 border-primary/50' : ''}`}
+              className={`${PANEL} ${PANEL_PAD} flex items-center gap-2.5 text-left cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 ${card.isActive ? 'ring-2 ring-primary/50 border-primary/50' : ''}`}
             >
-              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${card.iconBg}`}>
-                <Icon size={18} className={card.iconColor} />
+              <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${card.iconBg}`}>
+                <Icon size={15} className={card.iconColor} />
               </div>
               <div className="min-w-0">
                 <p className="text-xs text-muted">{card.label}</p>
@@ -623,9 +652,9 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
 
       {/* Table */}
       <div className={PANEL}>
-        <div className="overflow-x-auto overflow-y-auto max-h-[70vh] rounded-t-xl">
+        <div className="overflow-hidden rounded-t-xl">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-surface">
+            <thead className="bg-surface">
               <tr className="border-b border-border">
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Receipt</th>
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Invoice / Customer</th>
@@ -695,7 +724,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                             <button type="button" onClick={() => openEdit(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"><Pencil size={15} /></button>
                           </Tooltip>
                         )}
-                        {c.status !== 'Confirmed' && (
+                        {(c.deleted_at || ['Confirmed', 'Cancelled'].includes(c.status)) && (
                           <Tooltip label={c.deleted_at ? 'Restore collection' : 'Archive collection'} align="end">
                             <button type="button" onClick={() => handleArchive(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                               {c.deleted_at ? <RotateCcw size={15} /> : <Archive size={15} />}
@@ -757,14 +786,16 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                   setForm((f) => ({
                     ...f,
                     ar_id: arId,
-                    collector_id: (selectedAr?.collector_id && selectedAr.collector_id > 0) ? String(selectedAr.collector_id) : f.collector_id,
+                    collector_id: (isCollectorUser && userCollectorId)
+                      ? userCollectorId
+                      : ((selectedAr?.collector_id && selectedAr.collector_id > 0) ? String(selectedAr.collector_id) : f.collector_id),
                   }))
                   setFieldErrors((fe) => ({ ...fe, ar_id: '', collector_id: '' }))
                 }}
                 className={`${INPUT} ${fieldErrors.ar_id ? 'border-red-400 dark:border-red-500' : ''}`}
               >
                 <option value="">Select invoice…</option>
-                {arRecords.map((a) => {
+                {availableArRecords.map((a) => {
                   const bal = a.balance ?? a.remaining_balance
                   return (
                     <option key={a._key} value={a._key}>
@@ -781,8 +812,9 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
               <label className={LABEL}>Collector <span className="text-red-500 dark:text-red-400">*</span></label>
               <select
                 value={form.collector_id}
+                disabled={isCollectorUser && !!userCollectorId}
                 onChange={(e) => { setForm((f) => ({ ...f, collector_id: e.target.value })); setFieldErrors((fe) => ({ ...fe, collector_id: '' })) }}
-                className={`${INPUT} ${fieldErrors.collector_id ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${isCollectorUser && userCollectorId ? 'opacity-70 cursor-not-allowed bg-slate-100 dark:bg-slate-800' : ''} ${fieldErrors.collector_id ? 'border-red-400 dark:border-red-500' : ''}`}
               >
                 <option value="">Select collector…</option>
                 {collectors.map((c) => (
@@ -791,6 +823,9 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                   </option>
                 ))}
               </select>
+              {isCollectorUser && userCollectorId && (
+                <p className="mt-1 text-[11px] text-muted">Auto-locked to your collector profile.</p>
+              )}
               {fieldErrors.collector_id && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.collector_id}</p>}
             </div>
           </div>

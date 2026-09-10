@@ -22,6 +22,10 @@ class TaxObligationResource extends JsonResource
             'payment_date'      => $this->payment_date?->toDateString(),
             'reference_number'  => $this->reference_number,
             'expense_id'        => $this->expense_id,
+            'cash_account_id'   => $this->cash_account_id,
+            'cash_account_name' => $this->cashAccount?->account_name,
+            'cash_account_bank' => $this->cashAccount?->bank_name,
+            'cash_account_code' => $this->cashAccount?->account_code,
             // Stored column is only ever 'Pending'/'Paid' — this is the
             // live derived value ('Overdue' included), same rule the
             // frontend already applies client-side, just computed here

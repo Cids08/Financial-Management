@@ -84,6 +84,13 @@ export const NOTIFICATION_TYPE_META = {
     color: 'text-cyan-600 dark:text-cyan-400',
     bg:    'bg-cyan-50 dark:bg-cyan-500/10',
   },
+  tax: {
+    icon:  Receipt,
+    route: '/transactions/tax-obligations',
+    label: 'Tax Obligation',
+    color: 'text-amber-600 dark:text-amber-400',
+    bg:    'bg-amber-50 dark:bg-amber-500/10',
+  },
 }
 
 export const DEFAULT_NOTIFICATION_TYPE_META = {
@@ -100,6 +107,18 @@ export function notificationTypeMeta(type, item = null) {
   if (item && (item.title || item.message)) {
     const text = `${item.title ?? ''} ${item.message ?? ''}`.toLowerCase()
 
+    if (text.includes('tax') || text.includes('bir')) {
+      return {
+        ...base,
+        route: '/transactions/tax-obligations',
+      }
+    }
+    if (text.includes('payable') || text.includes('bill') || text.includes('supplier')) {
+      return {
+        ...base,
+        route: '/transactions/payable',
+      }
+    }
     if (text.includes('collection') || text.includes('collected') || text.includes('receipt') || text.includes('invoice')) {
       return {
         ...base,
@@ -122,12 +141,6 @@ export function notificationTypeMeta(type, item = null) {
       return {
         ...base,
         route: '/transactions/budgets',
-      }
-    }
-    if (text.includes('payable') || text.includes('bill') || text.includes('supplier')) {
-      return {
-        ...base,
-        route: '/transactions/payable',
       }
     }
     if (text.includes('receivable')) {

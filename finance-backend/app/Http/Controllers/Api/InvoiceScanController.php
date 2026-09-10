@@ -18,24 +18,24 @@ class InvoiceScanController extends Controller
         $request->validate([
             'image' => [
                 'required',
-                'image',
-                'mimes:jpeg,png,webp',
-                'max:8192',
-                // File-size limits alone don't cap actual pixel dimensions
-                // — a small, heavily-compressed file can still decode to
-                // an enormous resolution, which is disproportionately
-                // expensive for Tesseract to process. 6000px is generous
-                // for any real photographed receipt/invoice.
-                'dimensions:max_width=6000,max_height=6000',
+                'file',
+                'mimes:jpeg,png,webp,pdf',
+                'max:10240',
             ],
         ]);
 
-        $result = $this->ocr->scan($request->file('image'));
+        $file = $request->file('image');
+        $isPdf = $file->getClientMimeType() === 'application/pdf'
+            || strtolower($file->getClientOriginalExtension()) === 'pdf';
+
+        $result = $isPdf
+            ? $this->ocr->scanPdf($file)
+            : $this->ocr->scan($file);
 
         if (! $result['is_receipt']) {
             return response()->json([
                 'success' => false,
-                'message' => $result['message'] ?? "This doesn't look like an invoice or receipt — please upload a clearer photo, or fill in the details manually.",
+                'message' => $result['message'] ?? "This doesn't look like an invoice or receipt — please upload a clearer document or bill.",
                 'data' => null,
             ], 422);
         }

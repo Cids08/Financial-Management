@@ -64,7 +64,8 @@ export default function Notifications({ title = 'Notifications', crumbs = ['Noti
     const today = new Date().toDateString()
     const todayItems = []
     const earlierItems = []
-    for (const n of notifications) {
+    const list = Array.isArray(notifications) ? notifications : []
+    for (const n of list) {
       const isToday = n.created_at && new Date(n.created_at).toDateString() === today
       ;(isToday ? todayItems : earlierItems).push(n)
     }

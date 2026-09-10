@@ -37,10 +37,8 @@ return new class extends Migration
                 ->constrained()
                 ->nullOnDelete();
 
-            $table->foreignId('cash_account_id')
-                ->constrained()
-                ->cascadeOnUpdate()
-                ->restrictOnDelete();
+            // FK to cash_accounts added later by 2026_08_04_045203 (cash_accounts created in 2026_08_04_045201)
+            $table->unsignedBigInteger('cash_account_id')->nullable();
 
             /*
             |--------------------------------------------------------------------------

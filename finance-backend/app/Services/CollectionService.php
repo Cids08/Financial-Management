@@ -66,6 +66,17 @@ class CollectionService
             /** @var AccountsReceivable $ar */
             $ar = AccountsReceivable::query()->lockForUpdate()->findOrFail($data['ar_id']);
 
+            // If the user creating the collection is a collector, bind to their own collector profile
+            if ($creator->role?->name === 'collector') {
+                $userCollectorId = $creator->collector?->id;
+                if (! $userCollectorId) {
+                    throw ValidationException::withMessages([
+                        'collector_id' => 'Your user account is not linked to an active collector profile.',
+                    ]);
+                }
+                $data['collector_id'] = $userCollectorId;
+            }
+
             if ((int) $ar->collector_id !== (int) $data['collector_id']) {
                 throw ValidationException::withMessages([
                     'collector_id' => $ar->collector_id

@@ -21,7 +21,16 @@ class RejectExpenseRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'remarks' => ['nullable', 'string', 'max:500'],
+            'remarks' => ['required', 'string', 'min:3', 'max:500'],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'remarks.required' => 'A reason for rejection is required.',
+            'remarks.min'      => 'The rejection reason must be at least 3 characters.',
+            'remarks.max'      => 'The rejection reason cannot exceed 500 characters.',
         ];
     }
 }

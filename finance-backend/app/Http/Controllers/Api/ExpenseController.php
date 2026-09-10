@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\BatchApproveExpenseRequest;
 use App\Http\Requests\RejectExpenseRequest;
 use App\Http\Requests\StoreExpenseRequest;
 use App\Http\Requests\UpdateExpenseRequest;
@@ -51,7 +52,15 @@ class ExpenseController extends Controller
 
     public function store(StoreExpenseRequest $request): JsonResponse
     {
-        $expense = $this->expenses->create($request->validated(), $request->user());
+        $data = $request->validated();
+        $data['receipt_status'] = $request->hasFile('receipt') ? Expense::RECEIPT_UPLOADED : Expense::RECEIPT_PENDING;
+
+        $expense = $this->expenses->create($data, $request->user());
+
+        if ($request->hasFile('receipt')) {
+            $this->expenses->attachReceipt($expense, $request->file('receipt'), $request->user());
+        }
+
         $expense->load(['budget:id,budget_name', 'category:id,category_name', 'supplier:id,supplier_name', 'creator:id,first_name,last_name']);
 
         return response()->json([
@@ -63,7 +72,7 @@ class ExpenseController extends Controller
 
     public function show(Expense $expense): JsonResponse
     {
-        $expense->load(['budget:id,budget_name', 'category:id,category_name', 'supplier:id,supplier_name', 'creator:id,first_name,last_name', 'deleter:id,first_name,last_name', 'taxObligations.createdBy']);
+        $expense->load(['budget:id,budget_name,remaining_amount,allocated_amount', 'category:id,category_name', 'supplier:id,supplier_name', 'creator:id,first_name,last_name', 'deleter:id,first_name,last_name', 'approver:id,first_name,last_name', 'rejector:id,first_name,last_name', 'taxObligations.createdBy']);
 
         return response()->json([
             'success' => true,
@@ -163,10 +172,56 @@ class ExpenseController extends Controller
         ]);
     }
 
+    public function getApprovalProposals(Request $request): JsonResponse
+    {
+        $filters = $request->only([
+            'budget_id',
+            'expense_category_id',
+            'expense_date_from',
+            'expense_date_to',
+        ]);
+
+        $result = $this->expenses->getApprovalProposals($filters);
+
+        return response()->json([
+            'success' => true,
+            'data'    => $result,
+        ]);
+    }
+
+    public function batchApprove(BatchApproveExpenseRequest $request): JsonResponse
+    {
+        $isAdminOverride = $request->user()->hasAnyRole(['super-admin', 'admin']);
+
+        try {
+            $result = $this->expenses->batchApprove(
+                $request->validated('expense_ids'),
+                $request->user(),
+                skipDepartmentCheck: $isAdminOverride
+            );
+        } catch (ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'errors'  => $e->errors(),
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => sprintf(
+                'Successfully approved and paid %d expense(s) totalling ₱%s.',
+                $result['count'],
+                number_format($result['total_amount'], 2)
+            ),
+            'data'    => $result,
+        ]);
+    }
+
     public function reject(RejectExpenseRequest $request, Expense $expense): JsonResponse
     {
         try {
-            $expense = $this->expenses->reject($expense, $request->validated('remarks'));
+            $expense = $this->expenses->reject($expense, $request->user(), $request->validated('remarks'));
         } catch (ValidationException $e) {
             return response()->json([
                 'success' => false,

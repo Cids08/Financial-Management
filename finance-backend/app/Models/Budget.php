@@ -34,6 +34,9 @@ class Budget extends Model
         'status',
         'remarks',
         'created_by',
+        'approved_by',
+        'approved_at',
+        'deleted_by',
     ];
 
     protected $casts = [

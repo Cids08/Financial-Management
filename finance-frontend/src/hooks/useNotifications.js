@@ -13,7 +13,7 @@ export function useNotifications() {
   const [notifications, setNotifications] = useState([])
   const [meta, setMeta] = useState({ current_page: 1, last_page: 1, total: 0 })
   const [unreadCount, setUnreadCount] = useState(0)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
   const fetchNotifications = useCallback(async (filters = {}, page = 1, perPage = 20) => {
@@ -29,11 +29,13 @@ export function useNotifications() {
       const res = await apiFetch(`/api/notifications?${params.toString()}`)
       const json = await res.json()
       if (!res.ok || !json.success) throw new Error(json.message || 'Failed to load notifications.')
-      setNotifications(json.data)
-      setMeta(json.meta ?? { current_page: 1, last_page: 1, total: json.data.length })
+      const list = Array.isArray(json.data) ? json.data : (json.data?.data ?? [])
+      setNotifications(list)
+      setMeta(json.meta ?? { current_page: 1, last_page: 1, total: list.length })
       return { success: true }
     } catch (err) {
       setError(err.message)
+      setNotifications([])
       return { success: false, message: err.message }
     } finally {
       setLoading(false)

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, Boxes, Wrench, Truck as TruckIcon, Building2, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, Boxes, Wrench, Truck as TruckIcon, Building2, ChevronLeft, ChevronRight, Loader2, TrendingDown } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
@@ -8,6 +8,8 @@ import { formatCurrency, formatDate } from '../utils/formatters'
 import { useFixedAssets } from '../hooks/useFixedAssets'
 import { apiFetch } from '../utils/api'
 import { useHighlightRow } from '../hooks/useHighlightRow'
+import DepreciationRunModal from '../components/DepreciationRunModal'
+
 
 // asset_category is a plain string column per the ERD (no lookup table) —
 // this list is just the frontend's suggested set for the dropdown; typing
@@ -50,7 +52,11 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
     showArchived, setShowArchived,
     page, setPage,
     createAsset, updateAsset, archiveAsset, restoreAsset,
+    fetchDepreciationPreview, executeDepreciationRun,
   } = useFixedAssets()
+
+  const [showDepreciationModal, setShowDepreciationModal] = useState(false)
+
 
   // Global search (SearchBar.jsx) navigates here with a highlightId (and,
   // since this table's `search` filter is server-side/debounced inside
@@ -222,8 +228,12 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
           <h1 className="text-xl font-bold tracking-tight text-ink">{title}</h1>
           <p className="mt-1 text-xs text-muted">Track equipment, vehicles, and other capital assets and their depreciation.</p>
         </div>
-        <Button variant="primary" size="sm" icon={Plus} onClick={openAdd}>Add Asset</Button>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" size="sm" icon={TrendingDown} onClick={() => setShowDepreciationModal(true)}>Depreciation Run</Button>
+          <Button variant="primary" size="sm" icon={Plus} onClick={openAdd}>Add Asset</Button>
+        </div>
       </div>
+
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{error}</div>
@@ -237,12 +247,12 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
               key={card.key}
               type="button"
               onClick={card.onClick}
-              className={`${PANEL} ${PANEL_PAD} flex items-center gap-3 text-left cursor-pointer
+              className={`${PANEL} ${PANEL_PAD} flex items-center gap-2.5 text-left cursor-pointer
                 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0
                 ${card.isActive ? 'ring-2 ring-primary/50 border-primary/50' : ''}`}
             >
-              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${card.iconBg}`}>
-                <Icon size={18} className={card.iconColor} />
+              <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${card.iconBg}`}>
+                <Icon size={15} className={card.iconColor} />
               </div>
               <div className="min-w-0">
                 <p className="text-xs text-muted">{card.label}</p>
@@ -279,9 +289,9 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
       </div>
 
       <div className={PANEL}>
-        <div className="overflow-x-auto overflow-y-auto max-h-[70vh] rounded-t-xl">
+        <div className="overflow-hidden rounded-t-xl">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-surface">
+            <thead className="bg-surface">
               <tr className="border-b border-border">
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Asset</th>
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Department / Location</th>
@@ -564,6 +574,14 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
           </div>
         </form>
       </Modal>
+
+      <DepreciationRunModal
+        open={showDepreciationModal}
+        onClose={() => setShowDepreciationModal(false)}
+        categories={ASSET_CATEGORIES}
+        fetchDepreciationPreview={fetchDepreciationPreview}
+        executeDepreciationRun={executeDepreciationRun}
+      />
     </div>
   )
 }

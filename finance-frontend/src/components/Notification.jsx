@@ -42,6 +42,7 @@ export default function Notification() {
   const {
     notifications,
     loading,
+    error,
     fetchNotifications,
     markAsRead: markAsReadLocal,
     markAllAsRead: markAllAsReadLocal,
@@ -85,7 +86,7 @@ export default function Notification() {
     navigate('/notifications')
   }
 
-  const preview = notifications.slice(0, PREVIEW_COUNT)
+  const preview = (Array.isArray(notifications) ? notifications : []).slice(0, PREVIEW_COUNT)
   const hasUnread = unreadCount > 0
 
   return (
@@ -125,6 +126,10 @@ export default function Notification() {
           {loading ? (
             <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted">
               <Loader2 size={15} className="animate-spin" /> Loading...
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center gap-1 py-8 text-center px-4">
+              <p className="text-xs text-red-500">{error}</p>
             </div>
           ) : preview.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-1.5 py-8 text-center">

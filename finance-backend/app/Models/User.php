@@ -113,7 +113,7 @@ class User extends Authenticatable
      */
     public function hasPermission(string $permissionName): bool
     {
-        if ($this->hasRole(self::SUPER_ADMIN_ROLE)) {
+        if ($this->hasAnyRole([self::SUPER_ADMIN_ROLE, 'Super Admin', 'admin', 'Admin'])) {
             return true;
         }
 

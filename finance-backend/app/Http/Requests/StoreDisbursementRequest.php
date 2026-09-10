@@ -36,6 +36,26 @@ class StoreDisbursementRequest extends FormRequest
                 Rule::unique('disbursements', 'reference_number')->whereNull('deleted_at'),
             ],
             'remarks' => ['nullable', 'string', 'max:2000'],
+            'proof' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
         ];
+    }
+
+    public function withValidator(\Illuminate\Contracts\Validation\Validator $validator): void
+    {
+        $validator->after(function ($validator) {
+            $cashAccountId = $this->input('cash_account_id');
+            $amount = (float) $this->input('amount_paid', 0);
+
+            if ($cashAccountId && $amount > 0) {
+                $cashAccount = \App\Models\CashAccount::find($cashAccountId);
+
+                if ($cashAccount && $amount > (float) $cashAccount->current_balance) {
+                    $validator->errors()->add(
+                        'amount_paid',
+                        'Amount exceeds available funds in the selected cash account.'
+                    );
+                }
+            }
+        });
     }
 }

@@ -102,9 +102,10 @@ export function useExpenses() {
   }, [])
 
   const createExpense = useCallback(async (payload) => {
+    const isFormData = payload instanceof FormData
     const result = await runMutation('/api/expenses', {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: isFormData ? payload : JSON.stringify(payload),
     })
     if (result.success) {
       fetchExpenses()
@@ -133,6 +134,35 @@ export function useExpenses() {
     }
     return result
   }, [runMutation, fetchExpenses, fetchStats])
+
+  const batchApproveExpenses = useCallback(async (expenseIds) => {
+    const result = await runMutation('/api/expenses/batch-approve', {
+      method: 'POST',
+      body: JSON.stringify({ expense_ids: expenseIds }),
+    })
+    if (result.success) {
+      fetchExpenses()
+      fetchStats()
+    }
+    return result
+  }, [runMutation, fetchExpenses, fetchStats])
+
+  const fetchApprovalProposals = useCallback(async (filters = {}) => {
+    const params = new URLSearchParams()
+    if (filters.budget_id) params.set('budget_id', filters.budget_id)
+    if (filters.expense_category_id) params.set('expense_category_id', filters.expense_category_id)
+    if (filters.expense_date_from) params.set('expense_date_from', filters.expense_date_from)
+    if (filters.expense_date_to) params.set('expense_date_to', filters.expense_date_to)
+
+    const query = params.toString() ? `?${params.toString()}` : ''
+    try {
+      const res = await apiFetch(`/api/expenses/approval-proposals${query}`)
+      const data = await res.json()
+      return data
+    } catch (e) {
+      return { success: false, message: e.message || 'Failed to fetch approval proposals.' }
+    }
+  }, [])
 
   const rejectExpense = useCallback(async (id, remarks) => {
     const result = await runMutation(`/api/expenses/${id}/reject`, {
@@ -333,6 +363,8 @@ export function useExpenses() {
     createExpense,
     updateExpense,
     approveExpense,
+    batchApproveExpenses,
+    fetchApprovalProposals,
     rejectExpense,
     archiveExpense,
     restoreExpense,

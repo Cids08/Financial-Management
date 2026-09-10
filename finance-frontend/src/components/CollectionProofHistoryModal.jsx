@@ -129,25 +129,32 @@ export default function CollectionProofHistoryModal({ open, onClose, collection,
       title="Proof of Receipt"
       footer={
         <div className="flex items-center justify-between w-full gap-3">
-          {/* Upload trigger — hidden file input, button opens it */}
-          <div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf,.jpg,.jpeg,.png"
-              className="hidden"
-              onChange={(e) => handleUpload(e.target.files?.[0])}
-            />
-            <Button
-              variant="secondary"
-              size="md"
-              icon={uploading ? Loader2 : Upload}
-              disabled={uploading}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              {uploading ? 'Uploading…' : 'Upload Proof'}
-            </Button>
-          </div>
+          {/* Upload trigger — hidden file input, button opens it (only allowed for Pending collections) */}
+          {collection?.status === 'Pending' ? (
+            <div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png"
+                className="hidden"
+                onChange={(e) => handleUpload(e.target.files?.[0])}
+              />
+              <Button
+                variant="secondary"
+                size="md"
+                icon={uploading ? Loader2 : Upload}
+                disabled={uploading}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {uploading ? 'Uploading…' : 'Upload Proof'}
+              </Button>
+            </div>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 text-xs text-muted">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+              Confirmed & locked — proof uploads disabled
+            </span>
+          )}
           <Button variant="secondary" size="md" onClick={onClose}>Close</Button>
         </div>
       }
@@ -157,8 +164,9 @@ export default function CollectionProofHistoryModal({ open, onClose, collection,
           <p className="text-xs text-muted">
             All proofs attached to receipt{' '}
             <span className="font-medium text-ink">{collection.receipt_number}</span>,
-            newest first. Re-uploading adds a new version rather than replacing the previous one.
-            Accepted formats: PDF, JPG, PNG (max 10MB).
+            newest first. {collection.status === 'Pending'
+              ? 'Re-uploading adds a new version rather than replacing the previous one. Accepted formats: PDF, JPG, PNG (max 10MB).'
+              : 'This collection is confirmed and financial journals are posted; proof attachments are locked.'}
           </p>
         )}
 

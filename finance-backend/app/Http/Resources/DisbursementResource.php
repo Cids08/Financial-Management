@@ -18,6 +18,44 @@ class DisbursementResource extends JsonResource
             'department_name' => $this->whenLoaded('department', fn () => $this->department?->department_name),
             'cash_account_id' => $this->cash_account_id,
             'cash_account_name' => $this->whenLoaded('cashAccount', fn () => $this->cashAccount?->account_name),
+            'cash_account_balance' => $this->whenLoaded('cashAccount', fn () => $this->cashAccount ? (float) $this->cashAccount->current_balance : null),
+            'is_insufficient_funds' => $this->whenLoaded('cashAccount', fn () => $this->status !== 'Released' && $this->cashAccount ? ((float) $this->amount_paid > (float) $this->cashAccount->current_balance) : false),
+            'has_active_budget' => $this->source_type === 'payroll'
+                ? ($this->department_id ? \App\Models\Budget::where('department_id', $this->department_id)->where('status', 'Active')->exists() : false)
+                : true,
+            'active_budget' => $this->when($this->source_type === 'payroll' && $this->department_id, function () {
+                $paymentDateStr = $this->payment_date?->toDateString() ?? now()->toDateString();
+                $budget = \App\Models\Budget::where('department_id', $this->department_id)
+                    ->where('status', 'Active')
+                    ->where('start_date', '<=', $paymentDateStr)
+                    ->where('end_date', '>=', $paymentDateStr)
+                    ->first()
+                    ?? \App\Models\Budget::where('department_id', $this->department_id)
+                        ->where('status', 'Active')
+                        ->first();
+
+                if (! $budget) {
+                    return [
+                        'exists' => false,
+                        'budget_id' => null,
+                        'budget_name' => null,
+                        'budget_code' => null,
+                        'remaining_amount' => 0,
+                        'is_exceeded' => true,
+                    ];
+                }
+
+                return [
+                    'exists' => true,
+                    'budget_id' => $budget->id,
+                    'budget_code' => $budget->budget_code,
+                    'budget_name' => $budget->budget_name,
+                    'allocated_amount' => (float) $budget->allocated_amount,
+                    'used_amount' => (float) $budget->used_amount,
+                    'remaining_amount' => (float) $budget->remaining_amount,
+                    'is_exceeded' => $this->status !== 'Released' && ((float) $this->amount_paid > (float) $budget->remaining_amount),
+                ];
+            }),
             'voucher_number' => $this->voucher_number,
             'payee' => $this->payee,
             'payment_date' => $this->payment_date?->toDateString(),
@@ -27,7 +65,7 @@ class DisbursementResource extends JsonResource
             'payment_method' => $this->payment_method,
             'reference_number' => $this->reference_number,
             'status' => $this->status,
-            'has_attachment' => (bool) $this->has_attachment,
+            'has_attachment' => (bool) ($this->has_attachment || ($this->supporting_documents_count ?? 0) > 0),
             'remarks' => $this->remarks,
 
             // FIX: these two were previously missing entirely, even though

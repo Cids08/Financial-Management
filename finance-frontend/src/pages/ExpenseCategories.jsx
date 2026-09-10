@@ -141,7 +141,7 @@ export default function ExpenseCategories({ title = 'Expense Categories', crumbs
       )}
 
       <div className={PANEL}>
-        <div className="overflow-x-auto">
+        <div className="overflow-hidden rounded-t-xl">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">

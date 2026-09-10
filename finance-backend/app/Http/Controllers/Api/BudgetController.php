@@ -35,7 +35,7 @@ class BudgetController extends Controller
         // BudgetService::paginate(), so the frontend's approval filter and
         // "Show Archived" toggle were silently no-ops.
         $budgets = $this->budgets->paginate(
-            $request->only(['status', 'fiscal_year', 'search', 'archived']),
+            $request->only(['status', 'fiscal_year', 'search', 'archived', 'date_from', 'date_to']),
             (int) $request->input('per_page', 20)
         );
 

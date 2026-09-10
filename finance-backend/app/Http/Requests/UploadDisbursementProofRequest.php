@@ -14,7 +14,7 @@ class UploadDisbursementProofRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'proof' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:10240'], // 10MB
+            'proof' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'], // 10MB
         ];
     }
 }

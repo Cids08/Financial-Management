@@ -35,7 +35,10 @@ use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\SearchController;
 use Illuminate\Support\Facades\Broadcast;
 
+
 Broadcast::routes(['middleware' => ['auth:sanctum']]);
+
+
 
 // Auth
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1', 'honeypot');
@@ -169,12 +172,15 @@ Route::middleware(['auth:sanctum', 'require.password.change'])->group(function (
 
     // Fixed assets
     Route::prefix('fixed-assets')->group(function () {
+        Route::get('/depreciation-preview', [FixedAssetController::class, 'depreciationPreview'])->middleware('permission:fixed-assets.view');
+        Route::post('/execute-depreciation-run', [FixedAssetController::class, 'executeDepreciationRun'])->middleware('permission:fixed-assets.manage');
         Route::get('/', [FixedAssetController::class, 'index'])->middleware('permission:fixed-assets.view');
         Route::post('/', [FixedAssetController::class, 'store'])->middleware('permission:fixed-assets.manage');
         Route::put('/{fixedAsset}', [FixedAssetController::class, 'update'])->middleware('permission:fixed-assets.manage');
         Route::delete('/{fixedAsset}', [FixedAssetController::class, 'archive'])->middleware('permission:fixed-assets.manage');
         Route::patch('/{fixedAsset}/restore', [FixedAssetController::class, 'restore'])->middleware('permission:fixed-assets.manage');
     });
+
 
     // Expense categories
     Route::prefix('expense-categories')->group(function () {
@@ -188,16 +194,29 @@ Route::middleware(['auth:sanctum', 'require.password.change'])->group(function (
     // Accounts receivable
     Route::middleware('permission:ar.view')->get('accounts-receivable', [AccountsReceivableController::class, 'index']);
     Route::middleware('permission:ar.manage')->post('accounts-receivable', [AccountsReceivableController::class, 'store']);
+    // Aging & SOA — static routes MUST come before /{accountsReceivable} wildcard
+    Route::middleware('permission:ar.view')->get('accounts-receivable/aging-summary', [AccountsReceivableController::class, 'agingSummary']);
+    Route::middleware('permission:ar.view')->get('accounts-receivable/customer-soa/{customerId}', [AccountsReceivableController::class, 'customerSoa']);
+    Route::middleware('permission:ar.view')->get('accounts-receivable/soa-batch', [AccountsReceivableController::class, 'soaBatch']);
+    // Wildcard routes follow
     Route::middleware('permission:ar.manage')->put('accounts-receivable/{accountsReceivable}', [AccountsReceivableController::class, 'update']);
     Route::middleware('permission:ar.manage')->post('accounts-receivable/{accountsReceivable}/toggle-archive', [AccountsReceivableController::class, 'toggleArchive']);
+    Route::middleware('permission:ar.view')->get('accounts-receivable/{accountsReceivable}/document', [AccountsReceivableController::class, 'documentHistory']);
+    Route::middleware('permission:ar.manage')->post('accounts-receivable/{accountsReceivable}/document', [AccountsReceivableController::class, 'attachDocument']);
+    Route::middleware('permission:ar.view')->get('accounts-receivable/{accountsReceivable}/document/{document}/view', [AccountsReceivableController::class, 'viewDocument']);
 
     // Accounts payable
     Route::prefix('accounts-payable')->group(function () {
         Route::get('/stats', [AccountsPayableController::class, 'stats'])->middleware('permission:ap.view');
         Route::get('/', [AccountsPayableController::class, 'index'])->middleware('permission:ap.view');
         Route::post('/', [AccountsPayableController::class, 'store'])->middleware('permission:ap.manage');
+        // Payment Wizard — static routes must come before /{accountsPayable} wildcard
+        Route::get('/payment-proposals', [AccountsPayableController::class, 'getPaymentProposals'])->middleware('permission:ap.view');
+        Route::post('/execute-payment-run', [AccountsPayableController::class, 'executePaymentRun'])->middleware('permission:ap.approve');
         Route::put('/{accountsPayable}', [AccountsPayableController::class, 'update'])->middleware('permission:ap.manage');
+
         Route::patch('/{accountsPayable}/approve', [AccountsPayableController::class, 'approve'])->middleware('permission:ap.approve');
+        Route::patch('/{accountsPayable}/reject', [AccountsPayableController::class, 'reject'])->middleware('permission:ap.approve');
         Route::patch('/{accountsPayable}/archive', [AccountsPayableController::class, 'archive'])->middleware('permission:ap.manage');
         Route::patch('/{accountsPayable}/restore', [AccountsPayableController::class, 'restore'])->middleware('permission:ap.manage')->withTrashed();
 
@@ -211,6 +230,8 @@ Route::middleware(['auth:sanctum', 'require.password.change'])->group(function (
     Route::prefix('expenses')->group(function () {
         Route::get('/stats', [ExpenseController::class, 'stats'])->middleware('permission:expenses.view');
         Route::get('/', [ExpenseController::class, 'index'])->middleware('permission:expenses.view');
+        Route::get('/approval-proposals', [ExpenseController::class, 'getApprovalProposals'])->middleware('permission:expenses.view');
+        Route::post('/batch-approve', [ExpenseController::class, 'batchApprove'])->middleware('permission:expenses.approve');
         Route::get('/{expense}', [ExpenseController::class, 'show'])->middleware('permission:expenses.view');
         Route::post('/', [ExpenseController::class, 'store'])->middleware('permission:expenses.manage');
         Route::put('/{expense}', [ExpenseController::class, 'update'])->middleware('permission:expenses.manage');
@@ -237,14 +258,19 @@ Route::middleware(['auth:sanctum', 'require.password.change'])->group(function (
         Route::get('/lines', [GeneralLedgerController::class, 'lines']);
         Route::get('/trial-balance', [GeneralLedgerController::class, 'trialBalance']);
         Route::get('/entries/{journalEntry}', [GeneralLedgerController::class, 'entryDetail']);
-        Route::get('/chart-of-accounts', [GeneralLedgerController::class, 'accounts']);
     });
+    Route::get('/general-ledger/chart-of-accounts', [GeneralLedgerController::class, 'accounts'])
+        ->middleware('permission:general-ledger.view|ap.view|ap.manage');
 
     // Tax obligations
     Route::prefix('tax-obligations')->group(function () {
         Route::get('/', [TaxObligationController::class, 'index'])->middleware('permission:tax.view');
+        Route::get('/calculate-base', [TaxObligationController::class, 'calculateBase'])->middleware('permission:tax.view');
+        Route::post('/generate-schedule', [TaxObligationController::class, 'generateSchedule'])->middleware('permission:tax.manage');
+        Route::post('/batch-pay', [TaxObligationController::class, 'batchRecordPayment'])->middleware('permission:tax.manage');
         Route::post('/', [TaxObligationController::class, 'store'])->middleware('permission:tax.manage');
         Route::put('/{taxObligation}', [TaxObligationController::class, 'update'])->middleware('permission:tax.manage');
+        Route::post('/{taxObligation}/pay', [TaxObligationController::class, 'recordPayment'])->middleware('permission:tax.manage');
         Route::delete('/{taxObligation}', [TaxObligationController::class, 'archive'])->middleware('permission:tax.manage');
         Route::patch('/{taxObligation}/restore', [TaxObligationController::class, 'restore'])->middleware('permission:tax.manage');
 
@@ -339,16 +365,23 @@ Route::middleware(['auth:sanctum', 'require.password.change'])->group(function (
         Route::get('/stats', [DisbursementController::class, 'stats'])->middleware('permission:disbursements.view');
         Route::get('/next-voucher-number', [DisbursementController::class, 'nextVoucherNumber'])->middleware('permission:disbursements.manage');
         Route::get('/', [DisbursementController::class, 'index'])->middleware('permission:disbursements.view');
+        Route::post('/payroll', [DisbursementController::class, 'storePayroll'])->middleware('permission:disbursements.manage');
         Route::get('/{disbursement}', [DisbursementController::class, 'show'])->middleware('permission:disbursements.view');
         Route::post('/', [DisbursementController::class, 'store'])->middleware('permission:disbursements.manage');
         Route::put('/{disbursement}', [DisbursementController::class, 'update'])->middleware('permission:disbursements.manage');
         Route::post('/{disbursement}/proof', [DisbursementController::class, 'uploadProof'])->middleware('permission:disbursements.manage');
-        Route::patch('/{disbursement}/approve', [DisbursementController::class, 'approve'])->middleware('permission:disbursements.approve');
-        Route::patch('/{disbursement}/reject', [DisbursementController::class, 'reject'])->middleware('permission:disbursements.approve');
-        Route::patch('/{disbursement}/release', [DisbursementController::class, 'release'])->middleware('permission:disbursements.approve');
-        Route::patch('/{disbursement}/archive', [DisbursementController::class, 'archive'])->middleware('permission:disbursements.manage');
-        Route::patch('/{disbursement}/restore', [DisbursementController::class, 'restore'])->middleware('permission:disbursements.manage')->withTrashed();
+        Route::get('/{disbursement}/proof', [DisbursementController::class, 'proofHistory'])->middleware('permission:disbursements.view');
+        Route::get('/{disbursement}/proof/{document}/view', [DisbursementController::class, 'viewProof'])->middleware('permission:disbursements.view');
+        // Printable Voucher & BIR 2307
+        Route::get('/{disbursement}/printable-voucher', [DisbursementController::class, 'printableVoucher'])->middleware('permission:disbursements.view');
+        Route::get('/{disbursement}/bir-2307', [DisbursementController::class, 'bir2307Data'])->middleware('permission:disbursements.view');
+        Route::patch('/{disbursement}/approve', [DisbursementController::class, 'approve'])->middleware('permission:disbursements.approve|disbursements.manage');
+        Route::patch('/{disbursement}/reject', [DisbursementController::class, 'reject'])->middleware('permission:disbursements.approve|disbursements.manage');
+        Route::patch('/{disbursement}/release', [DisbursementController::class, 'release'])->middleware('permission:disbursements.manage|disbursements.approve|disbursements.release');
+        Route::patch('/{disbursement}/archive', [DisbursementController::class, 'archive'])->middleware('permission:disbursements.manage|disbursements.approve|disbursements.release');
+        Route::patch('/{disbursement}/restore', [DisbursementController::class, 'restore'])->middleware('permission:disbursements.manage|disbursements.approve|disbursements.release')->withTrashed();
     });
+
 
     // Audit logs
     Route::middleware('permission:audit-logs.view')->prefix('audit-logs')->group(function () {

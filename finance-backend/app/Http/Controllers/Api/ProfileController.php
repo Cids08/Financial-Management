@@ -21,7 +21,7 @@ class ProfileController extends Controller
      */
     public function show(Request $request): JsonResponse
     {
-        $user = $request->user()->load(['role', 'department']);
+        $user = $request->user()->load(['role', 'department', 'collector']);
 
         return response()->json([
             'success' => true,

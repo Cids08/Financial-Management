@@ -53,6 +53,8 @@ class ExpenseSeeder extends Seeder
             'Client meeting expenses', 'Software subscription renewal',
         ];
 
+        $cashAccountIds = \App\Models\CashAccount::pluck('id')->all();
+
         for ($i = 0; $i < $count; $i++) {
             $daysAgo = $i < 8 ? random_int(0, 29) : random_int(30, 179);
             $date = $today->copy()->subDays($daysAgo);
@@ -65,6 +67,7 @@ class ExpenseSeeder extends Seeder
                     'budget_id' => $budget->id,
                     'expense_category_id' => $category->id,
                     'supplier_id' => $supplierId,
+                    'cash_account_id' => ! empty($cashAccountIds) ? $cashAccountIds[$i % count($cashAccountIds)] : null,
                     'expense_date' => $date->toDateString(),
                     'expense_amount' => round(random_int(1500, 45000), 2),
                     'expense_source' => self::EXPENSE_SOURCES[$i % count(self::EXPENSE_SOURCES)],

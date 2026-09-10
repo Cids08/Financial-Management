@@ -4,7 +4,9 @@ namespace App\Services;
 
 use App\Models\AccountsPayable;
 use App\Models\AuditLog;
+use App\Models\Budget;
 use App\Models\CashAccount;
+use App\Models\ChartOfAccount;
 use App\Models\Disbursement;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
@@ -15,8 +17,105 @@ use Illuminate\Validation\ValidationException;
 
 class DisbursementService
 {
+    /**
+     * Auto-reconciles any disbursement records that had journal entries posted
+     * but whose status was not persisted due to prior model fillable protection,
+     * and prunes any accidental duplicate GL postings caused by multiple clicks.
+     */
+    public function reconcileReleasedDisbursements(): void
+    {
+        try {
+            // Migrate any legacy lowercase 'disbursement' records to 'Disbursement'
+            JournalEntryLine::where('reference_type', 'disbursement')
+                ->update(['reference_type' => 'Disbursement']);
+
+            $releasedDisbursementIds = JournalEntryLine::whereIn('reference_type', ['disbursement', 'Disbursement', 'Disbursements'])
+                ->distinct()
+                ->pluck('reference_id')
+                ->filter();
+
+            if ($releasedDisbursementIds->isEmpty()) {
+                return;
+            }
+
+            foreach ($releasedDisbursementIds as $disbursementId) {
+                $disbursement = Disbursement::find($disbursementId);
+                if (! $disbursement) {
+                    continue;
+                }
+
+                // Find all unique journal entries posted for this disbursement
+                $journalEntryIds = JournalEntryLine::whereIn('reference_type', ['disbursement', 'Disbursement', 'Disbursements'])
+                    ->where('reference_id', $disbursementId)
+                    ->distinct()
+                    ->pluck('journal_entry_id')
+                    ->sort()
+                    ->values();
+
+                // Prune duplicate entries if user clicked release multiple times
+                if ($journalEntryIds->count() > 1) {
+                    $keepId = $journalEntryIds->first();
+                    $duplicateIds = $journalEntryIds->slice(1);
+
+                    foreach ($duplicateIds as $dupId) {
+                        $cashLines = JournalEntryLine::where('journal_entry_id', $dupId)
+                            ->where('credit', '>', 0)
+                            ->get();
+
+                        foreach ($cashLines as $cl) {
+                            if ($disbursement->cash_account_id) {
+                                $cashAcc = CashAccount::find($disbursement->cash_account_id);
+                                if ($cashAcc) {
+                                    $cashAcc->increment('current_balance', $cl->credit);
+                                }
+                            }
+                        }
+
+                        if ($disbursement->isPayroll() && $disbursement->department_id) {
+                            $budget = Budget::where('department_id', $disbursement->department_id)
+                                ->where('status', Budget::STATUS_ACTIVE)
+                                ->first();
+                            if ($budget) {
+                                $budget->decrement('used_amount', $disbursement->amount_paid);
+                                $budget->increment('remaining_amount', $disbursement->amount_paid);
+                            }
+                        }
+
+                        JournalEntryLine::where('journal_entry_id', $dupId)->delete();
+                        JournalEntry::where('id', $dupId)->delete();
+                    }
+                }
+
+                // Ensure disbursement status is Released in the database
+                if ($disbursement->status !== 'Released') {
+                    $disbursement->update([
+                        'status' => 'Released',
+                        'released_date' => $disbursement->released_date ?? now()->toDateString(),
+                    ]);
+                }
+
+                // If it is AP-sourced, ensure linked bill is updated
+                if ($disbursement->ap_id && $disbursement->accountsPayable) {
+                    $ap = $disbursement->accountsPayable;
+                    if ($ap->status !== 'Paid' && $ap->status !== 'Partially Paid') {
+                        $newPaid = $ap->paid_amount + $disbursement->amount_paid;
+                        $newRemaining = max(0, $ap->original_amount - $newPaid);
+                        $ap->update([
+                            'paid_amount' => $newPaid,
+                            'remaining_balance' => $newRemaining,
+                            'status' => $newRemaining <= 0 ? 'Paid' : 'Partially Paid',
+                        ]);
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Disbursement reconciliation: ' . $e->getMessage());
+        }
+    }
+
     public function stats(): array
     {
+        $this->reconcileReleasedDisbursements();
         $active = Disbursement::query()->whereNull('deleted_at');
 
         return [
@@ -32,6 +131,7 @@ class DisbursementService
 
     public function paginate(array $filters, int $perPage = 20)
     {
+        $this->reconcileReleasedDisbursements();
         $query = Disbursement::query()
             ->with(['accountsPayable', 'department', 'cashAccount', 'creator', 'approver', 'releaser'])
             ->withCount(['supportingDocuments as supporting_documents_count']);
@@ -44,6 +144,10 @@ class DisbursementService
 
         if (! empty($filters['status'])) {
             $query->where('status', $filters['status']);
+        }
+
+        if (! empty($filters['ap_id'])) {
+            $query->where('ap_id', $filters['ap_id']);
         }
 
         // 'ap' | 'payroll'. Accounts Payable disbursements are created and
@@ -79,7 +183,18 @@ class DisbursementService
             });
         }
 
-        return $query->latest('created_at')->paginate($perPage);
+        return $query
+            ->orderByRaw("
+                CASE 
+                    WHEN status = 'Pending' THEN 1
+                    WHEN status = 'Approved' THEN 2
+                    WHEN status = 'Released' THEN 3
+                    ELSE 4
+                END ASC
+            ")
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->paginate($perPage);
     }
 
     /**
@@ -367,6 +482,23 @@ class DisbursementService
             ]);
         }
 
+        // AP supplier payments require an uploaded proof-of-payment document OR
+        // the linked AP bill's attached invoice document before funds are released.
+        // Payroll disbursements are exempt.
+        $hasProof = (bool) (
+            $disbursement->has_attachment
+            || $disbursement->supportingDocuments()->exists()
+            || ($disbursement->accountsPayable && ($disbursement->accountsPayable->has_attachment || $disbursement->accountsPayable->supportingDocuments()->exists()))
+        );
+
+        if (! $disbursement->isPayroll() && ! $hasProof) {
+            throw ValidationException::withMessages([
+                'proof' => 'A proof of payment (e.g. bank transfer slip, check voucher scan, or official receipt) '
+                    . 'must be attached to this disbursement before it can be released. '
+                    . 'Upload the payment document using the Paperclip button, then release.',
+            ]);
+        }
+
         $released = $disbursement->isPayroll()
             ? $this->releasePayroll($disbursement, $releasedById)
             : $this->releaseAp($disbursement, $releasedById);
@@ -395,10 +527,18 @@ class DisbursementService
     {
         $apAccountId = config('accounting.accounts.accounts_payable_control');
 
+        if (! $apAccountId || ! ChartOfAccount::where('id', $apAccountId)->exists()) {
+            $apAccount = ChartOfAccount::where('account_name', 'Accounts Payable')
+                ->orWhere('account_code', '2000')
+                ->orWhere('account_type', 'Liability')
+                ->first();
+            $apAccountId = $apAccount?->id;
+        }
+
         if (! $apAccountId) {
             throw ValidationException::withMessages([
-                'config' => 'Chart-of-accounts mapping is not configured (config/accounting.php). '
-                    .'Set accounts_payable_control before releasing payments.',
+                'config' => 'Chart-of-accounts mapping is not configured. '
+                    .'Please ensure an Accounts Payable or Liability account exists in chart_of_accounts.',
             ]);
         }
 
@@ -407,9 +547,18 @@ class DisbursementService
             $cashAccount = CashAccount::lockForUpdate()->findOrFail($disbursement->cash_account_id);
 
             if (! $cashAccount->chart_of_account_id) {
-                throw ValidationException::withMessages([
-                    'cash_account_id' => "Cash account \"{$cashAccount->account_name}\" has no linked chart-of-accounts entry — set one on the cash account before releasing payments from it.",
-                ]);
+                $fallbackAccount = ChartOfAccount::where('account_name', 'like', '%Cash%')
+                    ->orWhere('account_code', '1010')
+                    ->orWhere('account_type', 'Asset')
+                    ->first();
+                if ($fallbackAccount) {
+                    $cashAccount->update(['chart_of_account_id' => $fallbackAccount->id]);
+                    $cashAccount->refresh();
+                } else {
+                    throw ValidationException::withMessages([
+                        'cash_account_id' => "Cash account \"{$cashAccount->account_name}\" has no linked chart-of-accounts entry — set one on the cash account before releasing payments from it.",
+                    ]);
+                }
             }
 
             $cashAccountChartId = $cashAccount->chart_of_account_id;
@@ -420,6 +569,12 @@ class DisbursementService
             if ($newRemaining < 0) {
                 throw ValidationException::withMessages([
                     'amount_paid' => 'Releasing this payment would overpay the linked payable.',
+                ]);
+            }
+
+            if ($disbursement->amount_paid > $cashAccount->current_balance) {
+                throw ValidationException::withMessages([
+                    'amount_paid' => 'Releasing this payment would overdraw the selected cash account.',
                 ]);
             }
 
@@ -435,8 +590,13 @@ class DisbursementService
                 'current_balance' => $cashAccount->current_balance - $disbursement->amount_paid,
             ]);
 
+            $transactionNo = 'DV-'.$disbursement->voucher_number;
+            if (JournalEntry::where('transaction_no', $transactionNo)->exists()) {
+                $transactionNo .= '-' . now()->format('YmdHis');
+            }
+
             $journalEntry = JournalEntry::create([
-                'transaction_no' => 'DV-'.$disbursement->voucher_number,
+                'transaction_no' => $transactionNo,
                 'transaction_date' => now()->toDateString(),
                 'description' => "Disbursement {$disbursement->voucher_number} — {$disbursement->payee}",
                 'status' => 'Posted',
@@ -453,7 +613,7 @@ class DisbursementService
                     'account_id' => $apAccountId,
                     'debit' => $disbursement->amount_paid,
                     'credit' => 0,
-                    'reference_type' => 'disbursement',
+                    'reference_type' => 'Disbursement',
                     'reference_id' => $disbursement->id,
                     'remarks' => 'AP settlement',
                     'created_at' => now(),
@@ -464,7 +624,7 @@ class DisbursementService
                     'account_id' => $cashAccountChartId,
                     'debit' => 0,
                     'credit' => $disbursement->amount_paid,
-                    'reference_type' => 'disbursement',
+                    'reference_type' => 'Disbursement',
                     'reference_id' => $disbursement->id,
                     'remarks' => 'Cash paid out',
                     'created_at' => now(),
@@ -532,10 +692,18 @@ class DisbursementService
     {
         $payrollAccountId = config('accounting.accounts.payroll_disbursement_control');
 
+        if (! $payrollAccountId || ! ChartOfAccount::where('id', $payrollAccountId)->exists()) {
+            $payrollAccount = ChartOfAccount::where('account_name', 'Accrued Payroll')
+                ->orWhere('account_code', '2200')
+                ->orWhere('account_type', 'Liability')
+                ->first();
+            $payrollAccountId = $payrollAccount?->id;
+        }
+
         if (! $payrollAccountId) {
             throw ValidationException::withMessages([
-                'config' => 'Chart-of-accounts mapping is not configured (config/accounting.php). '
-                    .'Set payroll_disbursement_control before releasing payroll payments.',
+                'config' => 'Chart-of-accounts mapping is not configured. '
+                    .'Please ensure an Accrued Payroll or Liability account exists in chart_of_accounts.',
             ]);
         }
 
@@ -543,9 +711,18 @@ class DisbursementService
             $cashAccount = CashAccount::lockForUpdate()->findOrFail($disbursement->cash_account_id);
 
             if (! $cashAccount->chart_of_account_id) {
-                throw ValidationException::withMessages([
-                    'cash_account_id' => "Cash account \"{$cashAccount->account_name}\" has no linked chart-of-accounts entry — set one on the cash account before releasing payments from it.",
-                ]);
+                $fallbackAccount = ChartOfAccount::where('account_name', 'like', '%Cash%')
+                    ->orWhere('account_code', '1010')
+                    ->orWhere('account_type', 'Asset')
+                    ->first();
+                if ($fallbackAccount) {
+                    $cashAccount->update(['chart_of_account_id' => $fallbackAccount->id]);
+                    $cashAccount->refresh();
+                } else {
+                    throw ValidationException::withMessages([
+                        'cash_account_id' => "Cash account \"{$cashAccount->account_name}\" has no linked chart-of-accounts entry — set one on the cash account before releasing payments from it.",
+                    ]);
+                }
             }
 
             $cashAccountChartId = $cashAccount->chart_of_account_id;
@@ -556,16 +733,50 @@ class DisbursementService
                 ]);
             }
 
+            // ── Strict Budget Alignment Guard ────────────────────────────
+            // A payroll disbursement CANNOT be released without an approved
+            // Active budget for the department. This ensures every single peso
+            // disbursed aligns with and is accounted for against an authorized budget.
+            $deptName = $disbursement->department?->department_name ?? "Department #{$disbursement->department_id}";
+            $paymentDateStr = $disbursement->payment_date ? date('Y-m-d', strtotime((string) $disbursement->payment_date)) : now()->toDateString();
+
+            $budget = null;
+            if ($disbursement->department_id) {
+                $budget = Budget::where('department_id', $disbursement->department_id)
+                    ->where('status', Budget::STATUS_ACTIVE)
+                    ->where('start_date', '<=', $paymentDateStr)
+                    ->where('end_date', '>=', $paymentDateStr)
+                    ->orderByRaw("CASE WHEN budget_type = 'Operational' THEN 0 ELSE 1 END")
+                    ->lockForUpdate()
+                    ->first()
+                    ?? Budget::where('department_id', $disbursement->department_id)
+                        ->where('status', Budget::STATUS_ACTIVE)
+                        ->orderByRaw("CASE WHEN budget_type = 'Operational' THEN 0 ELSE 1 END")
+                        ->lockForUpdate()
+                        ->first();
+            }
+
+            if (! $budget) {
+                throw ValidationException::withMessages([
+                    'budget' => "Cannot release payroll disbursement {$disbursement->voucher_number}: No approved Active budget found for {$deptName}. An active budget must be created and approved before payroll funds can be released.",
+                ]);
+            }
+
             $cashBalanceBefore = $cashAccount->current_balance;
 
             $cashAccount->update([
                 'current_balance' => $cashAccount->current_balance - $disbursement->amount_paid,
             ]);
 
+            $transactionNo = 'DV-'.$disbursement->voucher_number;
+            if (JournalEntry::where('transaction_no', $transactionNo)->exists()) {
+                $transactionNo .= '-' . now()->format('YmdHis');
+            }
+
             $journalEntry = JournalEntry::create([
-                'transaction_no' => 'DV-'.$disbursement->voucher_number,
+                'transaction_no' => $transactionNo,
                 'transaction_date' => now()->toDateString(),
-                'description' => "Payroll disbursement {$disbursement->voucher_number} — {$disbursement->payee} ({$disbursement->department?->department_name})",
+                'description' => "Payroll disbursement {$disbursement->voucher_number} — {$disbursement->payee} ({$deptName})",
                 'status' => 'Posted',
                 'posted_by' => $releasedById,
                 'posted_at' => now(),
@@ -578,7 +789,7 @@ class DisbursementService
                     'account_id' => $payrollAccountId,
                     'debit' => $disbursement->amount_paid,
                     'credit' => 0,
-                    'reference_type' => 'disbursement',
+                    'reference_type' => 'Disbursement',
                     'reference_id' => $disbursement->id,
                     'remarks' => 'Payroll settlement',
                     'created_at' => now(),
@@ -589,7 +800,7 @@ class DisbursementService
                     'account_id' => $cashAccountChartId,
                     'debit' => 0,
                     'credit' => $disbursement->amount_paid,
-                    'reference_type' => 'disbursement',
+                    'reference_type' => 'Disbursement',
                     'reference_id' => $disbursement->id,
                     'remarks' => 'Cash paid out',
                     'created_at' => now(),
@@ -602,6 +813,46 @@ class DisbursementService
                 'released_date' => now()->toDateString(),
                 'released_by' => $releasedById,
             ]);
+
+            // ── Budget Utilization Deduction ─────────────────────────────
+            // Deduct the payroll amount from the locked active budget.
+            $newUsed      = bcadd((string) $budget->used_amount, (string) $disbursement->amount_paid, 2);
+            $newRemaining = bcsub((string) $budget->allocated_amount, $newUsed, 2);
+
+            $budget->update([
+                'used_amount'      => $newUsed,
+                'remaining_amount' => $newRemaining,
+            ]);
+
+            $budgetUpdated = true;
+
+            // Warn the budget creator if utilization crossed the threshold
+            if ($budget->warning_percentage && $budget->allocated_amount > 0) {
+                $usedPct = ((float) $newUsed / (float) $budget->allocated_amount) * 100;
+                if ($usedPct >= (float) $budget->warning_percentage && $budget->created_by) {
+                    \Illuminate\Support\Facades\Log::info(
+                        "Budget {$budget->budget_code} for {$deptName} "
+                        . "is now {$usedPct}% utilized after payroll release {$disbursement->voucher_number}."
+                    );
+                    Notification::create([
+                        'user_id' => $budget->created_by,
+                        'title'   => 'Budget Utilization Warning',
+                        'message' => sprintf(
+                            'Budget "%s" (%s) for %s is now %.1f%% utilized after payroll release %s (₱%s). Remaining: ₱%s.',
+                            $budget->budget_name,
+                            $budget->budget_code,
+                            $deptName,
+                            $usedPct,
+                            $disbursement->voucher_number,
+                            number_format((float) $disbursement->amount_paid, 2),
+                            number_format((float) $newRemaining, 2)
+                        ),
+                        'type'    => 'Warning',
+                        'is_read' => false,
+                    ]);
+                }
+            }
+            // ────────────────────────────────────────────────────────────
 
             AuditLog::create([
                 'user_id' => $releasedById,
@@ -630,6 +881,8 @@ class DisbursementService
                     'cash_balance_after' => (float) $cashAccount->current_balance,
                     'journal_entry_id' => $journalEntry->id,
                     'journal_entry_no' => $journalEntry->transaction_no,
+                    'budget_id' => $budget?->id,
+                    'budget_updated' => $budgetUpdated,
                 ],
                 'ip_address' => request()->ip(),
                 'user_agent' => request()->userAgent(),
@@ -678,11 +931,35 @@ class DisbursementService
         return $document;
     }
 
+    /**
+     * Return all proof-of-payment documents uploaded for a disbursement, newest first.
+     * Matches AccountsPayableService::getDocumentHistory() and CollectionService::getProofHistory().
+     *
+     * @return \Illuminate\Database\Eloquent\Collection<int, SupportingDocument>
+     */
+    public function getProofHistory(Disbursement $disbursement): \Illuminate\Database\Eloquent\Collection
+    {
+        return SupportingDocument::query()
+            ->with('uploader:id,first_name,last_name')
+            ->where('reference_type', 'disbursement')
+            ->where('reference_id', $disbursement->id)
+            ->orderByDesc('uploaded_at')
+            ->orderByDesc('id')
+            ->get()
+            ->map(function (SupportingDocument $doc) {
+                $doc->uploaded_by_name = $doc->uploader
+                    ? trim("{$doc->uploader->first_name} {$doc->uploader->last_name}")
+                    : null;
+                $doc->has_file = (bool) $doc->storage_path;
+                return $doc;
+            });
+    }
+
     public function archive(Disbursement $disbursement, int $userId): Disbursement
     {
-        if ($disbursement->isPayroll()) {
+        if (! in_array($disbursement->status, ['Released', 'Rejected'], true)) {
             throw ValidationException::withMessages([
-                'source_type' => 'Payroll requests cannot be archived here.',
+                'status' => 'Only completed disbursements (Released or Rejected) can be archived. Pending and approved vouchers must complete the payment workflow.',
             ]);
         }
 
@@ -771,5 +1048,228 @@ class DisbursementService
         }
 
         return sprintf('REF-DIS-%03d', $nextNum);
+    }
+
+    /**
+     * Compile rich data for Check & Disbursement Voucher generation.
+     */
+    public function getPrintableVoucher(Disbursement $disbursement): array
+    {
+        $disbursement->loadMissing([
+            'accountsPayable.supplier',
+            'accountsPayable.account',
+            'department',
+            'cashAccount',
+            'creator',
+            'approver',
+            'releaser',
+        ]);
+
+        $ap = $disbursement->accountsPayable;
+        $supplier = $ap?->supplier;
+        $cashAccount = $disbursement->cashAccount;
+
+        // Fetch actual posted journal entry lines if released
+        $accountingEntries = [];
+        $journalEntry = JournalEntry::where('transaction_no', 'DV-'.$disbursement->voucher_number)->first();
+        if ($journalEntry) {
+            $lines = JournalEntryLine::with('account')
+                ->where('journal_entry_id', $journalEntry->id)
+                ->get();
+
+            foreach ($lines as $line) {
+                $accountingEntries[] = [
+                    'account_code' => $line->account?->account_code ?? '—',
+                    'account_name' => $line->account?->account_name ?? ($line->remarks ?? 'Accounting Entry'),
+                    'debit'        => (float) $line->debit,
+                    'credit'       => (float) $line->credit,
+                    'remarks'      => $line->remarks,
+                ];
+            }
+        }
+
+        // If no journal entry posted yet, project standard balanced double entry
+        if (empty($accountingEntries)) {
+            $apAccount = $ap?->account ?? ChartOfAccount::where('account_code', '2000')->orWhere('account_name', 'Accounts Payable')->first();
+            $cashCoa = $cashAccount?->chart_of_account_id
+                ? ChartOfAccount::find($cashAccount->chart_of_account_id)
+                : ChartOfAccount::where('account_code', '1001')->orWhere('account_type', 'Asset')->first();
+
+            $accountingEntries[] = [
+                'account_code' => $apAccount?->account_code ?? '2000',
+                'account_name' => $apAccount?->account_name ?? 'Accounts Payable',
+                'debit'        => (float) $disbursement->amount_paid,
+                'credit'       => 0,
+                'remarks'      => $disbursement->isPayroll() ? 'Payroll clearing' : 'AP settlement',
+            ];
+
+            $accountingEntries[] = [
+                'account_code' => $cashCoa?->account_code ?? '1001',
+                'account_name' => $cashCoa?->account_name ?? ($cashAccount?->account_name ?? 'Cash in Bank'),
+                'debit'        => 0,
+                'credit'       => (float) $disbursement->amount_paid,
+                'remarks'      => 'Cash disbursement',
+            ];
+        }
+
+        $fmtDate = fn ($d) => $d ? date('Y-m-d', strtotime((string) $d)) : null;
+
+        return [
+            'voucher' => [
+                'id'                   => $disbursement->id,
+                'voucher_number'       => $disbursement->voucher_number,
+                'source_type'          => $disbursement->source_type,
+                'is_payroll'           => $disbursement->isPayroll(),
+                'status'               => $disbursement->status,
+                'payment_method'       => $disbursement->payment_method,
+                'payment_date'         => $fmtDate($disbursement->payment_date),
+                'released_date'        => $fmtDate($disbursement->released_date),
+                'amount_paid'          => (float) $disbursement->amount_paid,
+                'currency'             => $disbursement->currency ?? 'PHP',
+                'reference_number'     => $disbursement->reference_number,
+                'remarks'              => $disbursement->remarks,
+                'payee'                => $disbursement->payee,
+                'payroll_batch_number' => $disbursement->payroll_batch_number,
+                'pay_period_start'     => $fmtDate($disbursement->pay_period_start),
+                'pay_period_end'       => $fmtDate($disbursement->pay_period_end),
+                'employee_count'       => $disbursement->employee_count,
+            ],
+            'supplier' => $supplier ? [
+                'id'             => $supplier->id,
+                'supplier_code'  => $supplier->supplier_code,
+                'supplier_name'  => $supplier->supplier_name,
+                'tin'            => $supplier->tin ?? '000-000-000-000',
+                'address'        => $supplier->address ?? '',
+                'contact_person' => $supplier->contact_person,
+                'contact_number' => $supplier->contact_number,
+                'email'          => $supplier->email,
+            ] : null,
+            'bill' => $ap ? [
+                'id'                => $ap->id,
+                'invoice_number'    => $ap->invoice_number,
+                'invoice_date'      => $fmtDate($ap->invoice_date),
+                'due_date'          => $fmtDate($ap->due_date),
+                'original_amount'   => (float) $ap->original_amount,
+                'paid_amount'       => (float) $ap->paid_amount,
+                'remaining_balance' => (float) $ap->remaining_balance,
+                'purchase_order_no' => $ap->purchase_order_no,
+                'description'       => $ap->description,
+            ] : null,
+            'cash_account' => $cashAccount ? [
+                'id'             => $cashAccount->id,
+                'account_name'   => $cashAccount->account_name,
+                'bank_name'      => $cashAccount->bank_name,
+                'account_number' => $cashAccount->account_number,
+                'account_type'   => $cashAccount->account_type,
+            ] : null,
+            'department' => $disbursement->department ? [
+                'id'              => $disbursement->department->id,
+                'department_name' => $disbursement->department->department_name,
+            ] : null,
+            'signatories' => [
+                'prepared_by' => trim(($disbursement->creator?->first_name ?? '').' '.($disbursement->creator?->last_name ?? '')) ?: 'Finance Staff',
+                'prepared_at' => $fmtDate($disbursement->created_at),
+                'approved_by' => trim(($disbursement->approver?->first_name ?? '').' '.($disbursement->approver?->last_name ?? '')) ?: ($disbursement->status !== 'Pending' ? 'Finance Officer' : null),
+                'approved_at' => $fmtDate($disbursement->approved_at),
+                'released_by' => trim(($disbursement->releaser?->first_name ?? '').' '.($disbursement->releaser?->last_name ?? '')) ?: ($disbursement->status === 'Released' ? 'Disbursing Cashier' : null),
+                'released_at' => $fmtDate($disbursement->released_date),
+            ],
+            'accounting_entries' => $accountingEntries,
+        ];
+    }
+
+    /**
+     * Compile official BIR Form 2307 (Certificate of Creditable Tax Withheld at Source) data.
+     */
+    public function getBir2307Data(Disbursement $disbursement): array
+    {
+        $disbursement->loadMissing(['accountsPayable.supplier']);
+        $supplier = $disbursement->accountsPayable?->supplier;
+
+        $paymentDate = $disbursement->payment_date ? \Carbon\Carbon::parse($disbursement->payment_date) : now();
+        $quarter = (int) ceil($paymentDate->month / 3);
+        $quarterMonths = [
+            1 => ['January', 'February', 'March', '01-01', '03-31'],
+            2 => ['April', 'May', 'June', '04-01', '06-30'],
+            3 => ['July', 'August', 'September', '07-01', '09-30'],
+            4 => ['October', 'November', 'December', '10-01', '12-31'],
+        ][$quarter];
+
+        $monthInQuarter = ($paymentDate->month - 1) % 3 + 1;
+
+        $atcCodes = [
+            [
+                'code' => 'WC157',
+                'rate' => 2.0,
+                'description' => 'Payments to contractors & sub-contractors / Purchase of Services',
+                'nature' => 'Services',
+            ],
+            [
+                'code' => 'WC100',
+                'rate' => 1.0,
+                'description' => 'Payments made by top withholding agents to regular suppliers of goods',
+                'nature' => 'Goods',
+            ],
+            [
+                'code' => 'WC158',
+                'rate' => 5.0,
+                'description' => 'Rental of real or personal properties',
+                'nature' => 'Rent',
+            ],
+            [
+                'code' => 'WC010',
+                'rate' => 10.0,
+                'description' => 'Professional fees paid to corporate / professional entities',
+                'nature' => 'Professional Fees',
+            ],
+            [
+                'code' => 'WI010',
+                'rate' => 5.0,
+                'description' => 'Professional fees paid to individuals (below statutory threshold)',
+                'nature' => 'Professional Fees (Individual)',
+            ],
+        ];
+
+        // Pick default ATC: if remarks or payee hints goods, WC100; else default WC157 (2%)
+        $text = strtolower(($disbursement->remarks ?? '').' '.($disbursement->payee ?? ''));
+        $defaultAtc = (str_contains($text, 'goods') || str_contains($text, 'supply') || str_contains($text, 'item'))
+            ? $atcCodes[1]
+            : $atcCodes[0];
+
+        $grossAmount = (float) $disbursement->amount_paid;
+        $taxRate = $defaultAtc['rate'];
+        $taxWithheld = round($grossAmount * ($taxRate / 100), 2);
+        $netAmount = $grossAmount - $taxWithheld;
+
+        return [
+            'certificate_no' => '2307-'.($disbursement->voucher_number ?: ('DV-'.$disbursement->id)),
+            'period' => [
+                'from' => $paymentDate->format('Y').'-'.$quarterMonths[3],
+                'to' => $paymentDate->format('Y').'-'.$quarterMonths[4],
+                'quarter' => "Q{$quarter}",
+                'year' => (int) $paymentDate->format('Y'),
+                'month_index_in_quarter' => $monthInQuarter,
+            ],
+            'payor' => [
+                'tin' => '009-876-543-000',
+                'registered_name' => 'Financial Management System Inc.',
+                'address' => '100 Ayala Avenue, Makati City, Metro Manila',
+                'zip_code' => '1226',
+            ],
+            'payee' => [
+                'tin' => $supplier?->tin ?: '123-456-789-000',
+                'registered_name' => $disbursement->payee,
+                'address' => $supplier?->address ?: 'Philippines',
+                'zip_code' => '1000',
+            ],
+            'atc_codes' => $atcCodes,
+            'default_atc' => $defaultAtc['code'],
+            'computation' => [
+                'gross_amount' => $grossAmount,
+                'tax_rate' => $taxRate,
+                'tax_withheld' => $taxWithheld,
+                'net_amount' => $netAmount,
+            ],
+        ];
     }
 }

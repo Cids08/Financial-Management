@@ -38,6 +38,7 @@ class AccountsReceivableResource extends JsonResource
             'remarks' => $this->remarks,
             'status' => $this->status,
             'created_by' => $this->created_by,
+            'has_attachment' => (bool) $this->supportingDocuments()->exists(),
             'is_archived' => (bool) $this->is_archived,
             'archived_at' => $this->archived_at?->toIso8601String(),
             'archived_by' => $this->archived_by,

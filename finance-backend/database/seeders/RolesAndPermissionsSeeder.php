@@ -133,6 +133,7 @@ class RolesAndPermissionsSeeder extends Seeder
         'disbursements.view' => ['View Disbursements', 'Budget Management'],
         'disbursements.manage' => ['Manage Disbursements', 'Budget Management'],
         'disbursements.approve' => ['Approve Disbursements', 'Budget Management'],
+        'disbursements.release' => ['Release Disbursements', 'Budget Management'],
         'budgets.view' => ['View Budgets', 'Budget Management'],
         'budgets.manage' => ['Manage Budgets', 'Budget Management'],
         'budgets.approve' => ['Approve Budgets', 'Budget Management'],
@@ -167,7 +168,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'ar.view', 'ar.manage',
             'ap.view', 'ap.manage', // NOT ap.approve
             'expenses.view', 'expenses.manage', // NOT expenses.approve
-            'disbursements.view', 'disbursements.manage', // NOT disbursements.approve
+            'disbursements.view', 'disbursements.manage', 'disbursements.release', // NOT disbursements.approve
             'budgets.view', 'budgets.manage', // NOT budgets.approve — final approval is Admin/CEO-only
             'expense-categories.view', // read-only dropdown source
         ],

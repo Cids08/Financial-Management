@@ -126,6 +126,39 @@ export function useFixedAssets() {
     }
   }, [fetchAssets])
 
+  const fetchDepreciationPreview = useCallback(async (params = {}) => {
+    try {
+      const qs = new URLSearchParams(params)
+      const res = await apiFetch(`/api/fixed-assets/depreciation-preview?${qs}`)
+      const json = await res.json()
+      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to load depreciation preview.')
+      return { success: true, data: json.data }
+    } catch (err) {
+      return { success: false, message: err.message }
+    }
+  }, [])
+
+  const executeDepreciationRun = useCallback(async (payload) => {
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await apiFetch('/api/fixed-assets/execute-depreciation-run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const json = await res.json()
+      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to execute depreciation run.')
+      await fetchAssets()
+      return { success: true, data: json.data, message: json.message }
+    } catch (err) {
+      setError(err.message)
+      return { success: false, message: err.message }
+    } finally {
+      setSaving(false)
+    }
+  }, [fetchAssets])
+
   return {
     assets, meta, loading, saving, error,
     search, setSearch,
@@ -134,5 +167,7 @@ export function useFixedAssets() {
     showArchived, setShowArchived,
     page, setPage,
     createAsset, updateAsset, archiveAsset, restoreAsset,
+    fetchDepreciationPreview, executeDepreciationRun,
+    refetch: fetchAssets,
   }
 }

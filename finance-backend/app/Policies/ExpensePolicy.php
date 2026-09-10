@@ -41,11 +41,12 @@ class ExpensePolicy
 
     public function update(User $user, Expense $expense): bool
     {
-        // Mirrors ExpenseService::update()'s own guard: once approved, an
-        // expense has already moved budget numbers and posted a journal
-        // entry — it must go through reject/reverse, never a silent edit,
-        // even for users who otherwise have expenses.manage.
-        if ($expense->status === Expense::STATUS_APPROVED) {
+        // Only Pending expenses may be edited. Once an expense is Approved it
+        // has already moved budget numbers and posted a journal entry — editing
+        // in place would silently desync both. Rejected expenses must also go
+        // through a fresh submission rather than an in-place edit, to maintain
+        // a clear audit trail.
+        if ($expense->status !== Expense::STATUS_PENDING) {
             return false;
         }
 
@@ -72,6 +73,13 @@ class ExpensePolicy
 
     public function archive(User $user, Expense $expense): bool
     {
+        // Only decided/completed expenses (Approved or Rejected) can be archived.
+        // Pending expense requests must be reviewed first and cannot be swept away.
+        // Archiving an approved expense keeps its General Ledger journal entry permanently posted.
+        if ($expense->status === Expense::STATUS_PENDING) {
+            return false;
+        }
+
         return $user->hasPermission('expenses.manage'); // archive route uses expenses.manage per routes/api.php
     }
 

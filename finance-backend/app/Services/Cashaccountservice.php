@@ -26,9 +26,9 @@ class CashAccountService
             $query->where('account_type', $filters['type']);
         }
 
-        $query->search($filters['search'] ?? null)->latest();
+        $perPage = ! empty($filters['per_page']) ? min((int) $filters['per_page'], 200) : self::PER_PAGE;
 
-        return $query->paginate(self::PER_PAGE);
+        return $query->paginate($perPage);
     }
 
     public function create(User $user, array $data): CashAccount

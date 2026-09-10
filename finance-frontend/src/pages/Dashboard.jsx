@@ -29,6 +29,8 @@ import {
   ChevronRight,
   Activity,
   Loader2,
+  Eye,
+  EyeOff,
 } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import DashboardCard from '../components/DashboardCard'
@@ -303,6 +305,9 @@ export default function Dashboard() {
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState(null)
 
+  // Privacy Mode — hides all currency figures when enabled
+  const [privacyMode, setPrivacyMode] = useState(false)
+
   useEffect(() => {
     setLoading(true)
     setError(null)
@@ -383,11 +388,13 @@ export default function Dashboard() {
     forecast_summary: forecastSummary = [],
   } = data
 
+  const MASKED = '₱ ••••••'
+
   const overviewCards = OVERVIEW_CARD_CONFIG.map((cfg) => {
     const entry = overview[cfg.key] || {}
     return {
       title: cfg.title,
-      value: formatCurrency(entry.value || 0),
+      value: privacyMode ? MASKED : formatCurrency(entry.value || 0),
       icon: cfg.icon,
       trend: entry.trend,
       iconBg: cfg.iconBg,
@@ -397,7 +404,9 @@ export default function Dashboard() {
 
   const moduleCards = MODULE_CARD_CONFIG.map((cfg) => ({
     title: cfg.title,
-    value: cfg.format === 'currency' ? formatCurrency(moduleCardValues[cfg.key] || 0) : String(moduleCardValues[cfg.key] ?? 0),
+    value: cfg.format === 'currency'
+      ? (privacyMode ? MASKED : formatCurrency(moduleCardValues[cfg.key] || 0))
+      : String(moduleCardValues[cfg.key] ?? 0),
     icon: cfg.icon,
     iconBg: cfg.iconBg,
     iconColor: cfg.iconColor,
@@ -422,6 +431,20 @@ export default function Dashboard() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          {/* Privacy Mode toggle — masks all currency values on this page */}
+          <button
+            type="button"
+            onClick={() => setPrivacyMode(m => !m)}
+            className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs transition-colors duration-150 ${
+              privacyMode
+                ? 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400'
+                : 'border-border bg-surface text-muted hover:text-ink'
+            }`}
+            title={privacyMode ? 'Disable Privacy Mode' : 'Enable Privacy Mode'}
+          >
+            {privacyMode ? <EyeOff size={13} /> : <Eye size={13} />}
+            {privacyMode ? 'Privacy On' : 'Privacy Mode'}
+          </button>
           <Button variant="secondary" size="sm" icon={Download} onClick={handleExport} disabled={exporting}>
             {exporting ? 'Exporting…' : 'Export'}
           </Button>

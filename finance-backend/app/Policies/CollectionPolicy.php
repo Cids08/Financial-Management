@@ -48,7 +48,17 @@ class CollectionPolicy
      */
     public function view(User $user, Collection $collection): bool
     {
-        return $user->hasPermission('collections.view');
+        if (! $user->hasPermission('collections.view')) {
+            return false;
+        }
+
+        // Collectors can only view their own collections
+        if ($user->role?->name === 'collector') {
+            return (int) $collection->collector_id === (int) $user->collector?->id
+                || (int) $collection->created_by === (int) $user->id;
+        }
+
+        return true;
     }
 
     /**
@@ -74,7 +84,40 @@ class CollectionPolicy
 
         // Confirmed collections cannot be edited — the financial side effects
         // (AR balance, cash account, journal entry) are already committed.
-        return $collection->status !== Collection::STATUS_CONFIRMED;
+        if ($collection->status === Collection::STATUS_CONFIRMED) {
+            return false;
+        }
+
+        // Collectors can only edit their own pending collections
+        if ($user->role?->name === 'collector') {
+            return (int) $collection->collector_id === (int) $user->collector?->id
+                || (int) $collection->created_by === (int) $user->id;
+        }
+
+        return true;
+    }
+
+    /**
+     * Attach proof of receipt — only allowed on pending collections.
+     */
+    public function attachProof(User $user, Collection $collection): bool
+    {
+        if (! $user->hasPermission('collections.manage')) {
+            return false;
+        }
+
+        // Confirmed or cancelled collections cannot accept new proof
+        if ($collection->status !== Collection::STATUS_PENDING) {
+            return false;
+        }
+
+        // Collectors can only attach proof to their own collections
+        if ($user->role?->name === 'collector') {
+            return (int) $collection->collector_id === (int) $user->collector?->id
+                || (int) $collection->created_by === (int) $user->id;
+        }
+
+        return true;
     }
 
     /**
@@ -121,11 +164,21 @@ class CollectionPolicy
             return false;
         }
 
-        // Confirmed collections should not be silently archived — they have
-        // committed journal entries and AR balance changes. Force the caller
-        // to cancel first (which itself requires collections.confirm), then
-        // archive. Adjust this guard if your business rules differ.
-        return $collection->status !== Collection::STATUS_CONFIRMED;
+        // Only completed or settled collections (Confirmed or Cancelled) can be archived.
+        // In-flight collections (Pending) represent unverified funds that must remain
+        // in the active queue until confirmed and deposited.
+        // Archiving a Confirmed collection keeps its General Ledger entries permanently posted.
+        if (! in_array($collection->status, [Collection::STATUS_CONFIRMED, Collection::STATUS_CANCELLED], true)) {
+            return false;
+        }
+
+        // Collectors can only archive their own pending collections
+        if ($user->role?->name === 'collector') {
+            return (int) $collection->collector_id === (int) $user->collector?->id
+                || (int) $collection->created_by === (int) $user->id;
+        }
+
+        return true;
     }
 
     /**
@@ -134,6 +187,15 @@ class CollectionPolicy
      */
     public function restore(User $user, Collection $collection): bool
     {
-        return $user->hasPermission('collections.manage');
+        if (! $user->hasPermission('collections.manage')) {
+            return false;
+        }
+
+        if ($user->role?->name === 'collector') {
+            return (int) $collection->collector_id === (int) $user->collector?->id
+                || (int) $collection->created_by === (int) $user->id;
+        }
+
+        return true;
     }
 }

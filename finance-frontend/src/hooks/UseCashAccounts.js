@@ -32,6 +32,7 @@ export function useCashAccounts() {
     try {
       const params = new URLSearchParams({
         page: String(page),
+        per_page: '100',
         archived: showArchived ? '1' : '0',
       })
       if (debouncedSearch) params.set('search', debouncedSearch)

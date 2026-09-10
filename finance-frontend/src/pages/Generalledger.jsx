@@ -9,13 +9,30 @@ import { apiFetch } from '../utils/api'
 
 const REFERENCE_TYPES = ['Collections', 'Disbursements', 'Accounts Receivable', 'Accounts Payable', 'Expenses', 'Tax Obligations']
 
+function formatSource(source) {
+  if (!source) return '—'
+  const text = String(source).replace(/_/g, ' ').trim()
+  if (!text) return '—'
+  // Sentence case: Capitalize first letter, keep rest lowercase
+  return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase()
+}
+
 const REFERENCE_STYLES = {
   Collections: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
-  Disbursements: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
-  'Accounts Receivable': 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400',
-  'Accounts Payable': 'bg-purple-50 text-purple-600 dark:bg-purple-500/10 dark:text-purple-400',
+  Collection: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
+  Disbursements: 'bg-primary/10 text-primary-dark dark:bg-primary/15 dark:text-primary',
+  Disbursement: 'bg-primary/10 text-primary-dark dark:bg-primary/15 dark:text-primary',
+  'Accounts receivable': 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+  'Accounts payable': 'bg-purple-50 text-purple-600 dark:bg-purple-500/10 dark:text-purple-400',
   Expenses: 'bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-400',
-  'Tax Obligations': 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+  Expense: 'bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-400',
+  'Tax obligations': 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+}
+
+function getSourceStyle(source) {
+  if (!source) return 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+  const formatted = formatSource(source)
+  return REFERENCE_STYLES[formatted] || REFERENCE_STYLES[source] || 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
 }
 
 const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
@@ -108,9 +125,9 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
   const [debouncedSearch, setDebouncedSearch] = useState(EMPTY_FILTERS.search)
   const [referenceFilter, setReferenceFilter] = useState(EMPTY_FILTERS.referenceFilter)
   const [accountFilter, setAccountFilter] = useState(EMPTY_FILTERS.accountFilter)
-  const [dateFrom, setDateFrom] = useState(EMPTY_FILTERS.dateFrom)
-  const [dateTo, setDateTo] = useState(EMPTY_FILTERS.dateTo)
-  const [datePreset, setDatePreset] = useState('all')
+  const [dateFrom, setDateFrom] = useState(() => resolveDatePreset('today').from)
+  const [dateTo, setDateTo] = useState(() => resolveDatePreset('today').to)
+  const [datePreset, setDatePreset] = useState('today')
   const [lineFilter, setLineFilter] = useState(EMPTY_FILTERS.lineFilter) // 'all' | 'debit' | 'credit'
   const [page, setPage] = useState(1)
 
@@ -228,8 +245,8 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
       label: 'Total Debits',
       value: formatCurrency(grandTotals.debit),
       icon: TrendingUp,
-      iconBg: 'bg-blue-50 dark:bg-blue-500/10',
-      iconColor: 'text-blue-600 dark:text-blue-400',
+      iconBg: 'bg-primary/15',
+      iconColor: 'text-primary-dark',
       isActive: lineFilter === 'debit',
       onClick: () => { setLineFilter('debit'); setView('journal') },
     },
@@ -332,7 +349,7 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
           </div>
           <select value={referenceFilter} onChange={(e) => setReferenceFilter(e.target.value)} className={INPUT} style={INPUT_TEXT_STYLE}>
             <option value="all">All Sources</option>
-            {REFERENCE_TYPES.map((r) => <option key={r} value={r}>{r}</option>)}
+            {REFERENCE_TYPES.map((r) => <option key={r} value={r}>{formatSource(r)}</option>)}
           </select>
           <select value={accountFilter} onChange={(e) => setAccountFilter(e.target.value)} className={INPUT} style={INPUT_TEXT_STYLE}>
             <option value="all">All Accounts</option>
@@ -405,17 +422,17 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
 
       {!loading && view === 'journal' && (
         <div className={PANEL}>
-        <div className="overflow-x-auto overflow-y-auto max-h-[70vh] border border-border rounded-lg">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-surface" border-border rounded-lg>
+        <div className="overflow-hidden rounded-t-xl">
+          <table className="w-full text-sm table-fixed">
+            <thead className="bg-surface">
                 <tr className="border-b border-border">
-                  <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Date</th>
-                  <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Account</th>
-                  <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Description</th>
-                  <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Source</th>
-                  <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Debit</th>
-                  <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Credit</th>
-                  <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Details</th>
+                  <th className="w-28 text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Date</th>
+                  <th className="w-48 text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Account</th>
+                  <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3">Description</th>
+                  <th className="w-32 text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Source</th>
+                  <th className="w-28 text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Debit</th>
+                  <th className="w-28 text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Credit</th>
+                  <th className="w-12 text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3"></th>
                 </tr>
               </thead>
               <tbody>
@@ -425,16 +442,22 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
                     onClick={() => openGroupDetail(e)}
                     className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150 cursor-pointer"
                   >
-                    <td className="px-4 py-3.5 whitespace-nowrap text-ink">{formatDate(e.transaction_date)}</td>
-                    <td className="px-4 py-3.5 whitespace-nowrap text-ink">{e.account_code} — {e.account_name}</td>
-                    <td className="px-4 py-3.5 text-ink max-w-70 truncate">{e.description}</td>
+                    <td className="px-4 py-3.5 whitespace-nowrap text-ink text-xs">{formatDate(e.transaction_date)}</td>
+                    <td className="px-4 py-3.5 text-ink text-xs">
+                      <span className="block truncate" title={`${e.account_code} — ${e.account_name}`}>{e.account_code} — {e.account_name}</span>
+                    </td>
+                    <td className="px-4 py-3.5 text-ink text-xs">
+                      <span className="block truncate" title={e.description}>{e.description}</span>
+                    </td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
                       {e.reference_type && (
-                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${REFERENCE_STYLES[e.reference_type] || 'bg-slate-100 text-slate-600'}`}>{e.reference_type}</span>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium truncate max-w-full ${getSourceStyle(e.reference_type)}`}>
+                          {formatSource(e.reference_type)}
+                        </span>
                       )}
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap text-right tabular-nums text-ink">{e.debit ? formatCurrency(e.debit) : '—'}</td>
-                    <td className="px-4 py-3.5 whitespace-nowrap text-right tabular-nums text-ink">{e.credit ? formatCurrency(e.credit) : '—'}</td>
+                    <td className="px-4 py-3.5 whitespace-nowrap text-right tabular-nums text-ink text-xs">{e.debit ? formatCurrency(e.debit) : '—'}</td>
+                    <td className="px-4 py-3.5 whitespace-nowrap text-right tabular-nums text-ink text-xs">{e.credit ? formatCurrency(e.credit) : '—'}</td>
                     <td className="px-4 py-3.5 whitespace-nowrap text-right">
                       <Tooltip label="View transaction pair" position="left">
                         <button
@@ -469,14 +492,14 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
 
       {!loading && view === 'trial-balance' && (
         <div className={PANEL}>
-        <div className="overflow-x-auto overflow-y-auto max-h-[70vh] rounded-t-xl">
+        <div className="overflow-hidden rounded-t-xl">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-surface">
+            <thead className="bg-surface">
                 <tr className="border-b border-border">
                   <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Account</th>
-                  <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Total Debit</th>
-                  <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Total Credit</th>
-                  <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Net Balance</th>
+                  <th className="w-32 text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Total Debit</th>
+                  <th className="w-32 text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Total Credit</th>
+                  <th className="w-32 text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Net Balance</th>
                 </tr>
               </thead>
               <tbody>
@@ -488,10 +511,10 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
                       onClick={() => { setAccountFilter(String(row.account_id)); setView('journal') }}
                       className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150 cursor-pointer"
                     >
-                      <td className="px-4 py-3.5 text-ink">{row.account_code} — {row.account_name}</td>
-                      <td className="px-4 py-3.5 whitespace-nowrap text-right tabular-nums text-ink">{row.total_debit ? formatCurrency(row.total_debit) : '—'}</td>
-                      <td className="px-4 py-3.5 whitespace-nowrap text-right tabular-nums text-ink">{row.total_credit ? formatCurrency(row.total_credit) : '—'}</td>
-                      <td className={`px-4 py-3.5 whitespace-nowrap text-right tabular-nums font-medium ${net > 0 ? 'text-blue-600 dark:text-blue-400' : net < 0 ? 'text-purple-600 dark:text-purple-400' : 'text-muted'}`}>
+                      <td className="px-4 py-3.5 text-ink text-xs">{row.account_code} — {row.account_name}</td>
+                      <td className="px-4 py-3.5 whitespace-nowrap text-right tabular-nums text-ink text-xs">{row.total_debit ? formatCurrency(row.total_debit) : '—'}</td>
+                      <td className="px-4 py-3.5 whitespace-nowrap text-right tabular-nums text-ink text-xs">{row.total_credit ? formatCurrency(row.total_credit) : '—'}</td>
+                      <td className={`px-4 py-3.5 whitespace-nowrap text-right tabular-nums font-medium text-xs ${net > 0 ? 'text-emerald-600 dark:text-emerald-400' : net < 0 ? 'text-purple-600 dark:text-purple-400' : 'text-muted'}`}>
                         {net === 0 ? '—' : formatCurrency(Math.abs(net)) + (net > 0 ? ' Dr' : ' Cr')}
                       </td>
                     </tr>
@@ -505,9 +528,9 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
                 <tfoot>
                   <tr className="border-t-2 border-border font-semibold">
                     <td className="px-4 py-3 text-right text-xs uppercase tracking-wide text-muted">Totals</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-right tabular-nums text-ink">{formatCurrency(trialTotals.debit)}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-right tabular-nums text-ink">{formatCurrency(trialTotals.credit)}</td>
-                    <td className={`px-4 py-3 whitespace-nowrap text-right tabular-nums ${Math.abs(trialTotals.debit - trialTotals.credit) < 0.005 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                    <td className="px-4 py-3 whitespace-nowrap text-right tabular-nums text-ink text-xs">{formatCurrency(trialTotals.debit)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-right tabular-nums text-ink text-xs">{formatCurrency(trialTotals.credit)}</td>
+                    <td className={`px-4 py-3 whitespace-nowrap text-right tabular-nums text-xs ${Math.abs(trialTotals.debit - trialTotals.credit) < 0.005 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                       {Math.abs(trialTotals.debit - trialTotals.credit) < 0.005 ? 'Balanced' : formatCurrency(Math.abs(trialTotals.debit - trialTotals.credit)) + ' off'}
                     </td>
                   </tr>

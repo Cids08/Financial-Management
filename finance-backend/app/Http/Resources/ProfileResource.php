@@ -26,8 +26,10 @@ class ProfileResource extends JsonResource
             // separate display_name column. Idempotent on an already-nice
             // string, so this is safe even if some roles are seeded pretty.
             'role'        => $this->whenLoaded('role', fn () => $this->role?->name ? Str::headline($this->role->name) : null),
+            'role_slug'   => $this->whenLoaded('role', fn () => $this->role?->name),
 
             'department'  => $this->whenLoaded('department', fn () => $this->department?->name),
+            'collector_id'=> $this->whenLoaded('collector', fn () => $this->collector?->id),
 
             // This is the field that mattered for the broken-image bug:
             // always emit a full, absolute URL — never a bare storage

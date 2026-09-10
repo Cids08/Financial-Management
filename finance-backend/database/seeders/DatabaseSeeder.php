@@ -23,17 +23,21 @@ class DatabaseSeeder extends Seeder
             // 3. Accounting Structure & Accounts
             ChartOfAccountSeeder::class,
             CashAccountSeeder::class,
-            CollectorSeeder::class,
+            // CollectorSeeder intentionally omitted:
+            //   Collectors are created by linking real user accounts (collector role).
+            //   Seeding dummy collectors would bypass that flow.
             ExpenseCategorySeeder::class,
             BudgetSeeder::class,
 
             // 4. Invoices, Payables & Transactions (Depend on previous entities)
             AccountsReceivableSeeder::class,
-            CollectionSeeder::class,
+            AccountsPayableSeeder::class,
+            // CollectionSeeder intentionally omitted: requires collectors to exist.
             ExpenseSeeder::class,
             TaxObligationSeeder::class,
             JournalEntrySeeder::class,
             DisbursementPayrollDemoSeeder::class,
         ]);
+
     }
 }

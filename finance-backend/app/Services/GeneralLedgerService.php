@@ -24,7 +24,14 @@ class GeneralLedgerService
             ->when($filters['side'] ?? null, function ($q, $side) {
                 $side === 'debit' ? $q->where('debit', '>', 0) : $q->where('credit', '>', 0);
             })
-            ->when($filters['reference_type'] ?? null, fn ($q, $type) => $q->where('reference_type', $type))
+            ->when($filters['reference_type'] ?? null, function ($q, $type) {
+                $q->where(function ($sub) use ($type) {
+                    $singular = rtrim($type, 's');
+                    $sub->where('reference_type', 'ilike', $type)
+                        ->orWhere('reference_type', 'ilike', $singular)
+                        ->orWhere('reference_type', 'ilike', $singular . 's');
+                });
+            })
             ->when($filters['account_id'] ?? null, fn ($q, $id) => $q->where('account_id', $id))
             ->when($filters['date_from'] ?? null, fn ($q, $date) => $q->whereHas(
                 'journalEntry', fn ($je) => $je->whereDate('transaction_date', '>=', $date)
@@ -43,8 +50,8 @@ class GeneralLedgerService
 
         return $query
             ->join('journal_entries', 'journal_entries.id', '=', 'journal_entry_lines.journal_entry_id')
-            ->orderBy('journal_entries.transaction_date')
-            ->orderBy('journal_entry_lines.id')
+            ->orderByDesc('journal_entries.transaction_date')
+            ->orderByDesc('journal_entry_lines.id')
             ->select('journal_entry_lines.*')
             ->paginate($filters['per_page'] ?? 25);
     }
@@ -67,7 +74,14 @@ class GeneralLedgerService
             ->join('journal_entries', 'journal_entries.id', '=', 'journal_entry_lines.journal_entry_id')
             ->join('chart_of_accounts', 'chart_of_accounts.id', '=', 'journal_entry_lines.account_id')
             ->where('journal_entries.status', 'Posted')
-            ->when($filters['reference_type'] ?? null, fn ($q, $type) => $q->where('journal_entry_lines.reference_type', $type))
+            ->when($filters['reference_type'] ?? null, function ($q, $type) {
+                $q->where(function ($sub) use ($type) {
+                    $singular = rtrim($type, 's');
+                    $sub->where('journal_entry_lines.reference_type', 'ilike', $type)
+                        ->orWhere('journal_entry_lines.reference_type', 'ilike', $singular)
+                        ->orWhere('journal_entry_lines.reference_type', 'ilike', $singular . 's');
+                });
+            })
             ->when($filters['account_id'] ?? null, fn ($q, $id) => $q->where('journal_entry_lines.account_id', $id))
             ->when($filters['date_from'] ?? null, fn ($q, $date) => $q->whereDate('journal_entries.transaction_date', '>=', $date))
             ->when($filters['date_to'] ?? null, fn ($q, $date) => $q->whereDate('journal_entries.transaction_date', '<=', $date));

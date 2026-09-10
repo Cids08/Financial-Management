@@ -1,15 +1,18 @@
 import { useState, useMemo, useEffect } from 'react'
 import {
   Search, Plus, Pencil, Archive, RotateCcw, Send, CheckCircle2, Clock3, Info, Printer,
-  Lock, ChevronLeft, ChevronRight, CalendarRange, X, Upload, ThumbsUp, ThumbsDown, Wallet,
-  Users,
+  Lock, ChevronLeft, ChevronRight, CalendarRange, X, Wallet, Users,
+  Paperclip, FileText, AlertTriangle, Loader2,
 } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
+import DisbursementProofModal from '../components/DisbursementProofModal'
+import DisbursementPrintModal from '../components/DisbursementPrintModal'
 import { formatCurrency } from '../utils/formatters'
 import { usePermissions } from '../context/PermissionsContext'
+import { useProfileContext } from '../context/ProfileContext'
 import { hasPermission } from '../utils/permissions'
 import { useDisbursements } from '../hooks/useDisbursements'
 import { useDepartments } from '../hooks/useDepartments'
@@ -48,7 +51,7 @@ const LABEL = 'block text-xs font-medium text-muted mb-1.5'
 
 const DISBURSEMENT_STATUS_STYLES = {
   Pending: 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400',
-  Approved: 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400',
+  Approved: 'bg-primary/10 text-primary-dark dark:bg-primary/15 dark:text-primary',
   Released: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
   Rejected: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
 }
@@ -160,10 +163,14 @@ function NoAccessState({ label }) {
 
 export default function Disbursements({ title = 'Disbursements', crumbs = ['Financial Transactions', 'Disbursements'] }) {
   const { permissions, loading: permsLoading } = usePermissions()
+  const { profile } = useProfileContext()
+  // Archive/restore of disbursements is restricted to Admin and Super Admin only.
+  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
 
   const canViewPayments = hasPermission(permissions, 'disbursements.view')
   const canManagePayments = hasPermission(permissions, 'disbursements.manage')
-  const canApprovePayments = hasPermission(permissions, 'disbursements.approve')
+  const canApprovePayments = hasPermission(permissions, 'disbursements.approve') || canManagePayments
+  const canReleasePayments = hasPermission(permissions, 'disbursements.release') || canManagePayments || canApprovePayments
 
   const {
     disbursements, stats, meta, loading, error,
@@ -175,6 +182,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
     approveDisbursement, rejectDisbursement, releaseDisbursement,
     uploadProof, archiveDisbursement, restoreDisbursement,
     fetchNextVoucherNumber,
+    fetchProofHistory, viewProof, viewLatestProof,
   } = useDisbursements()
 
   // Lookup data for the Add/Edit form's dropdowns. These are only needed
@@ -201,6 +209,14 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
   const [dDetailRecord, setDDetailRecord] = useState(null)
   const [dSubmitting, setDSubmitting] = useState(false)
   const [dActionError, setDActionError] = useState('')
+  const [dActionSuccess, setDActionSuccess] = useState('')
+  const [releasingId, setReleasingId] = useState(null)
+  const [approvingId, setApprovingId] = useState(null)
+  const [proofTarget, setProofTarget] = useState(null)
+  const [printTarget, setPrintTarget] = useState(null)
+  const [rejectTarget, setRejectTarget] = useState(null)
+  const [rejectReason, setRejectReason] = useState('')
+  const [rejectSubmitting, setRejectSubmitting] = useState(false)
 
   const validateDate = (field, value) => {
     if (!value) {
@@ -224,15 +240,62 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
   // param, swap this for a hook-driven filter like the status filter above.
   const [dSourceFilter, setDSourceFilter] = useState('all') // 'all' | 'ap' | 'payroll'
 
+  const STATUS_SORT_PRIORITY = {
+    Pending: 1,
+    Approved: 2,
+    Released: 3,
+    Rejected: 4,
+    Cancelled: 5,
+  }
+
   const visibleDisbursements = useMemo(() => {
-    if (dSourceFilter === 'all') return disbursements
-    return disbursements.filter((d) => getSourceType(d) === dSourceFilter)
+    const list = dSourceFilter === 'all'
+      ? disbursements
+      : disbursements.filter((d) => getSourceType(d) === dSourceFilter)
+
+    return [...list].sort((a, b) => {
+      const priorityA = STATUS_SORT_PRIORITY[a.status] || 99
+      const priorityB = STATUS_SORT_PRIORITY[b.status] || 99
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB
+      }
+      return (b.disbursement_id || 0) - (a.disbursement_id || 0)
+    })
   }, [disbursements, dSourceFilter])
 
   const payrollPendingCount = useMemo(
     () => (stats?.payroll_pending ?? disbursements.filter((d) => getSourceType(d) === 'payroll' && d.status === 'Pending').length),
     [stats, disbursements]
   )
+
+  const cashAccountsMap = useMemo(() => {
+    const map = new Map()
+    for (const acc of cashAccounts) {
+      map.set(String(acc.id), acc)
+    }
+    return map
+  }, [cashAccounts])
+
+  const getDisbursementCashAccount = (d) => {
+    if (!d) return null
+    return cashAccountsMap.get(String(d.cash_account_id)) || null
+  }
+
+  const checkInsufficientFunds = (d) => {
+    if (!d || d.status === 'Released') return false
+    const acc = getDisbursementCashAccount(d)
+    const balance = acc ? Number(acc.current_balance) : (d.cash_account_balance !== null && d.cash_account_balance !== undefined ? Number(d.cash_account_balance) : null)
+    if (balance === null || isNaN(balance)) return Boolean(d.is_insufficient_funds)
+    return Number(d.amount_paid) > balance
+  }
+
+  const checkMissingBudget = (d) => {
+    if (!d || d.status === 'Released' || getSourceType(d) !== 'payroll') return false
+    if (d.active_budget) {
+      return !d.active_budget.exists
+    }
+    return d.has_active_budget === false
+  }
 
   const openAddDisbursement = () => {
     // Default Payment Date to today — there's nothing bill-specific to
@@ -269,8 +332,8 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
     setDModalMode(d)
   }
   const closeDisbursementModal = () => { setDModalMode(null); setDFormError(''); setFieldErrors({}); setDateErrors({ payment_date: '' }) }
-  const openDisbursementDetail = (d) => setDDetailRecord(d)
-  const closeDisbursementDetail = () => setDDetailRecord(null)
+  const openDisbursementDetail = (d) => { setDDetailRecord(d); setDActionError('') }
+  const closeDisbursementDetail = () => { setDDetailRecord(null); setDActionError('') }
 
   // Selecting a bill already tells us who's being paid and how much they're
   // owed — auto-fill Payee/Amount Paid/Currency (and Payment Method, if the
@@ -383,6 +446,11 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
       errors.amount_paid = 'Amount paid is required.'
     } else if (amt <= 0) {
       errors.amount_paid = 'Amount must be greater than zero.'
+    } else if (dForm.cash_account_id) {
+      const selectedAcc = cashAccountsMap.get(String(dForm.cash_account_id))
+      if (selectedAcc && amt > Number(selectedAcc.current_balance)) {
+        errors.amount_paid = 'Amount exceeds available funds in the selected cash account.'
+      }
     }
 
     if (dForm.reference_number && dForm.reference_number.trim()) {
@@ -429,7 +497,41 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
     try {
       await fn()
     } catch (err) {
-      setDActionError(err?.response?.data?.message || 'That action failed.')
+      setDActionError(err?.message || err?.response?.data?.message || 'That action failed.')
+    }
+  }
+
+  const handleRelease = async (id, isDetail = false) => {
+    if (releasingId) return
+    setReleasingId(id)
+    setDActionError('')
+    setDActionSuccess('')
+    try {
+      await releaseDisbursement(id)
+      setDActionSuccess('Disbursement released successfully! Payment journal entry posted to General Ledger.')
+      setTimeout(() => setDActionSuccess(''), 7000)
+      if (isDetail) closeDisbursementDetail()
+    } catch (err) {
+      setDActionError(err?.message || err?.response?.data?.message || 'Failed to release disbursement.')
+    } finally {
+      setReleasingId(null)
+    }
+  }
+
+  const handleApprove = async (id, isDetail = false) => {
+    if (approvingId) return
+    setApprovingId(id)
+    setDActionError('')
+    setDActionSuccess('')
+    try {
+      await approveDisbursement(id)
+      setDActionSuccess('Disbursement approved successfully! It is now ready for release.')
+      setTimeout(() => setDActionSuccess(''), 7000)
+      if (isDetail) closeDisbursementDetail()
+    } catch (err) {
+      setDActionError(err?.message || err?.response?.data?.message || 'Failed to approve disbursement.')
+    } finally {
+      setApprovingId(null)
     }
   }
 
@@ -438,12 +540,31 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
     runAction(() => uploadProof(d.disbursement_id, file))
   }
 
+  const openReject = (d) => {
+    setRejectTarget(d)
+    setRejectReason('')
+  }
+
+  const confirmReject = async () => {
+    if (!rejectTarget) return
+    setRejectSubmitting(true)
+    try {
+      await rejectDisbursement(rejectTarget.disbursement_id, rejectReason)
+      setRejectTarget(null)
+    } catch (err) {
+      setDActionError(err?.response?.data?.message || 'Could not reject the disbursement.')
+    } finally {
+      setRejectSubmitting(false)
+    }
+  }
+
   const disbursementStatCards = stats && [
     { key: 'total', label: 'Total Payments', value: stats.total, icon: Send, iconBg: 'bg-primary/15', iconColor: 'text-primary-dark', isActive: dStatusFilter === 'all' && !dShowArchived && dSourceFilter === 'all', onClick: () => { setDStatusFilter('all'); setDShowArchived(false); setDSourceFilter('all') } },
     { key: 'released', label: 'Released Amount', value: formatCurrency(stats.total_paid), icon: CheckCircle2, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: dStatusFilter === 'Released' && !dShowArchived, onClick: () => { setDStatusFilter('Released'); setDShowArchived(false) } },
     { key: 'pending', label: 'Pending', value: stats.pending, icon: Clock3, iconBg: 'bg-amber-50 dark:bg-amber-500/10', iconColor: 'text-amber-600 dark:text-amber-400', isActive: dStatusFilter === 'Pending' && !dShowArchived, onClick: () => { setDStatusFilter('Pending'); setDShowArchived(false) } },
     { key: 'payroll_pending', label: 'Payroll Pending', value: payrollPendingCount, icon: Users, iconBg: 'bg-violet-50 dark:bg-violet-500/10', iconColor: 'text-violet-600 dark:text-violet-400', isActive: dSourceFilter === 'payroll' && dStatusFilter === 'Pending' && !dShowArchived, onClick: () => { setDStatusFilter('Pending'); setDShowArchived(false); setDSourceFilter('payroll') } },
-    { key: 'archived', label: 'Archived', value: stats.archived, icon: Archive, iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-500 dark:text-slate-400', isActive: dShowArchived, onClick: () => setDShowArchived(true) },
+    // Only admins can archive/restore disbursements — hide this card for non-admin roles
+    ...(isAdmin ? [{ key: 'archived', label: 'Archived', value: stats.archived, icon: Archive, iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-500 dark:text-slate-400', isActive: dShowArchived, onClick: () => setDShowArchived(true) }] : []),
   ]
 
   const isDisbursementModalOpen = dModalMode !== null
@@ -476,9 +597,27 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
         )}
       </div>
 
+      {dActionSuccess && (
+        <div className="flex items-center justify-between gap-2 p-3 bg-emerald-500/15 border border-emerald-500/30 rounded-lg text-emerald-800 dark:text-emerald-300 text-xs sm:text-sm">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span>{dActionSuccess}</span>
+          </div>
+          <button type="button" onClick={() => setDActionSuccess('')} className="text-muted hover:text-ink">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {(error || dActionError) && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
-          {error || dActionError}
+        <div className="flex items-center justify-between gap-2 p-3 bg-rose-500/15 border border-rose-500/30 rounded-lg text-rose-800 dark:text-rose-300 text-xs sm:text-sm">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+            <span>{error || dActionError}</span>
+          </div>
+          <button type="button" onClick={() => setDActionError('')} className="text-muted hover:text-ink">
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 
@@ -491,12 +630,12 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                 key={card.key}
                 type="button"
                 onClick={card.onClick}
-                className={`${PANEL} ${PANEL_PAD} flex items-center gap-3 text-left cursor-pointer
+                className={`${PANEL} ${PANEL_PAD} flex items-center gap-2.5 text-left cursor-pointer
                   transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0
                   ${card.isActive ? 'ring-2 ring-primary/50 border-primary/50' : ''}`}
               >
-                <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${card.iconBg}`}>
-                  <Icon size={18} className={card.iconColor} />
+                <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${card.iconBg}`}>
+                  <Icon size={15} className={card.iconColor} />
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs text-muted">{card.label}</p>
@@ -559,17 +698,17 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
       </div>
 
       <div className={PANEL}>
-        <div className="overflow-x-auto overflow-y-auto max-h-[70vh] rounded-t-xl">
+        <div className="overflow-hidden rounded-t-xl">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-surface">
+            <thead className="bg-surface">
               <tr className="border-b border-border">
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Payee</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Source</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Reference / Department</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Payment Date</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Amount</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Status</th>
-                <th className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Actions</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-3 py-3">Payee</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3">Source</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3">Reference / Dept</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 whitespace-nowrap">Payment Date</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 whitespace-nowrap">Amount</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3">Status</th>
+                <th className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wider px-3 py-3">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -582,101 +721,203 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
               ) : visibleDisbursements.map((d) => {
                 const sourceType = getSourceType(d)
                 const isPayroll = sourceType === 'payroll'
+                const cashAcc = getDisbursementCashAccount(d)
+                const cashAccBal = cashAcc ? Number(cashAcc.current_balance) : (d.cash_account_balance !== null && d.cash_account_balance !== undefined ? Number(d.cash_account_balance) : null)
+                const isOverdrawn = checkInsufficientFunds(d)
+                const isMissingBudget = checkMissingBudget(d)
+                // "No Proof, No Release" — AP payments require an uploaded proof document
+                // (bank wire slip, check scan, or OR) before the Release button activates.
+                // Payroll disbursements are exempt from this rule.
+                const isMissingProof = !isPayroll && !d.has_attachment && d.status === 'Approved'
+                const cashAccName = cashAcc?.account_name || d.cash_account_name || 'Cash Account'
                 return (
                   <tr key={d.disbursement_id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
-                    <td className="px-4 py-3.5">
-                      <p className="font-medium text-ink">{d.payee}</p>
-                      <p className="text-xs text-muted">{d.voucher_number} &middot; {d.cash_account_name}</p>
+                    <td className="px-3 py-2.5 min-w-0">
+                      <p className="font-medium text-ink truncate max-w-35 sm:masm:max-w-45ax-w-[220px]">{d.payee}</p>
+                      <p className="text-xs text-muted truncate max-w-.2.5:max-w-42.5 xl:max-w-50">{d.voucher_number} &middot; {d.cash_account_name}</p>
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${SOURCE_BADGE_STYLES[sourceType]}`}>
+                    <td className="px-2 py-2.5 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${SOURCE_BADGE_STYLES[sourceType]}`}>
                         {SOURCE_TYPES[sourceType].short}
                       </span>
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap">
+                    <td className="px-2 py-2.5 min-w-0">
                       {isPayroll ? (
                         <>
-                          <p className="text-ink">{d.payroll_batch_number || '—'}</p>
-                          <p className="text-xs text-muted">{d.department_name} &middot; requested payroll</p>
+                          <p className="text-ink text-xs truncate max-w-27.5 xl:max-w-32.5">{d.payroll_batch_number || '—'}</p>
+                          <p className="text-xs text-muted truncate max-w-27.5 xl:max-w-32.5">{d.department_name}</p>
                         </>
                       ) : (
                         <>
-                          <p className="text-ink">{d.invoice_number}</p>
-                          <p className="text-xs text-muted">{d.department_name}</p>
+                          <p className="text-ink text-xs truncate max-w-27.5 xl:max-w-32.5">{d.invoice_number}</p>
+                          <p className="text-xs text-muted truncate max-w-27.5 xl:max-w-32.5">{d.department_name}</p>
                         </>
                       )}
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap text-ink">{formatDate(d.payment_date)}</td>
-                    <td className="px-4 py-3.5 whitespace-nowrap font-medium tabular-nums text-ink">{formatCurrency(d.amount_paid)}</td>
-                    <td className="px-4 py-3.5 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${DISBURSEMENT_STATUS_STYLES[d.status]}`}>{d.status}</span>
+                    <td className="px-2 py-2.5 whitespace-nowrap text-ink text-xs">{formatDate(d.payment_date)}</td>
+                    <td className="px-2 py-2.5 whitespace-nowrap font-medium tabular-nums text-ink text-xs sm:text-sm">{formatCurrency(d.amount_paid)}</td>
+                    <td className="px-2 py-2.5 whitespace-nowrap">
+                      <div className="flex flex-col items-start gap-1">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${DISBURSEMENT_STATUS_STYLES[d.status]}`}>{d.status}</span>
+                        {isOverdrawn && (
+                          <Tooltip label={`Insufficient balance in ${cashAccName} to cover ${formatCurrency(d.amount_paid)}`}>
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300 border border-red-200 dark:border-red-500/30">
+                              <AlertTriangle size={9} className="shrink-0" />
+                              Insufficient Funds
+                            </span>
+                          </Tooltip>
+                        )}
+                        {isMissingBudget && (
+                          <Tooltip label={`No active approved budget found for ${d.department_name || 'this department'}. Release blocked.`}>
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300 border border-amber-200 dark:border-amber-500/30">
+                              <AlertTriangle size={9} className="shrink-0" />
+                              No Budget
+                            </span>
+                          </Tooltip>
+                        )}
+                      </div>
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap text-right">
-                      <div className="flex items-center justify-end gap-1">
+                    <td className="px-3 py-2.5 whitespace-nowrap text-right">
+                      <div className="flex items-center justify-end gap-0.5">
                         <Tooltip label="View full record" align="start">
-                          <button type="button" onClick={() => openDisbursementDetail(d)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                            <Info size={15} />
+                          <button type="button" onClick={() => openDisbursementDetail(d)} className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                            <Info size={14} />
                           </button>
                         </Tooltip>
-                        <Tooltip label="Print voucher" align="start">
-                          <button type="button" onClick={() => handlePrintDisbursement(d)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                            <Printer size={15} />
+                        <Tooltip label="Print voucher / BIR 2307" align="start">
+                          <button type="button" onClick={() => setPrintTarget(d)} className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                            <Printer size={14} />
                           </button>
                         </Tooltip>
 
-                        {/* Edit / attach proof / archive are AP-only. Payroll
-                            requests are created by the Payroll module and are
-                            approve/reject/release only from this screen. */}
+
+                        {/* Proof attachment button — AP-only */}
+                        {canManagePayments && !isPayroll && !d.is_archived && (
+                          <Tooltip label={d.has_attachment ? 'View proof of payment' : 'Attach proof of payment'} align="start">
+                            <button
+                              type="button"
+                              onClick={() => setProofTarget(d)}
+                              className={`flex h-7 w-7 items-center justify-center rounded-lg transition-colors duration-150 ${
+                                d.has_attachment
+                                  ? 'text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-500/10'
+                                  : 'text-muted hover:bg-bg hover:text-ink'
+                              }`}
+                            >
+                              <Paperclip size={14} />
+                            </button>
+                          </Tooltip>
+                        )}
+
+                        {/* Edit / archive are AP-only */}
                         {canManagePayments && !isPayroll && d.status === 'Pending' && !d.is_archived && (
-                          <>
-                            <Tooltip label="Edit disbursement" align="start">
-                              <button type="button" onClick={() => openEditDisbursement(d)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                                <Pencil size={15} />
-                              </button>
-                            </Tooltip>
-                            <Tooltip label="Attach proof" align="start">
-                              <label className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 cursor-pointer">
-                                <Upload size={15} />
-                                <input type="file" className="hidden" onChange={(e) => handleProofUpload(d, e.target.files?.[0])} />
-                              </label>
-                            </Tooltip>
-                          </>
+                          <Tooltip label="Edit disbursement" align="start">
+                            <button type="button" onClick={() => openEditDisbursement(d)} className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                              <Pencil size={14} />
+                            </button>
+                          </Tooltip>
                         )}
 
                         {canApprovePayments && d.status === 'Pending' && (
                           <>
-                            <Tooltip label="Approve" align="start">
-                              <button type="button" onClick={() => runAction(() => approveDisbursement(d.disbursement_id))} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-emerald-600 transition-colors duration-150">
-                                <ThumbsUp size={15} />
-                              </button>
-                            </Tooltip>
-                            <Tooltip label="Reject" align="start">
-                              <button type="button" onClick={() => runAction(() => rejectDisbursement(d.disbursement_id))} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-red-600 transition-colors duration-150">
-                                <ThumbsDown size={15} />
-                              </button>
-                            </Tooltip>
+                            <button
+                              type="button"
+                              disabled={approvingId === d.disbursement_id}
+                              onClick={() => handleApprove(d.disbursement_id)}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-sm transition-all duration-150 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
+                            >
+                              {approvingId === d.disbursement_id
+                                ? <><Loader2 size={11} className="animate-spin" />Approving…</>
+                                : <><CheckCircle2 size={11} />Approve</>
+                              }
+                            </button>
+                            <button
+                              type="button"
+                              disabled={!!approvingId}
+                              onClick={() => openReject(d)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20 shadow-sm transition-all duration-150 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                            >
+                              Reject
+                            </button>
                           </>
                         )}
 
-                        {canApprovePayments && d.status === 'Approved' && (
-                          <Tooltip label="Release payment" align="start">
-                            <button type="button" onClick={() => runAction(() => releaseDisbursement(d.disbursement_id))} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-primary transition-colors duration-150">
-                              <Wallet size={15} />
-                            </button>
-                          </Tooltip>
-                        )}
-
-                        {canManagePayments && !isPayroll && (
-                          <Tooltip label={d.is_archived ? 'Restore disbursement' : 'Archive disbursement'} align="end">
+                        {canReleasePayments && d.status === 'Approved' && (
+                          isOverdrawn ? (
+                            <Tooltip label={`Cannot release: Insufficient funds in ${cashAccName} (available: ${formatCurrency(cashAccBal ?? 0)}, required: ${formatCurrency(d.amount_paid)})`}>
+                              <button
+                                type="button"
+                                disabled
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed opacity-75 shrink-0"
+                              >
+                                <Wallet size={13} />
+                                Release
+                              </button>
+                            </Tooltip>
+                          ) : isMissingBudget ? (
+                            <Tooltip label={`Cannot release: No active approved budget found for ${d.department_name || 'this department'}`}>
+                              <button
+                                type="button"
+                                disabled
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed opacity-75 shrink-0"
+                              >
+                                <Wallet size={13} />
+                                Release
+                              </button>
+                            </Tooltip>
+                          ) : isMissingProof ? (
+                            <Tooltip label="Attach proof of payment (bank slip, check scan, or OR) before releasing — click the paperclip icon to upload">
+                              <button
+                                type="button"
+                                onClick={() => setProofTarget(d)}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-amber-50 border border-amber-300 text-amber-700 hover:bg-amber-100 dark:bg-amber-500/10 dark:border-amber-500/40 dark:text-amber-400 dark:hover:bg-amber-500/20 shadow-sm transition-all duration-150 active:scale-95 shrink-0"
+                              >
+                                <Paperclip size={13} />
+                                Attach Proof
+                              </button>
+                            </Tooltip>
+                          ) : (
                             <button
                               type="button"
-                              onClick={() => runAction(() => (d.is_archived ? restoreDisbursement(d.disbursement_id) : archiveDisbursement(d.disbursement_id)))}
-                              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
+                              disabled={releasingId !== null}
+                              onClick={() => handleRelease(d.disbursement_id, false)}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-primary hover:bg-primary-dark active:bg-primary-dark text-black shadow-sm transition-all duration-150 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
                             >
-                              {d.is_archived ? <RotateCcw size={15} /> : <Archive size={15} />}
+                              {releasingId === d.disbursement_id ? (
+                                <>
+                                  <Loader2 size={13} className="animate-spin" />
+                                  Releasing...
+                                </>
+                              ) : (
+                                <>
+                                  <Wallet size={13} />
+                                  Release
+                                </>
+                              )}
+                            </button>
+                          )
+                        )}
+
+                        {d.is_archived ? (
+                          <Tooltip label="Restore disbursement" align="end">
+                            <button
+                              type="button"
+                              onClick={() => runAction(() => restoreDisbursement(d.disbursement_id))}
+                              className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
+                            >
+                              <RotateCcw size={14} />
                             </button>
                           </Tooltip>
-                        )}
+                        ) : ['Released', 'Rejected'].includes(d.status) ? (
+                          <Tooltip label="Archive disbursement" align="end">
+                            <button
+                              type="button"
+                              onClick={() => runAction(() => archiveDisbursement(d.disbursement_id))}
+                              className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400 transition-colors duration-150"
+                            >
+                              <Archive size={14} />
+                            </button>
+                          </Tooltip>
+                        ) : null}
                       </div>
                     </td>
                   </tr>
@@ -838,6 +1079,11 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                     setFieldErrors((fe) => ({ ...fe, amount_paid: 'Amount paid cannot be negative.' }))
                   } else if (Number(val) === 0) {
                     setFieldErrors((fe) => ({ ...fe, amount_paid: 'Amount paid must be greater than zero.' }))
+                  } else if (dForm.cash_account_id) {
+                    const acc = cashAccountsMap.get(String(dForm.cash_account_id))
+                    if (acc && Number(val) > Number(acc.current_balance)) {
+                      setFieldErrors((fe) => ({ ...fe, amount_paid: 'Amount exceeds available funds in the selected cash account.' }))
+                    }
                   }
                 }}
                 className={`${INPUT} ${fieldErrors.amount_paid ? 'border-red-400 dark:border-red-500' : ''}`}
@@ -858,19 +1104,59 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
               <label className={LABEL}>Cash Account <span className="text-red-500 dark:text-red-400">*</span></label>
               <select
                 value={dForm.cash_account_id}
-                onChange={(e) => { setDForm((f) => ({ ...f, cash_account_id: e.target.value })); setFieldErrors((fe) => ({ ...fe, cash_account_id: '' })) }}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setDForm((f) => ({ ...f, cash_account_id: val }))
+                  setFieldErrors((fe) => ({ ...fe, cash_account_id: '' }))
+                  const selectedAcc = cashAccountsMap.get(String(val))
+                  const amt = Number(dForm.amount_paid)
+                  if (selectedAcc && amt > 0 && amt > Number(selectedAcc.current_balance)) {
+                    setFieldErrors((fe) => ({ ...fe, amount_paid: 'Amount exceeds available funds in the selected cash account.' }))
+                  } else if (fieldErrors.amount_paid?.includes('exceeds available funds')) {
+                    setFieldErrors((fe) => ({ ...fe, amount_paid: '' }))
+                  }
+                }}
                 className={`${INPUT} ${fieldErrors.cash_account_id ? 'border-red-400 dark:border-red-500' : ''}`}
                 style={INPUT_TEXT_STYLE}
                 disabled={cashAccountsLoading}
               >
                 <option value="">{cashAccountsLoading ? 'Loading accounts…' : 'Select an account…'}</option>
                 {cashAccounts.map((a) => (
-                  <option key={a.id} value={a.id}>{a.account_name}</option>
+                  <option key={a.id} value={a.id}>
+                    {a.account_name} {a.bank_name ? `(${a.bank_name})` : ''}
+                  </option>
                 ))}
               </select>
               {fieldErrors.cash_account_id && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.cash_account_id}</p>}
             </div>
           </div>
+          {(() => {
+            const selectedAcc = cashAccountsMap.get(String(dForm.cash_account_id))
+            const enteredAmt = Number(dForm.amount_paid)
+            if (selectedAcc) {
+              if (Number(selectedAcc.current_balance) <= 0) {
+                return (
+                  <div className="rounded-lg border border-red-200 bg-red-50 dark:border-red-500/30 dark:bg-red-500/10 p-3 text-xs text-red-800 dark:text-red-300 flex items-start gap-2.5">
+                    <AlertTriangle size={16} className="shrink-0 mt-0.5 text-red-600 dark:text-red-400" />
+                    <div>
+                      <span className="font-semibold">Account Has Zero Balance:</span> <strong>{selectedAcc.account_name}</strong> currently has no available funds for transactions. Please select another account.
+                    </div>
+                  </div>
+                )
+              }
+              if (enteredAmt > 0 && enteredAmt > Number(selectedAcc.current_balance)) {
+                return (
+                  <div className="rounded-lg border border-red-200 bg-red-50 dark:border-red-500/30 dark:bg-red-500/10 p-3 text-xs text-red-800 dark:text-red-300 flex items-start gap-2.5">
+                    <AlertTriangle size={16} className="shrink-0 mt-0.5 text-red-600 dark:text-red-400" />
+                    <div>
+                      <span className="font-semibold">Insufficient Account Funds:</span> The entered amount ({formatCurrency(enteredAmt)}) exceeds the available funds in <strong>{selectedAcc.account_name}</strong>. This voucher cannot be created until sufficient funds are available.
+                    </div>
+                  </div>
+                )
+              }
+            }
+            return null
+          })()}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <div className="flex items-center justify-between mb-1.5">
@@ -951,15 +1237,208 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
         footer={
           <>
             <Button variant="secondary" size="md" onClick={closeDisbursementDetail}>Close</Button>
-            {dDetailRecord && <Button variant="primary" size="md" icon={Printer} onClick={() => handlePrintDisbursement(dDetailRecord)}>Print Voucher</Button>}
+            {dDetailRecord && (
+              <Button
+                variant="primary"
+                size="md"
+                icon={Printer}
+                onClick={() => {
+                  const target = dDetailRecord
+                  closeDisbursementDetail()
+                  setPrintTarget(target)
+                }}
+              >
+                Print Voucher / BIR 2307
+              </Button>
+            )}
+
+            {dDetailRecord && canApprovePayments && dDetailRecord.status === 'Pending' && (
+              <>
+                <button
+                  type="button"
+                  disabled={!!approvingId}
+                  onClick={() => { closeDisbursementDetail(); openReject(dDetailRecord) }}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-semibold rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20 shadow-sm transition-all duration-150 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Reject
+                </button>
+                <button
+                  type="button"
+                  disabled={approvingId === dDetailRecord.disbursement_id}
+                  onClick={() => handleApprove(dDetailRecord.disbursement_id, true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-sm transition-all duration-150 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {approvingId === dDetailRecord.disbursement_id
+                    ? <><Loader2 size={13} className="animate-spin" />Approving…</>
+                    : <><CheckCircle2 size={13} />Approve</>
+                  }
+                </button>
+              </>
+            )}
+            {dDetailRecord && canReleasePayments && dDetailRecord.status === 'Approved' && (
+              checkInsufficientFunds(dDetailRecord) ? (
+                <Tooltip label={`Cannot release: Insufficient funds in ${getDisbursementCashAccount(dDetailRecord)?.account_name || dDetailRecord.cash_account_name}`}>
+                  <button
+                    type="button"
+                    disabled
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed opacity-75"
+                  >
+                    <Wallet size={15} />
+                    Release Payment
+                  </button>
+                </Tooltip>
+              ) : checkMissingBudget(dDetailRecord) ? (
+                <Tooltip label={`Cannot release: No active approved budget found for ${dDetailRecord.department_name || 'this department'}`}>
+                  <button
+                    type="button"
+                    disabled
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed opacity-75"
+                  >
+                    <Wallet size={15} />
+                    Release Payment
+                  </button>
+                </Tooltip>
+              ) : (getSourceType(dDetailRecord) !== 'payroll' && !dDetailRecord.has_attachment) ? (
+                <Tooltip label="Attach proof of payment before releasing (bank slip, check scan, or official receipt required)">
+                  <button
+                    type="button"
+                    onClick={() => { closeDisbursementDetail(); setProofTarget(dDetailRecord) }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-lg bg-amber-50 border border-amber-300 text-amber-700 hover:bg-amber-100 dark:bg-amber-500/10 dark:border-amber-500/40 dark:text-amber-400 dark:hover:bg-amber-500/20 shadow-sm transition-all duration-150 active:scale-95"
+                  >
+                    <Paperclip size={15} />
+                    Attach Proof
+                  </button>
+                </Tooltip>
+              ) : (
+                <button
+                  type="button"
+                  disabled={releasingId !== null}
+                  onClick={() => handleRelease(dDetailRecord.disbursement_id, true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-lg bg-primary hover:bg-primary-dark active:bg-primary-dark text-black shadow-sm transition-all duration-150 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {releasingId === dDetailRecord.disbursement_id ? (
+                    <>
+                      <Loader2 size={15} className="animate-spin" />
+                      Releasing...
+                    </>
+                  ) : (
+                    <>
+                      <Wallet size={15} />
+                      Release Payment
+                    </>
+                  )}
+                </button>
+              )
+            )}
+            {dDetailRecord && !dDetailRecord.is_archived && ['Released', 'Rejected'].includes(dDetailRecord.status) && (
+              <button
+                type="button"
+                onClick={() => {
+                  const id = dDetailRecord.disbursement_id
+                  closeDisbursementDetail()
+                  runAction(() => archiveDisbursement(id))
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-lg border border-border bg-surface hover:bg-red-50 hover:border-red-200 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:border-red-500/30 dark:hover:text-red-400 text-muted shadow-sm transition-all duration-150 active:scale-95"
+              >
+                <Archive size={15} />
+                Archive
+              </button>
+            )}
+            {dDetailRecord && dDetailRecord.is_archived && (
+              <button
+                type="button"
+                onClick={() => {
+                  const id = dDetailRecord.disbursement_id
+                  closeDisbursementDetail()
+                  runAction(() => restoreDisbursement(id))
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-lg border border-border bg-surface hover:bg-bg text-ink shadow-sm transition-all duration-150 active:scale-95"
+              >
+                <RotateCcw size={15} />
+                Restore
+              </button>
+            )}
           </>
         }
       >
         {dDetailRecord && (() => {
           const sourceType = getSourceType(dDetailRecord)
           const isPayroll = sourceType === 'payroll'
+          const detailCashAcc = getDisbursementCashAccount(dDetailRecord)
+          const detailCashAccBal = detailCashAcc ? Number(detailCashAcc.current_balance) : (dDetailRecord.cash_account_balance !== null && dDetailRecord.cash_account_balance !== undefined ? Number(dDetailRecord.cash_account_balance) : null)
+          const isDetailOverdrawn = checkInsufficientFunds(dDetailRecord)
+          const shortage = isDetailOverdrawn && detailCashAccBal !== null ? Math.max(0, Number(dDetailRecord.amount_paid) - detailCashAccBal) : 0
+          const detailAccName = detailCashAcc?.account_name || dDetailRecord.cash_account_name || 'Cash Account'
           return (
             <div className="space-y-4">
+              {dActionError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+                  {dActionError}
+                </div>
+              )}
+              {/* Insufficient Funds alert banner */}
+              {isDetailOverdrawn && (
+                <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-500/30 dark:bg-red-500/10">
+                  <AlertTriangle size={18} className="mt-0.5 shrink-0 text-red-600 dark:text-red-400" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-red-700 dark:text-red-400">Insufficient Account Funds</p>
+                    <p className="text-xs text-red-600 dark:text-red-400/90 mt-0.5">
+                      The assigned cash account (<strong>{detailAccName}</strong>) currently has insufficient funds to cover this disbursement of <strong>{formatCurrency(dDetailRecord.amount_paid)}</strong>.
+                    </p>
+                    <p className="text-xs text-red-500 dark:text-red-400/70 mt-1">
+                      Funds must be deposited to this account before this payment can be released.
+                    </p>
+                  </div>
+                </div>
+              )}
+              {/* Missing Active Budget alert banner */}
+              {isPayroll && checkMissingBudget(dDetailRecord) && (
+                <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-500/30 dark:bg-amber-500/10">
+                  <AlertTriangle size={18} className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Missing Active Department Budget</p>
+                    <p className="text-xs text-amber-700 dark:text-amber-400/90 mt-0.5">
+                      The requesting department (<strong>{dDetailRecord.department_name || 'Department'}</strong>) does not have an approved <strong>Active</strong> budget.
+                    </p>
+                    <p className="text-xs text-amber-600 dark:text-amber-400/80 mt-1">
+                      To maintain fiscal control, an approved active budget is strictly required before payroll funds can be released.
+                    </p>
+                  </div>
+                </div>
+              )}
+              {/* Pending approval banner */}
+              {dDetailRecord.status === 'Pending' && canApprovePayments && (
+                <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-500/30 dark:bg-amber-500/10">
+                  <AlertTriangle size={16} className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">Awaiting Approval</p>
+                    <p className="text-xs text-amber-600 dark:text-amber-400/80 mt-0.5">This disbursement is pending your review.</p>
+                  </div>
+                </div>
+              )}
+              {/* Approved awaiting release banner — only when proof is also present (or payroll) */}
+              {dDetailRecord.status === 'Approved' && canReleasePayments && !isDetailOverdrawn && !checkMissingBudget(dDetailRecord) && (isPayroll || dDetailRecord.has_attachment) && (
+                <div className="flex items-start gap-3 rounded-lg border border-primary/30 bg-primary/10 px-4 py-3 dark:border-primary/20 dark:bg-primary/10">
+                  <Wallet size={16} className="mt-0.5 shrink-0 text-primary-dark dark:text-primary" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-primary-dark dark:text-primary">Approved — Ready for Release</p>
+                    <p className="text-xs text-primary-dark/80 dark:text-primary/80 mt-0.5">This disbursement has been approved and is ready to be released.</p>
+                  </div>
+                </div>
+              )}
+              {/* Missing proof banner — AP only, blocks release until proof is attached */}
+              {dDetailRecord.status === 'Approved' && !isPayroll && !dDetailRecord.has_attachment && (
+                <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-500/30 dark:bg-amber-500/10">
+                  <Paperclip size={16} className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">Proof of Payment Required</p>
+                    <p className="text-xs text-amber-600 dark:text-amber-400/80 mt-0.5">
+                      A bank transfer slip, check voucher scan, or official receipt must be attached before this disbursement can be released.
+                      Use the <strong>Attach Proof</strong> button in the Supporting Documents section below.
+                    </p>
+                  </div>
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-semibold text-ink">{dDetailRecord.payee}</p>
@@ -975,14 +1454,30 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
               <div className="rounded-lg border border-border divide-y divide-border">
                 {isPayroll ? (
                   <div className="px-3 py-2">
+                    <DetailRow label="Voucher No." value={dDetailRecord.voucher_number} />
+                    <DetailRow label="HR Batch No." value={dDetailRecord.payroll_batch_number} />
                     <DetailRow label="Requesting Department" value={dDetailRecord.department_name} />
+                    <DetailRow
+                      label="Linked Budget"
+                      value={
+                        dDetailRecord.active_budget?.exists ? (
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className="font-semibold text-ink">{dDetailRecord.active_budget.budget_name}</span>
+                            <span className="text-xs text-muted">({formatCurrency(dDetailRecord.active_budget.remaining_amount)} left)</span>
+                          </span>
+                        ) : (
+                          <span className="font-semibold text-rose-600 dark:text-rose-400">No active budget</span>
+                        )
+                      }
+                    />
                     <DetailRow label="Pay Period" value={dDetailRecord.pay_period_start && dDetailRecord.pay_period_end ? `${formatDate(dDetailRecord.pay_period_start)} – ${formatDate(dDetailRecord.pay_period_end)}` : '—'} />
                     <DetailRow label="Employees Covered" value={dDetailRecord.employee_count} />
                     <DetailRow label="Payment Date" value={formatDate(dDetailRecord.payment_date)} />
                     <DetailRow label="Amount Paid" value={formatCurrency(dDetailRecord.amount_paid)} />
+                    <DetailRow label="Currency" value={dDetailRecord.currency} />
                     <DetailRow label="Payment Method" value={dDetailRecord.payment_method} />
                     <DetailRow label="Cash Account" value={dDetailRecord.cash_account_name} />
-                    <DetailRow label="Reference No." value={dDetailRecord.reference_number} />
+                    <DetailRow label="HR Reference No." value={dDetailRecord.reference_number} />
                   </div>
                 ) : (
                   <div className="px-3 py-2">
@@ -1007,10 +1502,89 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                   )}
                 </div>
               </div>
+
+              {/* Proof of payment section — AP-only */}
+              {!isPayroll && (
+                <div className="flex items-center justify-between rounded-lg border border-border bg-bg px-4 py-3">
+                  <div className="flex items-center gap-2.5">
+                    <FileText size={15} className={dDetailRecord.has_attachment ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted'} />
+                    <span className="text-sm text-ink">
+                      {dDetailRecord.has_attachment ? 'Proof of payment attached' : 'No proof of payment attached'}
+                    </span>
+                  </div>
+                  {canManagePayments && (
+                    <button
+                      type="button"
+                      onClick={() => { closeDisbursementDetail(); setProofTarget(dDetailRecord) }}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg border border-border bg-surface hover:bg-bg text-ink shadow-sm transition-all duration-150 active:scale-95"
+                    >
+                      <Paperclip size={13} />
+                      {dDetailRecord.has_attachment ? 'View / Upload' : 'Attach Proof'}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           )
         })()}
       </Modal>
+
+      {/* ---- Reject confirmation modal ---- */}
+      <Modal
+        open={!!rejectTarget}
+        onClose={() => setRejectTarget(null)}
+        title="Reject Disbursement"
+        maxWidth="max-w-sm"
+        footer={
+          <>
+            <Button variant="secondary" size="md" onClick={() => setRejectTarget(null)} disabled={rejectSubmitting}>Cancel</Button>
+            <button
+              type="button"
+              onClick={confirmReject}
+              disabled={rejectSubmitting}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20 shadow-sm transition-all duration-150 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {rejectSubmitting ? 'Rejecting…' : 'Confirm Reject'}
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-ink">
+            Reject disbursement for <span className="font-semibold">{rejectTarget?.payee}</span>?
+          </p>
+          <div>
+            <label className={LABEL}>Reason <span className="text-muted font-normal">(optional)</span></label>
+            <textarea
+              rows={3}
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="Enter rejection reason…"
+              className={`${INPUT} h-auto py-2 resize-none`}
+              style={INPUT_TEXT_STYLE}
+            />
+          </div>
+        </div>
+      </Modal>
+
+      {/* ---- Disbursement Proof Modal ---- */}
+      <DisbursementProofModal
+        open={!!proofTarget}
+        onClose={() => setProofTarget(null)}
+        disbursement={proofTarget}
+        fetchHistory={fetchProofHistory}
+        onUpload={uploadProof}
+        onView={viewProof}
+        onUploaded={() => {}}
+        canManage={canManagePayments}
+      />
+
+      {/* ---- Disbursement Print & BIR 2307 Modal ---- */}
+      <DisbursementPrintModal
+        open={!!printTarget}
+        onClose={() => setPrintTarget(null)}
+        disbursementId={printTarget?.disbursement_id || printTarget?.id}
+      />
     </div>
   )
 }

@@ -1,11 +1,15 @@
 import { useMemo, useState, useEffect } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, Receipt, CheckCircle2, Clock3, AlertTriangle, Info, Printer, Sparkles, Eye, EyeOff, ChevronLeft, ChevronRight, Loader2, CalendarRange, X, Paperclip, History, FileText } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, Receipt, CheckCircle2, Clock3, AlertTriangle, Info, Printer, Sparkles, Eye, EyeOff, ChevronLeft, ChevronRight, Loader2, CalendarRange, X, Paperclip, History, FileText, Calculator, FileSpreadsheet } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
 import TaxObligationDocumentUploadModal from '../components/TaxObligationDocumentUploadModal'
 import TaxObligationDocumentHistoryModal from '../components/TaxObligationDocumentHistoryModal'
+import RecordTaxPaymentModal from '../components/RecordTaxPaymentModal'
+import BatchRecordTaxPaymentModal from '../components/BatchRecordTaxPaymentModal'
+import GenerateTaxScheduleModal from '../components/GenerateTaxScheduleModal'
+import TaxComplianceReportModal from '../components/TaxComplianceReportModal'
 import { formatCurrency } from '../utils/formatters'
 import { useTaxObligations } from '../hooks/useTaxObligations'
 import { useHighlightRow } from '../hooks/useHighlightRow'
@@ -145,7 +149,17 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
     page, setPage,
     createObligation, updateObligation, archiveObligation, restoreObligation,
     uploadDocument, fetchDocumentHistory, viewDocument,
+    calculateTaxBase, recordTaxPayment, batchRecordTaxPayment, generateTaxSchedule,
   } = useTaxObligations()
+
+  // Multi-row selection for batch payment
+  const [selectedTaxIds, setSelectedTaxIds] = useState([])
+  const [showBatchModal, setShowBatchModal] = useState(false)
+
+  // Clear selection whenever any filter or pagination page changes
+  useEffect(() => {
+    setSelectedTaxIds([])
+  }, [search, statusFilter, showArchived, dateFrom, dateTo, page])
 
   // Global search (SearchBar.jsx) navigates here with a highlightId (and,
   // since this table's `search` filter is server-side/debounced inside
@@ -162,6 +176,38 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
     setPage(1)
   }, [highlightSearch])
 
+  const eligibleObligations = useMemo(() => {
+    return obligations.filter((o) => o.status !== 'Paid' && !showArchived)
+  }, [obligations, showArchived])
+
+  const isAllEligibleSelected = useMemo(() => {
+    return eligibleObligations.length > 0 && eligibleObligations.every((o) => selectedTaxIds.includes(o.tax_id))
+  }, [eligibleObligations, selectedTaxIds])
+
+  const selectedObligations = useMemo(() => {
+    return obligations.filter((o) => selectedTaxIds.includes(o.tax_id))
+  }, [obligations, selectedTaxIds])
+
+  const selectedTotalAmount = useMemo(() => {
+    return selectedObligations.reduce((sum, o) => sum + (Number(o.amount) || 0), 0)
+  }, [selectedObligations])
+
+  const toggleSelectAll = () => {
+    if (isAllEligibleSelected) {
+      const eligibleIds = new Set(eligibleObligations.map((o) => o.tax_id))
+      setSelectedTaxIds((prev) => prev.filter((id) => !eligibleIds.has(id)))
+    } else {
+      const eligibleIds = eligibleObligations.map((o) => o.tax_id)
+      setSelectedTaxIds((prev) => Array.from(new Set([...prev, ...eligibleIds])))
+    }
+  }
+
+  const toggleSelectOne = (tax_id) => {
+    setSelectedTaxIds((prev) =>
+      prev.includes(tax_id) ? prev.filter((id) => id !== tax_id) : [...prev, tax_id]
+    )
+  }
+
   const [modalMode, setModalMode] = useState(null)
   const [form, setForm] = useState(buildEmptyForm)
   const [formError, setFormError] = useState('')
@@ -170,6 +216,40 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
   const [amountError, setAmountError] = useState('')
   const [detailRecord, setDetailRecord] = useState(null)
   const [refTouched, setRefTouched] = useState(false)
+
+  // Auto-calculation from transactions (enterprise tax engine automation)
+  const [calcLoading, setCalcLoading] = useState(false)
+  const [calcResult, setCalcResult] = useState(null)
+  const [calcNotice, setCalcNotice] = useState('')
+
+  // Periodic schedule generation & reporting
+  const [showScheduleModal, setShowScheduleModal] = useState(false)
+  const [scheduleNotice, setScheduleNotice] = useState('')
+  const [showReportModal, setShowReportModal] = useState(false)
+
+  // Statutory deadline compliance monitor
+  const complianceAlert = useMemo(() => {
+    const overdue = obligations.filter(
+      (o) => o.status === 'Overdue' || (daysUntil(o.due_date) < 0 && o.status !== 'Paid')
+    )
+    const dueSoon = obligations.filter(
+      (o) => o.status !== 'Paid' && daysUntil(o.due_date) >= 0 && daysUntil(o.due_date) <= 7
+    )
+    return {
+      overdueCount: overdue.length,
+      dueSoonCount: dueSoon.length,
+      hasUrgent: overdue.length > 0 || dueSoon.length > 0,
+    }
+  }, [obligations])
+
+  const filterUrgent = () => {
+    if (complianceAlert.overdueCount > 0) {
+      setStatusFilter('Overdue')
+    } else {
+      setStatusFilter('Pending')
+    }
+    setShowArchived(false)
+  }
 
   const validateDate = (field, value) => {
     if (!value) {
@@ -193,6 +273,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
   // not a precondition for any workflow action here.
   const [uploadTarget, setUploadTarget] = useState(null)
   const [historyTarget, setHistoryTarget] = useState(null)
+  const [paymentTarget, setPaymentTarget] = useState(null)
   // Surfaces a failure from handleViewDocument() below — same reasoning
   // as Budgets.jsx's viewNotice: this page has no other place to show a
   // "couldn't open this file" message.
@@ -226,6 +307,8 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
   // AUTOMATION: changing tax type or period recomputes tax_period + due_date
   // together — the person never types either one directly.
   const updatePeriod = (patch) => {
+    setCalcResult(null)
+    setCalcNotice('')
     setForm((f) => {
       const next = { ...f, ...patch }
       const { tax_period, due_date } = computePeriodAndDue(next.tax_type, next.period_year, next.period_month, next.period_quarter)
@@ -243,9 +326,12 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
     setDateErrors({ due_date: '', payment_date: '' })
     setAmountError('')
     setRefTouched(false)
+    setCalcResult(null)
+    setCalcNotice('')
     setModalMode('add')
   }
   const openEdit = (o) => {
+    if (o.status === 'Paid') return
     const { period_year, period_month, period_quarter } = parsePeriod(o.tax_type, o.tax_period)
     setForm({
       tax_type: o.tax_type, period_year, period_month, period_quarter,
@@ -258,6 +344,8 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
     setDateErrors({ due_date: '', payment_date: '' })
     setAmountError('')
     setRefTouched(!!o.reference_number)
+    setCalcResult(null)
+    setCalcNotice('')
     setModalMode(o)
   }
   const closeModal = () => {
@@ -266,7 +354,40 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
     setFieldErrors({})
     setDateErrors({ due_date: '', payment_date: '' })
     setAmountError('')
+    setCalcResult(null)
+    setCalcNotice('')
   }
+
+  const handleAutoCompute = async () => {
+    setCalcLoading(true)
+    setCalcNotice('')
+    setCalcResult(null)
+    const currentPeriodType = TAX_TYPE_CONFIG[form.tax_type]?.periodType || 'month'
+    const res = await calculateTaxBase({
+      tax_type: form.tax_type,
+      period_year: form.period_year,
+      period_month: currentPeriodType === 'month' ? form.period_month : null,
+      period_quarter: currentPeriodType === 'quarter' ? form.period_quarter : null,
+    })
+    setCalcLoading(false)
+    if (!res.success) {
+      setCalcNotice(res.message || 'Could not auto-calculate tax base.')
+      return
+    }
+    setCalcResult(res.data)
+  }
+
+  const handleApplyComputed = () => {
+    if (!calcResult) return
+    setForm((f) => ({
+      ...f,
+      taxable_amount: String(calcResult.suggested_taxable_amount),
+      tax_rate: String(calcResult.suggested_tax_rate ?? f.tax_rate),
+    }))
+    setFieldErrors((fe) => ({ ...fe, taxable_amount: '', tax_rate: '' }))
+    setAmountError('')
+  }
+
   const openDetail = (o) => setDetailRecord(o)
   const closeDetail = () => setDetailRecord(null)
 
@@ -338,6 +459,11 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
       payment_date: form.is_paid ? form.payment_date : null,
       reference_number: form.is_paid ? form.reference_number : null,
       remarks: form.remarks,
+    }
+
+    if (modalMode !== 'add' && modalMode?.status === 'Paid') {
+      setFormError('Paid tax obligations cannot be edited.')
+      return
     }
 
     const result = modalMode === 'add'
@@ -419,9 +545,9 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
 
   const statCards = [
     { key: 'total', label: 'Total Obligations', value: meta.total, icon: Receipt, iconBg: 'bg-primary/15', iconColor: 'text-primary-dark', isActive: statusFilter === 'all' && !showArchived, onClick: () => { setStatusFilter('all'); setShowArchived(false) } },
-    { key: 'paid', label: 'Paid (this page)', value: pageStats.paid, icon: CheckCircle2, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: statusFilter === 'Paid' && !showArchived, onClick: () => { setStatusFilter('Paid'); setShowArchived(false) } },
-    { key: 'overdue', label: 'Overdue (this page)', value: pageStats.overdue, icon: AlertTriangle, iconBg: 'bg-red-50 dark:bg-red-500/10', iconColor: 'text-red-600 dark:text-red-400', isActive: statusFilter === 'Overdue' && !showArchived, onClick: () => { setStatusFilter('Overdue'); setShowArchived(false) } },
-    { key: 'due', label: 'Amount Due (this page)', value: formatCurrency(pageStats.dueAmount), icon: Clock3, iconBg: 'bg-amber-50 dark:bg-amber-500/10', iconColor: 'text-amber-600 dark:text-amber-400', isActive: false, onClick: () => {} },
+    { key: 'paid', label: 'Paid Obligations', value: pageStats.paid, icon: CheckCircle2, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: statusFilter === 'Paid' && !showArchived, onClick: () => { setStatusFilter('Paid'); setShowArchived(false) } },
+    { key: 'overdue', label: 'Overdue Obligations', value: pageStats.overdue, icon: AlertTriangle, iconBg: 'bg-red-50 dark:bg-red-500/10', iconColor: 'text-red-600 dark:text-red-400', isActive: statusFilter === 'Overdue' && !showArchived, onClick: () => { setStatusFilter('Overdue'); setShowArchived(false) } },
+    { key: 'due', label: 'Total Amount Due', value: formatCurrency(pageStats.dueAmount), icon: Clock3, iconBg: 'bg-amber-50 dark:bg-amber-500/10', iconColor: 'text-amber-600 dark:text-amber-400', isActive: false, onClick: () => {} },
   ]
 
   const isModalOpen = modalMode !== null
@@ -450,14 +576,63 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
       <Breadcrumb items={crumbs} />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
+        <div className="min-w-0 pr-4">
           <h1 className="text-xl font-bold tracking-tight text-ink">{title}</h1>
           <p className="mt-1 text-xs text-muted">
             Track statutory tax filings and payments. Obligations automatically flip to <span className="font-medium text-red-500">Overdue</span> once their due date passes — no manual update needed.
           </p>
         </div>
-        <Button variant="primary" size="sm" icon={Plus} onClick={openAdd}>Add Obligation</Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button variant="secondary" size="sm" icon={FileSpreadsheet} onClick={() => setShowReportModal(true)}>
+            Tax Report
+          </Button>
+          <Button variant="secondary" size="sm" icon={CalendarRange} onClick={() => setShowScheduleModal(true)}>
+            Generate Schedule
+          </Button>
+          <Button variant="primary" size="sm" icon={Plus} onClick={openAdd}>
+            Add Obligation
+          </Button>
+        </div>
       </div>
+
+      {/* Statutory Filing Compliance Alert */}
+      {complianceAlert.hasUrgent && statusFilter === 'all' && !showArchived && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 rounded-xl border border-rose-200 bg-rose-50/70 dark:border-rose-500/20 dark:bg-rose-500/10 p-3 text-xs">
+          <div className="flex items-center gap-2 text-rose-800 dark:text-rose-300">
+            <AlertTriangle size={16} className="shrink-0 text-rose-600 dark:text-rose-400" />
+            <span>
+              <strong>Statutory Filing Deadline Notice:</strong>{' '}
+              {complianceAlert.overdueCount > 0 && (
+                <span className="font-semibold text-rose-700 dark:text-rose-400">
+                  {complianceAlert.overdueCount} obligation{complianceAlert.overdueCount === 1 ? '' : 's'} OVERDUE.{' '}
+                </span>
+              )}
+              {complianceAlert.dueSoonCount > 0 && (
+                <span>
+                  {complianceAlert.dueSoonCount} obligation{complianceAlert.dueSoonCount === 1 ? '' : 's'} due within the next 7 days.
+                </span>
+              )}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={filterUrgent}
+            className="inline-flex items-center justify-center px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-medium transition-colors shrink-0 shadow-xs"
+          >
+            Review Urgent Filings
+          </button>
+        </div>
+      )}
+
+      {scheduleNotice && (
+        <div className="flex items-start justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400">
+          <span className="flex items-center gap-1.5 font-medium">
+            <CheckCircle2 size={14} className="shrink-0" />
+            {scheduleNotice}
+          </span>
+          <button type="button" onClick={() => setScheduleNotice('')} className="shrink-0 font-medium underline">Dismiss</button>
+        </div>
+      )}
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{error}</div>
@@ -559,20 +734,69 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
       </div>
 
       <div className={PANEL}>
-        <div className="overflow-x-auto overflow-y-auto max-h-[70vh] rounded-t-xl">
+        {/* Active multi-row selection bar for batch payment */}
+        {selectedTaxIds.length > 0 && (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-2.5 bg-emerald-500/10 border-b border-emerald-500/20 text-xs animate-fadeIn">
+            <div className="flex items-center gap-2">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-white font-bold text-[10px]">
+                {selectedTaxIds.length}
+              </span>
+              <span className="font-semibold text-ink">
+                {selectedTaxIds.length} obligation{selectedTaxIds.length === 1 ? '' : 's'} selected
+              </span>
+              <span className="text-muted">·</span>
+              <span className="text-muted">
+                Total Due:{' '}
+                <span className="font-bold text-ink">
+                  {formatCurrency(selectedTotalAmount)}
+                </span>
+              </span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setSelectedTaxIds([])}
+                className="text-xs text-muted hover:text-ink font-medium px-2 py-1 rounded hover:bg-bg transition-colors"
+              >
+                Clear
+              </button>
+              <Button
+                variant="primary"
+                size="sm"
+                icon={Receipt}
+                onClick={() => setShowBatchModal(true)}
+              >
+                Batch Pay ({selectedTaxIds.length})
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <div className="overflow-hidden rounded-t-xl">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-surface">
+            <thead className="bg-surface">
               <tr className="border-b border-border">
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Tax Type / Period</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Due Date</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Amount</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Status</th>
-                <th className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Actions</th>
+                <th className="bg-surface text-center font-semibold text-muted text-xs uppercase tracking-wider px-2.5 py-3 w-10 whitespace-nowrap">
+                  {!showArchived && eligibleObligations.length > 0 && (
+                    <input
+                      type="checkbox"
+                      checked={isAllEligibleSelected}
+                      onChange={toggleSelectAll}
+                      aria-label="Select all eligible unpaid obligations on this page"
+                      className="rounded border-border text-primary focus:ring-primary/40 cursor-pointer h-3.5 w-3.5 align-middle"
+                    />
+                  )}
+                </th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-3.5 py-3 whitespace-nowrap">Tax Type / Period</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-3 py-3 whitespace-nowrap">Due Date</th>
+                <th className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wider px-3 py-3 whitespace-nowrap">Amount</th>
+                <th className="bg-surface text-center font-semibold text-muted text-xs uppercase tracking-wider px-3 py-3 whitespace-nowrap">Status</th>
+                <th className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wider px-3.5 py-3 whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-muted">
+                <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">
                   <Loader2 size={16} className="inline animate-spin mr-2" /> Loading tax obligations…
                 </td></tr>
               )}
@@ -585,22 +809,47 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                     key={o.tax_id}
                     data-row-id={o.tax_id}
                     className={`border-b border-border last:border-0 transition-colors duration-300
-                      ${highlightedId === o.tax_id ? 'bg-primary/10' : 'hover:bg-bg'}`}
+                      ${selectedTaxIds.includes(o.tax_id) ? 'bg-emerald-50/40 dark:bg-emerald-500/5' : highlightedId === o.tax_id ? 'bg-primary/10' : 'hover:bg-bg'}`}
                   >
-                    <td className="px-4 py-3.5">
-                      <p className="font-medium text-ink">{o.tax_type}</p>
-                      <p className="text-xs text-muted">{o.tax_period}</p>
+                    <td className="px-2.5 py-2.5 text-center w-10 whitespace-nowrap">
+                      {o.status !== 'Paid' && !showArchived ? (
+                        <input
+                          type="checkbox"
+                          checked={selectedTaxIds.includes(o.tax_id)}
+                          onChange={() => toggleSelectOne(o.tax_id)}
+                          aria-label={`Select ${o.tax_type}`}
+                          className="rounded border-border text-primary focus:ring-primary/40 cursor-pointer h-3.5 w-3.5 align-middle"
+                        />
+                      ) : null}
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap">
-                      <p className="text-ink">{formatDate(o.due_date)}</p>
+                    <td className="px-3.5 py-2.5 min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => openDetail(o)}
+                        className="font-semibold text-ink hover:text-primary transition-colors text-left truncate block"
+                        title="Click to view tax obligation details"
+                      >
+                        {o.tax_type}
+                      </button>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <p className="text-xs text-muted">{o.tax_period}</p>
+                        {o.has_document && (
+                          <Tooltip label="Supporting document attached">
+                            <Paperclip size={11} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                          </Tooltip>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5 whitespace-nowrap text-xs">
+                      <p className="font-medium text-ink">{formatDate(o.due_date)}</p>
                       {o.status !== 'Paid' && (
-                        <p className={`text-xs ${remaining < 0 ? 'text-red-500' : 'text-muted'}`}>
-                          {remaining < 0 ? `${Math.abs(remaining)} day${Math.abs(remaining) === 1 ? '' : 's'} overdue` : remaining === 0 ? 'Due today' : `Due in ${remaining} day${remaining === 1 ? '' : 's'}`}
+                        <p className={`text-[11px] ${remaining < 0 ? 'text-red-500 font-medium' : 'text-muted'}`}>
+                          {remaining < 0 ? `${Math.abs(remaining)}d overdue` : remaining === 0 ? 'Due today' : `Due in ${remaining}d`}
                         </p>
                       )}
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap font-medium tabular-nums text-ink">
-                      <span className="inline-flex items-center gap-1.5">
+                    <td className="px-3 py-2.5 whitespace-nowrap text-right font-medium tabular-nums text-ink text-xs sm:text-sm">
+                      <span className="inline-flex items-center justify-end gap-1.5">
                         {revealed ? formattedAmount : maskCurrency(formattedAmount)}
                         <button
                           type="button"
@@ -612,67 +861,96 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                         </button>
                       </span>
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[o.status]}`}>{o.status}</span>
+                    <td className="px-3 py-2.5 whitespace-nowrap text-center">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[o.status]}`}>{o.status}</span>
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap text-right">
+                    <td className="px-3.5 py-2.5 whitespace-nowrap text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <Tooltip label="View full record" align="start">
-                          <button type="button" onClick={() => openDetail(o)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                            <Info size={15} />
+                        {/* Workflow Action: Pay (Unpaid obligations only) */}
+                        {o.status !== 'Paid' && !showArchived && (
+                          <div className="flex items-center mr-1 pr-1.5 border-r border-border">
+                            <Tooltip label="Record BIR Payment" align="start">
+                              <button
+                                type="button"
+                                onClick={() => setPaymentTarget(o)}
+                                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded-md bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-xs transition-all duration-150 active:scale-95 shrink-0"
+                              >
+                                <Receipt size={12} />
+                                <span>Pay</span>
+                              </button>
+                            </Tooltip>
+                          </div>
+                        )}
+
+                        {/* View full record details */}
+                        <Tooltip label="View details" align="start">
+                          <button type="button" onClick={() => openDetail(o)} className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                            <Info size={14} />
                           </button>
                         </Tooltip>
-                        <Tooltip label={o.has_document ? 'Document attached — click to add another version' : 'Attach supporting document'} align="start">
+
+                        {/* Unified Supporting Document Action */}
+                        <Tooltip label={o.has_document ? 'View supporting documents' : 'Attach supporting document'} align="start">
                           <button
                             type="button"
-                            onClick={() => setUploadTarget(o)}
-                            className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors duration-150 ${
+                            onClick={() => (o.has_document ? setHistoryTarget(o) : setUploadTarget(o))}
+                            className={`flex h-7 w-7 items-center justify-center rounded-lg transition-colors duration-150 ${
                               o.has_document
-                                ? 'text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10'
+                                ? 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:hover:bg-emerald-500/20'
                                 : 'text-muted hover:bg-bg hover:text-ink'
                             }`}
                           >
-                            <Paperclip size={15} />
+                            <Paperclip size={14} fill={o.has_document ? 'currentColor' : 'none'} fillOpacity={o.has_document ? 0.2 : 0} />
                           </button>
                         </Tooltip>
-                        {o.has_document && (
-                          <Tooltip label="View current document" align="start">
-                            <button type="button" onClick={() => handleViewDocument(o)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                              <FileText size={15} />
+
+                        {/* Print tax voucher */}
+                        <Tooltip label="Print tax voucher" align="start">
+                          <button type="button" onClick={() => handlePrint(o)} className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                            <Printer size={14} />
+                          </button>
+                        </Tooltip>
+
+                        {/* Edit: only when not paid and not archived */}
+                        {o.status !== 'Paid' && !showArchived && (
+                          <Tooltip label="Edit obligation" align="start">
+                            <button type="button" onClick={() => openEdit(o)} className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                              <Pencil size={14} />
                             </button>
                           </Tooltip>
                         )}
-                        <Tooltip label="Document history" align="start">
-                          <button type="button" onClick={() => setHistoryTarget(o)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                            <History size={15} />
-                          </button>
-                        </Tooltip>
-                        <Tooltip label="Print" align="start">
-                          <button type="button" onClick={() => handlePrint(o)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                            <Printer size={15} />
-                          </button>
-                        </Tooltip>
-                        <Tooltip label="Edit obligation" align="start">
-                          <button type="button" onClick={() => openEdit(o)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                            <Pencil size={15} />
-                          </button>
-                        </Tooltip>
-                        <Tooltip label={showArchived ? 'Restore obligation' : 'Archive obligation'} align="end">
-                          <button
-                            type="button"
-                            onClick={() => (showArchived ? restoreObligation(o.tax_id) : archiveObligation(o.tax_id))}
-                            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
-                          >
-                            {showArchived ? <RotateCcw size={15} /> : <Archive size={15} />}
-                          </button>
-                        </Tooltip>
+
+                        {/* Archive / Restore:
+                            - Only Paid obligations can be archived
+                            - In archived view, Restore button is shown */}
+                        {showArchived ? (
+                          <Tooltip label="Restore obligation" align="end">
+                            <button
+                              type="button"
+                              onClick={() => restoreObligation(o.tax_id)}
+                              className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
+                            >
+                              <RotateCcw size={14} />
+                            </button>
+                          </Tooltip>
+                        ) : o.status === 'Paid' ? (
+                          <Tooltip label="Archive obligation" align="end">
+                            <button
+                              type="button"
+                              onClick={() => archiveObligation(o.tax_id)}
+                              className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
+                            >
+                              <Archive size={14} />
+                            </button>
+                          </Tooltip>
+                        ) : null}
                       </div>
                     </td>
                   </tr>
                 )
               })}
               {!loading && obligations.length === 0 && (
-                <tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-muted">
+                <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">
                   {hasDateFilter ? 'No tax obligations fall within the selected date range.' : 'No tax obligations match your filters.'}
                 </td></tr>
               )}
@@ -822,6 +1100,75 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
               )}
             </div>
           </div>
+
+          {/* Enterprise Tax Automation: Auto-Compute from Transactions */}
+          {!isLockedObligation && (
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Calculator size={15} className="text-primary-dark shrink-0" />
+                  <span className="text-xs font-semibold text-ink">Auto-Compute from System Transactions</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAutoCompute}
+                  disabled={calcLoading}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-primary hover:bg-primary-dark text-white transition-all duration-150 active:scale-95 disabled:opacity-50"
+                >
+                  {calcLoading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                  {calcLoading ? 'Calculating…' : 'Compute Base'}
+                </button>
+              </div>
+              <p className="text-[11px] text-muted leading-relaxed">
+                Aggregates confirmed collections, approved expenses, and released disbursements for <strong className="text-ink">{form.tax_period}</strong> to calculate statutory base and tax due.
+              </p>
+
+              {calcNotice && (
+                <div className="rounded border border-amber-200 bg-amber-50 dark:border-amber-500/20 dark:bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-700 dark:text-amber-400">
+                  {calcNotice}
+                </div>
+              )}
+
+              {calcResult && (
+                <div className="rounded-lg border border-border bg-surface p-3 space-y-2 text-xs">
+                  <div className="flex items-center justify-between border-b border-border pb-1.5">
+                    <span className="text-muted">Suggested Taxable Base:</span>
+                    <span className="font-semibold text-ink tabular-nums text-sm">
+                      {formatCurrency(calcResult.suggested_taxable_amount)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between border-b border-border pb-1.5">
+                    <span className="text-muted">Estimated Tax ({calcResult.suggested_tax_rate}%):</span>
+                    <span className="font-bold text-emerald-600 dark:text-emerald-400 tabular-nums text-sm">
+                      {formatCurrency(calcResult.estimated_tax_amount)}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-muted space-y-1 pt-0.5">
+                    <div className="flex justify-between">
+                      <span>• Gross Collections (Sales):</span>
+                      <span className="tabular-nums font-medium text-ink">{formatCurrency(calcResult.breakdown.gross_collections)} ({calcResult.breakdown.collections_count} records)</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>• Deductible Outflows (Expenses & Disbursements):</span>
+                      <span className="tabular-nums font-medium text-ink">{formatCurrency(calcResult.breakdown.total_deductible_outflow)} ({calcResult.breakdown.outflows_count} records)</span>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-muted italic pt-1 border-t border-border/50">
+                    {calcResult.breakdown.notes}
+                  </p>
+                  <div className="pt-1.5 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleApplyComputed}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all duration-150 active:scale-95"
+                    >
+                      <CheckCircle2 size={13} /> Apply to Form
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Taxable amount + rate are the real ERD inputs — tax_amount
               (shown as "Amount" elsewhere) is always derived from these
@@ -998,7 +1345,21 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
         footer={
           <>
             <Button variant="secondary" size="md" onClick={closeDetail}>Close</Button>
-            {detailRecord && <Button variant="primary" size="md" icon={Printer} onClick={() => handlePrint(detailRecord)}>Print</Button>}
+            {detailRecord && <Button variant="secondary" size="md" icon={Printer} onClick={() => handlePrint(detailRecord)}>Print</Button>}
+            {detailRecord && detailRecord.status !== 'Paid' && !showArchived && (
+              <Button
+                variant="primary"
+                size="md"
+                icon={Receipt}
+                onClick={() => {
+                  const target = detailRecord
+                  closeDetail()
+                  setPaymentTarget(target)
+                }}
+              >
+                Record BIR Payment
+              </Button>
+            )}
           </>
         }
       >
@@ -1013,15 +1374,21 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
             </div>
 
             <div className="flex items-center gap-3 rounded-lg border border-border bg-bg px-3 py-2 flex-wrap">
-              <button
-                type="button"
-                onClick={() => setUploadTarget(detailRecord)}
-                className={`inline-flex items-center gap-1.5 text-xs font-medium hover:underline ${
-                  detailRecord.has_document ? 'text-emerald-600 dark:text-emerald-400' : 'text-primary'
-                }`}
-              >
-                <Paperclip size={12} /> {detailRecord.has_document ? 'Document attached' : 'Attach document'}
-              </button>
+              {detailRecord.status === 'Paid' ? (
+                <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${detailRecord.has_document ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted'}`}>
+                  <Paperclip size={12} /> {detailRecord.has_document ? 'Document attached' : 'No document attached'}
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setUploadTarget(detailRecord)}
+                  className={`inline-flex items-center gap-1.5 text-xs font-medium hover:underline ${
+                    detailRecord.has_document ? 'text-emerald-600 dark:text-emerald-400' : 'text-primary'
+                  }`}
+                >
+                  <Paperclip size={12} /> {detailRecord.has_document ? 'Document attached' : 'Attach document'}
+                </button>
+              )}
               {detailRecord.has_document && (
                 <>
                   <span className="text-border">·</span>
@@ -1068,6 +1435,12 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
               <div className="px-3 py-2">
                 <DetailRow label="Payment Date" value={formatDate(detailRecord.payment_date)} />
                 <DetailRow label="Reference No." value={detailRecord.reference_number || '—'} />
+                {detailRecord.cash_account_name && (
+                  <DetailRow
+                    label="Paid From"
+                    value={`${detailRecord.cash_account_name} (${detailRecord.cash_account_bank || detailRecord.cash_account_code || ''})`}
+                  />
+                )}
                 {detailRecord.expense_id && (
                   <DetailRow label="Recorded Expense" value={`#${detailRecord.expense_id}`} />
                 )}
@@ -1097,7 +1470,12 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
         open={!!uploadTarget}
         onClose={() => setUploadTarget(null)}
         obligation={uploadTarget}
-        onUpload={async (file) => uploadDocument(uploadTarget.tax_id, file)}
+        onUpload={async (file) => {
+          if (uploadTarget?.status === 'Paid') {
+            return { success: false, message: 'Cannot attach documents to a paid tax obligation.' }
+          }
+          return uploadDocument(uploadTarget.tax_id, file)
+        }}
       />
 
       {/* Document version history modal — same trigger points as above. */}
@@ -1107,6 +1485,47 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
         obligation={historyTarget}
         fetchHistory={fetchDocumentHistory}
         onView={viewDocument}
+      />
+
+      {/* Record BIR tax payment modal */}
+      <RecordTaxPaymentModal
+        open={!!paymentTarget}
+        onClose={() => setPaymentTarget(null)}
+        obligation={paymentTarget}
+        onPay={recordTaxPayment}
+      />
+
+      {/* Batch Record BIR tax payment modal */}
+      <BatchRecordTaxPaymentModal
+        open={showBatchModal}
+        onClose={() => setShowBatchModal(false)}
+        obligations={selectedObligations}
+        onBatchPay={async (formData) => {
+          const res = await batchRecordTaxPayment(formData)
+          if (res?.success) {
+            setSelectedTaxIds([])
+          }
+          return res
+        }}
+      />
+
+      {/* Generate statutory tax filing schedule modal */}
+      <GenerateTaxScheduleModal
+        open={showScheduleModal}
+        onClose={() => setShowScheduleModal(false)}
+        onGenerate={async (payload) => {
+          const res = await generateTaxSchedule(payload)
+          if (res?.success) {
+            setScheduleNotice(res.message)
+          }
+          return res
+        }}
+      />
+
+      {/* Consolidated statutory tax compliance report & export modal */}
+      <TaxComplianceReportModal
+        open={showReportModal}
+        onClose={() => setShowReportModal(false)}
       />
     </div>
   )

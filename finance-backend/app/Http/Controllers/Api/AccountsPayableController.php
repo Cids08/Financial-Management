@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\ExecutePaymentRunRequest;
 use App\Http\Requests\StoreAccountsPayableRequest;
 use App\Http\Requests\UpdateAccountsPayableRequest;
 use App\Http\Requests\UploadAccountsPayableDocumentRequest;
@@ -12,6 +13,7 @@ use App\Models\SupportingDocument;
 use App\Services\AccountsPayableService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+
 
 class AccountsPayableController extends Controller
 {
@@ -50,12 +52,17 @@ class AccountsPayableController extends Controller
         // controller level — cheap no-op if already authorized.
         $this->authorize('create', AccountsPayable::class);
 
-        $bill = $this->service->create($request->user(), $request->validated());
+        $validated = $request->validated();
+        $bill = $this->service->create($request->user(), $validated);
+
+        if ($request->hasFile('document')) {
+            $this->service->attachDocument($bill, $request->file('document'), $request->user());
+        }
 
         return response()->json([
             'success' => true,
             'message' => 'Bill created successfully.',
-            'data' => new AccountsPayableResource($bill),
+            'data' => new AccountsPayableResource($bill->fresh(['supplier', 'account', 'creator'])),
         ], 201);
     }
 
@@ -81,6 +88,23 @@ class AccountsPayableController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Bill approved successfully.',
+            'data' => new AccountsPayableResource($bill),
+        ]);
+    }
+
+    public function reject(Request $request, AccountsPayable $accountsPayable): JsonResponse
+    {
+        $this->authorize('reject', $accountsPayable);
+
+        $request->validate([
+            'reason' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $bill = $this->service->reject($request->user(), $accountsPayable, $request->input('reason'));
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Bill rejected successfully.',
             'data' => new AccountsPayableResource($bill),
         ]);
     }
@@ -195,5 +219,41 @@ class AccountsPayableController extends Controller
         return response()->file($fullPath, [
             'Content-Type' => $document->mime_type ?? 'application/octet-stream',
         ]);
+    }
+
+    /**
+     * GET /api/accounts-payable/payment-proposals
+     * Returns approved, unpaid bills eligible for a payment run.
+     */
+    public function getPaymentProposals(Request $request): JsonResponse
+    {
+        $this->authorize('viewAny', AccountsPayable::class);
+
+        $filters = $request->only(['horizon', 'supplier_id', 'department_id']);
+
+        $result = $this->service->getPaymentProposals($filters);
+
+        return response()->json([
+            'success'  => true,
+            'message'  => '',
+            'data'     => $result,
+        ]);
+    }
+
+    /**
+     * POST /api/accounts-payable/execute-payment-run
+     * Creates pending disbursements for all selected proposals in one transaction.
+     */
+    public function executePaymentRun(ExecutePaymentRunRequest $request): JsonResponse
+    {
+        $this->authorize('create', AccountsPayable::class);
+
+        $result = $this->service->executePaymentRun($request->user(), $request->validated());
+
+        return response()->json([
+            'success' => true,
+            'message' => "{$result['count']} disbursement(s) created totalling ₱" . number_format($result['total_amount'], 2) . '.',
+            'data'    => $result,
+        ], 201);
     }
 }

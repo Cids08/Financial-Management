@@ -4,6 +4,9 @@ namespace App\Services;
 
 use App\Models\AuditLog;
 use App\Models\Budget;
+use App\Models\CashAccount;
+use App\Models\Collection;
+use App\Models\Disbursement;
 use App\Models\Expense;
 use App\Models\ExpenseCategory;
 use App\Models\SupportingDocument;
@@ -11,6 +14,7 @@ use App\Models\TaxObligation;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -42,7 +46,7 @@ class TaxObligationService
      */
     public function list(array $filters): LengthAwarePaginator
     {
-        $query = TaxObligation::query()->with(['createdBy', 'deletedBy', 'expense']);
+        $query = TaxObligation::query()->with(['createdBy', 'deletedBy', 'expense', 'cashAccount']);
 
         if (! empty($filters['archived'])) {
             $query->onlyTrashed();
@@ -129,6 +133,12 @@ class TaxObligationService
     public function update(User $user, TaxObligation $obligation, array $data): TaxObligation
     {
         return DB::transaction(function () use ($user, $obligation, $data) {
+            if ($obligation->status === 'Paid') {
+                throw ValidationException::withMessages([
+                    'status' => 'Paid tax obligations cannot be edited. Archive the obligation if a correction is needed.',
+                ]);
+            }
+
             $wasPaid = $obligation->status === 'Paid';
             $isPaid = (bool) ($data['is_paid'] ?? false);
             $oldValues = $obligation->only(self::AUDITED_FIELDS);
@@ -187,6 +197,12 @@ class TaxObligationService
 
     public function archive(User $user, TaxObligation $obligation): TaxObligation
     {
+        if (! $obligation->is_paid && $obligation->status !== 'Paid') {
+            throw ValidationException::withMessages([
+                'status' => 'Only paid tax obligations can be archived. In-flight and overdue obligations must remain in the active schedule.',
+            ]);
+        }
+
         return DB::transaction(function () use ($user, $obligation) {
             $obligation->update(['deleted_by' => $user->id]);
             $obligation->delete();
@@ -252,6 +268,167 @@ class TaxObligationService
     }
 
     /**
+     * Dedicated method for recording statutory BIR tax payment from a real
+     * cash/bank account with required proof of payment.
+     *
+     * Validates account balance, stores the uploaded proof document, updates
+     * status to Paid, and auto-posts the double-entry expense and GL transaction.
+     */
+    public function recordPayment(User $user, TaxObligation $obligation, array $data, UploadedFile $document): TaxObligation
+    {
+        if ($obligation->status === 'Paid') {
+            throw ValidationException::withMessages([
+                'status' => 'This tax obligation has already been recorded as Paid.',
+            ]);
+        }
+
+        return DB::transaction(function () use ($user, $obligation, $data, $document) {
+            /** @var CashAccount $cashAccount */
+            $cashAccount = CashAccount::lockForUpdate()->findOrFail($data['cash_account_id']);
+
+            if ((float) $obligation->tax_amount > (float) $cashAccount->current_balance) {
+                throw ValidationException::withMessages([
+                    'cash_account_id' => sprintf(
+                        'Insufficient funds in account "%s" (Available: ₱%s, Tax Due: ₱%s).',
+                        $cashAccount->account_name,
+                        number_format($cashAccount->current_balance, 2),
+                        number_format((float) $obligation->tax_amount, 2)
+                    ),
+                ]);
+            }
+
+            // 1. Attach official payment proof to the tax obligation
+            $proofDoc = $this->attachDocument($obligation, $document, $user);
+
+            // 2. Update obligation attributes
+            $obligation->update([
+                'status'           => 'Paid',
+                'payment_date'     => $data['payment_date'],
+                'reference_number' => $data['reference_number'],
+                'remarks'          => $data['remarks'] ?? $obligation->remarks,
+                'cash_account_id'  => $cashAccount->id,
+            ]);
+
+            // 3. Post to Expense, deduct from cash account, and post GL journal
+            $obligation = $this->recordAsExpense($user, $obligation, $proofDoc);
+
+            // 4. Audit logging
+            $this->logAudit($user, 'record_payment', $obligation, null, [
+                'amount_paid'     => $obligation->tax_amount,
+                'cash_account'    => $cashAccount->account_name,
+                'reference'       => $obligation->reference_number,
+                'payment_date'    => $obligation->payment_date,
+                'document'        => $proofDoc->original_name,
+            ]);
+
+            return $obligation->fresh(['createdBy', 'deletedBy', 'expense', 'cashAccount']);
+        });
+    }
+
+    /**
+     * Batch records payment for multiple statutory BIR tax obligations from a single
+     * cash/bank account with 1 shared proof of payment (BIR confirmation slip or bank receipt).
+     *
+     * Validates aggregate account balance upfront, stores the uploaded proof once,
+     * updates all obligations to Paid, auto-posts individual expenses/GL entries,
+     * and records audit logs.
+     */
+    public function batchRecordPayment(User $user, array $data, UploadedFile $document): array
+    {
+        return DB::transaction(function () use ($user, $data, $document) {
+            /** @var CashAccount $cashAccount */
+            $cashAccount = CashAccount::lockForUpdate()->findOrFail($data['cash_account_id']);
+
+            $obligations = TaxObligation::whereIn('id', $data['tax_ids'])
+                ->lockForUpdate()
+                ->get();
+
+            if ($obligations->isEmpty()) {
+                throw ValidationException::withMessages([
+                    'tax_ids' => 'No matching tax obligations were found.',
+                ]);
+            }
+
+            // Check if any obligation is already Paid
+            $alreadyPaid = $obligations->filter(fn ($o) => $o->status === 'Paid');
+            if ($alreadyPaid->isNotEmpty()) {
+                $labels = $alreadyPaid->map(fn ($o) => "{$o->tax_type} ({$o->tax_period})")->join(', ');
+                throw ValidationException::withMessages([
+                    'tax_ids' => "The following tax obligation(s) are already marked as Paid: {$labels}.",
+                ]);
+            }
+
+            // Calculate aggregate tax amount
+            $totalTaxAmount = (float) $obligations->sum('tax_amount');
+
+            if ($totalTaxAmount > (float) $cashAccount->current_balance) {
+                throw ValidationException::withMessages([
+                    'cash_account_id' => sprintf(
+                        'Insufficient funds in account "%s" for batch payment (Available: ₱%s, Total Required: ₱%s).',
+                        $cashAccount->account_name,
+                        number_format($cashAccount->current_balance, 2),
+                        number_format($totalTaxAmount, 2)
+                    ),
+                ]);
+            }
+
+            // Store the single proof document in storage
+            $timestamp = now()->format('YmdHis');
+            $originalName = $document->getClientOriginalName();
+            $path = $document->store("tax-obligation-documents/batch/{$timestamp}", 'local');
+
+            $paidObligations = [];
+
+            foreach ($obligations as $obligation) {
+                // Attach supporting document record for each obligation
+                $proofDoc = SupportingDocument::create([
+                    'reference_type' => 'tax_obligation',
+                    'reference_id'   => $obligation->id,
+                    'file_name'      => basename($path),
+                    'original_name'  => $originalName,
+                    'storage_path'   => $path,
+                    'mime_type'      => $document->getClientMimeType(),
+                    'file_size'      => $document->getSize(),
+                    'uploaded_by'    => $user->id,
+                    'uploaded_at'    => now(),
+                ]);
+
+                // Update obligation attributes
+                $obligation->update([
+                    'status'           => 'Paid',
+                    'payment_date'     => $data['payment_date'],
+                    'reference_number' => $data['reference_number'],
+                    'remarks'          => $data['remarks'] ?? $obligation->remarks,
+                    'cash_account_id'  => $cashAccount->id,
+                ]);
+
+                // Post to Expense, deduct from cash account, and post GL journal
+                $obligation = $this->recordAsExpense($user, $obligation, $proofDoc);
+
+                // Audit logging per obligation
+                $this->logAudit($user, 'batch_pay', $obligation, null, [
+                    'amount_paid'     => $obligation->tax_amount,
+                    'batch_total'     => $totalTaxAmount,
+                    'batch_count'     => $obligations->count(),
+                    'cash_account'    => $cashAccount->account_name,
+                    'reference'       => $obligation->reference_number,
+                    'payment_date'    => $obligation->payment_date,
+                    'document'        => $originalName,
+                ]);
+
+                $paidObligations[] = $obligation->fresh(['createdBy', 'deletedBy', 'expense', 'cashAccount']);
+            }
+
+            return [
+                'count'        => count($paidObligations),
+                'total_amount' => $totalTaxAmount,
+                'obligations'  => $paidObligations,
+            ];
+        });
+    }
+
+
+    /**
      * Creates and approves the corresponding Expense the moment an
      * obligation is marked Paid, so it flows through the exact same
      * budget-deduction + GL-posting path as any other approved expense
@@ -263,7 +440,7 @@ class TaxObligationService
      * Idempotent via expense_id — safe to call defensively; will not
      * create a second Expense if one is already linked.
      */
-    protected function recordAsExpense(User $user, TaxObligation $obligation): TaxObligation
+    protected function recordAsExpense(User $user, TaxObligation $obligation, ?SupportingDocument $proofDoc = null): TaxObligation
     {
         if ($obligation->expense_id) {
             return $obligation;
@@ -279,18 +456,34 @@ class TaxObligationService
         }
 
         $expense = $this->expenseService->create([
-            'budget_id' => $budget->id,
+            'budget_id'           => $budget->id,
             'expense_category_id' => $category->id,
-            'supplier_id' => null,
-            'expense_date' => $obligation->payment_date,
-            'description' => "{$obligation->tax_type} — {$obligation->tax_period} (BIR filing)",
-            'expense_amount' => $obligation->tax_amount,
-            'expense_source' => 'Statutory Tax Payment',
-            'receipt_number' => $obligation->reference_number,
-            'receipt_status' => Expense::RECEIPT_VERIFIED,
+            'supplier_id'         => null,
+            'cash_account_id'     => $obligation->cash_account_id,
+            'expense_date'        => $obligation->payment_date,
+            'description'         => "{$obligation->tax_type} — {$obligation->tax_period} (BIR payment)",
+            'expense_amount'      => $obligation->tax_amount,
+            'expense_source'      => $obligation->cashAccount?->account_name ?? 'Statutory Tax Payment',
+            'receipt_number'      => $obligation->reference_number,
+            'receipt_status'      => Expense::RECEIPT_VERIFIED,
         ], $user);
 
-        $expense = $this->expenseService->approve($expense, $user);
+        // If a payment proof document was uploaded, link it as an expense supporting document
+        if ($proofDoc) {
+            SupportingDocument::create([
+                'reference_type' => 'expense',
+                'reference_id'   => $expense->id,
+                'file_name'      => $proofDoc->file_name,
+                'original_name'  => $proofDoc->original_name,
+                'storage_path'   => $proofDoc->storage_path,
+                'mime_type'      => $proofDoc->mime_type,
+                'file_size'      => $proofDoc->file_size,
+                'uploaded_by'    => $user->id,
+                'uploaded_at'    => now(),
+            ]);
+        }
+
+        $expense = $this->expenseService->approve($expense, $user, skipDepartmentCheck: true);
 
         $obligation->update(['expense_id' => $expense->id]);
 
@@ -317,6 +510,12 @@ class TaxObligationService
      */
     public function attachDocument(TaxObligation $obligation, UploadedFile $file, User $actor): SupportingDocument
     {
+        if ($obligation->status === 'Paid') {
+            throw ValidationException::withMessages([
+                'document' => 'Cannot attach documents to a paid tax obligation.',
+            ]);
+        }
+
         $path = $file->store("tax-obligation-documents/{$obligation->id}", 'local');
 
         $document = SupportingDocument::create([
@@ -365,5 +564,389 @@ class TaxObligationService
                 $doc->has_file = (bool) $doc->storage_path;
                 return $doc;
             });
+    }
+
+    /**
+     * Auto-calculate taxable base and estimated tax amount from system transactions
+     * (Confirmed Collections, Approved Expenses, Released Disbursements) for a given
+     * period (month or quarter) and tax type.
+     */
+    public function calculateBase(string $taxType, int $year, ?int $month = null, ?int $quarter = null): array
+    {
+        if ($month) {
+            $startDate = Carbon::create($year, $month, 1)->startOfDay();
+            $endDate = Carbon::create($year, $month, 1)->endOfMonth()->endOfDay();
+            $periodLabel = sprintf('%04d-%02d', $year, $month);
+        } elseif ($quarter) {
+            $startMonth = ($quarter - 1) * 3 + 1;
+            $startDate = Carbon::create($year, $startMonth, 1)->startOfDay();
+            $endDate = Carbon::create($year, $startMonth + 2, 1)->endOfMonth()->endOfDay();
+            $periodLabel = sprintf('%04d-Q%d', $year, $quarter);
+        } else {
+            throw ValidationException::withMessages([
+                'period' => 'A valid month or quarter is required to calculate tax base.',
+            ]);
+        }
+
+        // 1. Confirmed collections (Sales / Inflows)
+        $collectionsQuery = Collection::where('status', Collection::STATUS_CONFIRMED)
+            ->whereBetween('collection_date', [$startDate->toDateString(), $endDate->toDateString()]);
+        $grossCollections = (float) $collectionsQuery->sum('amount_received');
+        $collectionsCount = (int) $collectionsQuery->count();
+
+        // 2. Approved expenses (Purchases / Outflows)
+        $expensesQuery = Expense::where('status', Expense::STATUS_APPROVED)
+            ->whereBetween('expense_date', [$startDate->toDateString(), $endDate->toDateString()]);
+        $grossExpenses = (float) $expensesQuery->sum('expense_amount');
+        $expensesCount = (int) $expensesQuery->count();
+
+        // 3. Released disbursements (Supplier Outflows)
+        $disbursementsQuery = Disbursement::whereBetween('payment_date', [$startDate->toDateString(), $endDate->toDateString()]);
+        $grossDisbursements = (float) $disbursementsQuery->sum('amount_paid');
+        $disbursementsCount = (int) $disbursementsQuery->count();
+
+        $totalOutflows = round($grossExpenses + $grossDisbursements, 2);
+        $totalOutflowsCount = $expensesCount + $disbursementsCount;
+
+        // 4. Derive taxable base per statutory tax rules
+        switch ($taxType) {
+            case 'VAT':
+                // Net Taxable Base = Sales minus allowable deductible purchases/expenses
+                $suggestedRate = 12.0;
+                $taxableAmount = max(0.0, round($grossCollections - $totalOutflows, 2));
+                $calculationNotes = sprintf(
+                    'Net VAT Base: Confirmed Collections (₱%s across %d records) minus Deductible Expenses & Disbursements (₱%s across %d records). Net Taxable Base = ₱%s.',
+                    number_format($grossCollections, 2),
+                    $collectionsCount,
+                    number_format($totalOutflows, 2),
+                    $totalOutflowsCount,
+                    number_format($taxableAmount, 2)
+                );
+                break;
+
+            case 'Withholding Tax':
+                // EWT Base = total vendor disbursements & approved expenses in the period
+                $suggestedRate = 2.0;
+                $taxableAmount = $totalOutflows;
+                $calculationNotes = sprintf(
+                    'EWT Base: Total Disbursements and Approved Expenses (₱%s across %d records) subject to withholding tax.',
+                    number_format($totalOutflows, 2),
+                    $totalOutflowsCount
+                );
+                break;
+
+            case 'Percentage Tax':
+                // 3% of Gross Receipts/Sales (Collections)
+                $suggestedRate = 3.0;
+                $taxableAmount = $grossCollections;
+                $calculationNotes = sprintf(
+                    'Percentage Tax Base: Total Confirmed Collections / Gross Receipts (₱%s across %d records).',
+                    number_format($grossCollections, 2),
+                    $collectionsCount
+                );
+                break;
+
+            case 'Income Tax':
+                // Quarterly Corporate Income Tax: 25% of Net Taxable Operating Income
+                $suggestedRate = 25.0;
+                $taxableAmount = max(0.0, round($grossCollections - $totalOutflows, 2));
+                $calculationNotes = sprintf(
+                    'Quarterly Net Operating Income: Gross Collections (₱%s across %d records) minus Allowable Expenses & Disbursements (₱%s across %d records). Taxable Net Income = ₱%s.',
+                    number_format($grossCollections, 2),
+                    $collectionsCount,
+                    number_format($totalOutflows, 2),
+                    $totalOutflowsCount,
+                    number_format($taxableAmount, 2)
+                );
+                break;
+
+            case 'Local Business Tax':
+                $suggestedRate = 2.0;
+                $taxableAmount = $grossCollections;
+                $calculationNotes = sprintf(
+                    'Local Business Tax Base: Total Confirmed Collections / Gross Revenues (₱%s across %d records).',
+                    number_format($grossCollections, 2),
+                    $collectionsCount
+                );
+                break;
+
+            case 'Documentary Stamp Tax':
+                $suggestedRate = 1.5;
+                $taxableAmount = $grossDisbursements;
+                $calculationNotes = sprintf(
+                    'DST Base: Total Released Disbursements (₱%s across %d records).',
+                    number_format($grossDisbursements, 2),
+                    $disbursementsCount
+                );
+                break;
+
+            default:
+                $suggestedRate = 12.0;
+                $taxableAmount = $grossCollections;
+                $calculationNotes = 'Taxable base derived from confirmed collections in the period.';
+                break;
+        }
+
+        $computedTax = round($taxableAmount * ($suggestedRate / 100), 2);
+
+        return [
+            'tax_type'                 => $taxType,
+            'tax_period'               => $periodLabel,
+            'date_range'               => [
+                'start_date' => $startDate->toDateString(),
+                'end_date'   => $endDate->toDateString(),
+            ],
+            'suggested_taxable_amount' => $taxableAmount,
+            'suggested_tax_rate'       => $suggestedRate,
+            'estimated_tax_amount'     => $computedTax,
+            'breakdown'                => [
+                'gross_collections'        => $grossCollections,
+                'collections_count'        => $collectionsCount,
+                'gross_expenses'           => $grossExpenses,
+                'expenses_count'           => $expensesCount,
+                'gross_disbursements'      => $grossDisbursements,
+                'disbursements_count'      => $disbursementsCount,
+                'total_deductible_outflow' => $totalOutflows,
+                'outflows_count'           => $totalOutflowsCount,
+                'net_operating_base'       => round($grossCollections - $totalOutflows, 2),
+                'notes'                    => $calculationNotes,
+            ],
+        ];
+    }
+
+    /**
+     * Auto-generate periodic statutory tax filing schedules based on Philippine BIR regulations.
+     *
+     * Creates scheduled tax obligations for the selected fiscal year / quarter
+     * based on Philippine BIR statutory deadlines. Idempotent: skips periods
+     * that already exist. Optionally calculates taxable amounts for past/current
+     * periods from system transactions.
+     */
+    public function generateSchedule(User $user, array $data): array
+    {
+        $year = (int) $data['year'];
+        $scope = $data['period_scope']; // 'full_year', 'q1', 'q2', 'q3', 'q4'
+        $selectedTaxTypes = $data['tax_types'];
+        $autoCalc = (bool) ($data['auto_calculate_past'] ?? false);
+
+        // Define monthly and quarterly scopes
+        $months = match ($scope) {
+            'q1'        => [1, 2, 3],
+            'q2'        => [4, 5, 6],
+            'q3'        => [7, 8, 9],
+            'q4'        => [10, 11, 12],
+            default     => range(1, 12),
+        };
+
+        $quarters = match ($scope) {
+            'q1'        => [1],
+            'q2'        => [2],
+            'q3'        => [3],
+            'q4'        => [4],
+            default     => [1, 2, 3, 4],
+        };
+
+        $taxConfigs = [
+            'VAT' => [
+                'type'        => 'month',
+                'rate'        => 12.0,
+                'compute_due' => function (int $y, int $m) {
+                    $ny = $y; $nm = $m + 1;
+                    if ($nm > 12) { $nm = 1; $ny += 1; }
+                    return sprintf('%04d-%02d-20', $ny, $nm);
+                },
+            ],
+            'Withholding Tax' => [
+                'type'        => 'month',
+                'rate'        => 2.0,
+                'compute_due' => function (int $y, int $m) {
+                    $ny = $y; $nm = $m + 1;
+                    if ($nm > 12) { $nm = 1; $ny += 1; }
+                    return sprintf('%04d-%02d-10', $ny, $nm);
+                },
+            ],
+            'Percentage Tax' => [
+                'type'        => 'month',
+                'rate'        => 3.0,
+                'compute_due' => function (int $y, int $m) {
+                    $ny = $y; $nm = $m + 1;
+                    if ($nm > 12) { $nm = 1; $ny += 1; }
+                    return sprintf('%04d-%02d-20', $ny, $nm);
+                },
+            ],
+            'Documentary Stamp Tax' => [
+                'type'        => 'month',
+                'rate'        => 1.5,
+                'compute_due' => function (int $y, int $m) {
+                    $ny = $y; $nm = $m + 1;
+                    if ($nm > 12) { $nm = 1; $ny += 1; }
+                    return sprintf('%04d-%02d-05', $ny, $nm);
+                },
+            ],
+            'Income Tax' => [
+                'type'        => 'quarter',
+                'rate'        => 25.0,
+                'compute_due' => function (int $y, int $q) {
+                    return match ($q) {
+                        1 => sprintf('%04d-05-15', $y),
+                        2 => sprintf('%04d-08-15', $y),
+                        3 => sprintf('%04d-11-15', $y),
+                        4 => sprintf('%04d-04-15', $y + 1),
+                        default => sprintf('%04d-05-15', $y),
+                    };
+                },
+            ],
+            'Local Business Tax' => [
+                'type'        => 'quarter',
+                'rate'        => 2.0,
+                'compute_due' => function (int $y, int $q) {
+                    return match ($q) {
+                        1 => sprintf('%04d-01-20', $y),
+                        2 => sprintf('%04d-04-20', $y),
+                        3 => sprintf('%04d-07-20', $y),
+                        4 => sprintf('%04d-10-20', $y),
+                        default => sprintf('%04d-01-20', $y),
+                    };
+                },
+            ],
+        ];
+
+        return DB::transaction(function () use ($user, $year, $scope, $months, $quarters, $selectedTaxTypes, $autoCalc, $taxConfigs) {
+            $created = [];
+            $skipped = 0;
+
+            foreach ($selectedTaxTypes as $taxType) {
+                if (! isset($taxConfigs[$taxType])) {
+                    continue;
+                }
+
+                $cfg = $taxConfigs[$taxType];
+
+                if ($cfg['type'] === 'month') {
+                    foreach ($months as $m) {
+                        $period = sprintf('%04d-%02d', $year, $m);
+
+                        $exists = TaxObligation::withTrashed()
+                            ->where('tax_type', $taxType)
+                            ->where('tax_period', $period)
+                            ->exists();
+
+                        if ($exists) {
+                            $skipped++;
+                            continue;
+                        }
+
+                        $dueDate = ($cfg['compute_due'])($year, $m);
+                        $rate = (float) $cfg['rate'];
+                        $taxableAmount = 0.0;
+                        $taxAmount = 0.0;
+
+                        // Check if period is past or current
+                        $periodStart = Carbon::create($year, $m, 1)->startOfDay();
+                        if ($autoCalc && $periodStart->lte(now())) {
+                            try {
+                                $calc = $this->calculateBase($taxType, $year, month: $m);
+                                $taxableAmount = (float) ($calc['suggested_taxable_amount'] ?? 0.0);
+                                $rate = (float) ($calc['suggested_tax_rate'] ?? $rate);
+                                $taxAmount = (float) ($calc['estimated_tax_amount'] ?? 0.0);
+                            } catch (\Throwable) {
+                                // Fallback to 0 if calculation errors
+                            }
+                        }
+
+                        $obligation = TaxObligation::create([
+                            'tax_type'       => $taxType,
+                            'tax_period'     => $period,
+                            'due_date'       => $dueDate,
+                            'tax_rate'       => $rate,
+                            'taxable_amount' => $taxableAmount,
+                            'tax_amount'     => $taxAmount,
+                            'status'         => 'Pending',
+                            'created_by'     => $user->id,
+                        ]);
+
+                        $created[] = $obligation;
+                    }
+                } else {
+                    // Quarterly tax
+                    foreach ($quarters as $q) {
+                        $period = sprintf('%04d-Q%d', $year, $q);
+
+                        $exists = TaxObligation::withTrashed()
+                            ->where('tax_type', $taxType)
+                            ->where('tax_period', $period)
+                            ->exists();
+
+                        if ($exists) {
+                            $skipped++;
+                            continue;
+                        }
+
+                        $dueDate = ($cfg['compute_due'])($year, $q);
+                        $rate = (float) $cfg['rate'];
+                        $taxableAmount = 0.0;
+                        $taxAmount = 0.0;
+
+                        $startMonth = ($q - 1) * 3 + 1;
+                        $periodStart = Carbon::create($year, $startMonth, 1)->startOfDay();
+                        if ($autoCalc && $periodStart->lte(now())) {
+                            try {
+                                $calc = $this->calculateBase($taxType, $year, quarter: $q);
+                                $taxableAmount = (float) ($calc['suggested_taxable_amount'] ?? 0.0);
+                                $rate = (float) ($calc['suggested_tax_rate'] ?? $rate);
+                                $taxAmount = (float) ($calc['estimated_tax_amount'] ?? 0.0);
+                            } catch (\Throwable) {
+                                // Fallback to 0
+                            }
+                        }
+
+                        $obligation = TaxObligation::create([
+                            'tax_type'       => $taxType,
+                            'tax_period'     => $period,
+                            'due_date'       => $dueDate,
+                            'tax_rate'       => $rate,
+                            'taxable_amount' => $taxableAmount,
+                            'tax_amount'     => $taxAmount,
+                            'status'         => 'Pending',
+                            'created_by'     => $user->id,
+                        ]);
+
+                        $created[] = $obligation;
+                    }
+                }
+            }
+
+            if (count($created) > 0) {
+                AuditLog::create([
+                    'user_id'              => $user->id,
+                    'module'               => 'Tax Obligations',
+                    'action'               => 'generate_schedule',
+                    'record_id'            => $created[0]->id,
+                    'activity_description' => sprintf(
+                        'Generated %d statutory tax filing schedules for FY %d (%d already existed and were skipped).',
+                        count($created),
+                        $year,
+                        $skipped
+                    ),
+                    'old_values'           => null,
+                    'new_values'           => [
+                        'year'          => $year,
+                        'scope'         => $scope,
+                        'created_count' => count($created),
+                        'skipped_count' => $skipped,
+                    ],
+                    'ip_address'           => request()?->ip(),
+                    'user_agent'           => request()?->userAgent(),
+                ]);
+            }
+
+            return [
+                'year'          => $year,
+                'scope'         => $scope,
+                'created_count' => count($created),
+                'skipped_count' => $skipped,
+                'total_records' => count($created) + $skipped,
+            ];
+        });
     }
 }
