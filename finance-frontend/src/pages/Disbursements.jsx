@@ -16,7 +16,7 @@ import { useProfileContext } from '../context/ProfileContext'
 import { hasPermission } from '../utils/permissions'
 import { useDisbursements } from '../hooks/useDisbursements'
 import { useDepartments } from '../hooks/useDepartments'
-import { useCashAccounts } from '../hooks/UseCashAccounts'
+import { useCashAccounts } from '../hooks/useCashAccounts'
 import { useAccountsPayable } from '../hooks/useAccountsPayable'
 
 /* ---------------------------------------------------------------------- */

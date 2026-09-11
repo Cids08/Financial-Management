@@ -5,7 +5,7 @@ import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
 import { formatCurrency } from '../utils/formatters'
-import { useCashAccounts } from '../hooks/UseCashAccounts'
+import { useCashAccounts } from '../hooks/useCashAccounts'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 
 const ACCOUNT_TYPES = ['Checking', 'Savings', 'Petty Cash', 'Money Market']
