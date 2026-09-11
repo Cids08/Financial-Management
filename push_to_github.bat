@@ -51,7 +51,7 @@ git status --short
 
 echo.
 echo [4/4] Committing local changes...
-git commit -m "Configure Docker, Docker Compose, and deployment infrastructure for HostForge"
+git commit -m "Fix case-sensitive import paths for Linux/Docker build"
 
 echo.
 echo Syncing with remote repository...

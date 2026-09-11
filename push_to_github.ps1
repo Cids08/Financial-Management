@@ -42,7 +42,7 @@ Write-Host "`nCurrent staged files:" -ForegroundColor Cyan
 git status --short
 
 Write-Host "`n[4/4] Committing local changes..." -ForegroundColor Green
-git commit -m "Configure Docker, Docker Compose, and deployment infrastructure for HostForge"
+git commit -m "Fix case-sensitive import paths for Linux/Docker build"
 
 Write-Host "`nSyncing with remote repository..." -ForegroundColor Green
 git pull --rebase origin main
