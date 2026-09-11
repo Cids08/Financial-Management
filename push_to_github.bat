@@ -51,7 +51,7 @@ git status --short
 
 echo.
 echo [4/4] Committing local changes...
-git commit -m "Fix case-sensitive import paths for Linux/Docker build"
+git commit -m "Make DB connection env-driven in docker-compose and add super admin env vars"
 
 echo.
 echo Syncing with remote repository...

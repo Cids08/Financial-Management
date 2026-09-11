@@ -42,7 +42,7 @@ Write-Host "`nCurrent staged files:" -ForegroundColor Cyan
 git status --short
 
 Write-Host "`n[4/4] Committing local changes..." -ForegroundColor Green
-git commit -m "Fix case-sensitive import paths for Linux/Docker build"
+git commit -m "Make DB connection env-driven in docker-compose and add super admin env vars"
 
 Write-Host "`nSyncing with remote repository..." -ForegroundColor Green
 git pull --rebase origin main
