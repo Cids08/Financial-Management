@@ -1,5 +1,5 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
-import { isAuthenticated } from '../hooks/useAuth'
+import { isAuthenticated } from '../hooks/Useauth'
 
 // Wrap any layout/route that requires a logged-in user.
 // Usage: <Route element={<ProtectedRoute />}><Route element={<DashboardLayout />}>...</Route></Route>
