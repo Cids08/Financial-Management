@@ -6,7 +6,7 @@
 FROM php:8.2-fpm
 
 LABEL maintainer="Financial Management System"
-LABEL description="php:8.2-fpm with tesseract-ocr installed"
+LABEL description="php:8.2-fpm with tesseract-ocr for OCR features"
 
 ENV DEBIAN_FRONTEND=noninteractive
 
