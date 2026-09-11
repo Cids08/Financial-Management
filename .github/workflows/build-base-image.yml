@@ -8,10 +8,6 @@ on:
       - main
   workflow_dispatch:
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository_owner }}/php82-fpm-tesseract
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -38,5 +34,5 @@ jobs:
         with:
           context: docker/base
           push: true
-          tags: ghcr.io/${{ env.IMAGE_NAME }}:latest
-          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          tags: ghcr.io/cids08/php82-fpm-tesseract:latest
+          labels: org.opencontainers.image.source=https://github.com/cids08/Financial-Management
