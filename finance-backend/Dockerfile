@@ -1,10 +1,10 @@
 # =============================================================================
 # finance-backend — Dockerfile
-# PHP 8.2 FPM (official image) + Nginx + Supervisor (queue + reverb)
-# Minimal: only pgsql extension compiled; everything else ships built-in.
-# Tesseract removed to stay within HostForge 20-min build limit.
+# PHP 8.2 FPM (base built on GitHub Actions, includes tesseract) + Nginx +
+# Supervisor. Only pgsql extension compiled here; everything else is in the
+# pre-built ghcr.io base image.
 # =============================================================================
-FROM php:8.2-fpm
+FROM ghcr.io/cids08/php82-fpm-tesseract:latest
 
 LABEL maintainer="Financial Management System"
 
