@@ -1,21 +1,20 @@
 # =============================================================================
-# finance-frontend — Dockerfile
-# Stage 1: Node 20 builds the Vite/React app
-# Stage 2: Nginx alpine serves the static dist
+# finance-frontend — Dockerfile (Ultra-fast Bun Builder + Nginx)
+# Stage 1: Bun installs packages & builds Vite in < 15 seconds (bypasses npm hang)
+# Stage 2: Nginx Alpine serves the static dist files
 # =============================================================================
 
-# --- Stage 1: Build ----------------------------------------------------------
-FROM node:20-slim AS builder
+# --- Stage 1: Fast Build with Bun -------------------------------------------
+FROM oven/bun:1 AS builder
 
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm install --no-audit --no-fund
+COPY package.json ./
+RUN bun install
 
 COPY . .
 
-# VITE_ vars are baked into the JS bundle at build time.
-# Pass them as build-args in docker-compose.
+# VITE_ build args baked into the JS bundle
 ARG VITE_API_BASE_URL
 ARG VITE_API_URL
 ARG VITE_REVERB_APP_KEY
@@ -30,9 +29,9 @@ ENV VITE_REVERB_HOST=$VITE_REVERB_HOST
 ENV VITE_REVERB_PORT=$VITE_REVERB_PORT
 ENV VITE_REVERB_SCHEME=$VITE_REVERB_SCHEME
 
-RUN npm run build
+RUN bun run build
 
-# --- Stage 2: Serve ----------------------------------------------------------
+# --- Stage 2: Serve with Nginx ----------------------------------------------
 FROM nginx:1.27-alpine
 
 COPY --from=builder /app/dist /usr/share/nginx/html
