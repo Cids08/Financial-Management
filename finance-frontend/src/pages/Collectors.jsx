@@ -9,7 +9,7 @@ import Modal from '../components/Modal'
 import Tooltip2 from '../components/Tooltip'
 import { formatCurrency } from '../utils/formatters'
 import { apiFetch } from '../utils/api'
-import { useCollectors } from '../hooks/UseCollectors'
+import { useCollectors } from '../hooks/useCollectors'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 
 const EMPTY_FORM = { employee_no: '', first_name: '', last_name: '', email: '', contact_no: '', assigned_area: '', service_area_id: '', monthly_target: '', commission_rate: '', is_active: true, user_id: '' }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { LogIn } from 'lucide-react'
 import Button from './Button'
-import { useAuth } from '../hooks/Useauth'
+import { useAuth } from '../hooks/useAuth'
 import { getEcho, disconnectEcho } from '../utils/echo'
 import { getClientSessionId, isAuthenticated } from '../utils/authToken'
 import { apiFetch } from '../utils/api'

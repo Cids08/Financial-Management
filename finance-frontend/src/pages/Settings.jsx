@@ -31,7 +31,7 @@ import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
 import { useCompany } from '../context/CompanyContext'
-import { useAccountSecurity } from '../hooks/UseAccountSecurity'
+import { useAccountSecurity } from '../hooks/useAccountSecurity'
 import { usePermissions } from '../context/PermissionsContext'
 import OtpInput from '../components/OtpInput'
 
