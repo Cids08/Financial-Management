@@ -1,50 +1,21 @@
 # =============================================================================
 # finance-backend — Dockerfile
 # PHP 8.2 + Nginx + Tesseract + Supervisor (queue + reverb)
+# Single stage: compile PHP extensions once, keep build under the 20 min cap.
 # =============================================================================
-
-# --- Stage 1: Composer install -----------------------------------------------
-FROM php:8.2-fpm AS vendor
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git unzip libpq-dev libzip-dev libpng-dev libjpeg-dev libwebp-dev \
-    libfreetype6-dev libonig-dev libxml2-dev \
-    && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
-    && docker-php-ext-install -j$(nproc) \
-       pdo pdo_pgsql pgsql zip gd bcmath mbstring xml pcntl sockets exif \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
-
-WORKDIR /var/www/html
-
-COPY composer.json composer.lock ./
-
-RUN composer install \
-    --no-dev \
-    --no-scripts \
-    --no-autoloader \
-    --prefer-dist \
-    --optimize-autoloader
-
-COPY . .
-
-RUN composer dump-autoload --optimize --no-dev
-
-# --- Stage 2: Runtime --------------------------------------------------------
 FROM php:8.2-fpm
 
 LABEL maintainer="Financial Management System"
 
+# System packages + PHP extensions (single install, no GD — not required)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq-dev libzip-dev libpng-dev libjpeg-dev libwebp-dev \
-    libfreetype6-dev libonig-dev libxml2-dev \
-    nginx supervisor curl \
-    tesseract-ocr \
-    && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
+    git unzip curl nginx supervisor tesseract-ocr \
+    libpq-dev libzip-dev libonig-dev libxml2-dev \
     && docker-php-ext-install -j$(nproc) \
-       pdo pdo_pgsql pgsql zip gd bcmath mbstring xml pcntl sockets exif \
+       pdo pdo_pgsql pgsql zip bcmath mbstring xml pcntl sockets \
     && rm -rf /var/lib/apt/lists/*
+
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 # PHP-FPM pool tuning
 RUN { \
@@ -66,7 +37,18 @@ RUN { \
 
 WORKDIR /var/www/html
 
-COPY --from=vendor /var/www/html /var/www/html
+COPY composer.json composer.lock ./
+
+RUN composer install \
+    --no-dev \
+    --no-scripts \
+    --no-autoloader \
+    --prefer-dist \
+    --optimize-autoloader
+
+COPY . .
+
+RUN composer dump-autoload --optimize --no-dev
 
 COPY docker/nginx/default.conf /etc/nginx/sites-available/default
 COPY docker/supervisor/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
