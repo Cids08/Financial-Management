@@ -1,11 +1,23 @@
-# Environment files - strictly ignored
+# Environment files - strictly ignored everywhere
 .env
 .env.*
 *.env
+**/.env
+**/.env.*
 finance-backend/.env
 finance-backend/.env.*
 finance-frontend/.env
 finance-frontend/.env.*
+finance-aiservice/.env
+finance-aiservice/.env.*
+finance-forecasting/.env
+finance-forecasting/.env.*
+
+# Python virtualenvs and caches
+.venv/
+*/.venv/
+**/__pycache__/
+*.py[cod]
 
 # Dependencies
 node_modules/

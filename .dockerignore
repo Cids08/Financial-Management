@@ -1,0 +1,18 @@
+.git
+**/.env
+**/.env.*
+**/*.env
+finance-backend/vendor
+finance-backend/storage/logs
+finance-backend/storage/framework/cache
+finance-backend/storage/framework/sessions
+finance-backend/storage/framework/views
+finance-frontend/node_modules
+finance-frontend/dist
+finance-aiservice/.venv
+finance-forecasting/.venv
+**/__pycache__
+**/*.pyc
+Finance ERD
+README.md
+push_to_github.bat

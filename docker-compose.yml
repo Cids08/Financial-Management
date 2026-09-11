@@ -1,0 +1,171 @@
+version: '3.9'
+
+services:
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # PostgreSQL
+  # ──────────────────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: fms_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-fms_db}
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - fms_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres} -d ${DB_DATABASE:-fms_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Laravel Backend  (PHP-FPM + Nginx + Queue Worker + Reverb WebSockets)
+  # ──────────────────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./finance-backend
+      dockerfile: Dockerfile
+    container_name: fms_backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      APP_NAME: "Financial Management System"
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_URL: ${APP_URL}
+      APP_KEY: ${APP_KEY}
+      APP_COMPANY_NAME: ${APP_COMPANY_NAME}
+      FRONTEND_URL: ${FRONTEND_URL}
+
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: ${DB_DATABASE:-fms_db}
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD}
+
+      BROADCAST_CONNECTION: reverb
+      QUEUE_CONNECTION: database
+      CACHE_STORE: database
+      SESSION_DRIVER: database
+      SESSION_LIFETIME: 120
+      SESSION_ENCRYPT: "false"
+      SESSION_PATH: /
+      SESSION_DOMAIN: ${SESSION_DOMAIN}
+      FILESYSTEM_DISK: local
+
+      REVERB_APP_ID: ${REVERB_APP_ID}
+      REVERB_APP_KEY: ${REVERB_APP_KEY}
+      REVERB_APP_SECRET: ${REVERB_APP_SECRET}
+      REVERB_HOST: ${REVERB_HOST}
+      REVERB_PORT: ${REVERB_PORT:-443}
+      REVERB_SCHEME: ${REVERB_SCHEME:-https}
+      REVERB_SERVER_HOST: "0.0.0.0"
+      REVERB_SERVER_PORT: "8080"
+
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+
+      MAIL_MAILER: ${MAIL_MAILER:-smtp}
+      MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      MAIL_ENCRYPTION: tls
+      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS}
+      MAIL_FROM_NAME: "Financial Management System"
+
+      # Internal service URLs — use Docker service names as hostnames
+      AI_ADVISOR_SERVICE_URL: http://aiservice:8002
+      AI_ADVISOR_SERVICE_TOKEN: ${AI_ADVISOR_SERVICE_TOKEN}
+      FORECAST_SERVICE_URL: http://forecasting:8001
+
+      # Tesseract OCR
+      TESSERACT_PATH: ${TESSERACT_PATH:-/usr/bin/tesseract}
+
+      LOG_CHANNEL: stack
+      LOG_LEVEL: ${LOG_LEVEL:-error}
+
+    ports:
+      - "8000:8000"   # HTTP API
+      - "8080:8080"   # Reverb WebSocket
+    volumes:
+      - backend_storage:/var/www/html/storage/app
+      - backend_logs:/var/www/html/storage/logs
+    networks:
+      - fms_network
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # React / Vite Frontend
+  # ──────────────────────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./finance-frontend
+      dockerfile: Dockerfile
+      args:
+        # These are baked into the JS bundle at build time — must be real URLs
+        VITE_API_BASE_URL: ${APP_URL}
+        VITE_API_URL: ${APP_URL}
+        VITE_REVERB_APP_KEY: ${REVERB_APP_KEY}
+        VITE_REVERB_HOST: ${REVERB_HOST}
+        VITE_REVERB_PORT: ${REVERB_PORT:-443}
+        VITE_REVERB_SCHEME: ${REVERB_SCHEME:-https}
+    container_name: fms_frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    networks:
+      - fms_network
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # AI Advisor Microservice  (FastAPI on port 8002)
+  # ──────────────────────────────────────────────────────────────────────────
+  aiservice:
+    build:
+      context: ./finance-aiservice
+      dockerfile: Dockerfile
+    container_name: fms_aiservice
+    restart: unless-stopped
+    environment:
+      OPENAI_BASE_URL: https://openrouter.ai/api/v1
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_ADVISOR_MODEL: ${OPENAI_ADVISOR_MODEL:-openai/gpt-4o-mini}
+      OPENAI_RECOMMENDATION_MODEL: ${OPENAI_RECOMMENDATION_MODEL:-openai/gpt-4o-mini}
+      OPENAI_REASONING_EFFORT: ${OPENAI_REASONING_EFFORT:-low}
+      OPENAI_REFERER: ${APP_URL}
+      OPENAI_TITLE: "Financial Management System"
+      INTERNAL_SERVICE_TOKEN: ${AI_ADVISOR_SERVICE_TOKEN}
+    ports:
+      - "8002:8002"
+    networks:
+      - fms_network
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # ARIMA Forecasting Microservice  (FastAPI on port 8001)
+  # ──────────────────────────────────────────────────────────────────────────
+  forecasting:
+    build:
+      context: ./finance-forecasting
+      dockerfile: Dockerfile
+    container_name: fms_forecasting
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    networks:
+      - fms_network
+
+# ──────────────────────────────────────────────────────────────────────────────
+volumes:
+  postgres_data:
+  backend_storage:
+  backend_logs:
+
+networks:
+  fms_network:
+    driver: bridge

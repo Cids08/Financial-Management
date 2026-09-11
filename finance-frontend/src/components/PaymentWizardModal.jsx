@@ -208,7 +208,7 @@ export default function PaymentWizardModal({
       <div className="bg-surface border border-border text-ink rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-gradient-to-r from-primary/15 via-primary/5 to-transparent">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-linear-to-r from-primary/15 via-primary/5 to-transparent">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-primary/20 text-primary-dark dark:text-primary rounded-xl">
               <Sparkles className="w-5 h-5" />
@@ -376,19 +376,19 @@ export default function PaymentWizardModal({
             <div className="space-y-4">
               {/* Summary bar */}
               <div className="flex flex-wrap gap-3">
-                <div className="flex-1 min-w-[140px] p-3 bg-primary/10 rounded-xl border border-primary/20">
+                <div className="flex-1 min-w-35 p-3 bg-primary/10 rounded-xl border border-primary/20">
                   <div className="text-xs text-primary-dark dark:text-primary font-medium">Total Eligible</div>
                   <div className="text-lg font-bold text-ink">{proposals.length} bills</div>
                   <div className="text-xs text-muted">{fmt(totals.total_available)} available</div>
                 </div>
                 {totals.total_overdue > 0 && (
-                  <div className="flex-1 min-w-[140px] p-3 bg-rose-500/10 rounded-xl border border-rose-500/20">
+                  <div className="flex-1 min-w-35 p-3 bg-rose-500/10 rounded-xl border border-rose-500/20">
                     <div className="text-xs text-rose-600 dark:text-rose-400 font-medium">Overdue</div>
                     <div className="text-lg font-bold text-rose-700 dark:text-rose-400">{totals.total_overdue} bills</div>
                     <div className="text-xs text-muted">Requires immediate payment</div>
                   </div>
                 )}
-                <div className={`flex-1 min-w-[140px] p-3 rounded-xl border ${isOverdraft ? 'bg-rose-500/10 border-rose-500/20' : 'bg-emerald-500/10 border-emerald-500/20'}`}>
+                <div className={`flex-1 min-w-35 p-3 rounded-xl border ${isOverdraft ? 'bg-rose-500/10 border-rose-500/20' : 'bg-emerald-500/10 border-emerald-500/20'}`}>
                   <div className={`text-xs font-medium ${isOverdraft ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>Selected Total</div>
                   <div className={`text-lg font-bold ${isOverdraft ? 'text-rose-700 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}>{fmt(selectedTotal)}</div>
                   <div className={`text-xs text-muted`}>
@@ -396,7 +396,7 @@ export default function PaymentWizardModal({
                   </div>
                 </div>
                 {cashAccount && (
-                  <div className={`flex-1 min-w-[140px] p-3 rounded-xl border ${isOverdraft ? 'bg-rose-500/10 border-rose-500/20' : 'bg-bg/40 border-border'}`}>
+                  <div className={`flex-1 min-w-35 p-3 rounded-xl border ${isOverdraft ? 'bg-rose-500/10 border-rose-500/20' : 'bg-bg/40 border-border'}`}>
                     <div className={`text-xs font-medium ${isOverdraft ? 'text-rose-600 dark:text-rose-400' : 'text-muted'}`}>Cash Balance</div>
                     <div className={`text-lg font-bold ${isOverdraft ? 'text-rose-700 dark:text-rose-400' : 'text-ink'} flex items-center gap-1.5`}>
                       {revealBalance ? fmt(cashAccount.current_balance) : '₱ ••••••'}
@@ -485,7 +485,7 @@ export default function PaymentWizardModal({
                                 className="rounded border-border text-primary focus:ring-primary/40 cursor-pointer"
                               />
                             </td>
-                            <td className="px-3 py-3 font-medium text-ink max-w-[140px] truncate">{p.supplier_name}</td>
+                            <td className="px-3 py-3 font-medium text-ink max-w-35 truncate">{p.supplier_name}</td>
                             <td className="px-3 py-3 text-muted font-mono text-xs">{p.invoice_number}</td>
                             <td className="px-3 py-3 text-muted text-xs">{p.due_date}</td>
                             <td className="px-3 py-3">
@@ -566,7 +566,7 @@ export default function PaymentWizardModal({
                     {result.disbursements.map((d) => (
                       <tr key={d.disbursement_id} className="hover:bg-bg/60">
                         <td className="px-4 py-3 font-mono text-xs text-primary-dark dark:text-primary font-bold">{d.voucher_number}</td>
-                        <td className="px-4 py-3 text-ink max-w-[140px] truncate">{d.payee}</td>
+                        <td className="px-4 py-3 text-ink max-w-35 truncate">{d.payee}</td>
                         <td className="px-4 py-3 text-muted font-mono text-xs">{d.invoice_number}</td>
                         <td className="px-4 py-3 text-right font-mono text-ink">{fmt(d.amount_paid)}</td>
                         <td className="px-4 py-3 text-center">

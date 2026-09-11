@@ -1,5 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
+set "PATH=%SystemRoot%\System32;%SystemRoot%;%PATH%"
 
 echo ===================================================
 echo   Financial Management System - Safe GitHub Push
@@ -22,7 +23,7 @@ if exist ".git\index" (
 
 echo.
 echo [1/4] Checking .env safety...
-git status --porcelain 2>nul | findstr /i "\.env"
+git status --porcelain 2>nul | "%SystemRoot%\System32\findstr.exe" /i "\.env"
 if %errorlevel% equ 0 (
     echo.
     echo [WARNING] Detected .env file in git status!
@@ -30,6 +31,7 @@ if %errorlevel% equ 0 (
     git rm --cached -f .env 2>nul
     git rm --cached -f finance-backend\.env 2>nul
     git rm --cached -f finance-frontend\.env 2>nul
+    git rm --cached -f finance-aiservice\.env 2>nul
     git rm --cached -f *.env 2>nul
 ) else (
     echo [OK] No .env files tracked or staged.
@@ -41,7 +43,7 @@ git add .
 
 echo.
 echo [3/4] Ensuring no .env files are staged...
-git rm --cached -r --quiet *.env .env finance-backend/.env finance-frontend/.env 2>nul
+git rm --cached -r --quiet *.env .env finance-backend/.env finance-frontend/.env finance-aiservice/.env finance-forecasting/.env 2>nul
 
 echo.
 echo Current staged files:
@@ -49,7 +51,7 @@ git status --short
 
 echo.
 echo [4/4] Committing local changes...
-git commit -m "Update financial management features, workflow sorting, GL sentence case, and table layouts"
+git commit -m "Configure Docker, Docker Compose, and deployment infrastructure for HostForge"
 
 echo.
 echo Syncing with remote repository...
