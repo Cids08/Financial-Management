@@ -1,22 +1,12 @@
 # =============================================================================
 # finance-backend — Dockerfile
-# PHP 8.2 FPM (base built on GitHub Actions, includes tesseract) + Nginx +
-# Supervisor. Only pgsql extension compiled here; everything else is in the
-# pre-built ghcr.io base image.
+# Based on the pre-built ghcr.io base image (php:8.2-fpm + tesseract + nginx +
+# supervisor + pgsql/pdo_pgsql, compiled on GitHub Actions). HostForge only
+# runs composer here so the build stays well under the 20-minute limit.
 # =============================================================================
 FROM ghcr.io/cids08/php82-fpm-tesseract:latest
 
 LABEL maintainer="Financial Management System"
-
-# Install minimal runtime deps + pgsql extension
-# php:8.2-fpm ships: bcmath, curl, dom, fileinfo, filter, iconv, mbstring,
-# openssl, pcntl, pdo, sockets, tokenizer, xml, zip, opcache, etc.
-# We only need the PostgreSQL PDO driver.
-ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    nginx supervisor curl unzip libpq-dev \
-    && docker-php-ext-install -j$(nproc) pgsql pdo_pgsql \
-    && rm -rf /var/lib/apt/lists/*
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
