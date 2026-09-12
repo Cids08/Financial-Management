@@ -24,6 +24,13 @@ return Application::configure(basePath: dirname(__DIR__))
             'require.password.change' => \App\Http\Middleware\EnsurePasswordChanged::class,
         ]);
 
+        // HostForge terminates TLS on its edge and forwards the real client
+        // IP via X-Forwarded-For. Without trusting the proxy, request()->ip()
+        // reports the edge/container network IP (a Hostinger/Malaysia range)
+        // and GeoIP shows "Kuala Lumpur, Malaysia" for every login instead of
+        // the user's actual city. Trust all proxies so the forwarded IP wins.
+        $middleware->trustProxies(at: '*');
+
         $middleware->api(append: [
             \App\Http\Middleware\SecurityHeaders::class,
         ]);
