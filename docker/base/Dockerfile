@@ -17,6 +17,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     unzip \
     libpq-dev \
-    && docker-php-ext-install -j$(nproc) pgsql pdo_pgsql \
+    && docker-php-ext-install -j$(nproc) pgsql pdo_pgsql pcntl \
     && rm -rf /var/lib/apt/lists/*
 

@@ -245,7 +245,14 @@ class AuthService
 
         $user->tokens()->where('id', '!=', $newToken->accessToken->id)->delete();
 
-        broadcast(new ForcedLogout($user->id, $clientSessionId, $deviceLabel));
+        // WebSocket notice is best-effort: if the broadcast server is
+        // unreachable we still must return the token — a dead websocket
+        // must never take down the login response itself.
+        try {
+            broadcast(new ForcedLogout($user->id, $clientSessionId, $deviceLabel));
+        } catch (\Throwable $e) {
+            logger()->warning('ForcedLogout broadcast failed', ['error' => $e->getMessage()]);
+        }
 
         // Secondary channel alongside the real-time WebSocket notice above
         // — this reaches the person even if their other device/tab isn't
