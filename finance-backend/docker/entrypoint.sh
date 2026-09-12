@@ -14,6 +14,10 @@ php artisan migrate --force
 echo "==> Creating storage link..."
 php artisan storage:link --force 2>/dev/null || true
 
+echo "==> Seeding roles & permissions (idempotent)..."
+php artisan db:seed --class=RolesAndPermissionsSeeder --force
+php artisan db:seed --class=SuperAdminSeeder --force
+
 echo "==> Caching config, routes, views..."
 php artisan config:cache
 php artisan route:cache
