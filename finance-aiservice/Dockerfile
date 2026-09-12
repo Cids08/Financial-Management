@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM ghcr.io/cids08/python311-ml:latest
 
 LABEL maintainer="Financial Management System — AI Advisor Service"
 
