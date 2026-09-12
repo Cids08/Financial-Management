@@ -29,6 +29,23 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->render(function (\Throwable $e, $request) {
+            if ($request->is('api/*') && $request->header('X-Debug-Reveal') === '1') {
+                return response()->json([
+                    'success' => false,
+                    'message' => $e->getMessage(),
+                    'meta' => [
+                        'class' => get_class($e),
+                        'file' => $e->getFile(),
+                        'line' => $e->getLine(),
+                        'trace' => collect($e->getTrace())->take(8)->toArray(),
+                    ],
+                ], 500);
+            }
+
+            return null;
+        });
+
         $exceptions->render(function (ThrottleRequestsException $e, $request) {
             if (! $request->is('api/*')) {
                 return null;
