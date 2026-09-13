@@ -17,10 +17,10 @@ COPY . .
 # VITE_ build args baked into the JS bundle.
 # Defaults are the production values so the build is correct even when
 # HostForge does not pass these as --build-arg.
-ARG VITE_API_BASE_URL=https://fms-backend-financial-management-system1.hostforgeplatforms.com
-ARG VITE_API_URL=https://fms-backend-financial-management-system1.hostforgeplatforms.com
+ARG VITE_API_BASE_URL=https://api-fms.alibaton-ph.com
+ARG VITE_API_URL=https://api-fms.alibaton-ph.com
 ARG VITE_REVERB_APP_KEY=e28f11fa00d789dbdd9e
-ARG VITE_REVERB_HOST=fms-backend-financial-management-system1.hostforgeplatforms.com
+ARG VITE_REVERB_HOST=api-fms.alibaton-ph.com
 ARG VITE_REVERB_PORT=443
 ARG VITE_REVERB_SCHEME=https
 
