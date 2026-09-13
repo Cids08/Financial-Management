@@ -29,14 +29,17 @@ class SuperAdminSeeder extends Seeder
             ]
         );
 
-        $email = env('SUPER_ADMIN_EMAIL', 'superadmin@alibaton.test');
-
-        if (User::where('email', $email)->exists()) {
-            $this->command->warn("Super Admin account already exists ({$email}) — skipping.");
+// Guard: if any user already holds the super-admin role, the
+        // account was already seeded (or manually promoted). Never
+        // overwrite it — the user may have changed their email or
+        // password, and we must not revert their credentials on boot.
+        if (User::where('role_id', $role->id)->exists()) {
+            $this->command->warn('Super Admin account already exists (by role) — skipping.');
             return;
         }
 
-        $password = env('SUPER_ADMIN_PASSWORD') ?: Str::password(16);
+        $email     = env('SUPER_ADMIN_EMAIL', 'superadmin@alibaton.test');
+        $password  = env('SUPER_ADMIN_PASSWORD') ?: Str::password(16);
 
         User::create([
             'role_id'           => $role->id,
