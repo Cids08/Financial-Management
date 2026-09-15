@@ -21,12 +21,15 @@ import {
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
+import Pagination from '../components/Pagination'
 import Tooltip from '../components/Tooltip'
 import { useUsers } from '../hooks/useUsers'
+import { useProfile } from '../hooks/useProfile'
 import { useHighlightRow } from '../hooks/useHighlightRow'
+import { apiFetch } from '../utils/api'
 
 // Covers both the originally-assumed role names AND the actual ones this
-// project's roles table uses (Admin, Staff) — every entry has an explicit
+// project's roles table uses (Admin, Staff)  -  every entry has an explicit
 // dark: variant so a role never silently falls back to the unstyled
 // default. If a brand-new role name shows up that isn't listed here, the
 // fallback below (also dark-mode-safe now) keeps it readable either way.
@@ -40,7 +43,7 @@ const ROLE_STYLES = {
   Auditor: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
 }
 
-// Was 'bg-gray-100 text-muted' — bg-gray-100 has no dark: variant, so any
+// Was 'bg-gray-100 text-muted'  -  bg-gray-100 has no dark: variant, so any
 // role name not in the map above stayed pale-on-pale in dark mode. This
 // mirrors the Auditor style, which already handled dark mode correctly.
 const ROLE_STYLE_FALLBACK = 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
@@ -50,7 +53,7 @@ const STATUS_STYLES = {
   Inactive: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
 }
 
-const EMPTY_FORM = { first_name: '', last_name: '', email: '', role_id: '', status: 'Active' }
+const EMPTY_FORM = { first_name: '', last_name: '', email: '', role_id: '', title_id: '', status: 'Active' }
 
 /* ---------------------------------------------------------------------- */
 /* Shared style tokens (matches Dashboard.jsx)                             */
@@ -66,7 +69,7 @@ const LABEL = 'block text-xs font-medium text-muted mb-1.5'
 // root-relative paths (e.g. "/storage/avatars/3.jpg" from Laravel's
 // Storage::url()) instead of full URLs. A root-relative path with no
 // domain gets resolved by the browser against whatever origin the page
-// is currently on (the Vite dev server), not the Laravel backend — which
+// is currently on (the Vite dev server), not the Laravel backend  -  which
 // is why avatars 404'd and silently fell back to initials. Falls back to
 // the known local backend so this works out of the box in dev; set
 // VITE_API_URL in your .env for other environments (staging, production).
@@ -93,7 +96,7 @@ function formatDateTime(iso) {
   })
 }
 
-// Full mask, not partial — a fixed placeholder rather than "keep first
+// Full mask, not partial  -  a fixed placeholder rather than "keep first
 // char + domain visible" or "keep last 4 digits visible". Partial masks
 // leak information (e.g. on a short list, seeing "j••••@alibaton.test"
 // narrows down who it is almost immediately); a fixed-length placeholder
@@ -101,7 +104,7 @@ function formatDateTime(iso) {
 const MASKED_EMAIL = '••••••••••••'
 const MASKED_VALUE = '••••••••'
 
-// Shown once, right after a new user is created — the backend only ever
+// Shown once, right after a new user is created  -  the backend only ever
 // includes initial_password on the create response, never again, so this
 // is genuinely the only chance to see it in the UI.
 function NewUserCredentialsModal({ credentials, onClose }) {
@@ -126,7 +129,7 @@ function NewUserCredentialsModal({ credentials, onClose }) {
       <div className="space-y-3">
         <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
           <ShieldAlert size={14} className="shrink-0 mt-0.5" />
-          This password is shown only once. Share it with the new user securely — they should change it after their first login.
+          This password is shown only once. Share it with the new user securely. They should change it after their first login.
         </div>
 
         <div className="rounded-lg border border-border bg-bg p-3 space-y-2 font-mono text-sm">
@@ -153,7 +156,7 @@ function NewUserCredentialsModal({ credentials, onClose }) {
   )
 }
 
-// Full-screen preview of a single image — click-to-enlarge target for the
+// Full-screen preview of a single image  -  click-to-enlarge target for the
 // avatar shown in ViewProfileModal. Closes on backdrop click, X button, or
 // Escape key.
 function ImageLightbox({ src, alt, onClose }) {
@@ -195,7 +198,7 @@ function ImageLightbox({ src, alt, onClose }) {
   )
 }
 
-// Full profile view — bigger avatar than the table row, plus the user's
+// Full profile view  -  bigger avatar than the table row, plus the user's
 // core info in one place. Clicking the avatar opens it full-screen via
 // ImageLightbox. Read-only; editing still happens through the existing
 // Edit modal so we don't duplicate validation/save logic here.
@@ -299,6 +302,8 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
     usersError,
     roles,
     rolesLoading,
+    titles,
+    titlesLoading,
     formSaving,
     formError,
     actionBusyId,
@@ -313,11 +318,14 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
   const [statusFilter, setStatusFilter] = useState('all')
   const [showArchived, setShowArchived] = useState(false)
   // Users.jsx loads every user client-side (no server-side `search`
-  // paging), so highlightSearch isn't needed here — the target row is
+  // paging), so highlightSearch isn't needed here  -  the target row is
   // already in memory the moment it's highlighted.
   const { highlightedId } = useHighlightRow()
+  // Current signed-in user  -  lets the edit modal lock the Role field when
+  // editing your own account, since the backend rejects self role-changes.
+  const { profile } = useProfile()
 
-  // A row arriving via search highlight should always be visible — clear
+  // A row arriving via search highlight should always be visible  -  clear
   // any active filter that could otherwise hide it (e.g. landing here
   // with a role filter still set from a previous visit).
   useEffect(() => {
@@ -353,7 +361,15 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
   // an in-progress edit.
   const [viewingUser, setViewingUser] = useState(null)
 
-  // Controls visibility of email + employee no. together per row — masked
+  // Role-change re-auth gate  -  when an admin edits a user and changes
+  // their role, the save is intercepted and a confirmation modal asks for
+  // the admin's own password before the PUT is actually sent.
+  const [roleGate, setRoleGate] = useState(null) // { user, payload, fromRoleName, toRoleName }
+  const [gatePassword, setGatePassword] = useState('')
+  const [gateSaving, setGateSaving] = useState(false)
+  const [gateError, setGateError] = useState('')
+
+  // Controls visibility of email + employee no. together per row  -  masked
   // by default, revealed only when the eye icon is clicked.
   const [revealedIds, setRevealedIds] = useState(new Set())
   const toggleReveal = (id) => {
@@ -366,7 +382,7 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
 
   // Same graceful-fallback pattern as Header.jsx's Avatar component:
   // avatar_url being present just means the backend has *a* path on
-  // record — it doesn't guarantee the file still exists at that URL
+  // record  -  it doesn't guarantee the file still exists at that URL
   // (deleted from disk, stale DB value, wrong storage disk, etc), or that
   // it was even a resolvable URL to begin with (relative paths need
   // resolveAvatarUrl above). A plain `u.avatar_url ? <img> : initials`
@@ -388,6 +404,8 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
 
   const roleName = (roleId) => roles.find((r) => r.role_id === roleId)?.role_name ?? 'Unknown'
 
+  const titleName = (titleId) => titles.find((t) => t.title_id === Number(titleId))?.title_name ?? '-'
+
   const sourceList = showArchived ? archivedUsers : users
 
   const filteredUsers = useMemo(() => {
@@ -401,6 +419,16 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
       return true
     })
   }, [sourceList, search, roleFilter, statusFilter])
+
+  const [page, setPage] = useState(1)
+  const PER_PAGE = 10
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PER_PAGE))
+  const rangeStart = (page - 1) * PER_PAGE + 1
+  const rangeEnd = Math.min(page * PER_PAGE, filteredUsers.length)
+
+  useEffect(() => {
+    setPage(1)
+  }, [search, roleFilter, statusFilter, showArchived])
 
   const stats = useMemo(() => ({
     total: users.length,
@@ -429,6 +457,7 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
       last_name: user.last_name,
       email: user.email,
       role_id: user.role_id,
+      title_id: user.title_id ?? '',
       status: user.status,
     })
     setFieldErrors({})
@@ -457,10 +486,26 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
       last_name: form.last_name.trim(),
       email: form.email.trim(),
       role_id: Number(form.role_id),
+      title_id: form.title_id ? Number(form.title_id) : null,
       status: form.status,
     }
 
     const wasAdding = modalMode === 'add'
+
+    // Sensitive operation: changing an existing user's role. Hold the
+    // save until the admin re-authenticates with their own password.
+    if (!wasAdding && Number(form.role_id) !== Number(modalMode.role_id)) {
+      setRoleGate({
+        user: modalMode,
+        payload,
+        fromRoleName: roleName(modalMode.role_id),
+        toRoleName: roleName(Number(form.role_id)),
+      })
+      setGatePassword('')
+      setGateError('')
+      return
+    }
+
     const result = wasAdding
       ? await createUser(payload)
       : await updateUser(modalMode.user_id, payload)
@@ -474,11 +519,11 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
         })
       }
     }
-    // On failure, formError (from the hook) surfaces via InlineError below —
+    // On failure, formError (from the hook) surfaces via InlineError below  - 
     // the modal stays open so the person can fix it.
   }
 
-  // Each stat card doubles as a quick filter — clicking it narrows the table
+  // Each stat card doubles as a quick filter  -  clicking it narrows the table
   // to match, and is highlighted while that filter is the active one. The
   // Archived card is the only way to toggle showArchived now (the separate
   // "Show Archived" button in the filter bar was removed as redundant); every
@@ -530,6 +575,41 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
   const isModalOpen = modalMode !== null
   const isEditing = modalMode !== null && modalMode !== 'add'
 
+  // Verify the admin's password, then apply the pending role change. The
+  // PUT only fires after the backend confirms the password  -  a wrong one
+  // keeps the gate open with an error and changes nothing.
+  const confirmRoleChange = async () => {
+    setGateSaving(true)
+    setGateError('')
+    try {
+      const res = await apiFetch('/auth/verify-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: gatePassword }),
+      })
+      const json = await res.json()
+
+      if (!res.ok || !json.success) {
+        setGateError(json.message || 'The password is incorrect.')
+        setGateSaving(false)
+        return
+      }
+
+      const result = await updateUser(roleGate.user.user_id, roleGate.payload)
+      if (result.success) {
+        setRoleGate(null)
+        setGatePassword('')
+        closeModal()
+      } else {
+        setGateError(result.message || 'Could not update the user.')
+      }
+    } catch {
+      setGateError('Could not verify your password. Please try again.')
+    } finally {
+      setGateSaving(false)
+    }
+  }
+
   return (
     <div className="space-y-5 animate-fadeIn">
       <Breadcrumb items={crumbs} />
@@ -540,7 +620,7 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
           <h1 className="text-xl font-bold tracking-tight text-ink">{title}</h1>
           <p className="mt-1 text-xs text-muted">Manage system accounts and access.</p>
         </div>
-        <Button variant="primary" size="sm" icon={Plus} onClick={openAddModal} disabled={rolesLoading}>
+        <Button variant="primary" size="sm" icon={Plus} onClick={openAddModal}>
           Add User
         </Button>
       </div>
@@ -551,7 +631,7 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
         </div>
       )}
 
-      {/* Stat cards — clickable quick filters */}
+      {/* Stat cards  -  clickable quick filters */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {statCards.map((card) => {
           const Icon = card.icon
@@ -569,7 +649,7 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
               </div>
               <div className="min-w-0">
                 <p className="text-xs text-muted">{card.label}</p>
-                <p className="text-lg font-bold text-ink">{usersLoading ? '—' : card.value}</p>
+                <p className="text-lg font-bold text-ink">{usersLoading ? '…' : card.value}</p>
               </div>
             </button>
           )
@@ -607,6 +687,7 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
               <tr className="border-b border-border">
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">User</th>
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Role</th>
+                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Position</th>
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Status</th>
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Last Login</th>
                 <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Actions</th>
@@ -615,13 +696,13 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
             <tbody>
               {usersLoading && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-muted">
+                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">
                     Loading users…
                   </td>
                 </tr>
               )}
 
-              {!usersLoading && filteredUsers.map((u) => {
+              {!usersLoading && filteredUsers.slice((page - 1) * PER_PAGE, page * PER_PAGE).map((u) => {
                 const revealed = revealedIds.has(u.user_id)
                 const avatarFailed = avatarErrorIds.has(u.user_id)
                 const avatarSrc = resolveAvatarUrl(u.avatar_url)
@@ -667,6 +748,11 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
                     <td className="px-4 py-3.5 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${ROLE_STYLES[roleName(u.role_id)] || ROLE_STYLE_FALLBACK}`}>
                         {roleName(u.role_id)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3.5 whitespace-nowrap">
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                        {u.title_name || titleName(u.title_id)}
                       </span>
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
@@ -719,7 +805,7 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
 
               {!usersLoading && filteredUsers.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-muted">
+                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">
                     No users match your filters.
                   </td>
                 </tr>
@@ -728,6 +814,18 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
           </table>
         </div>
       </div>
+
+      <Pagination
+        page={page}
+        totalPages={totalPages}
+        onPageChange={setPage}
+        total={filteredUsers.length}
+        label="users"
+        showRange
+        rangeStart={rangeStart}
+        rangeEnd={rangeEnd}
+        bordered
+      />
 
       {/* Add / Edit User modal */}
       <Modal
@@ -799,13 +897,17 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
               <label className={LABEL}>Role</label>
               <select
                 value={form.role_id}
-                onChange={(e) => setForm((f) => ({ ...f, role_id: e.target.value }))}
-                className={INPUT}
+                onChange={isEditing && Number(modalMode.user_id) === Number(profile?.id) ? undefined : (e) => setForm((f) => ({ ...f, role_id: e.target.value }))}
+                disabled={isEditing && Number(modalMode.user_id) === Number(profile?.id)}
+                className={`${INPUT} disabled:cursor-not-allowed disabled:opacity-60`}
               >
                 {roles.map((r) => (
                   <option key={r.role_id} value={r.role_id}>{r.role_name}</option>
                 ))}
               </select>
+              {isEditing && Number(modalMode.user_id) === Number(profile?.id) && (
+                <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">You can't change your own role.</p>
+              )}
             </div>
             <div>
               <label className={LABEL}>Status</label>
@@ -818,6 +920,21 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
                 <option value="Inactive">Inactive</option>
               </select>
             </div>
+          </div>
+
+          <div>
+            <label className={LABEL}>Position</label>
+            <select
+              value={form.title_id}
+              onChange={(e) => setForm((f) => ({ ...f, title_id: e.target.value }))}
+              className={INPUT}
+            >
+              <option value="">- No position -</option>
+              {titles.map((t) => (
+                <option key={t.title_id} value={t.title_id}>{t.title_name}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-[11px] text-muted">Shown as the signatory position on printed disbursement vouchers.</p>
           </div>
         </form>
       </Modal>
@@ -832,6 +949,56 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
         roleLabel={viewingUser ? roleName(viewingUser.role_id) : ''}
         onClose={() => setViewingUser(null)}
       />
+
+      {/* Role-change confirmation  -  requires the admin's own password before
+          the role assignment takes effect. */}
+      <Modal
+        open={!!roleGate}
+        onClose={() => { if (!gateSaving) { setRoleGate(null); setGatePassword(''); setGateError('') } }}
+        title="Confirm Role Change"
+        footer={
+          <>
+            <Button variant="secondary" size="md" onClick={() => { if (!gateSaving) { setRoleGate(null); setGatePassword(''); setGateError('') } }} disabled={gateSaving}>
+              Cancel
+            </Button>
+            <Button variant="primary" size="md" onClick={confirmRoleChange} loading={gateSaving}>
+              Confirm &amp; Apply
+            </Button>
+          </>
+        }
+      >
+        {roleGate && (
+          <div className="space-y-4">
+            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+              <ShieldAlert size={14} className="shrink-0 mt-0.5" />
+              <span>
+                Changing <span className="font-medium text-ink">{roleGate.user.first_name} {roleGate.user.last_name}</span>'s role
+                from <span className="font-medium">{roleGate.fromRoleName}</span> to <span className="font-medium">{roleGate.toRoleName}</span>
+                applies immediately to their account.
+              </span>
+            </div>
+
+            {gateError && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+                {gateError}
+              </div>
+            )}
+
+            <div>
+              <label className={LABEL}>Your Password <span className="text-red-500">*</span></label>
+              <input
+                type="password"
+                value={gatePassword}
+                onChange={(e) => { setGatePassword(e.target.value); setGateError('') }}
+                placeholder="Enter your password to confirm"
+                className={INPUT}
+                autoFocus
+              />
+              <p className="mt-1 text-[11px] text-muted">Proving it's you before the role change is applied.</p>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }

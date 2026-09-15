@@ -121,7 +121,7 @@ export default function DisbursementProofModal({ open, onClose, disbursement, fe
     <Modal
       open={open}
       onClose={handleClose}
-      title={`Proof of Payment — ${disbursement?.voucher_number || 'Disbursement'}`}
+      title={`Proof of Payment  -  ${disbursement?.voucher_number || 'Disbursement'}`}
       maxWidth="max-w-2xl"
       footer={<Button variant="secondary" size="md" onClick={handleClose} disabled={uploading}>Close</Button>}
     >
@@ -138,7 +138,7 @@ export default function DisbursementProofModal({ open, onClose, disbursement, fe
           <div className="space-y-2">
             <label className="block text-xs font-semibold text-ink">
               Attach New Proof of Payment
-              <span className="ml-1 text-[11px] font-normal text-muted">— upload signed check voucher, transfer slip, or deposit receipt</span>
+              <span className="ml-1 text-[11px] font-normal text-muted">Upload signed check voucher, transfer slip, or deposit receipt</span>
             </label>
             <div
               onDragOver={(e) => { e.preventDefault(); setDragActive(true) }}

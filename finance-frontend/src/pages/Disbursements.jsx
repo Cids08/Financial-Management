@@ -1,23 +1,26 @@
 import { useState, useMemo, useEffect } from 'react'
 import {
   Search, Plus, Pencil, Archive, RotateCcw, Send, CheckCircle2, Clock3, Info, Printer,
-  Lock, ChevronLeft, ChevronRight, CalendarRange, X, Wallet, Users,
+  Lock, CalendarRange, X, Wallet, Users,
   Paperclip, FileText, AlertTriangle, Loader2,
 } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
+import Pagination from '../components/Pagination'
 import Tooltip from '../components/Tooltip'
 import DisbursementProofModal from '../components/DisbursementProofModal'
 import DisbursementPrintModal from '../components/DisbursementPrintModal'
 import { formatCurrency } from '../utils/formatters'
 import { usePermissions } from '../context/PermissionsContext'
 import { useProfileContext } from '../context/ProfileContext'
+import { usePrivacy } from '../context/PrivacyContext'
 import { hasPermission } from '../utils/permissions'
 import { useDisbursements } from '../hooks/useDisbursements'
 import { useDepartments } from '../hooks/useDepartments'
 import { useCashAccounts } from '../hooks/useCashAccounts'
 import { useAccountsPayable } from '../hooks/useAccountsPayable'
+import { useSearchParams } from 'react-router-dom'
 
 /* ---------------------------------------------------------------------- */
 /* Static form config                                                      */
@@ -28,7 +31,7 @@ const PAYMENT_METHODS = ['Bank Transfer', 'Check', 'Cash', 'GCash']
 // A disbursement either originates from Accounts Payable (created and
 // managed here) or from another department's Payroll request (created by
 // the Payroll/HR module and simply routed here for approval). Finance only
-// approves/rejects/releases payroll-sourced records — it never edits,
+// approves/rejects/releases payroll-sourced records  -  it never edits,
 // attaches proof to, or archives them from this screen.
 const SOURCE_TYPES = {
   ap: { label: 'Accounts Payable', short: 'AP' },
@@ -96,25 +99,25 @@ function formatDateTime(value) {
 // Confirmed against the real AccountsPayableResource: ap_id, invoice_number,
 // remaining_balance. supplier_name is `whenLoaded('supplier', ...)` on the
 // backend, so it only appears here if AccountsPayableController::index()
-// eager-loads the supplier relation — falls back to just the invoice
+// eager-loads the supplier relation  -  falls back to just the invoice
 // number if it isn't loaded, rather than showing "undefined".
 function apBillId(bill) {
   return bill.ap_id
 }
 function apBillLabel(bill) {
   const ref = bill.invoice_number || `AP #${bill.ap_id}`
-  const label = bill.supplier_name ? `${ref} — ${bill.supplier_name}` : ref
+  const label = bill.supplier_name ? `${ref}  -  ${bill.supplier_name}` : ref
   return `${label} (${formatCurrency(bill.remaining_balance)} due)`
 }
 // Only bills that are approved, still open, and not archived make sense to
 // disburse against:
 //  - not archived: obviously.
-//  - remaining_balance > 0 alone isn't enough — per AccountsPayableService::
+//  - remaining_balance > 0 alone isn't enough  -  per AccountsPayableService::
 //    stats()'s own comment, a Cancelled bill can still carry a nonzero
 //    remaining_balance since cancelling doesn't zero that column out, so
 //    status is checked explicitly too.
 //  - approved_by !== null: per AccountsPayableService::approve()'s
-//    comment, the AP liability only posts to the ledger at approval —
+//    comment, the AP liability only posts to the ledger at approval  - 
 //    a disbursement is meant to settle that liability, so a bill with
 //    nothing posted yet shouldn't be payable against.
 function isSelectableApBill(bill) {
@@ -124,7 +127,7 @@ function isSelectableApBill(bill) {
     && Number(bill.remaining_balance) > 0
 }
 
-// ASSUMPTION: same caveat as above — CashAccountController/Resource not
+// ASSUMPTION: same caveat as above  -  CashAccountController/Resource not
 // seen. Following the same `<module>_id` convention as departments
 // (department_id) and disbursements (disbursement_id), the resource key
 // is assumed to be cash_account_id; falls back to id if not.
@@ -133,7 +136,7 @@ function cashAccountId(account) {
 }
 function cashAccountLabel(account) {
   const name = account.account_name ?? account.name ?? `Account #${cashAccountId(account)}`
-  return account.bank_name ? `${name} — ${account.bank_name}` : name
+  return account.bank_name ? `${name}  -  ${account.bank_name}` : name
 }
 
 function DetailRow({ label, value }) {
@@ -158,7 +161,7 @@ function NoAccessState({ label }) {
 }
 
 /* ---------------------------------------------------------------------- */
-/* Main module — Disbursements (payments)                                  */
+/* Main module  -  Disbursements (payments)                                  */
 /* ---------------------------------------------------------------------- */
 
 export default function Disbursements({ title = 'Disbursements', crumbs = ['Financial Transactions', 'Disbursements'] }) {
@@ -188,13 +191,15 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
   // Lookup data for the Add/Edit form's dropdowns. These are only needed
   // once canManagePayments is true, but the hooks themselves are cheap
   // (single list fetch) and permission-gating the *inputs* rather than
-  // the hook calls keeps this component simpler — no conditional hooks.
+  // the hook calls keeps this component simpler  -  no conditional hooks.
   const { departments, loading: departmentsLoading, fetchDepartments } = useDepartments()
   const { accounts: cashAccounts, loading: cashAccountsLoading } = useCashAccounts()
   const { bills: apBills, billsLoading: apBillsLoading } = useAccountsPayable()
 
+  usePrivacy()
+
   // useDepartments() doesn't auto-fetch on mount (unlike useCashAccounts
-  // and useAccountsPayable) — it's built to be called with filters/page
+  // and useAccountsPayable)  -  it's built to be called with filters/page
   // from the Departments page itself. Pull a single large page here since
   // this is just a lookup list for the dropdown, not a paginated view.
   useEffect(() => {
@@ -298,7 +303,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
   }
 
   const openAddDisbursement = () => {
-    // Default Payment Date to today — there's nothing bill-specific to
+    // Default Payment Date to today  -  there's nothing bill-specific to
     // derive it from (bills only carry invoice_date/due_date), and most
     // disbursements are being recorded as happening now.
     setDForm({
@@ -310,7 +315,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
     setFieldErrors({})
     setDateErrors({ payment_date: '' })
     setDModalMode('add')
-    // Preview the next voucher number right away — see
+    // Preview the next voucher number right away  -  see
     // useDisbursements' fetchNextVoucherNumber comment for why this is a
     // preview, not a reservation. Falls back to the "Auto-generated on
     // save" placeholder if the fetch fails for any reason.
@@ -318,6 +323,19 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
       if (voucherNumber) setDForm((f) => ({ ...f, voucher_number: voucherNumber }))
     })
   }
+
+  // Deep-link from the dashboard's "New Transaction" menu: /?new=1 opens
+  // the create form directly, then the param is stripped so a refresh
+  // doesn't re-open it.
+  const [searchParams, setSearchParams] = useSearchParams()
+  useEffect(() => {
+    if (searchParams.get('new') !== '1') return
+    openAddDisbursement()
+    const next = new URLSearchParams(searchParams)
+    next.delete('new')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams])
+
   const openEditDisbursement = (d) => {
     if (!canManagePayments || d.status !== 'Pending' || getSourceType(d) === 'payroll') return
     setDForm({
@@ -336,7 +354,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
   const closeDisbursementDetail = () => { setDDetailRecord(null); setDActionError('') }
 
   // Selecting a bill already tells us who's being paid and how much they're
-  // owed — auto-fill Payee/Amount Paid/Currency (and Payment Method, if the
+  // owed  -  auto-fill Payee/Amount Paid/Currency (and Payment Method, if the
   // bill's method is one this form actually supports) instead of making the
   // user retype what's already on the bill. Amount Paid defaults to the
   // FULL remaining_balance (a full settlement); the user can still lower it
@@ -355,7 +373,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
       payment_method: bill?.payment_method && PAYMENT_METHODS.includes(bill.payment_method)
         ? bill.payment_method
         : f.payment_method,
-      // Head start only, not guaranteed correct — the bill's reference is
+      // Head start only, not guaranteed correct  -  the bill's reference is
       // often a PO/invoice reference, while the disbursement's is more
       // often the actual payment transaction reference (check no., bank
       // transfer ID) that may not exist yet. Still editable either way.
@@ -372,7 +390,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
           ['Payee', d.payee],
           ['Payroll Batch No.', d.payroll_batch_number || '—'],
           ['Requesting Department', d.department_name || '—'],
-          ['Pay Period', d.pay_period_start && d.pay_period_end ? `${formatDate(d.pay_period_start)} – ${formatDate(d.pay_period_end)}` : '—'],
+          ['Pay Period', d.pay_period_start && d.pay_period_end ? `${formatDate(d.pay_period_start)}  -  ${formatDate(d.pay_period_end)}` : '—'],
           ['Employees Covered', d.employee_count ?? '—'],
           ['Payment Date', formatDate(d.payment_date)],
           ['Amount Paid', formatCurrency(d.amount_paid)],
@@ -563,7 +581,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
     { key: 'released', label: 'Released Amount', value: formatCurrency(stats.total_paid), icon: CheckCircle2, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: dStatusFilter === 'Released' && !dShowArchived, onClick: () => { setDStatusFilter('Released'); setDShowArchived(false) } },
     { key: 'pending', label: 'Pending', value: stats.pending, icon: Clock3, iconBg: 'bg-amber-50 dark:bg-amber-500/10', iconColor: 'text-amber-600 dark:text-amber-400', isActive: dStatusFilter === 'Pending' && !dShowArchived, onClick: () => { setDStatusFilter('Pending'); setDShowArchived(false) } },
     { key: 'payroll_pending', label: 'Payroll Pending', value: payrollPendingCount, icon: Users, iconBg: 'bg-violet-50 dark:bg-violet-500/10', iconColor: 'text-violet-600 dark:text-violet-400', isActive: dSourceFilter === 'payroll' && dStatusFilter === 'Pending' && !dShowArchived, onClick: () => { setDStatusFilter('Pending'); setDShowArchived(false); setDSourceFilter('payroll') } },
-    // Only admins can archive/restore disbursements — hide this card for non-admin roles
+    // Only admins can archive/restore disbursements  -  hide this card for non-admin roles
     ...(isAdmin ? [{ key: 'archived', label: 'Archived', value: stats.archived, icon: Archive, iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-500 dark:text-slate-400', isActive: dShowArchived, onClick: () => setDShowArchived(true) }] : []),
   ]
 
@@ -725,7 +743,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                 const cashAccBal = cashAcc ? Number(cashAcc.current_balance) : (d.cash_account_balance !== null && d.cash_account_balance !== undefined ? Number(d.cash_account_balance) : null)
                 const isOverdrawn = checkInsufficientFunds(d)
                 const isMissingBudget = checkMissingBudget(d)
-                // "No Proof, No Release" — AP payments require an uploaded proof document
+                // "No Proof, No Release"  -  AP payments require an uploaded proof document
                 // (bank wire slip, check scan, or OR) before the Release button activates.
                 // Payroll disbursements are exempt from this rule.
                 const isMissingProof = !isPayroll && !d.has_attachment && d.status === 'Approved'
@@ -791,7 +809,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                         </Tooltip>
 
 
-                        {/* Proof attachment button — AP-only */}
+                        {/* Proof attachment button  -  AP-only */}
                         {canManagePayments && !isPayroll && !d.is_archived && (
                           <Tooltip label={d.has_attachment ? 'View proof of payment' : 'Attach proof of payment'} align="start">
                             <button
@@ -865,7 +883,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                               </button>
                             </Tooltip>
                           ) : isMissingProof ? (
-                            <Tooltip label="Attach proof of payment (bank slip, check scan, or OR) before releasing — click the paperclip icon to upload">
+                            <Tooltip label="Attach proof of payment (bank slip, check scan, or OR) before releasing  -  click the paperclip icon to upload">
                               <button
                                 type="button"
                                 onClick={() => setProofTarget(d)}
@@ -927,36 +945,17 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
           </table>
         </div>
 
-        {!loading && visibleDisbursements.length > 0 && (
-          <div className="flex flex-col gap-2 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs text-muted">
-              Showing page {meta.current_page} of {meta.last_page} &middot; {meta.total} disbursements
-            </p>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => setDPage((p) => Math.max(1, p - 1))}
-                disabled={dPage === 1}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
-                aria-label="Previous page"
-              >
-                <ChevronLeft size={15} />
-              </button>
-              <span className="px-2 text-xs font-medium text-ink whitespace-nowrap">
-                Page {meta.current_page} of {meta.last_page}
-              </span>
-              <button
-                type="button"
-                onClick={() => setDPage((p) => Math.min(meta.last_page, p + 1))}
-                disabled={dPage === meta.last_page}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
-                aria-label="Next page"
-              >
-                <ChevronRight size={15} />
-              </button>
-            </div>
-          </div>
-        )}
+        <Pagination
+          page={dPage}
+          totalPages={meta.last_page}
+          onPageChange={setDPage}
+          total={meta.total}
+          label="disbursements"
+          showRange
+          rangeStart={meta.total === 0 ? 0 : (meta.current_page - 1) * 10 + 1}
+          rangeEnd={Math.min(meta.current_page * 10, meta.total)}
+          bordered
+        />
       </div>
 
       {/* ---- Disbursement Add/Edit modal (Accounts Payable only) ---- */}
@@ -1030,7 +1029,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
               />
               {!isEditingDisbursement && (
                 <p className="mt-1 text-[11px] text-muted">
-                  Reserved automatically — the exact number is only final once saved.
+                  Reserved automatically  -  the exact number is only final once saved.
                 </p>
               )}
             </div>
@@ -1416,17 +1415,17 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                   </div>
                 </div>
               )}
-              {/* Approved awaiting release banner — only when proof is also present (or payroll) */}
+              {/* Approved awaiting release banner  -  only when proof is also present (or payroll) */}
               {dDetailRecord.status === 'Approved' && canReleasePayments && !isDetailOverdrawn && !checkMissingBudget(dDetailRecord) && (isPayroll || dDetailRecord.has_attachment) && (
                 <div className="flex items-start gap-3 rounded-lg border border-primary/30 bg-primary/10 px-4 py-3 dark:border-primary/20 dark:bg-primary/10">
                   <Wallet size={16} className="mt-0.5 shrink-0 text-primary-dark dark:text-primary" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-primary-dark dark:text-primary">Approved — Ready for Release</p>
+                    <p className="text-sm font-semibold text-primary-dark dark:text-primary">Approved  -  Ready for Release</p>
                     <p className="text-xs text-primary-dark/80 dark:text-primary/80 mt-0.5">This disbursement has been approved and is ready to be released.</p>
                   </div>
                 </div>
               )}
-              {/* Missing proof banner — AP only, blocks release until proof is attached */}
+              {/* Missing proof banner  -  AP only, blocks release until proof is attached */}
               {dDetailRecord.status === 'Approved' && !isPayroll && !dDetailRecord.has_attachment && (
                 <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-500/30 dark:bg-amber-500/10">
                   <Paperclip size={16} className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
@@ -1470,7 +1469,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                         )
                       }
                     />
-                    <DetailRow label="Pay Period" value={dDetailRecord.pay_period_start && dDetailRecord.pay_period_end ? `${formatDate(dDetailRecord.pay_period_start)} – ${formatDate(dDetailRecord.pay_period_end)}` : '—'} />
+                    <DetailRow label="Pay Period" value={dDetailRecord.pay_period_start && dDetailRecord.pay_period_end ? `${formatDate(dDetailRecord.pay_period_start)}  -  ${formatDate(dDetailRecord.pay_period_end)}` : '—'} />
                     <DetailRow label="Employees Covered" value={dDetailRecord.employee_count} />
                     <DetailRow label="Payment Date" value={formatDate(dDetailRecord.payment_date)} />
                     <DetailRow label="Amount Paid" value={formatCurrency(dDetailRecord.amount_paid)} />
@@ -1503,7 +1502,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                 </div>
               </div>
 
-              {/* Proof of payment section — AP-only */}
+              {/* Proof of payment section  -  AP-only */}
               {!isPayroll && (
                 <div className="flex items-center justify-between rounded-lg border border-border bg-bg px-4 py-3">
                   <div className="flex items-center gap-2.5">

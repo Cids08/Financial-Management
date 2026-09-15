@@ -12,6 +12,7 @@ class ProfileResource extends JsonResource
     {
         return [
             'id'          => $this->id,
+            'role_id'     => $this->role_id,
             'name'        => trim("{$this->first_name} {$this->last_name}"),
             'first_name'  => $this->first_name,
             'middle_name' => $this->middle_name,

@@ -285,35 +285,35 @@ export default function DepreciationRunModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden">
+      <div className="bg-surface rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-amber-50 to-orange-50">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-500/15 dark:to-orange-500/15">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-amber-100 rounded-xl">
+            <div className="p-2 bg-amber-100 dark:bg-amber-500/20 rounded-xl">
               <TrendingDown className="w-5 h-5 text-amber-600" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-gray-900">Fixed Assets Depreciation Run</h2>
-              <p className="text-xs text-gray-500">Automated periodic asset depreciation & GL journal entry posting</p>
+              <h2 className="text-lg font-bold text-ink">Fixed Assets Depreciation Run</h2>
+              <p className="text-xs text-muted">Automated periodic asset depreciation & GL journal entry posting</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-bg text-muted transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Step Indicator */}
-        <div className="flex items-center gap-0 px-6 py-3 border-b border-gray-100 bg-gray-50">
+        <div className="flex items-center gap-0 px-6 py-3 border-b border-border bg-bg">
           {STEPS.map((label, i) => (
             <div key={i} className="flex items-center flex-1 last:flex-none">
-              <div className={`flex items-center gap-2 ${i <= step ? 'text-amber-600' : 'text-gray-400'}`}>
+              <div className={`flex items-center gap-2 ${i <= step ? 'text-amber-600' : 'text-muted'}`}>
                 <div
                   className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-colors ${
                     i < step
                       ? 'bg-amber-600 border-amber-600 text-white'
                       : i === step
                       ? 'border-amber-600 text-amber-600'
-                      : 'border-gray-300 text-gray-400'
+                      : 'border-border text-muted'
                   }`}
                 >
                   {i < step ? <CheckCircle2 className="w-4 h-4" /> : i + 1}
@@ -321,7 +321,7 @@ export default function DepreciationRunModal({
                 <span className="text-xs font-semibold hidden sm:block">{label}</span>
               </div>
               {i < STEPS.length - 1 && (
-                <div className={`flex-1 h-0.5 mx-3 ${i < step ? 'bg-amber-400' : 'bg-gray-200'}`} />
+                <div className={`flex-1 h-0.5 mx-3 ${i < step ? 'bg-amber-400' : 'bg-border'}`} />
               )}
             </div>
           ))}
@@ -333,18 +333,18 @@ export default function DepreciationRunModal({
           {step === 0 && (
             <div className="space-y-6 max-w-xl mx-auto">
               <div>
-                <h3 className="text-base font-semibold text-gray-800 mb-1">Depreciation Run Configuration</h3>
-                <p className="text-sm text-gray-500">Configure the fiscal period and calculation rules for this run.</p>
+                <h3 className="text-base font-semibold text-ink mb-1">Depreciation Run Configuration</h3>
+                <p className="text-sm text-muted">Configure the fiscal period and calculation rules for this run.</p>
               </div>
 
               {/* Fiscal Year & Cadence */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Fiscal Year</label>
+                  <label className="block text-xs font-semibold text-muted mb-1">Fiscal Year</label>
                   <select
                     value={fiscalYear}
                     onChange={(e) => setFiscalYear(Number(e.target.value))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-300 focus:outline-none"
+                    className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-300 focus:outline-none"
                   >
                     {[2024, 2025, 2026, 2027, 2028, 2029, 2030].map((y) => (
                       <option key={y} value={y}>FY {y}</option>
@@ -352,13 +352,13 @@ export default function DepreciationRunModal({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Period Cadence</label>
-                  <div className="flex rounded-lg border border-gray-300 overflow-hidden text-sm">
+                  <label className="block text-xs font-semibold text-muted mb-1">Period Cadence</label>
+                  <div className="flex rounded-lg border border-border overflow-hidden text-sm">
                     <button
                       type="button"
                       onClick={() => setPeriod('monthly')}
                       className={`flex-1 py-2 font-medium transition-colors ${
-                        period === 'monthly' ? 'bg-amber-600 text-white font-semibold' : 'bg-white text-gray-700 hover:bg-gray-50'
+                        period === 'monthly' ? 'bg-amber-600 text-white font-semibold' : 'bg-surface text-ink hover:bg-bg'
                       }`}
                     >
                       Monthly
@@ -367,7 +367,7 @@ export default function DepreciationRunModal({
                       type="button"
                       onClick={() => setPeriod('annual')}
                       className={`flex-1 py-2 font-medium transition-colors ${
-                        period === 'annual' ? 'bg-amber-600 text-white font-semibold' : 'bg-white text-gray-700 hover:bg-gray-50'
+                        period === 'annual' ? 'bg-amber-600 text-white font-semibold' : 'bg-surface text-ink hover:bg-bg'
                       }`}
                     >
                       Annual
@@ -379,11 +379,11 @@ export default function DepreciationRunModal({
               {/* Month Selector if Monthly */}
               {period === 'monthly' && (
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Fiscal Month</label>
+                  <label className="block text-xs font-semibold text-muted mb-1">Fiscal Month</label>
                   <select
                     value={month}
                     onChange={(e) => setMonth(Number(e.target.value))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-300 focus:outline-none"
+                    className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-300 focus:outline-none"
                   >
                     {MONTHS.map((m) => (
                       <option key={m.value} value={m.value}>
@@ -396,11 +396,11 @@ export default function DepreciationRunModal({
 
               {/* Category Filter */}
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Asset Category Filter</label>
+                <label className="block text-xs font-semibold text-muted mb-1">Asset Category Filter</label>
                 <select
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-300 focus:outline-none"
+                  className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-300 focus:outline-none"
                 >
                   <option value="all">All Asset Categories</option>
                   {categories.map((c) => (
@@ -411,11 +411,11 @@ export default function DepreciationRunModal({
 
               {/* Method Override */}
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Depreciation Method</label>
+                <label className="block text-xs font-semibold text-muted mb-1">Depreciation Method</label>
                 <select
                   value={methodOverride}
                   onChange={(e) => setMethodOverride(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-300 focus:outline-none"
+                  className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-300 focus:outline-none"
                 >
                   {METHODS.map((m) => (
                     <option key={m.value} value={m.value}>{m.label}</option>
@@ -425,29 +425,29 @@ export default function DepreciationRunModal({
 
               {/* Posting Date */}
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">GL Posting Date</label>
+                <label className="block text-xs font-semibold text-muted mb-1">GL Posting Date</label>
                 <input
                   type="date"
                   value={postingDate}
                   onChange={(e) => setPostingDate(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-300 focus:outline-none"
+                  className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-300 focus:outline-none"
                 />
               </div>
 
               {/* Remarks */}
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Journal Entry Remarks (Optional)</label>
+                <label className="block text-xs font-semibold text-muted mb-1">Journal Entry Remarks (Optional)</label>
                 <input
                   type="text"
                   value={remarks}
                   onChange={(e) => setRemarks(e.target.value)}
                   placeholder="e.g. Monthly asset depreciation run"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-300 focus:outline-none"
+                  className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-300 focus:outline-none"
                 />
               </div>
 
               {previewError && (
-                <div className="flex items-start gap-2 p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-sm">
+                <div className="flex items-start gap-2 p-3 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 rounded-lg text-rose-700 dark:text-rose-300 dark:text-rose-300 text-sm">
                   <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
                   {previewError}
                 </div>
@@ -460,12 +460,12 @@ export default function DepreciationRunModal({
             <div className="space-y-4">
               {/* Idempotency Warning if already posted */}
               {previewData.already_posted && (
-                <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-300 rounded-xl text-amber-800 text-sm">
+                <div className="flex items-start gap-3 p-4 bg-amber-50 dark:bg-amber-500/10 border border-amber-300 dark:border-amber-500/40 rounded-xl text-amber-800 dark:text-amber-200 text-sm">
                   <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
                   <div>
                     <strong className="font-bold">Period Already Posted:</strong> A depreciation journal entry for{' '}
                     <strong>{previewData.period_key}</strong> has already been posted under transaction voucher{' '}
-                    <span className="font-mono font-bold text-amber-900">{previewData.voucher_number}</span>.
+                    <span className="font-mono font-bold text-amber-900 dark:text-amber-200">{previewData.voucher_number}</span>.
                     Duplicate execution is strictly prevented by system controls.
                   </div>
                 </div>
@@ -473,36 +473,36 @@ export default function DepreciationRunModal({
 
               {/* Executive Metrics Bar */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
-                  <div className="text-xs text-gray-500 font-medium">Eligible Assets</div>
-                  <div className="text-lg font-bold text-gray-900">{selectedProposals.length} of {previewData.proposals?.length || 0}</div>
-                  <div className="text-xs text-gray-400">Selected for run</div>
+                <div className="p-3 bg-bg rounded-xl border border-border">
+                  <div className="text-xs text-muted font-medium">Eligible Assets</div>
+                  <div className="text-lg font-bold text-ink">{selectedProposals.length} of {previewData.proposals?.length || 0}</div>
+                  <div className="text-xs text-muted">Selected for run</div>
                 </div>
-                <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
-                  <div className="text-xs text-gray-500 font-medium">Pre-Run Book Value</div>
-                  <div className="text-lg font-bold text-gray-800 font-mono">{fmt(selectedCurrentBookTotal)}</div>
-                  <div className="text-xs text-gray-400">Current carrying value</div>
+                <div className="p-3 bg-bg rounded-xl border border-border">
+                  <div className="text-xs text-muted font-medium">Pre-Run Book Value</div>
+                  <div className="text-lg font-bold text-ink font-mono">{fmt(selectedCurrentBookTotal)}</div>
+                  <div className="text-xs text-muted">Current carrying value</div>
                 </div>
-                <div className="p-3 bg-rose-50 rounded-xl border border-rose-200">
-                  <div className="text-xs text-rose-600 font-medium">Depreciation Expense</div>
-                  <div className="text-lg font-bold text-rose-700 font-mono">{fmt(selectedDepreciationTotal)}</div>
+                <div className="p-3 bg-rose-50 dark:bg-rose-500/10 rounded-xl border border-rose-200 dark:border-rose-500/30">
+                  <div className="text-xs text-rose-600 dark:text-rose-300 font-medium">Depreciation Expense</div>
+                  <div className="text-lg font-bold text-rose-700 dark:text-rose-300 font-mono">{fmt(selectedDepreciationTotal)}</div>
                   <div className="text-xs text-rose-500">Period P&L impact</div>
                 </div>
-                <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200">
-                  <div className="text-xs text-emerald-600 font-medium">Post-Run Book Value</div>
-                  <div className="text-lg font-bold text-emerald-700 font-mono">{fmt(selectedProjectedBookTotal)}</div>
-                  <div className="text-xs text-emerald-600">Ending carrying value</div>
+                <div className="p-3 bg-emerald-50 dark:bg-emerald-500/10 rounded-xl border border-emerald-200 dark:border-emerald-500/30">
+                  <div className="text-xs text-emerald-600 dark:text-emerald-300 font-medium">Post-Run Book Value</div>
+                  <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300 font-mono">{fmt(selectedProjectedBookTotal)}</div>
+                  <div className="text-xs text-emerald-600 dark:text-emerald-300">Ending carrying value</div>
                 </div>
               </div>
 
               {/* GL Double-Entry Preview Box */}
-              <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl text-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div className="p-3 bg-blue-50/70 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/30 rounded-xl text-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <div>
-                  <span className="font-bold text-blue-900 uppercase">General Ledger Journal Entry:</span>{' '}
-                  <span className="font-mono text-blue-700 font-semibold">{previewData.voucher_number}</span> &middot;{' '}
-                  <span className="text-blue-800">Posting Date: {postingDate}</span>
+                  <span className="font-bold text-blue-900 dark:text-blue-200 uppercase">General Ledger Journal Entry:</span>{' '}
+                  <span className="font-mono text-blue-700 dark:text-blue-300 font-semibold">{previewData.voucher_number}</span> &middot;{' '}
+                  <span className="text-blue-800 dark:text-blue-300">Posting Date: {postingDate}</span>
                 </div>
-                <div className="font-mono font-semibold text-blue-900 flex items-center gap-3">
+                <div className="font-mono font-semibold text-blue-900 dark:text-blue-200 flex items-center gap-3">
                   <span>Dr. 5500 Depreciation Expense: {fmt(selectedDepreciationTotal)}</span>
                   <span>|</span>
                   <span>Cr. 1590 Accumulated Depreciation: {fmt(selectedDepreciationTotal)}</span>
@@ -511,15 +511,15 @@ export default function DepreciationRunModal({
 
               {/* Asset Schedule Table */}
               {previewData.proposals?.length === 0 ? (
-                <div className="text-center py-12 text-gray-400">
+                <div className="text-center py-12 text-muted">
                   <Building2 className="w-10 h-10 mx-auto mb-3 opacity-40" />
                   <p className="text-sm font-medium">No eligible depreciable assets found for this criteria.</p>
                   <p className="text-xs mt-1">Check category filters or confirm assets have not reached salvage value.</p>
                 </div>
               ) : (
-                <div className="overflow-x-hidden overflow-y-auto rounded-xl border border-gray-200 max-h-[42vh]">
+                <div className="overflow-x-hidden overflow-y-auto rounded-xl border border-border max-h-[42vh]">
                   <table className="w-full text-xs">
-                    <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
+                    <thead className="bg-bg border-b border-border sticky top-0 z-10">
                       <tr>
                         <th className="px-3 py-2.5 text-left">
                           <input
@@ -529,22 +529,22 @@ export default function DepreciationRunModal({
                             className="rounded"
                           />
                         </th>
-                        <th className="px-3 py-2.5 text-left font-semibold text-gray-600">Asset Code</th>
-                        <th className="px-3 py-2.5 text-left font-semibold text-gray-600">Asset Name</th>
-                        <th className="px-3 py-2.5 text-left font-semibold text-gray-600">Category</th>
-                        <th className="px-3 py-2.5 text-right font-semibold text-gray-600">Acquisition Cost</th>
-                        <th className="px-3 py-2.5 text-right font-semibold text-gray-600">Current Book</th>
-                        <th className="px-3 py-2.5 text-right font-semibold text-gray-600">Depreciation</th>
-                        <th className="px-3 py-2.5 text-right font-semibold text-gray-600">Projected Book</th>
+                        <th className="px-3 py-2.5 text-left font-semibold text-muted">Asset Code</th>
+                        <th className="px-3 py-2.5 text-left font-semibold text-muted">Asset Name</th>
+                        <th className="px-3 py-2.5 text-left font-semibold text-muted">Category</th>
+                        <th className="px-3 py-2.5 text-right font-semibold text-muted">Acquisition Cost</th>
+                        <th className="px-3 py-2.5 text-right font-semibold text-muted">Current Book</th>
+                        <th className="px-3 py-2.5 text-right font-semibold text-muted">Depreciation</th>
+                        <th className="px-3 py-2.5 text-right font-semibold text-muted">Projected Book</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-border">
                       {previewData.proposals.map((p) => {
                         const isChecked = selectedAssetIds.has(p.asset_id)
                         return (
                           <tr
                             key={p.asset_id}
-                            className={`hover:bg-gray-50 transition-colors ${isChecked ? 'bg-amber-50/40' : 'opacity-60'}`}
+                            className={`hover:bg-bg transition-colors ${isChecked ? 'bg-amber-50/40 dark:bg-amber-500/15' : 'opacity-60'}`}
                           >
                             <td className="px-3 py-2">
                               <input
@@ -554,26 +554,26 @@ export default function DepreciationRunModal({
                                 className="rounded"
                               />
                             </td>
-                            <td className="px-3 py-2 font-mono font-bold text-gray-800">{p.asset_code}</td>
-                            <td className="px-3 py-2 font-medium text-gray-900 max-w-[150px] truncate">{p.asset_name}</td>
-                            <td className="px-3 py-2 text-gray-500">{p.asset_category}</td>
-                            <td className="px-3 py-2 text-right font-mono text-gray-700">{fmt(p.purchase_cost)}</td>
-                            <td className="px-3 py-2 text-right font-mono text-gray-700">{fmt(p.current_book_value)}</td>
-                            <td className="px-3 py-2 text-right font-mono font-bold text-rose-700">{fmt(p.period_depreciation)}</td>
-                            <td className="px-3 py-2 text-right font-mono font-bold text-emerald-700">{fmt(p.projected_book_value)}</td>
+                            <td className="px-3 py-2 font-mono font-bold text-ink">{p.asset_code}</td>
+                            <td className="px-3 py-2 font-medium text-ink max-w-[150px] truncate">{p.asset_name}</td>
+                            <td className="px-3 py-2 text-muted">{p.asset_category}</td>
+                            <td className="px-3 py-2 text-right font-mono text-ink">{fmt(p.purchase_cost)}</td>
+                            <td className="px-3 py-2 text-right font-mono text-ink">{fmt(p.current_book_value)}</td>
+                            <td className="px-3 py-2 text-right font-mono font-bold text-rose-700 dark:text-rose-300">{fmt(p.period_depreciation)}</td>
+                            <td className="px-3 py-2 text-right font-mono font-bold text-emerald-700 dark:text-emerald-300">{fmt(p.projected_book_value)}</td>
                           </tr>
                         )
                       })}
                     </tbody>
-                    <tfoot className="bg-gray-50 border-t border-gray-200 sticky bottom-0 z-10 font-bold">
+                    <tfoot className="bg-bg border-t border-border sticky bottom-0 z-10 font-bold">
                       <tr>
-                        <td colSpan={4} className="px-3 py-2 text-gray-700">
+                        <td colSpan={4} className="px-3 py-2 text-ink">
                           {selectedAssetIds.size} of {previewData.proposals.length} assets selected
                         </td>
                         <td className="px-3 py-2 text-right font-mono">{fmt(selectedProposals.reduce((s, p) => s + p.purchase_cost, 0))}</td>
                         <td className="px-3 py-2 text-right font-mono">{fmt(selectedCurrentBookTotal)}</td>
-                        <td className="px-3 py-2 text-right font-mono text-rose-700">{fmt(selectedDepreciationTotal)}</td>
-                        <td className="px-3 py-2 text-right font-mono text-emerald-700">{fmt(selectedProjectedBookTotal)}</td>
+                        <td className="px-3 py-2 text-right font-mono text-rose-700 dark:text-rose-300">{fmt(selectedDepreciationTotal)}</td>
+                        <td className="px-3 py-2 text-right font-mono text-emerald-700 dark:text-emerald-300">{fmt(selectedProjectedBookTotal)}</td>
                       </tr>
                     </tfoot>
                   </table>
@@ -581,7 +581,7 @@ export default function DepreciationRunModal({
               )}
 
               {execError && (
-                <div className="flex items-start gap-2 p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-sm">
+                <div className="flex items-start gap-2 p-3 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 rounded-lg text-rose-700 dark:text-rose-300 dark:text-rose-300 text-sm">
                   <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
                   {execError}
                 </div>
@@ -592,32 +592,32 @@ export default function DepreciationRunModal({
           {/* STEP 2: Confirmation / Success */}
           {step === 2 && runResult && (
             <div className="max-w-xl mx-auto space-y-6 text-center">
-              <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto">
-                <CheckCircle2 className="w-9 h-9 text-emerald-600" />
+              <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto">
+                <CheckCircle2 className="w-9 h-9 text-emerald-600 dark:text-emerald-300" />
               </div>
               <div>
-                <h3 className="text-xl font-bold text-gray-900">Depreciation Run Complete!</h3>
-                <p className="text-sm text-gray-500 mt-1">
+                <h3 className="text-xl font-bold text-ink">Depreciation Run Complete!</h3>
+                <p className="text-sm text-muted mt-1">
                   Successfully processed {runResult.assets_count} asset(s) for {runResult.period_key}
                 </p>
               </div>
 
-              <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl space-y-2 text-sm text-left">
+              <div className="p-4 bg-bg border border-border rounded-xl space-y-2 text-sm text-left">
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Journal Voucher No:</span>
-                  <span className="font-mono font-bold text-blue-700">{runResult.voucher_number}</span>
+                  <span className="text-muted">Journal Voucher No:</span>
+                  <span className="font-mono font-bold text-blue-700 dark:text-blue-300">{runResult.voucher_number}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Total Depreciation Posted:</span>
-                  <span className="font-mono font-bold text-rose-700">{fmt(runResult.total_depreciation)}</span>
+                  <span className="text-muted">Total Depreciation Posted:</span>
+                  <span className="font-mono font-bold text-rose-700 dark:text-rose-300">{fmt(runResult.total_depreciation)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">GL Accounts Updated:</span>
-                  <span className="font-medium text-gray-800">5500 (Dr) / 1590 (Cr)</span>
+                  <span className="text-muted">GL Accounts Updated:</span>
+                  <span className="font-medium text-ink">5500 (Dr) / 1590 (Cr)</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Execution Status:</span>
-                  <span className="inline-flex items-center px-2 py-0.5 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-700">
+                  <span className="text-muted">Execution Status:</span>
+                  <span className="inline-flex items-center px-2 py-0.5 text-xs font-semibold rounded-full bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
                     Posted & Reconciled
                   </span>
                 </div>
@@ -627,7 +627,7 @@ export default function DepreciationRunModal({
                 <button
                   type="button"
                   onClick={printSchedule}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg transition-colors shadow-sm"
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-surface border border-border hover:bg-bg text-ink rounded-lg transition-colors shadow-sm"
                 >
                   <Printer className="w-4 h-4" />
                   Print Depreciation Schedule
@@ -638,7 +638,7 @@ export default function DepreciationRunModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
+        <div className="flex items-center justify-between px-6 py-4 border-t border-border bg-bg">
           <button
             type="button"
             onClick={() => {
@@ -648,7 +648,7 @@ export default function DepreciationRunModal({
                 setExecError(null)
               }
             }}
-            className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+            className="flex items-center gap-2 px-4 py-2 text-sm text-muted bg-surface border border-border rounded-lg hover:bg-bg font-medium transition-colors"
           >
             {step === 0 || step === 2 ? (
               <>

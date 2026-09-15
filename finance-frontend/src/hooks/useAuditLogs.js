@@ -37,7 +37,7 @@ export function useAuditLogs() {
       const json = await res.json()
       if (res.ok && json.success) setModules(json.data)
     } catch {
-      // Non-critical — the module filter dropdown just falls back to no
+      // Non-critical  -  the module filter dropdown just falls back to no
       // options if this fails; it shouldn't block the log list itself.
     }
   }, [])
@@ -58,8 +58,8 @@ export function useAuditLogs() {
     }
   }, [])
 
-  // Exports whatever the current filters (including date range) match —
-  // not just the current page — via the unpaginated /export endpoint.
+  // Exports whatever the current filters (including date range) match  - 
+  // not just the current page  -  via the unpaginated /export endpoint.
   // Returns the raw entries so the page can build the CSV itself, same
   // division of labor as Settings.jsx's exportActivity().
   const exportLogs = useCallback(async (filters = {}) => {

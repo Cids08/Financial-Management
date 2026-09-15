@@ -3,6 +3,7 @@ import { Search, Plus, Pencil, Archive, RotateCcw, Building2, Users, Mail, Phone
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
+import Pagination from '../components/Pagination'
 import Tooltip from '../components/Tooltip'
 import { apiFetch } from '../utils/api'
 import { useHighlightRow } from '../hooks/useHighlightRow'
@@ -16,7 +17,7 @@ function maskValue(value) {
     .join('')
 }
 
-// Fully masks an email — no part of the local name or domain is shown
+// Fully masks an email  -  no part of the local name or domain is shown
 function maskEmail(value) {
   if (!value) return value
   return '•'.repeat(10)
@@ -114,7 +115,7 @@ export default function Departments({ title = 'Departments', crumbs = ['Master D
     return () => clearTimeout(timeout)
   }, [fetchDepartments])
 
-  // Switching views should always land back on page 1 — an archived-list
+  // Switching views should always land back on page 1  -  an archived-list
   // page number has no relationship to the active list's pagination.
   const toggleShowArchived = (checked) => {
     setShowArchived(checked)
@@ -350,29 +351,13 @@ export default function Departments({ title = 'Departments', crumbs = ['Master D
       </div>
 
       {!loading && meta.total > 0 && (
-        <div className="flex items-center justify-between gap-3 text-xs text-muted">
-          <p>
-            Page {meta.currentPage} of {meta.lastPage} · {meta.total} department{meta.total === 1 ? '' : 's'} total
-          </p>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={meta.currentPage <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-            >
-              Previous
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={meta.currentPage >= meta.lastPage}
-              onClick={() => setPage((p) => Math.min(meta.lastPage, p + 1))}
-            >
-              Next
-            </Button>
-          </div>
-        </div>
+        <Pagination
+          page={meta.currentPage}
+          totalPages={meta.lastPage}
+          onPageChange={setPage}
+          total={meta.total}
+          label="departments"
+        />
       )}
 
       <Modal

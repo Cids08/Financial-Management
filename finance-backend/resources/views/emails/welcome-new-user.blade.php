@@ -8,7 +8,7 @@
 <body style="margin:0; padding:0; background-color:#f4f5f7; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
 
   <div style="display:none; max-height:0; overflow:hidden; opacity:0;">
-    Your temporary password is inside — you'll be asked to change it on first login.
+    Your temporary password is inside  -  you'll be asked to change it on first login.
   </div>
 
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f5f7; padding:32px 16px;">

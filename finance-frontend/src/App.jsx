@@ -19,6 +19,7 @@ import Departments from './pages/Departments'
 import CashAccounts from './pages/CashAccounts'
 import FixedAssets from './pages/FixedAssets'
 import ExpenseCategories from './pages/ExpenseCategories'
+import Titles from './pages/Titles'
 import AccountsReceivable from './pages/AccountsReceivable'
 import Collections from './pages/Collections'
 import AccountsPayable from './pages/AccountsPayable'
@@ -41,14 +42,14 @@ export default function App() {
       <AuthExpiredListener />
       <MustChangePasswordListener />
       <Routes>
-      {/* Standalone — no sidebar/header/footer chrome */}
+      {/* Standalone  -  no sidebar/header/footer chrome */}
       {/* Login is the landing page */}
       <Route path="/" element={<Login />} />
       <Route path="/login" element={<Login />} />
       <Route path="/logout" element={<Logout />} />
 
       {/* Everything below requires an authenticated session.
-          CompanyProvider is scoped here — inside ProtectedRoute — rather
+          CompanyProvider is scoped here  -  inside ProtectedRoute  -  rather
           than around the whole app, because it fetches GET /api/settings
           on mount, which requires auth:sanctum. Wrapping the whole router
           meant that fetch fired on the public /login screen too, before
@@ -58,13 +59,13 @@ export default function App() {
           <CompanyProvider>
             {/* ForcedLogoutListener needs a valid token to subscribe to
                 this user's private channel, so it's mounted here rather
-                than alongside AuthExpiredListener above — that one has to
+                than alongside AuthExpiredListener above  -  that one has to
                 run even on the public /login screen, this one can't. */}
             <ForcedLogoutListener />
             <DashboardLayout />
           </CompanyProvider>
         }>
-          {/* Open to every authenticated user — DashboardRouter picks the
+          {/* Open to every authenticated user  -  DashboardRouter picks the
               right component per role (Collector/Staff get their own
               simplified view, Admin/Super Admin get the full dashboard).
               No permission gate here, matching that the module isn't
@@ -114,12 +115,17 @@ export default function App() {
               <FixedAssets crumbs={['Master Data', 'Fixed Assets']} />
             </RequirePermission>
           } />
-          {/* New — matches menuData.js's new sidebar entry and the
+          {/* New  -  matches menuData.js's new sidebar entry and the
               expense-categories.view/.manage permissions already
               enforced by routes/api.php + ExpenseCategoryPolicy. */}
           <Route path="/master-data/expense-categories" element={
             <RequirePermission permission="expense-categories.view">
               <ExpenseCategories crumbs={['Master Data', 'Expense Categories']} />
+            </RequirePermission>
+          } />
+          <Route path="/master-data/titles" element={
+            <RequirePermission permission="users.view">
+              <Titles crumbs={['Master Data', 'Titles']} />
             </RequirePermission>
           } />
 
@@ -146,7 +152,7 @@ export default function App() {
           } />
           {/* /transactions/budgets has no entry in menuData.js (no sidebar
               link, and its comment there says Budgets was folded into the
-              combined Disbursements module/permission) — left UNGATED
+              combined Disbursements module/permission)  -  left UNGATED
               since there's no confirmed permission slug for it. If this
               route is still meant to be reachable, decide whether it
               should share disbursements.view or get its own budgets.view
@@ -190,24 +196,24 @@ export default function App() {
               <Reports crumbs={['Reports']} />
             </RequirePermission>
           } />
-          {/* New — system-wide audit trail across every module (Tax
+          {/* New  -  system-wide audit trail across every module (Tax
               Obligations, Expenses, etc.), not tied to any one module's
               own permission. Matches the hyphenated slug convention
               (cash-accounts.view, general-ledger.view) rather than the
-              short forms used for tax/ai — "audit-logs" is two words. */}
+              short forms used for tax/ai  -  "audit-logs" is two words. */}
           <Route path="/system/audit-logs" element={
             <RequirePermission permission="audit-logs.view">
               <AuditLogs crumbs={['System', 'Audit Logs']} />
             </RequirePermission>
           } />
           {/* Settings, Profile, and Notifications are intentionally NOT
-              wrapped in RequirePermission — all three are "my own
+              wrapped in RequirePermission  -  all three are "my own
               account" pages, open to every authenticated user regardless
               of role. Notifications matches this same pattern: its
               routes/api.php group (GET /notifications, .../unread-count,
               PATCH .../read-all, PATCH .../{id}/read, DELETE .../{id}) has
-              no `permission:` middleware on any of those routes — only
-              auth:sanctum, same as Profile — so it stays ungated here too.
+              no `permission:` middleware on any of those routes  -  only
+              auth:sanctum, same as Profile  -  so it stays ungated here too.
               The Company Branding EDIT form inside Settings.jsx checks
               settings.manage itself, which is the correct place for that
               narrower restriction. */}

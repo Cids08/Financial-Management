@@ -1,5 +1,5 @@
 // src/components/BatchApproveExpensesModal.jsx
-// 3-step Expense Batch Approval Wizard — modeled after PaymentWizardModal.jsx
+// 3-step Expense Batch Approval Wizard  -  modeled after PaymentWizardModal.jsx
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react'
 import { formatCurrency } from '../utils/formatters'
+import { usePrivacy } from '../context/PrivacyContext'
 import Button from './Button'
 
 // ---------------------------------------------------------------------------
@@ -39,6 +40,8 @@ export default function BatchApproveExpensesModal({
   onBatchApprove,
 }) {
   const [step, setStep] = useState(0)
+
+  usePrivacy()
 
   // ── Step 0 (Configure) state ──────────────────────────────────────────────
   const [filterCategory, setFilterCategory] = useState('')
@@ -314,7 +317,7 @@ export default function BatchApproveExpensesModal({
         <div className="flex-1 overflow-y-auto p-6 bg-surface">
 
           {/* ================================================================
-              STEP 0 — Configure Run
+              STEP 0  -  Configure Run
           ================================================================ */}
           {step === 0 && (
             <div className="space-y-6 max-w-xl mx-auto">
@@ -404,7 +407,7 @@ export default function BatchApproveExpensesModal({
           )}
 
           {/* ================================================================
-              STEP 1 — Review & Select (ONLY expenses with proof)
+              STEP 1  -  Review & Select (ONLY expenses with proof)
           ================================================================ */}
           {step === 1 && (
             <div className="space-y-4">
@@ -422,13 +425,13 @@ export default function BatchApproveExpensesModal({
                 </div>
               </div>
 
-              {/* Withheld notice — exactly like AP Payment Wizard */}
+              {/* Withheld notice  -  exactly like AP Payment Wizard */}
               {(totals.attachment_missing_count ?? 0) > 0 && (
                 <div className="flex items-start gap-2.5 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-800 dark:text-amber-300">
                   <Paperclip className="w-4 h-4 mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
                   <div className="text-sm">
                     <p className="font-semibold text-amber-800 dark:text-amber-300">
-                      {totals.attachment_missing_count} pending expense{totals.attachment_missing_count === 1 ? '' : 's'} withheld — missing supporting receipt
+                      {totals.attachment_missing_count} pending expense{totals.attachment_missing_count === 1 ? '' : 's'} withheld  -  missing supporting receipt
                     </p>
                     <p className="text-amber-700 dark:text-amber-400/90 mt-0.5 text-xs">
                       Company policy (<em>"No Document, No Payment"</em>) requires an attached receipt document before an expense can be approved.
@@ -543,7 +546,7 @@ export default function BatchApproveExpensesModal({
           )}
 
           {/* ================================================================
-              STEP 2 — Confirmation
+              STEP 2  -  Confirmation
           ================================================================ */}
           {step === 2 && (
             <div className="max-w-xl mx-auto space-y-6">
@@ -654,7 +657,7 @@ export default function BatchApproveExpensesModal({
           )}
 
           {/* ================================================================
-              STEP 3 — Success
+              STEP 3  -  Success
           ================================================================ */}
           {step === 3 && (
             <div className="max-w-md mx-auto space-y-6 text-center py-4">

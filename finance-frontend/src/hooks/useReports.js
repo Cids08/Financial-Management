@@ -19,7 +19,7 @@ const EMPTY_DEFAULTS = {
 
 /**
  * Backs Reports.jsx against /api/reports/*. Each report type is fetched
- * independently and cached against the period it was fetched with — AR
+ * independently and cached against the period it was fetched with  -  AR
  * and AP aging ignore the period entirely (aging is always "as of
  * today"), so those two are only ever fetched once and never refetched
  * on a period change, unlike the other three.
@@ -59,7 +59,7 @@ export function useReports() {
     }
   }, [])
 
-  // Ensures every report type is loaded for the given period — used by
+  // Ensures every report type is loaded for the given period  -  used by
   // "Export All", which needs all five regardless of which tab is active.
   const fetchAll = useCallback(async (period) => {
     await Promise.all(Object.keys(ENDPOINTS).map((key) => fetchReport(key, period)))

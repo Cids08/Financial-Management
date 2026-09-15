@@ -133,7 +133,7 @@ class DisbursementService
     {
         $this->reconcileReleasedDisbursements();
         $query = Disbursement::query()
-            ->with(['accountsPayable', 'department', 'cashAccount', 'creator', 'approver', 'releaser'])
+            ->with(['accountsPayable', 'department', 'cashAccount', 'creator.title', 'approver.title', 'releaser.title'])
             ->withCount(['supportingDocuments as supporting_documents_count']);
 
         // Archived toggle — mirrors Expenses/Budgets: default excludes
@@ -1061,8 +1061,11 @@ class DisbursementService
             'department',
             'cashAccount',
             'creator',
+            'creator.title',
             'approver',
+            'approver.title',
             'releaser',
+            'releaser.title',
         ]);
 
         $ap = $disbursement->accountsPayable;
@@ -1168,10 +1171,14 @@ class DisbursementService
             ] : null,
             'signatories' => [
                 'prepared_by' => trim(($disbursement->creator?->first_name ?? '').' '.($disbursement->creator?->last_name ?? '')) ?: 'Finance Staff',
+                'prepared_by_position' => $disbursement->creator?->title?->name,
                 'prepared_at' => $fmtDate($disbursement->created_at),
+                'verified_by_position' => 'Finance Manager',
                 'approved_by' => trim(($disbursement->approver?->first_name ?? '').' '.($disbursement->approver?->last_name ?? '')) ?: ($disbursement->status !== 'Pending' ? 'Finance Officer' : null),
+                'approved_by_position' => $disbursement->approver?->title?->name,
                 'approved_at' => $fmtDate($disbursement->approved_at),
                 'released_by' => trim(($disbursement->releaser?->first_name ?? '').' '.($disbursement->releaser?->last_name ?? '')) ?: ($disbursement->status === 'Released' ? 'Disbursing Cashier' : null),
+                'released_by_position' => $disbursement->releaser?->title?->name,
                 'released_at' => $fmtDate($disbursement->released_date),
             ],
             'accounting_entries' => $accountingEntries,

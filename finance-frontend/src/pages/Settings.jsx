@@ -19,9 +19,7 @@ import {
   Mail,
   Phone,
   MapPin,
-  Coins,
-  ChevronDown,
-  ChevronUp,
+  Coins,
   CalendarRange,
   X,
   Download,
@@ -30,6 +28,7 @@ import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
+import Pagination from '../components/Pagination'
 import { useCompany } from '../context/CompanyContext'
 import { useAccountSecurity } from '../hooks/useAccountSecurity'
 import { usePermissions } from '../context/PermissionsContext'
@@ -51,10 +50,9 @@ const ACTIVITY_COLOR = {
   failed: 'text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-500/10',
 }
 
-// Cap how many entries render before scroll/height becomes an issue —
+// Cap how many entries render before scroll/height becomes an issue  - 
 // the log only ever grows, so without this the page gets longer with
 // every login/password-change/session event a user rack up over time.
-const ACTIVITY_PREVIEW_COUNT = 6
 
 const CURRENCIES = ['PHP', 'USD', 'EUR', 'JPY', 'GBP', 'AUD', 'SGD']
 
@@ -81,7 +79,7 @@ function formatDateTime(iso) {
 // Derives a YYYY-MM-DD string from an ISO timestamp using LOCAL calendar
 // fields, not the raw UTC substring. `iso.slice(0, 10)` reads whatever
 // date is embedded in the string, which is the UTC date if the timestamp
-// carries a 'Z'/offset — that can be a different calendar day than what
+// carries a 'Z'/offset  -  that can be a different calendar day than what
 // formatDateTime() actually displays to the user (e.g. a UTC evening
 // timestamp lands on the next day in Manila time). Filtering against the
 // UTC slice could silently let a later local-date entry through, or
@@ -110,7 +108,7 @@ function timeAgo(iso) {
 }
 
 // CSV field escaping: wrap in quotes and double up any embedded quotes
-// whenever the value contains a comma, quote, or newline — otherwise a
+// whenever the value contains a comma, quote, or newline  -  otherwise a
 // description like "Login, retried" would silently split into two columns.
 function csvField(value) {
   const str = String(value ?? '')
@@ -175,7 +173,7 @@ function PasswordInput({ label, value, onChange, placeholder }) {
   )
 }
 
-// A single Active Sessions row — extracted so it can be rendered once for
+// A single Active Sessions row  -  extracted so it can be rendered once for
 // "This Device" and again (mapped) for "Other Sessions" below, instead of
 // duplicating the JSX in both spots.
 function SessionRow({ session, isCurrent, onRevoke }) {
@@ -224,8 +222,8 @@ function SessionRow({ session, isCurrent, onRevoke }) {
 
 export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) {
   // Company Branding + Regional/Financial Defaults are admin-only on the
-  // backend — routes/api.php gates PUT/logo endpoints with settings.manage
-  // (its own dedicated permission, not borrowed from users.manage — that
+  // backend  -  routes/api.php gates PUT/logo endpoints with settings.manage
+  // (its own dedicated permission, not borrowed from users.manage  -  that
   // was an earlier, now-reverted approach). GET /api/settings itself only
   // needs settings.view, which every role has (see RolesAndPermissionsSeeder)
   // so the sidebar logo/name still works for everyone; the edit forms here
@@ -389,7 +387,7 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
     return { currentSession: current, otherSessions: others }
   }, [security.sessions, security.currentTokenId])
 
-  /* Recent Security Activity — date-range filter, then capped preview, expandable */
+  /* Recent Security Activity  -  date-range filter, then capped preview, expandable */
   const [activityDateFrom, setActivityDateFrom] = useState('')
   const [activityDateTo, setActivityDateTo] = useState('')
   const hasActivityDateFilter = Boolean(activityDateFrom || activityDateTo)
@@ -405,14 +403,15 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
     })
   }, [security.activityLog, activityDateFrom, activityDateTo, hasActivityDateFilter])
 
-  const [showAllActivity, setShowAllActivity] = useState(false)
-  const visibleActivity = showAllActivity
-    ? filteredActivity
-    : filteredActivity.slice(0, ACTIVITY_PREVIEW_COUNT)
-  const hasMoreActivity = filteredActivity.length > ACTIVITY_PREVIEW_COUNT
+  const [activityPage, setActivityPage] = useState(1)
+  const ACTIVITY_PAGE_SIZE = 6
+  const activityTotalPages = Math.max(1, Math.ceil(filteredActivity.length / ACTIVITY_PAGE_SIZE))
+  const safeActivityPage = Math.min(activityPage, activityTotalPages)
+  const activityStart = (safeActivityPage - 1) * ACTIVITY_PAGE_SIZE
+  const visibleActivity = filteredActivity.slice(activityStart, activityStart + ACTIVITY_PAGE_SIZE)
 
   // Exports whatever the date filter currently shows, not the full
-  // unfiltered log — matches what's actually on screen. formatDateTime
+  // unfiltered log  -  matches what's actually on screen. formatDateTime
   // is reused so the timestamp column reads the same way it does in the UI.
   const exportActivity = () => {
     const rows = [
@@ -429,18 +428,18 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
     downloadCsv(`security-activity-${today}.csv`, rows)
   }
 
-  // Collapse back to the preview whenever a fresh (shorter) log loads, or
-  // whenever the date filter narrows the results — otherwise "Show less"
-  // can get stuck expanded against a list that no longer needs it.
+  // Reset to page 1 whenever a fresh (shorter) log loads, or whenever the
+  // date filter narrows the results  -  otherwise pagination can get stuck
+  // pointing past the end of a list that no longer has that many pages.
   useEffect(() => {
-    if (filteredActivity.length <= ACTIVITY_PREVIEW_COUNT) setShowAllActivity(false)
+    setActivityPage(1)
   }, [filteredActivity.length])
 
   /* Danger zone */
   const [deactivateModalOpen, setDeactivateModalOpen] = useState(false)
   const [deactivateConfirmText, setDeactivateConfirmText] = useState('')
   // The backend's deactivate endpoint validates a current password (same
-  // ConfirmPasswordRequest-style guard as disabling 2FA above) — without
+  // ConfirmPasswordRequest-style guard as disabling 2FA above)  -  without
   // collecting one here, every deactivate attempt failed with "The
   // password field is required." This mirrors disable2FAPassword's pattern.
   const [deactivatePassword, setDeactivatePassword] = useState('')
@@ -472,7 +471,7 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
         <p className="mt-1 text-xs text-muted">Manage your account security and access.</p>
       </div>
 
-      {/* Company Branding — admin-only (users.manage). Hidden entirely for
+      {/* Company Branding  -  admin-only (users.manage). Hidden entirely for
           everyone else, rather than shown and then 403'd on submit. While
           permissions are still loading, nothing renders here yet to avoid
           a flash of the form for someone who then loses access to it. */}
@@ -594,7 +593,7 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
         </div>
       )}
 
-      {/* Regional & Financial Defaults — same gate as Company Branding. */}
+      {/* Regional & Financial Defaults  -  same gate as Company Branding. */}
       {!permissionsLoading && canManageBranding && (
         <div className={`${PANEL} ${PANEL_PAD}`}>
           <div className="flex items-center gap-2.5 mb-4">
@@ -664,7 +663,7 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
         </div>
       )}
 
-      {/* Change Password — every authenticated user, no permission needed */}
+      {/* Change Password  -  every authenticated user, no permission needed */}
       <div className={`${PANEL} ${PANEL_PAD}`}>
         <div className="flex items-center gap-2.5 mb-4">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary-dark">
@@ -754,7 +753,7 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
         )}
       </div>
 
-      {/* Active Sessions — grouped: "This Device" pinned on top, then
+      {/* Active Sessions  -  grouped: "This Device" pinned on top, then
           "Other Sessions" below, instead of one flat undifferentiated list. */}
       <div className={`${PANEL} ${PANEL_PAD}`}>
         <div className="flex items-center justify-between mb-4">
@@ -807,7 +806,7 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
         )}
       </div>
 
-      {/* Recent Security Activity — capped to a preview so a long history
+      {/* Recent Security Activity  -  capped to a preview so a long history
           of logins/2FA toggles/session events doesn't turn the whole
           Settings page into an ever-growing scroll. "Show all" expands
           in place; "Show less" collapses back to the preview. */}
@@ -894,19 +893,18 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
               })}
             </div>
 
-            {hasMoreActivity && (
-              <button
-                type="button"
-                onClick={() => setShowAllActivity((s) => !s)}
-                className="flex w-full items-center justify-center gap-1.5 border-t border-border px-5 py-3
-                  text-xs font-medium text-primary-dark hover:bg-bg transition-colors duration-150"
-              >
-                {showAllActivity ? (
-                  <>Show less <ChevronUp size={13} /></>
-                ) : (
-                  <>Show all {filteredActivity.length} events <ChevronDown size={13} /></>
-                )}
-              </button>
+            {filteredActivity.length > ACTIVITY_PAGE_SIZE && (
+              <Pagination
+                page={safeActivityPage}
+                totalPages={activityTotalPages}
+                onPageChange={setActivityPage}
+                total={filteredActivity.length}
+                label="events"
+                showRange
+                rangeStart={activityStart + 1}
+                rangeEnd={Math.min(activityStart + ACTIVITY_PAGE_SIZE, filteredActivity.length)}
+                bordered
+              />
             )}
           </>
         )}
@@ -994,7 +992,7 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
         )}
       </Modal>
 
-      {/* Disable 2FA confirm modal — requires the current password, since
+      {/* Disable 2FA confirm modal  -  requires the current password, since
           the backend's ConfirmPasswordRequest validates one (stolen-session
           protection against silently stripping 2FA). */}
       <Modal
@@ -1048,7 +1046,7 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
         </p>
       </Modal>
 
-      {/* Deactivate account modal — now also collects the current password,
+      {/* Deactivate account modal  -  now also collects the current password,
           which the backend requires alongside the DEACTIVATE confirmation
           text (see deactivatePassword above). */}
       <Modal

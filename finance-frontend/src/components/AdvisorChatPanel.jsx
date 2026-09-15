@@ -19,7 +19,7 @@ const SUGGESTED_PROMPTS = [
 
 // Recurring "still here" nudge while minimized: a different short line pops
 // up every TEASER_INTERVAL_MS, stays for TEASER_VISIBLE_MS, then hides until
-// the next tick. Keeps going only while the panel is minimized — stops the
+// the next tick. Keeps going only while the panel is minimized  -  stops the
 // moment the user opens it, and the interval is cleared on unmount too.
 const TEASER_FIRST_DELAY_MS = 1200
 const TEASER_INTERVAL_MS = 8000
@@ -40,14 +40,14 @@ function buildGreeting(firstName) {
   const name = firstName ? `Hi ${firstName}` : 'Hi'
   return {
     role: 'assistant',
-    text: `${name}, I'm your AI financial advisor. Ask me about any of the recommendations on this page — cash flow, expenses, revenue, or budget.`,
+    text: `${name}, I'm your AI financial advisor. Ask me about any of the recommendations on this page  -  cash flow, expenses, revenue, or budget.`,
     at: new Date().toISOString(),
   }
 }
 
 export default function AdvisorChatPanel() {
   const { sendMessage: sendToAdvisor } = useAiAdvisor()
-  // Same hook Header.jsx uses for "Good afternoon, Carl" — one source of
+  // Same hook Header.jsx uses for "Good afternoon, Carl"  -  one source of
   // truth for the user's name, no separate fetch here.
   const { profile } = useProfile()
   const firstName = profile?.name?.split(' ')[0]
@@ -78,7 +78,7 @@ export default function AdvisorChatPanel() {
 
   // Profile loads asynchronously, so the very first render (before
   // useProfile resolves) won't have a name yet. Once it arrives, update
-  // the greeting in place, but ONLY while it's still the sole message —
+  // the greeting in place, but ONLY while it's still the sole message  - 
   // never touch it after the user has started actually chatting.
   useEffect(() => {
     if (firstName) {
@@ -120,7 +120,7 @@ export default function AdvisorChatPanel() {
 
   const sendMessage = async (text) => {
     const trimmed = text.trim()
-    // Guard against firing a second request while one is still pending —
+    // Guard against firing a second request while one is still pending  - 
     // previously nothing stopped overlapping sends while isThinking was true.
     if (!trimmed || isThinking) return
 

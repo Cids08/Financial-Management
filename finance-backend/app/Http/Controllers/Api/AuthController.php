@@ -10,6 +10,7 @@ use App\Http\Resources\ProfileResource;
 use App\Services\AuthService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 
 class AuthController extends Controller
 {
@@ -115,6 +116,37 @@ class AuthController extends Controller
             'success' => true,
             'message' => 'A new code has been sent.',
             'data'    => ['maskedEmail' => $result['maskedEmail']],
+        ]);
+    }
+
+    /**
+     * POST /api/auth/verify-password
+     *
+     * Re-authentication guard for sensitive actions (e.g. assigning a
+     * user's role from the User Management page). Verifies the signed-in
+     * user's OWN password against their stored hash — a consent prompt,
+     * not a session challenge: there's no token rotation or timeout, just
+     * confirmation that the person at the keyboard is the account holder.
+     * Rate-limited by the route so it can't be brute-forced.
+     */
+    public function verifyPassword(Request $request): JsonResponse
+    {
+        $request->validate([
+            'password' => ['required', 'string'],
+        ]);
+
+        if (! Hash::check($request->string('password'), $request->user()->password)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'The password is incorrect.',
+                'data'    => null,
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Password verified.',
+            'data'    => null,
         ]);
     }
 

@@ -23,7 +23,7 @@ function formatDateTime(value) {
  * - obligation: the tax obligation whose document history is shown (uses
  *   obligation.tax_id, obligation.tax_type, obligation.tax_period)
  * - fetchHistory: async (obligationId) => { success, data, message }
- * - onView: async (obligationId, documentId, targetWindow?) => { success, message } —
+ * - onView: async (obligationId, documentId, targetWindow?) => { success, message }  - 
  *   opens the version inline in a new tab (see useTaxObligations.js's
  *   viewDocument). Only PDFs/images actually render inline in most
  *   browsers, though for these documents (PDF/JPG/PNG only) that should
@@ -53,7 +53,7 @@ export default function TaxObligationDocumentHistoryModal({ open, onClose, oblig
   }, [open, obligation, fetchHistory])
 
   const handleView = async (doc) => {
-    // Open the tab SYNCHRONOUSLY, before the await below — same reasoning
+    // Open the tab SYNCHRONOUSLY, before the await below  -  same reasoning
     // as BudgetPlanHistoryModal's/ExpenseReceiptHistoryModal's handleView():
     // browsers only reliably allow window.open() to bypass the popup
     // blocker when it's a direct result of the click event, not after an
@@ -79,7 +79,7 @@ export default function TaxObligationDocumentHistoryModal({ open, onClose, oblig
       <div className="space-y-3">
         {obligation && (
           <p className="text-xs text-muted">
-            Every document attached to <span className="font-medium text-ink">{obligation.tax_type} — {obligation.tax_period}</span>, newest first. Re-uploading a document adds a new version here rather than replacing the old one.
+            Every document attached to <span className="font-medium text-ink">{obligation.tax_type}  -  {obligation.tax_period}</span>, newest first. Re-uploading a document adds a new version here rather than replacing the old one.
           </p>
         )}
 

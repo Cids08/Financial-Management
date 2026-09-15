@@ -4,16 +4,19 @@ import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
+import Pagination from '../components/Pagination'
 import { formatCurrency } from '../utils/formatters'
 import { useAccountsPayable } from '../hooks/useAccountsPayable'
 import { apiFetch } from '../utils/api'
 import AccountsPayableDocumentModal from '../components/AccountsPayableDocumentModal'
 import PaymentWizardModal from '../components/PaymentWizardModal'
 import { usePermissions } from '../context/PermissionsContext'
+import { usePrivacy } from '../context/PrivacyContext'
+import { useSearchParams } from 'react-router-dom'
 
 
 const PAYMENT_METHODS = ['Bank Transfer', 'Check', 'Cash', 'Credit Card', 'GCash']
-// Confirmed via pg_get_constraintdef on accounts_payable_status_check —
+// Confirmed via pg_get_constraintdef on accounts_payable_status_check  - 
 // same allowed set as accounts_receivable.
 const STATUS_OPTIONS = ['Pending', 'Partially Paid', 'Paid', 'Overdue', 'Cancelled']
 const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
@@ -21,7 +24,7 @@ const ACCEPTED_DOCUMENT_TYPES = [...ACCEPTED_IMAGE_TYPES, 'application/pdf']
 const MAX_IMAGE_MB = 8
 const MAX_DOC_MB = 10
 
-// Sanity bounds for invoice/due date pickers — nothing previously stopped
+// Sanity bounds for invoice/due date pickers  -  nothing previously stopped
 // a fat-fingered year (e.g. "1111" instead of "2026") from being typed
 // directly into a native date input and saved without complaint. Mirrors
 // Budgets.jsx's CURRENT_YEAR/MAX_FISCAL_YEAR reasoning: a static floor/
@@ -110,7 +113,7 @@ function DetailRow({ label, value }) {
   )
 }
 
-// Upload + scan panel shown at the top of the Add Bill form — same behavior
+// Upload + scan panel shown at the top of the Add Bill form  -  same behavior
 // as AccountsReceivable's InvoiceScanUpload, adapted for bills. Owns its own
 // image/drag-state; calls onScanned(fields) once the real OCR scan resolves
 // so the parent form can be auto-filled.
@@ -196,7 +199,7 @@ function BillScanUpload({ onScanned, onFileSelected, onClear }) {
         <ScanLine size={15} className="text-primary-dark shrink-0" />
         <p className="text-xs font-semibold text-ink">
           Supporting Document <span className="text-red-500 dark:text-red-400">*</span>
-          <span className="font-normal text-muted ml-1">— upload image or PDF to auto-fill</span>
+          <span className="font-normal text-muted ml-1">Upload image or PDF to auto-fill</span>
         </p>
       </div>
 
@@ -238,7 +241,7 @@ function BillScanUpload({ onScanned, onFileSelected, onClear }) {
             )}
             {status === 'done' && (
               <p className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-                <CheckCircle2 size={13} /> {preview === 'pdf' ? 'PDF verified & fields filled below — please review' : 'Fields filled below — please review before saving'}
+                <CheckCircle2 size={13} /> {preview === 'pdf' ? 'PDF verified & fields filled below  -  please review' : 'Fields filled below  -  please review before saving'}
               </p>
             )}
           </div>
@@ -286,12 +289,17 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
   const { hasPermission } = usePermissions()
   const canApprove = hasPermission('ap.approve')
   const canManage = hasPermission('ap.manage')
-  // Payment Wizard execution requires elevated permission — staff with only ap.manage cannot access it
+  // Payment Wizard execution requires elevated permission  -  staff with only ap.manage cannot access it
   const canExecutePayments = hasPermission('ap.approve') || hasPermission('disbursements.approve')
+
+  usePrivacy()
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [showArchived, setShowArchived] = useState(false)
+
+  const PER_PAGE = 10
+  const [page, setPage] = useState(1)
 
   const [modalMode, setModalMode] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
@@ -432,14 +440,14 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
   const supplierName = (id) => suppliers.find((s) => s.supplier_id === Number(id))?.supplier_name || 'Unknown'
   const accountLabel = (id) => {
     const acct = (accounts ?? []).find((a) => a.id === Number(id))
-    return acct ? `${acct.account_code} — ${acct.account_name}` : '—'
+    return acct ? `${acct.account_code}  -  ${acct.account_name}` : '—'
   }
-  // Mirrors AccountsPayablePolicy::update() — a bill that's been approved,
+  // Mirrors AccountsPayablePolicy::update()  -  a bill that's been approved,
   // or whose status is Paid/Cancelled, can't be edited (goes through a
   // corrective/void flow instead). Keeping this in sync with the backend
   // means the Edit button doesn't show for a bill the save would 403 on.
   const canEditBill = (r) => canManage && !r.approved_by && !['Paid', 'Cancelled'].includes(r.status)
-  // Mirrors AccountsPayablePolicy::archive() — only completed/settled bills
+  // Mirrors AccountsPayablePolicy::archive()  -  only completed/settled bills
   // (Paid or Cancelled) can be archived. In-flight bills (Pending, Partially Paid, Overdue)
   // must remain in the active operational queue until fully resolved.
   const canArchiveBill = (r) => canManage && ['Paid', 'Cancelled'].includes(r.status)
@@ -462,6 +470,13 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceList, search, statusFilter, suppliers])
 
+  // Reset to page 1 whenever search/status/archived filters change.
+  useEffect(() => { setPage(1) }, [search, statusFilter, showArchived])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE))
+  const rangeStart = (page - 1) * PER_PAGE + 1
+  const rangeEnd = Math.min(page * PER_PAGE, filtered.length)
+
   const allBills = useMemo(() => [...bills, ...(archivedBills || [])], [bills, archivedBills])
 
   const openAdd = () => {
@@ -476,6 +491,18 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
     setDateErrors({ invoice_date: '', due_date: '' })
     setModalMode('add')
   }
+
+  // Deep-link from the dashboard's "New Transaction" menu: /?new=1 opens
+  // the create form directly, then the param is stripped so a refresh
+  // doesn't re-open it.
+  const [searchParams, setSearchParams] = useSearchParams()
+  useEffect(() => {
+    if (searchParams.get('new') !== '1') return
+    openAdd()
+    const next = new URLSearchParams(searchParams)
+    next.delete('new')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams])
 
   // Populate first available options if lookups resolve while Add modal is open
   useEffect(() => {
@@ -537,7 +564,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
   }
 
   // Merges scanned fields into the form without clobbering anything the
-  // user already typed by hand — same merge pattern as AccountsReceivable's
+  // user already typed by hand  -  same merge pattern as AccountsReceivable's
   // handleScanned.
   const handleScanned = (extracted) => {
     setForm((f) => ({
@@ -554,7 +581,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
     const win = window.open('', '_blank', 'width=800,height=900')
     if (!win) return
     // Every value below is escaped before being interpolated into the raw
-    // HTML string — description/billing_address are user-controlled fields
+    // HTML string  -  description/billing_address are user-controlled fields
     // stored verbatim, so this print window is otherwise an XSS vector.
     const rows = [
       ['Supplier', escapeHtml(supplierName(r.supplier_id))],
@@ -688,7 +715,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
   }
 
   // Quick-view the newest document without opening the full history modal
-  // first — mirrors Budgets.jsx's "View current plan" button, adapted for
+  // first  -  mirrors Budgets.jsx's "View current plan" button, adapted for
   // the fact that our view endpoint needs an explicit document id (unlike
   // Budget's /plan/view, which resolves "current" server-side by
   // budget_id alone). Fetches history, takes the newest entry, views it.
@@ -757,7 +784,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
         <div className="flex items-center gap-2 shrink-0">
           <Button variant="secondary" size="sm" icon={Sparkles} onClick={openPaymentWizard}>Payment Wizard</Button>
           {canManage && (
-            <Button variant="primary" size="sm" icon={Plus} onClick={openAdd} disabled={suppliersLoading || accountsLoading}>Add Bill</Button>
+            <Button variant="primary" size="sm" icon={Plus} onClick={openAdd}>Add Bill</Button>
           )}
         </div>
 
@@ -838,7 +865,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                 <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">Loading bills…</td></tr>
               )}
 
-              {!billsLoading && filtered.map((r) => (
+              {!billsLoading && filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE).map((r) => (
                 <tr key={r.ap_id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
                   <td className="px-2.5 py-2 min-w-0">
                     <div className="flex items-center gap-1.5 min-w-0">
@@ -877,7 +904,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                   </td>
                   <td className="px-2.5 py-2 whitespace-nowrap text-right">
                     <div className="flex items-center justify-end gap-1">
-                      {/* Workflow decision buttons — Approve / Reject (Pending only) */}
+                      {/* Workflow decision buttons  -  Approve / Reject (Pending only) */}
                       {canApprove && !r.is_archived && !r.approved_by && r.status !== 'Cancelled' && (
                         <div className="flex items-center gap-1 mr-1 pr-1 border-r border-border shrink-0">
                           <Tooltip label="Approve bill & post to General Ledger" align="start">
@@ -949,7 +976,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                         </button>
                       </Tooltip>
 
-                      {/* Edit bill — only rendered when bill is editable */}
+                      {/* Edit bill  -  only rendered when bill is editable */}
                       {!r.is_archived && canEditBill(r) && (
                         <Tooltip label="Edit bill" align="start">
                           <button type="button" onClick={() => openEdit(r)} className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
@@ -958,7 +985,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                         </Tooltip>
                       )}
 
-                      {/* Archive / Restore bill — only rendered when actionable */}
+                      {/* Archive / Restore bill  -  only rendered when actionable */}
                       {r.is_archived ? (
                         <Tooltip label="Restore bill" align="end">
                           <button
@@ -993,6 +1020,18 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
           </table>
         </div>
       </div>
+
+      <Pagination
+        page={page}
+        totalPages={totalPages}
+        onPageChange={setPage}
+        total={filtered.length}
+        label="bills"
+        showRange
+        rangeStart={rangeStart}
+        rangeEnd={rangeEnd}
+        bordered
+      />
 
       <Modal
         open={isModalOpen}
@@ -1066,7 +1105,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
             >
               <option value="" disabled>Select an account…</option>
               {(accounts ?? []).map((a) => (
-                <option key={a.id} value={a.id}>{a.account_code} — {a.account_name}</option>
+                <option key={a.id} value={a.id}>{a.account_code}  -  {a.account_name}</option>
               ))}
             </select>
             {fieldErrors.account_id && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.account_id}</p>}
@@ -1460,7 +1499,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
       <Modal
         open={!!payTarget}
         onClose={() => { if (!paySubmitting) setPayTarget(null) }}
-        title={payTarget ? `Record Payment — ${payTarget.invoice_number}` : 'Record Bill Payment'}
+        title={payTarget ? `Record Payment  -  ${payTarget.invoice_number}` : 'Record Bill Payment'}
         footer={
           <>
             <Button variant="secondary" size="md" onClick={() => setPayTarget(null)} disabled={paySubmitting}>
@@ -1576,7 +1615,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                 <option value="">Select cash / bank account...</option>
                 {wizardCashAccounts.map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.account_name} {a.bank_name ? `(${a.bank_name})` : ''} — Balance: {formatCurrency(a.current_balance)}
+                    {a.account_name} {a.bank_name ? `(${a.bank_name})` : ''}  -  Balance: {formatCurrency(a.current_balance)}
                   </option>
                 ))}
               </select>

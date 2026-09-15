@@ -3,8 +3,9 @@ import {
   X, Printer, RefreshCw, AlertTriangle, Loader2, ChevronDown, ChevronUp,
   FileText, Users, Download
 } from 'lucide-react'
-import { formatCurrency } from '../utils/formatters'
+import { formatCurrencyRaw } from '../utils/formatters'
 import { usePermissions } from '../context/PermissionsContext'
+import { usePrivacy } from '../context/PrivacyContext'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -15,20 +16,20 @@ function fmtDate(str) {
 
 function agingColor(bucket) {
   const MAP = {
-    current: 'text-emerald-700',
-    d1_30:   'text-amber-600',
-    d31_60:  'text-orange-600',
-    d61_90:  'text-red-600',
-    over90:  'text-red-800 font-bold',
+    current: 'text-emerald-700 dark:text-emerald-300',
+    d1_30:   'text-amber-600 dark:text-amber-400',
+    d31_60:  'text-orange-600 dark:text-orange-400',
+    d61_90:  'text-red-600 dark:text-red-400',
+    over90:  'text-red-800 dark:text-red-300 font-bold',
   }
   return MAP[bucket] || ''
 }
 
 const BUCKET_LABELS = {
   current: 'Current',
-  d1_30:   '1–30 days',
-  d31_60:  '31–60 days',
-  d61_90:  '61–90 days',
+  d1_30:   '1-30 days',
+  d31_60:  '31-60 days',
+  d61_90:  '61-90 days',
   over90:  '90+ days',
 }
 
@@ -52,7 +53,7 @@ function printSingleSOA(soa) {
     </tr>`).join('')
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
-    <title>SOA – ${customer.customer_name}</title>
+    <title>SOA  -  ${customer.customer_name}</title>
     <style>
       body { font-family: Arial, sans-serif; font-size: 12px; color: #1e293b; margin: 24px; }
       h2 { margin: 0 0 2px; font-size: 18px; }
@@ -224,14 +225,14 @@ function AgingTable({ rows, onSelectCustomer }) {
   return (
     <div className="overflow-hidden rounded-xl border border-border">
       <table className="w-full text-sm">
-        <thead className="bg-gray-50 border-b border-border sticky top-0 z-10">
+        <thead className="bg-bg border-b border-border sticky top-0 z-10">
           <tr>
             <TH field="customer_name" label="Customer" />
             <TH field="invoice_count" label="Invoices" right />
             <TH field="current"       label="Current"  right />
-            <TH field="d1_30"         label="1–30 d"   right />
-            <TH field="d31_60"        label="31–60 d"  right />
-            <TH field="d61_90"        label="61–90 d"  right />
+            <TH field="d1_30"         label="1-30 d"   right />
+            <TH field="d31_60"        label="31-60 d"  right />
+            <TH field="d61_90"        label="61-90 d"  right />
             <TH field="over90"        label="90+ d"    right />
             <TH field="total_outstanding" label="Total" right />
             <th className="px-3 py-3 text-xs font-semibold text-muted uppercase tracking-wide text-right">
@@ -243,7 +244,7 @@ function AgingTable({ rows, onSelectCustomer }) {
           {sorted.map((row) => (
             <tr
               key={row.customer_id}
-              className="hover:bg-gray-50 transition-colors cursor-pointer"
+              className="hover:bg-bg transition-colors cursor-pointer"
               onClick={() => onSelectCustomer(row.customer_id)}
             >
               <td className="px-3 py-3 font-medium text-ink">
@@ -253,17 +254,17 @@ function AgingTable({ rows, onSelectCustomer }) {
               <td className="px-3 py-3 text-right tabular-nums text-muted">{row.invoice_count}</td>
               {buckets.map((b) => (
                 <td key={b} className={`px-3 py-3 text-right tabular-nums ${agingColor(b)}`}>
-                  {row[b] > 0 ? formatCurrency(row[b]) : <span className="text-gray-300">—</span>}
+                  {row[b] > 0 ? formatCurrencyRaw(row[b]) : <span className="text-muted/60">—</span>}
                 </td>
               ))}
               <td className="px-3 py-3 text-right tabular-nums font-semibold text-ink">
-                {formatCurrency(row.total_outstanding)}
+                {formatCurrencyRaw(row.total_outstanding)}
               </td>
               <td className="px-3 py-3 text-right">
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); onSelectCustomer(row.customer_id) }}
-                  className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted hover:text-ink hover:bg-gray-100 transition-colors"
+                  className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted hover:text-ink hover:bg-bg transition-colors"
                 >
                   <FileText size={12} /> View
                 </button>
@@ -271,7 +272,7 @@ function AgingTable({ rows, onSelectCustomer }) {
             </tr>
           ))}
         </tbody>
-        <tfoot className="bg-gray-50 border-t-2 border-border font-semibold text-sm">
+        <tfoot className="bg-bg border-t-2 border-border font-semibold text-sm">
           <tr>
             <td className="px-3 py-3 text-ink">TOTAL ({rows.length} customers)</td>
             <td className="px-3 py-3 text-right tabular-nums text-muted">
@@ -279,11 +280,11 @@ function AgingTable({ rows, onSelectCustomer }) {
             </td>
             {buckets.map((b) => (
               <td key={b} className={`px-3 py-3 text-right tabular-nums ${agingColor(b)}`}>
-                {totals[b] > 0 ? formatCurrency(totals[b]) : <span className="text-gray-300">—</span>}
+                {totals[b] > 0 ? formatCurrencyRaw(totals[b]) : <span className="text-muted/60">—</span>}
               </td>
             ))}
             <td className="px-3 py-3 text-right tabular-nums text-ink">
-              {formatCurrency(totals.total_outstanding)}
+              {formatCurrencyRaw(totals.total_outstanding)}
             </td>
             <td />
           </tr>
@@ -313,7 +314,7 @@ function CustomerSOADetail({ soa, onBack, onPrint }) {
         </div>
         <div className="text-right">
           <p className="text-xs text-muted">As of {fmtDate(as_of_date)}</p>
-          <p className="text-xl font-bold text-ink">{formatCurrency(total_outstanding)}</p>
+          <p className="text-xl font-bold text-ink">{formatCurrencyRaw(total_outstanding)}</p>
           <p className="text-xs text-muted">{invoices.length} invoice{invoices.length !== 1 ? 's' : ''}</p>
         </div>
       </div>
@@ -321,10 +322,10 @@ function CustomerSOADetail({ soa, onBack, onPrint }) {
       {/* Aging buckets */}
       <div className="grid grid-cols-5 gap-2">
         {buckets.map((b) => (
-          <div key={b} className="rounded-lg border border-border bg-gray-50 p-3 text-center">
+          <div key={b} className="rounded-lg border border-border bg-bg p-3 text-center">
             <p className="text-xs text-muted mb-1">{BUCKET_LABELS[b]}</p>
             <p className={`text-sm font-bold ${agingColor(b)}`}>
-              {aging[b] > 0 ? formatCurrency(aging[b]) : <span className="text-gray-300">—</span>}
+              {aging[b] > 0 ? formatCurrencyRaw(aging[b]) : <span className="text-muted/60">—</span>}
             </p>
           </div>
         ))}
@@ -333,7 +334,7 @@ function CustomerSOADetail({ soa, onBack, onPrint }) {
       {/* Invoice table */}
       <div className="overflow-hidden rounded-xl border border-border">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b border-border">
+          <thead className="bg-bg border-b border-border">
             <tr>
               <th className="px-3 py-3 text-left text-xs font-semibold text-muted uppercase tracking-wide">Invoice #</th>
               <th className="px-3 py-3 text-left text-xs font-semibold text-muted uppercase tracking-wide whitespace-nowrap">Invoice Date</th>
@@ -348,14 +349,14 @@ function CustomerSOADetail({ soa, onBack, onPrint }) {
           </thead>
           <tbody className="divide-y divide-border">
             {invoices.map((inv) => (
-              <tr key={inv.ar_id} className="hover:bg-gray-50 transition-colors">
+              <tr key={inv.ar_id} className="hover:bg-bg transition-colors">
                 <td className="px-3 py-3 font-mono text-xs text-ink">{inv.invoice_number}</td>
                 <td className="px-3 py-3 text-xs text-muted whitespace-nowrap">{fmtDate(inv.invoice_date)}</td>
                 <td className="px-3 py-3 text-xs text-muted whitespace-nowrap">{fmtDate(inv.due_date)}</td>
-                <td className="px-3 py-3 text-right tabular-nums text-xs">{formatCurrency(inv.original_amount)}</td>
-                <td className="px-3 py-3 text-right tabular-nums text-xs text-emerald-600">{formatCurrency(inv.paid_amount)}</td>
-                <td className="px-3 py-3 text-right tabular-nums text-xs font-semibold text-ink">{formatCurrency(inv.remaining_balance)}</td>
-                <td className={`px-3 py-3 text-right text-xs font-semibold ${inv.days_overdue > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                <td className="px-3 py-3 text-right tabular-nums text-xs">{formatCurrencyRaw(inv.original_amount)}</td>
+                <td className="px-3 py-3 text-right tabular-nums text-xs text-emerald-600 dark:text-emerald-400">{formatCurrencyRaw(inv.paid_amount)}</td>
+                <td className="px-3 py-3 text-right tabular-nums text-xs font-semibold text-ink">{formatCurrencyRaw(inv.remaining_balance)}</td>
+                <td className={`px-3 py-3 text-right text-xs font-semibold ${inv.days_overdue > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
                   {inv.days_overdue > 0 ? `${inv.days_overdue} days` : 'Current'}
                 </td>
                 <td className={`px-3 py-3 text-xs font-medium ${agingColor(inv.aging_bucket)}`}>
@@ -365,10 +366,10 @@ function CustomerSOADetail({ soa, onBack, onPrint }) {
               </tr>
             ))}
           </tbody>
-          <tfoot className="bg-gray-50 border-t-2 border-border font-semibold">
+          <tfoot className="bg-bg border-t-2 border-border font-semibold">
             <tr>
               <td className="px-3 py-3 text-xs text-ink" colSpan={5}>TOTAL OUTSTANDING</td>
-              <td className="px-3 py-3 text-right tabular-nums text-sm font-bold text-ink">{formatCurrency(total_outstanding)}</td>
+              <td className="px-3 py-3 text-right tabular-nums text-sm font-bold text-ink">{formatCurrencyRaw(total_outstanding)}</td>
               <td colSpan={3} />
             </tr>
           </tfoot>
@@ -380,7 +381,7 @@ function CustomerSOADetail({ soa, onBack, onPrint }) {
         <button
           type="button"
           onClick={onPrint}
-          className="inline-flex items-center gap-2 rounded-lg border border-border bg-white px-4 py-2 text-sm font-medium text-ink shadow-sm hover:bg-gray-50 transition-colors"
+          className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-ink shadow-sm hover:bg-bg transition-colors"
         >
           <Printer size={14} /> Print SOA
         </button>
@@ -393,6 +394,10 @@ function CustomerSOADetail({ soa, onBack, onPrint }) {
 
 export default function StatementOfAccountModal({ open, onClose, fetchAgingSummary, fetchCustomerSoa, fetchBatchSoa }) {
   const { hasPermission } = usePermissions()
+
+  // Re-render when the privacy flag flips; this document always shows real amounts.
+  usePrivacy()
+
   const canBatchPrint = hasPermission('ar.manage')
 
   const [view,         setView]         = useState('aging')   // 'aging' | 'soa'
@@ -457,19 +462,19 @@ export default function StatementOfAccountModal({ open, onClose, fetchAgingSumma
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
 
       {/* Panel */}
-      <div className="relative z-10 flex flex-col w-full max-w-6xl max-h-[90vh] rounded-2xl bg-white shadow-2xl">
+      <div className="relative z-10 flex flex-col w-full max-w-6xl max-h-[90vh] rounded-2xl bg-surface shadow-2xl">
 
         {/* Modal Header */}
         <div className="flex items-center justify-between border-b border-border px-6 py-4 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50">
-              <Users size={18} className="text-indigo-600" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-500/15">
+              <Users size={18} className="text-indigo-600 dark:text-indigo-300" />
             </div>
             <div>
               <h2 className="text-base font-bold text-ink">Customer Aging & Statement of Account</h2>
               <p className="text-xs text-muted">
                 {view === 'soa' && selectedSoa
-                  ? `Viewing SOA — ${selectedSoa.customer.customer_name}`
+                  ? `Viewing SOA  -  ${selectedSoa.customer.customer_name}`
                   : 'Outstanding invoice aging by customer'}
               </p>
             </div>
@@ -504,7 +509,7 @@ export default function StatementOfAccountModal({ open, onClose, fetchAgingSumma
             <button
               type="button"
               onClick={onClose}
-              className="ml-2 flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-gray-100 hover:text-ink transition-colors"
+              className="ml-2 flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors"
             >
               <X size={16} />
             </button>
@@ -515,12 +520,12 @@ export default function StatementOfAccountModal({ open, onClose, fetchAgingSumma
         <div className="flex-1 overflow-y-auto p-6">
           {/* Error banners */}
           {agingError && (
-            <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+            <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 p-3 text-xs text-red-700 dark:text-red-300">
               <AlertTriangle size={14} className="mt-0.5 shrink-0" /> {agingError}
             </div>
           )}
           {soaError && (
-            <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+            <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 p-3 text-xs text-red-700 dark:text-red-300">
               <AlertTriangle size={14} className="mt-0.5 shrink-0" /> {soaError}
             </div>
           )}

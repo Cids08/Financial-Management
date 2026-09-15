@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, HandCoins, Clock3, Wallet, Info, Printer, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Paperclip } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, HandCoins, Clock3, Wallet, Info, Printer, CheckCircle2, XCircle, Paperclip } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
+import Pagination from '../components/Pagination'
 import CollectionEfficiencyPanel from '../components/CollectionEfficiencyPanel'
 import CollectionProofHistoryModal from '../components/CollectionProofHistoryModal'
 import { useCollectionUpdates } from '../hooks/useCollectionUpdates'
 import { useProfile } from '../hooks/useProfile'
 import { formatCurrency } from '../utils/formatters'
 import { apiFetch } from '../utils/api'
+import { useSearchParams } from 'react-router-dom'
+import { usePrivacy } from '../context/PrivacyContext'
 
 const STATUS_OPTIONS = ['Pending', 'Confirmed', 'Cancelled']
 const PAGE_SIZE = 10
@@ -107,7 +110,7 @@ function useLookups() {
   useEffect(() => {
     const errors = []
     Promise.all([
-      // AR — primary key is ar_id
+      // AR  -  primary key is ar_id
       apiFetch('/api/accounts-receivable?per_page=500')
         .then((r) => r.json())
         .then((j) => {
@@ -118,7 +121,7 @@ function useLookups() {
         })
         .catch((e) => errors.push(`AR records: ${e.message}`)),
 
-      // Collectors — primary key is collector_id
+      // Collectors  -  primary key is collector_id
       apiFetch('/api/collectors?per_page=500')
         .then((r) => r.json())
         .then((j) => {
@@ -128,7 +131,7 @@ function useLookups() {
         })
         .catch((e) => errors.push(`collectors: ${e.message}`)),
 
-      // Cash accounts — primary key is id
+      // Cash accounts  -  primary key is id
       apiFetch('/api/cash-accounts?per_page=500')
         .then((r) => r.json())
         .then((j) => {
@@ -138,7 +141,7 @@ function useLookups() {
         })
         .catch((e) => errors.push(`cash accounts: ${e.message}`)),
 
-      // Users — primary key is user_id or id
+      // Users  -  primary key is user_id or id
       apiFetch('/api/users?per_page=500')
         .then((r) => r.json())
         .then((j) => {
@@ -153,7 +156,7 @@ function useLookups() {
     })
   }, [])
 
-  // Lookup helpers — all use _key for matching
+  // Lookup helpers  -  all use _key for matching
   const arInfo        = (id) => arRecords.find((a) => Number(a._key) === Number(id))
   const collectorName = (id) => {
     const c = collectors.find((c) => Number(c._key) === Number(id))
@@ -213,6 +216,8 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
   const { collections, loading, error, meta, trashed, setTrashed, refetch } = useCollections()
 
   useCollectionUpdates(refetch)
+
+  usePrivacy()
 
   const { profile } = useProfile()
   const isCollectorUser = profile?.role_slug === 'collector' || profile?.role?.toLowerCase() === 'collector'
@@ -325,7 +330,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
     setForm({
       ...EMPTY_FORM,
       // Use _key (normalised) for the initial value so the dropdown
-      // matches on first render — arRecords[0]._key is ar_id for AR.
+      // matches on first render  -  arRecords[0]._key is ar_id for AR.
       ar_id:           defaultArId,
       collector_id:    defaultCollectorId,
       cash_account_id: cashAccounts[0]?._key ?? '',
@@ -336,6 +341,18 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
     setDateErrors({ collection_date: '' })
     setModalMode('add')
   }
+
+  // Deep-link from the dashboard's "New Transaction" menu: /?new=1 opens
+  // the create form directly, then the param is stripped so a refresh
+  // doesn't re-open it.
+  const [searchParams, setSearchParams] = useSearchParams()
+  useEffect(() => {
+    if (searchParams.get('new') !== '1') return
+    openAdd()
+    const next = new URLSearchParams(searchParams)
+    next.delete('new')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams])
 
   const openEdit = (c) => {
     setForm({
@@ -598,7 +615,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
           <h1 className="text-xl font-bold tracking-tight text-ink">{title}</h1>
           <p className="mt-1 text-xs text-muted">Record customer payments received against outstanding invoices.</p>
         </div>
-        <Button variant="primary" size="sm" icon={Plus} onClick={openAdd} disabled={!lookupsReady}>
+        <Button variant="primary" size="sm" icon={Plus} onClick={openAdd}>
           Add Collection
         </Button>
       </div>
@@ -741,20 +758,17 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
         </div>
 
         {!loading && filtered.length > 0 && (
-          <div className="flex flex-col gap-2 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs text-muted">Showing {rangeStart}–{rangeEnd} of {filtered.length} collections</p>
-            <div className="flex items-center gap-1">
-              <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed" aria-label="Previous page">
-                <ChevronLeft size={15} />
-              </button>
-              <span className="px-2 text-xs font-medium text-ink whitespace-nowrap">Page {page} of {totalPages}</span>
-              <button type="button" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed" aria-label="Next page">
-                <ChevronRight size={15} />
-              </button>
-            </div>
-          </div>
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            total={filtered.length}
+            label="collections"
+            showRange
+            rangeStart={rangeStart}
+            rangeEnd={rangeEnd}
+            bordered
+          />
         )}
       </div>
 
@@ -775,7 +789,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
           )}
 
           <div className="grid grid-cols-2 gap-3">
-            {/* Invoice — uses _key (= ar_id) as option value */}
+            {/* Invoice  -  uses _key (= ar_id) as option value */}
             <div>
               <label className={LABEL}>Invoice <span className="text-red-500 dark:text-red-400">*</span></label>
               <select
@@ -799,7 +813,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                   const bal = a.balance ?? a.remaining_balance
                   return (
                     <option key={a._key} value={a._key}>
-                      {a.invoice_number} — {a.customer_name} {bal !== undefined ? `(Bal: ₱${Number(bal).toLocaleString('en-PH', { minimumFractionDigits: 2 })})` : ''}
+                      {a.invoice_number}  -  {a.customer_name} {bal !== undefined ? `(Bal: ₱${Number(bal).toLocaleString('en-PH', { minimumFractionDigits: 2 })})` : ''}
                     </option>
                   )
                 })}
@@ -807,7 +821,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
               {fieldErrors.ar_id && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.ar_id}</p>}
             </div>
 
-            {/* Collector — uses _key (= collector_id) as option value */}
+            {/* Collector  -  uses _key (= collector_id) as option value */}
             <div>
               <label className={LABEL}>Collector <span className="text-red-500 dark:text-red-400">*</span></label>
               <select
@@ -918,7 +932,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            {/* Cash account — uses _key (= id) as option value */}
+            {/* Cash account  -  uses _key (= id) as option value */}
             <div>
               <label className={LABEL}>Deposit To (Cash Account) <span className="text-red-500 dark:text-red-400">*</span></label>
               <select

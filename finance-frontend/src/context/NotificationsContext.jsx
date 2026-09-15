@@ -3,14 +3,14 @@ import { useNotifications } from '../hooks/useNotifications'
 
 const NotificationsContext = createContext(null)
 
-// Same polling cadence Sidebar.jsx used before — now lives in exactly one
+// Same polling cadence Sidebar.jsx used before  -  now lives in exactly one
 // place instead of once per component that needs the unread count.
 const UNREAD_POLL_MS = 30_000
 
 export function NotificationsProvider({ children }) {
   // Everything useNotifications() exposes (notifications, meta, unreadCount,
   // loading, error, fetchNotifications, fetchUnreadCount, markAsRead,
-  // markAllAsRead, deleteNotification) is shared as-is — consumers just
+  // markAllAsRead, deleteNotification) is shared as-is  -  consumers just
   // call useNotificationsContext() instead of useNotifications() directly.
   const notificationsState = useNotifications()
   const { fetchUnreadCount } = notificationsState

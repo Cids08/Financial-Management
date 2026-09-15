@@ -21,13 +21,13 @@ function formatDateTime(value) {
  * - open, onClose: standard Modal controls
  * - budget: the budget whose plan history is shown (uses budget_id, budget_name)
  * - fetchHistory: async (budgetId) => { success, data, message }
- * - onView: async (budgetId, documentId, targetWindow?) => { success, message } —
+ * - onView: async (budgetId, documentId, targetWindow?) => { success, message }  - 
  *   opens the version inline in a new tab (see useBudgets.js's
- *   viewPlanVersion). Renamed from the previous onDownload/handleDownload —
+ *   viewPlanVersion). Renamed from the previous onDownload/handleDownload  - 
  *   this now opens the file instead of forcing it to disk. Only PDFs
  *   actually render inline in most browsers; Word/Excel versions will
  *   still trigger a download regardless, since browsers have no native
- *   viewer for those — that's a browser limitation, not something this
+ *   viewer for those  -  that's a browser limitation, not something this
  *   modal controls.
  */
 export default function BudgetPlanHistoryModal({ open, onClose, budget, fetchHistory, onView }) {
@@ -54,12 +54,12 @@ export default function BudgetPlanHistoryModal({ open, onClose, budget, fetchHis
   }, [open, budget, fetchHistory])
 
   const handleView = async (doc) => {
-    // Open the tab SYNCHRONOUSLY, before the await below — see
+    // Open the tab SYNCHRONOUSLY, before the await below  -  see
     // useBudgets.js's viewPlan()/viewPlanVersion() for why: browsers only
     // reliably allow window.open() to bypass the popup blocker when it's
     // a direct result of the click event, not after an async fetch has
     // already resolved. The blank tab gets redirected to the real blob
-    // URL once onView() resolves — or, for a file type with no in-browser
+    // URL once onView() resolves  -  or, for a file type with no in-browser
     // viewer (docx/xlsx/etc.), onView() closes this tab itself and
     // downloads the file instead, so nothing stays stuck at about:blank.
     const targetWindow = window.open('', '_blank')

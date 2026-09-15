@@ -3,6 +3,7 @@ import { Search, Plus, Pencil, Archive, RotateCcw, Truck, UserCheck, UserX, Mail
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
+import Pagination from '../components/Pagination'
 import Tooltip from '../components/Tooltip'
 import { apiFetch } from '../utils/api'
 import { useCompany } from '../context/CompanyContext'
@@ -17,7 +18,7 @@ function maskValue(value) {
     .join('')
 }
 
-// Fully masks an email — no part of the local name or domain is shown
+// Fully masks an email  -  no part of the local name or domain is shown
 function maskEmail(value) {
   if (!value) return value
   return '•'.repeat(10)
@@ -52,6 +53,7 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [showArchived, setShowArchived] = useState(false)
+  const [page, setPage] = useState(1)
 
   const [modalMode, setModalMode] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
@@ -70,8 +72,12 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
     setShowArchived(false)
   }, [highlightSearch])
 
+  useEffect(() => {
+    setPage(1)
+  }, [search, statusFilter, showArchived])
+
   // Controls visibility of contact number and email together per row
-  // (TIN used to be part of this too — column dropped from the app
+  // (TIN used to be part of this too  -  column dropped from the app
   // layer, so it's gone from both the mask set and the table).
   const [revealedIds, setRevealedIds] = useState(new Set())
   const toggleReveal = (id) => {
@@ -115,7 +121,7 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
         setStats(json.data)
       }
     } catch {
-      // Non-critical — stat cards just keep their last known values.
+      // Non-critical  -  stat cards just keep their last known values.
     }
   }, [])
 
@@ -128,7 +134,7 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
     fetchStats()
   }, [fetchStats])
 
-  // Stats now come from a dedicated /stats endpoint (see fetchStats above) —
+  // Stats now come from a dedicated /stats endpoint (see fetchStats above)  - 
   // they reflect true global counts regardless of the current table filter,
   // rather than being derived from whatever subset is currently loaded.
 
@@ -218,6 +224,11 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
   const isModalOpen = modalMode !== null
   const isEditing = modalMode !== null && modalMode !== 'add'
 
+  const PER_PAGE = 10
+  const totalPages = Math.max(1, Math.ceil(suppliers.length / PER_PAGE))
+  const rangeStart = (page - 1) * PER_PAGE + 1
+  const rangeEnd = Math.min(page * PER_PAGE, suppliers.length)
+
   return (
     <div className="space-y-5 animate-fadeIn">
       <Breadcrumb items={crumbs} />
@@ -291,7 +302,7 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
               ) : suppliers.length === 0 ? (
                 <tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-muted">No suppliers match your filters.</td></tr>
               ) : (
-                suppliers.map((s) => {
+                suppliers.slice((page - 1) * PER_PAGE, page * PER_PAGE).map((s) => {
                   const revealed = revealedIds.has(s.supplier_id)
                   return (
                     <tr
@@ -356,6 +367,18 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
           </table>
         </div>
       </div>
+
+      <Pagination
+        page={page}
+        totalPages={totalPages}
+        onPageChange={setPage}
+        total={suppliers.length}
+        label="suppliers"
+        showRange
+        rangeStart={rangeStart}
+        rangeEnd={rangeEnd}
+        bordered
+      />
 
       <Modal
         open={isModalOpen}

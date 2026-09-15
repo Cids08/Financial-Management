@@ -5,8 +5,8 @@ const PermissionsContext = createContext(null)
 
 /**
  * Wrap DashboardLayout (alongside ProfileProvider/CompanyProvider) with
- * this once. Sidebar — and any future route guard that needs to check
- * "can this user do X" — then reads from the same fetched list instead of
+ * this once. Sidebar  -  and any future route guard that needs to check
+ * "can this user do X"  -  then reads from the same fetched list instead of
  * each consumer re-fetching or, worse, reading the wrong shape off
  * useAuth()'s `user` object (see the bug this fixes: Sidebar.jsx was
  * passing `user` itself into filterMenuByPermissions(), which expects a
@@ -42,7 +42,7 @@ export function PermissionsProvider({ children }) {
   }, [fetchPermissions])
 
   // A Set gives O(1) lookups for hasPermission() instead of permissions
-  // .includes(...) re-scanning the array on every single call — cheap
+  // .includes(...) re-scanning the array on every single call  -  cheap
   // either way at this list size, but this is the correct shape for it.
   const permissionSet = useMemo(() => new Set(permissions), [permissions])
 

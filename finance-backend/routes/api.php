@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\PermissionController;
 use App\Http\Controllers\Api\DepartmentController;
+use App\Http\Controllers\Api\TitleController;
 use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\SupplierController;
 use App\Http\Controllers\Api\CollectorController;
@@ -67,6 +68,9 @@ Route::middleware(['auth:sanctum', 'require.password.change'])->group(function (
 
     // Current user's own permissions
     Route::get('/me/permissions', [PermissionController::class, 'mine']);
+
+    // Re-authentication consent for sensitive actions (role assignment, etc.)
+    Route::post('/auth/verify-password', [AuthController::class, 'verifyPassword'])->middleware('throttle:5,1');
 
     // Global hybrid search (SearchBar.jsx's "DATABASE RESULTS" half).
     // Deliberately NOT gated by a single 'permission:' middleware — it
@@ -128,6 +132,16 @@ Route::middleware(['auth:sanctum', 'require.password.change'])->group(function (
         Route::post('/', [DepartmentController::class, 'store'])->middleware('permission:departments.manage');
         Route::put('/{department}', [DepartmentController::class, 'update'])->middleware('permission:departments.manage');
         Route::delete('/{department}', [DepartmentController::class, 'destroy'])->middleware('permission:departments.manage');
+    });
+
+    // Titles / Positions (job titles assigned to users; also drive the
+    // signatory positions printed on Disbursement Vouchers & BIR 2307).
+    Route::prefix('titles')->group(function () {
+        Route::get('/', [TitleController::class, 'index'])->middleware('permission:users.view');
+        Route::post('/', [TitleController::class, 'store'])->middleware('permission:users.manage');
+        Route::put('/{title}', [TitleController::class, 'update'])->middleware('permission:users.manage');
+        Route::patch('/{title}/archive', [TitleController::class, 'archive'])->middleware('permission:users.manage');
+        Route::patch('/{title}/restore', [TitleController::class, 'restore'])->middleware('permission:users.manage')->withTrashed();
     });
 
     // Customers

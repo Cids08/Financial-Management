@@ -3,7 +3,7 @@ import { ShieldAlert } from 'lucide-react'
 
 /**
  * Gates a single route by permission. Distinct from ProtectedRoute (which
- * only checks whether the user is authenticated at all, via <Outlet/>) —
+ * only checks whether the user is authenticated at all, via <Outlet/>)  - 
  * this checks whether the authenticated user has a specific permission,
  * and wraps an individual page element rather than a layout route.
  *
@@ -23,7 +23,7 @@ import { ShieldAlert } from 'lucide-react'
 export default function RequirePermission({ permission, children }) {
   const { hasPermission, loading } = usePermissions()
 
-  // Permissions haven't loaded yet (e.g. hard refresh on a deep link) —
+  // Permissions haven't loaded yet (e.g. hard refresh on a deep link)  - 
   // render nothing rather than bouncing the user before we actually know.
   if (loading) {
     return null

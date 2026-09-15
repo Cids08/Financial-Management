@@ -3,11 +3,11 @@ import { Bell, Wallet, Receipt, PiggyBank, TrendingUp, Sparkles, CheckCircle2, A
 // Mirrors the notifications table's type CHECK constraint, which only
 // allows: 'Info', 'Success', 'Warning', 'Error'.
 //
-// The DB type column is severity-based, not module-based — so the old
+// The DB type column is severity-based, not module-based  -  so the old
 // module-specific keys (collection, expense, disbursement, budget_over,
 // budget_warning) can never match anything and have been removed.
 //
-// Routing by severity is coarse — Success goes to /transactions/collections
+// Routing by severity is coarse  -  Success goes to /transactions/collections
 // as the most common success notification, Warning goes to /transactions/budgets.
 // If you later need per-module routing, add a separate `module` column to
 // the notifications table (not constrained by a CHECK) and route on that
@@ -17,7 +17,7 @@ import { Bell, Wallet, Receipt, PiggyBank, TrendingUp, Sparkles, CheckCircle2, A
 // forecast, ai_recommendation) are kept for any legacy notifications
 // already stored in the DB with those type values.
 export const NOTIFICATION_TYPE_META = {
-  // Severity types — matches the DB CHECK constraint
+  // Severity types  -  matches the DB CHECK constraint
   Success: {
     icon:  CheckCircle2,
     route: '/transactions/collections',
@@ -47,7 +47,7 @@ export const NOTIFICATION_TYPE_META = {
     bg:    'bg-red-50 dark:bg-red-500/10',
   },
 
-  // Legacy module-specific keys — kept for notifications already in the DB.
+  // Legacy module-specific keys  -  kept for notifications already in the DB.
   // These will never be written by new code since the DB constraint blocks them.
   receivable: {
     icon:  Wallet,

@@ -7,7 +7,7 @@ import { apiFetch } from '../utils/api'
  * and account deactivation.
  *
  * Kept separate from useProfile/useCompany because it's only ever
- * consumed by Settings.jsx — no shared-state need for a Context here,
+ * consumed by Settings.jsx  -  no shared-state need for a Context here,
  * per "only create a new hook when necessary."
  *
  * Backed by:
@@ -58,7 +58,7 @@ export function useAccountSecurity() {
 
   // Reads the real 2FA status from the backend on mount. Without this,
   // twoFAEnabled just stays at its useState(false) default on every fresh
-  // page load, regardless of what's actually stored on the user — the bug
+  // page load, regardless of what's actually stored on the user  -  the bug
   // where the toggle appeared to reset to "off" after a refresh.
   const fetchTwoFAStatus = useCallback(async () => {
     try {
@@ -68,7 +68,7 @@ export function useAccountSecurity() {
         setTwoFAEnabled(json.data.twoFactorEnabled)
       }
     } catch {
-      // Non-fatal — toggle just falls back to its default state.
+      // Non-fatal  -  toggle just falls back to its default state.
     }
   }, [])
 
@@ -103,7 +103,7 @@ export function useAccountSecurity() {
         throw new Error(json.errors?.code?.[0] || json.message || 'Invalid verification code.')
       }
       setTwoFAEnabled(true)
-      // { recoveryCodes: [...] } — show these to the user exactly once
+      // { recoveryCodes: [...] }  -  show these to the user exactly once
       return { success: true, ...json.data }
     } catch (err) {
       setTwoFAError(err.message)
@@ -113,7 +113,7 @@ export function useAccountSecurity() {
     }
   }, [])
 
-  // Requires the current password — ConfirmPasswordRequest on the backend
+  // Requires the current password  -  ConfirmPasswordRequest on the backend
   // validates it server-side so a hijacked session can't silently strip
   // 2FA. Field name assumed to be "password"; adjust if the backend
   // validates a different key.

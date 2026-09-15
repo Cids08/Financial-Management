@@ -12,6 +12,6 @@ export default function Logout() {
     navigate('/login', { replace: true })
   }, [navigate])
 
-  // Nothing rendered — this route just clears the session and redirects.
+  // Nothing rendered  -  this route just clears the session and redirects.
   return null
 }

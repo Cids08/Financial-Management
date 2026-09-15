@@ -1,15 +1,15 @@
 /**
  * CollectionEfficiencyPanel
  *
- * Shows aggregate team efficiency — total collected vs combined target
- * across all collectors — bucketed by day/week/month/year.
+ * Shows aggregate team efficiency  -  total collected vs combined target
+ * across all collectors  -  bucketed by day/week/month/year.
  *
  * Per-collector breakdown lives on the Collector page. This panel
  * answers the fleet-level question: is the whole team hitting target?
  *
  * Endpoint: GET /api/collections/efficiency?period=X&limit=12
  * Response shape per bucket: { period, collected, target, efficiency }
- * — same shape as before, collector selector removed.
+ *  -  same shape as before, collector selector removed.
  */
 
 import { useEffect, useMemo, useState } from 'react'
@@ -26,6 +26,7 @@ import {
   Legend,
 } from 'recharts'
 import { formatCurrency } from '../utils/formatters'
+import { usePrivacy } from '../context/PrivacyContext'
 import { apiFetch } from '../utils/api'
 
 const INPUT = `w-full h-9 px-3 rounded-lg border border-border bg-bg text-sm text-ink
@@ -47,6 +48,8 @@ export default function CollectionEfficiencyPanel() {
   const [buckets, setBuckets] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
+
+  usePrivacy()
 
   useEffect(() => {
     let cancelled = false
@@ -93,7 +96,7 @@ export default function CollectionEfficiencyPanel() {
           </div>
         </div>
 
-        {/* Period buttons — no collector selector needed */}
+        {/* Period buttons  -  no collector selector needed */}
         <div className="flex gap-1">
           {EFFICIENCY_PERIODS.map((p) => (
             <button
@@ -129,7 +132,7 @@ export default function CollectionEfficiencyPanel() {
           <ResponsiveContainer width="100%" height="100%">
             {/*
               ComposedChart lets us overlay the target as a Line on top of
-              the collected Bar — cleaner than a grouped bar for a
+              the collected Bar  -  cleaner than a grouped bar for a
               collected-vs-target comparison.
             */}
             <ComposedChart data={buckets} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>

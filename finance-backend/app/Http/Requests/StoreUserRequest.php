@@ -19,6 +19,7 @@ class StoreUserRequest extends FormRequest
             'last_name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
             'role_id' => ['required', 'integer', Rule::exists('roles', 'id')],
+            'title_id' => ['nullable', 'integer', Rule::exists('titles', 'id')],
             'status' => ['required', 'string', Rule::in(['Active', 'Inactive'])],
         ];
     }

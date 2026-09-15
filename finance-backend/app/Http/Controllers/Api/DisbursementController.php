@@ -147,7 +147,7 @@ class DisbursementController extends Controller
             'success' => true,
             'message' => '',
             'data' => new DisbursementResource(
-                $disbursement->load(['accountsPayable', 'department', 'cashAccount', 'creator', 'approver', 'releaser'])
+                $disbursement->load(['accountsPayable', 'department', 'cashAccount', 'creator.title', 'approver.title', 'releaser.title'])
             ),
         ]);
     }

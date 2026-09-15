@@ -4,7 +4,7 @@ import { apiFetch } from '../utils/api'
 /**
  * Owns all network interaction for the Departments module (Master Data >
  * Departments). Departments.jsx should only call these functions and
- * render `departments` / `meta` — no fetch/apiFetch calls belong in the
+ * render `departments` / `meta`  -  no fetch/apiFetch calls belong in the
  * page itself, same convention as useBudgets.
  *
  * Maps to routes/api.php:
@@ -14,7 +14,7 @@ import { apiFetch } from '../utils/api'
  *   DELETE /departments/{department}           (soft delete / archive)
  *   PATCH  /departments/{department}/restore
  *
- * NOTE: field name is `department_id`, not `id` — DepartmentController
+ * NOTE: field name is `department_id`, not `id`  -  DepartmentController
  * resources appear to key off department_id per Departments.jsx's existing
  * usage (`/api/departments/${d.department_id}`). Kept consistent below.
  */

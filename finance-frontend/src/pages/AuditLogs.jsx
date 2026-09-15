@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Search, CalendarRange, X, ChevronDown, ChevronRight, Download } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
+import Pagination from '../components/Pagination'
 import { usePermissions } from '../context/PermissionsContext'
 import { useAuditLogs } from '../hooks/useAuditLogs'
 
@@ -11,7 +12,7 @@ const INPUT = `h-9 px-3 rounded-lg border border-border bg-bg text-sm text-ink
   placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary
   transition-all duration-150`
 // Native <input type="date"> calendar popups are OS-rendered and ignore
-// normal CSS, but they do respect color-scheme — without this, the popup
+// normal CSS, but they do respect color-scheme  -  without this, the popup
 // renders in the OS/browser's default (usually light) palette regardless
 // of the app's dark theme, clashing against everything around it. Same
 // fix Settings.jsx's date inputs already use.
@@ -31,7 +32,7 @@ function formatDateTime(iso) {
   })
 }
 
-// Same CSV field-escaping rule as Settings.jsx's exportActivity — wrap in
+// Same CSV field-escaping rule as Settings.jsx's exportActivity  -  wrap in
 // quotes and double up embedded quotes whenever the value contains a
 // comma, quote, or newline, so e.g. a multi-line old/new value diff
 // doesn't silently split into extra columns.
@@ -56,7 +57,7 @@ function downloadCsv(filename, rows) {
 
 // Renders a field-by-field before/after diff for one log entry. Both sides
 // are optional (archive/restore log null values since they're pure status
-// transitions, not field edits) — falls back to a plain message rather
+// transitions, not field edits)  -  falls back to a plain message rather
 // than an empty diff block.
 function ValueDiff({ oldValues, newValues }) {
   if (!oldValues && !newValues) {
@@ -92,7 +93,7 @@ function ValueDiff({ oldValues, newValues }) {
 
 export default function AuditLogs({ title = 'Audit Logs', crumbs = ['System', 'Audit Logs'] }) {
   // Gated on a dedicated permission string, same pattern the Settings page
-  // already uses for Company Branding (settings.manage) — not tied to any
+  // already uses for Company Branding (settings.manage)  -  not tied to any
   // single module's own permission, since this view spans all of them.
   const { hasPermission, loading: permissionsLoading } = usePermissions()
   const canView = hasPermission('audit-logs.view')
@@ -122,7 +123,7 @@ export default function AuditLogs({ title = 'Audit Logs', crumbs = ['System', 'A
     if (canView) fetchModules()
   }, [canView, fetchModules])
 
-  // Any filter change resets to page 1 — otherwise narrowing the results
+  // Any filter change resets to page 1  -  otherwise narrowing the results
   // could leave the view stranded on a page that no longer exists.
   useEffect(() => {
     setPage(1)
@@ -138,8 +139,8 @@ export default function AuditLogs({ title = 'Audit Logs', crumbs = ['System', 'A
 
   const hasFilters = Boolean(search || module || action || dateFrom || dateTo)
 
-  // Exports whatever the current filters match — including the date
-  // range, if one is set — not just the current page. Mirrors
+  // Exports whatever the current filters match  -  including the date
+  // range, if one is set  -  not just the current page. Mirrors
   // Settings.jsx's exportActivity(): fetch the full matching set via the
   // unpaginated endpoint, then build the CSV client-side.
   const handleExport = async () => {
@@ -191,7 +192,6 @@ export default function AuditLogs({ title = 'Audit Logs', crumbs = ['System', 'A
           icon={Download}
           onClick={handleExport}
           loading={exporting}
-          disabled={logs.length === 0}
           className="shrink-0 whitespace-nowrap"
         >
           Export
@@ -307,29 +307,14 @@ export default function AuditLogs({ title = 'Audit Logs', crumbs = ['System', 'A
           </div>
         )}
 
-        {meta.last_page > 1 && (
-          <div className="flex items-center justify-between border-t border-border px-5 py-3 text-xs text-muted">
-            <span>Page {meta.current_page} of {meta.last_page} · {meta.total} total</span>
-            <div className="flex gap-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={meta.current_page <= 1}
-                onClick={() => setPage((p) => p - 1)}
-              >
-                Previous
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={meta.current_page >= meta.last_page}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Next
-              </Button>
-            </div>
-          </div>
-        )}
+        <Pagination
+          page={meta.current_page}
+          totalPages={meta.last_page}
+          onPageChange={setPage}
+          total={meta.total}
+          label="audit log entries"
+          bordered
+        />
       </div>
     </div>
   )

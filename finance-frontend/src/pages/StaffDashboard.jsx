@@ -18,11 +18,12 @@ import Breadcrumb from '../components/Breadcrumb'
 import Tooltip from '../components/Tooltip'
 import { formatCurrency } from '../utils/formatters'
 import { useStaffDashboard } from '../hooks/useStaffDashboard'
+import { usePrivacy } from '../context/PrivacyContext'
 
 const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
 const PANEL_PAD = 'p-4'
 
-// Staff has view/manage on these five modules — no approve on any of them
+// Staff has view/manage on these five modules  -  no approve on any of them
 // (see RolesAndPermissionsSeeder). Routes match the /master-data and
 // /transactions convention used by Dashboard.jsx and CollectorDashboard.jsx.
 const QUICK_LINKS = [
@@ -54,7 +55,7 @@ function StatCard({ label, value, icon: Icon, iconBg, iconColor, loading }) {
   )
 }
 
-// One row inside a "needs attention" list — same shape for AR/AP/Expenses/
+// One row inside a "needs attention" list  -  same shape for AR/AP/Expenses/
 // Disbursements/Budgets, just different label/amount fields per section.
 function AttentionRow({ title, subtitle, amount, onClick }) {
   return (
@@ -98,6 +99,8 @@ function AttentionSection({ title, icon: Icon, items, emptyLabel, renderItem }) 
 export default function StaffDashboard({ title = 'Dashboard', crumbs = ['Dashboard'] }) {
   const navigate = useNavigate()
   const { data, loading, error, fetchDashboard } = useStaffDashboard()
+
+  usePrivacy()
 
   useEffect(() => { fetchDashboard() }, [fetchDashboard])
 
@@ -157,7 +160,7 @@ export default function StaffDashboard({ title = 'Dashboard', crumbs = ['Dashboa
         </div>
       </div>
 
-      {/* Needs Your Attention — pulled from the same modules Staff can
+      {/* Needs Your Attention  -  pulled from the same modules Staff can
           manage but not approve, so this doubles as "what's waiting on
           someone else" (AR/AP/Expenses/Disbursements pending Admin
           approval) plus "what YOU still need to finish" (Draft budgets
@@ -252,7 +255,7 @@ export default function StaffDashboard({ title = 'Dashboard', crumbs = ['Dashboa
         )}
       </div>
 
-      {/* Recent activity — a lightweight feed, not per-section, since
+      {/* Recent activity  -  a lightweight feed, not per-section, since
           Staff doesn't need an audit trail, just "what changed lately". */}
       <div className={PANEL}>
         <div className="flex items-center gap-2 border-b border-border px-4 py-3">

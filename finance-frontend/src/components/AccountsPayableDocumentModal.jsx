@@ -4,7 +4,7 @@ import Modal from './Modal'
 import Button from './Button'
 import Tooltip from './Tooltip'
 
-// Confirmed against UploadAccountsPayableDocumentRequest::rules() — keep
+// Confirmed against UploadAccountsPayableDocumentRequest::rules()  -  keep
 // these two constants in sync if that validation rule ever changes.
 // Images/PDF only, same restriction as Expense receipts and Collection
 // proof-of-receipt uploads.
@@ -34,7 +34,7 @@ function formatDateTime(value) {
  * - open, onClose: standard Modal controls
  * - bill: the AccountsPayable record (uses bill.ap_id, bill.invoice_number)
  * - fetchHistory: async (apId) => { success, data, message }
- * - onUpload: async (file) => { success, message } — call the hook's
+ * - onUpload: async (file) => { success, message }  -  call the hook's
  *   attachDocument(bill.ap_id, file) here from the parent page
  * - onView: async (apId, documentId, targetWindow) => { success, message, viewedInline }
  * - onUploaded: called after a successful upload, so the parent can refetch bills
@@ -111,7 +111,7 @@ export default function AccountsPayableDocumentModal({ open, onClose, bill, fetc
   }
 
   const handleView = async (doc) => {
-    // Open the tab SYNCHRONOUSLY, before the await below — browsers only
+    // Open the tab SYNCHRONOUSLY, before the await below  -  browsers only
     // reliably allow window.open() to bypass the popup blocker when it's
     // a direct result of the click event, not after an async fetch has
     // already resolved.
@@ -217,7 +217,7 @@ export default function AccountsPayableDocumentModal({ open, onClose, bill, fetc
             >
               <UploadCloud size={24} className="text-muted" />
               <p className="text-sm font-medium text-ink">Click to browse or drag a file here</p>
-              <p className="text-xs text-muted">PDF, JPG, or PNG — up to {MAX_SIZE_MB}MB</p>
+              <p className="text-xs text-muted">PDF, JPG, or PNG  -  up to {MAX_SIZE_MB}MB</p>
               <input
                 ref={inputRef}
                 type="file"

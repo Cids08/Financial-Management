@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react'
+import { Fragment, useMemo, useState, useEffect } from 'react'
 import {
   FileBarChart, TrendingUp, Wallet, Users, Truck, PiggyBank, Download, ChevronRight, Loader2,
 } from 'lucide-react'
@@ -8,9 +8,11 @@ import {
 } from 'recharts'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
-import { formatCurrency } from '../utils/formatters'
+import Pagination from '../components/Pagination'
+import { formatCurrency, formatCurrencyRaw } from '../utils/formatters'
 import { useReports } from '../hooks/useReports'
 import { useCompany } from '../context/CompanyContext'
+import { usePrivacy } from '../context/PrivacyContext'
 
 const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
 const PANEL_PAD = 'p-4'
@@ -45,9 +47,9 @@ const DEPT_PIE_COLORS = ['#F4B400', '#3b82f6', '#8b5cf6', '#10b981', '#f97316']
 
 const AGING_BUCKETS = [
   { key: 'current', name: 'Current', color: '#10b981' },
-  { key: 'd1_30', name: '1–30 Days', color: '#F4B400' },
-  { key: 'd31_60', name: '31–60 Days', color: '#f97316' },
-  { key: 'd61_90', name: '61–90 Days', color: '#ef4444' },
+  { key: 'd1_30', name: '1-30 Days', color: '#F4B400' },
+  { key: 'd31_60', name: '31-60 Days', color: '#f97316' },
+  { key: 'd61_90', name: '61-90 Days', color: '#ef4444' },
   { key: 'over90', name: '90+ Days', color: '#991b1b' },
 ]
 
@@ -89,7 +91,7 @@ function ReportLoading() {
   )
 }
 
-// -- Report generation (opens a formatted, printable document — "Save as PDF" from the browser print dialog works with no extra libraries) --
+// -- Report generation (opens a formatted, printable document  -  "Save as PDF" from the browser print dialog works with no extra libraries) --
 
 const PRINT_STYLES = `
   * { box-sizing: border-box; }
@@ -116,23 +118,23 @@ const PRINT_STYLES = `
   .report-block .block-sub { margin: 0 0 12px; font-size: 12px; color: #666; }
   @media print {
     body { padding: 24px; }
-    /* Adjacent-sibling combinator, not :not(:first-child) — the previous
+    /* Adjacent-sibling combinator, not :not(:first-child)  -  the previous
        rule compared each .report-block against being the first child of
        <body>, but .letterhead/.header always precede it there, so it
        never matched and EVERY report (including the first) got forced
        onto its own page, leaving page 1 almost entirely blank. This
        version only matches a .report-block that directly follows
-       another .report-block — correctly "every report after the first",
+       another .report-block  -  correctly "every report after the first",
        regardless of what non-report elements come earlier in the body. */
     .report-block + .report-block { page-break-before: always; }
   }
 `
 
 // Resolves once the image has actually finished downloading (or after a
-// failure/timeout — never blocks the export indefinitely on a bad URL).
+// failure/timeout  -  never blocks the export indefinitely on a bad URL).
 // Without this, window.print() can fire before a freshly-opened popup's
 // <img> has loaded, especially on longer documents with more HTML to
-// parse first — the logo silently never appears in that case, even
+// parse first  -  the logo silently never appears in that case, even
 // though its src was correct all along.
 function preloadImage(url, timeoutMs = 3000) {
   return new Promise((resolve) => {
@@ -151,7 +153,7 @@ function printReport(title, subtitle, bodyHtml, company) {
   if (!win) return
   const generatedAt = new Date().toLocaleString('en-PH', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 
-  // Letterhead renders once, above everything else — since it sits
+  // Letterhead renders once, above everything else  -  since it sits
   // outside the per-report .report-block loop (which is what gets the
   // page-break-before rule), it only ever appears on the first printed
   // page, never repeated on pages 2+ of a multi-report export.
@@ -188,7 +190,7 @@ function printReport(title, subtitle, bodyHtml, company) {
   win.focus()
 
   // Print only after the popup's OWN <img> element has actually finished
-  // decoding — not just after preloadImage() has warmed the browser
+  // decoding  -  not just after preloadImage() has warmed the browser
   // cache in the parent window. Those are two different moments: the
   // bytes being cached doesn't mean this specific document's <img> has
   // painted yet, and Chrome's print snapshot can still be taken in
@@ -208,11 +210,11 @@ function printReport(title, subtitle, bodyHtml, company) {
 function agingRowHtml(label, r) {
   return `<tr>
     <td>${label}</td>
-    <td class="num">${r.current ? formatCurrency(r.current) : '—'}</td>
-    <td class="num">${r.d1_30 ? formatCurrency(r.d1_30) : '—'}</td>
-    <td class="num">${r.d31_60 ? formatCurrency(r.d31_60) : '—'}</td>
-    <td class="num">${r.d61_90 ? formatCurrency(r.d61_90) : '—'}</td>
-    <td class="num">${r.over90 ? formatCurrency(r.over90) : '—'}</td>
+    <td class="num">${r.current ? formatCurrencyRaw(r.current) : '—'}</td>
+    <td class="num">${r.d1_30 ? formatCurrencyRaw(r.d1_30) : '—'}</td>
+    <td class="num">${r.d31_60 ? formatCurrencyRaw(r.d31_60) : '—'}</td>
+    <td class="num">${r.d61_90 ? formatCurrencyRaw(r.d61_90) : '—'}</td>
+    <td class="num">${r.over90 ? formatCurrencyRaw(r.over90) : '—'}</td>
   </tr>`
 }
 
@@ -221,6 +223,18 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
   const [period, setPeriod] = useState('This Quarter')
   const [exporting, setExporting] = useState(false)
 
+  // Client-side paging for the report body tables  -  one shared page slice
+  // is active at a time (only the current report renders), so a single
+  // REPORT_PAGE_SIZE + one page state is enough. Reset when the tab changes.
+  const REPORT_PAGE_SIZE = 10
+  const [reportPage, setReportPage] = useState(1)
+  const reportStart = (reportPage - 1) * REPORT_PAGE_SIZE
+  const reportEnd = reportPage * REPORT_PAGE_SIZE
+
+  useEffect(() => {
+    setReportPage(1)
+  }, [activeReport])
+
   const { data, loading, error, fetchReport, fetchAll } = useReports()
 
   // Powers the letterhead (logo + company name) on printed/exported
@@ -228,17 +242,20 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
   // companyLogoUrl, companyAddress } as absolute-URL camelCase, same
   // convention as ProfileResource's avatarUrl. Adjust the three keys
   // below if your actual SettingsResource differs.
-  // Same source Settings.jsx itself uses to display/edit this data — no
+  // Same source Settings.jsx itself uses to display/edit this data  -  no
   // separate fetch or key-name guessing needed. CompanyProvider is
   // mounted at the layout level (same pattern as ProfileProvider), so
   // this is normally already loaded well before anyone reaches this page.
   const { name: companyName, logoUrl: companyLogoUrl, address: companyAddress, loading: companyLoading } = useCompany()
 
+  // Re-render when the privacy flag flips so formatCurrency re-reads the module flag.
+  usePrivacy()
+
   const company = useMemo(() => (
     companyName ? { name: companyName, logoUrl: companyLogoUrl, address: companyAddress } : null
   ), [companyName, companyLogoUrl, companyAddress])
 
-  // Fetch whenever the active tab or period changes — the hook itself
+  // Fetch whenever the active tab or period changes  -  the hook itself
   // skips the network call if that exact (report, period) combination
   // is already cached, so flipping between tabs you've already visited
   // this period is instant.
@@ -260,6 +277,14 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
     const totalExpenses = incomeStatement.expenses.reduce((s, r) => s + r.amount, 0)
     return { totalRevenue, totalExpenses, netIncome: totalRevenue - totalExpenses }
   }, [incomeStatement])
+
+  // Income statement is rendered as ONE table with a Revenue section and an
+  // Expenses section, so its rows are paginated as a single combined list to
+  // keep the section header + row slice in sync with the shared Pagination.
+  const incomeRows = useMemo(() => [
+    ...incomeStatement.revenue.map((r) => ({ section: 'Revenue', account: r.account, amount: r.amount })),
+    ...incomeStatement.expenses.map((r) => ({ section: 'Expenses', account: r.account, amount: r.amount })),
+  ], [incomeStatement])
 
   const cashFlowTotals = useMemo(() => {
     const inflow = cashFlow.reduce((s, r) => s + r.inflow, 0)
@@ -319,14 +344,14 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
     <table>
       <tbody>
         <tr class="section-heading"><td colspan="2">Revenue</td></tr>
-        ${incomeStatement.revenue.map((r) => `<tr><td>${r.account}</td><td class="num">${formatCurrency(r.amount)}</td></tr>`).join('')}
+        ${incomeStatement.revenue.map((r) => `<tr><td>${r.account}</td><td class="num">${formatCurrencyRaw(r.amount)}</td></tr>`).join('')}
         <tr class="section-heading"><td colspan="2">Expenses</td></tr>
-        ${incomeStatement.expenses.map((r) => `<tr><td>${r.account}</td><td class="num">${formatCurrency(r.amount)}</td></tr>`).join('')}
+        ${incomeStatement.expenses.map((r) => `<tr><td>${r.account}</td><td class="num">${formatCurrencyRaw(r.amount)}</td></tr>`).join('')}
       </tbody>
       <tfoot>
-        <tr><td>Total Revenue</td><td class="num">${formatCurrency(incomeTotals.totalRevenue)}</td></tr>
-        <tr><td>Total Expenses</td><td class="num">${formatCurrency(incomeTotals.totalExpenses)}</td></tr>
-        <tr><td>Net Income</td><td class="num ${incomeTotals.netIncome >= 0 ? 'positive' : 'negative'}">${formatCurrency(incomeTotals.netIncome)}</td></tr>
+        <tr><td>Total Revenue</td><td class="num">${formatCurrencyRaw(incomeTotals.totalRevenue)}</td></tr>
+        <tr><td>Total Expenses</td><td class="num">${formatCurrencyRaw(incomeTotals.totalExpenses)}</td></tr>
+        <tr><td>Net Income</td><td class="num ${incomeTotals.netIncome >= 0 ? 'positive' : 'negative'}">${formatCurrencyRaw(incomeTotals.netIncome)}</td></tr>
       </tfoot>
     </table>
   `
@@ -339,15 +364,15 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
       <tbody>
         ${cashFlow.map((r) => {
           const net = r.inflow - r.outflow
-          return `<tr><td>${r.account}</td><td class="num">${formatCurrency(r.inflow)}</td><td class="num">${formatCurrency(r.outflow)}</td><td class="num ${net >= 0 ? 'positive' : 'negative'}">${formatCurrency(net)}</td></tr>`
+          return `<tr><td>${r.account}</td><td class="num">${formatCurrencyRaw(r.inflow)}</td><td class="num">${formatCurrencyRaw(r.outflow)}</td><td class="num ${net >= 0 ? 'positive' : 'negative'}">${formatCurrencyRaw(net)}</td></tr>`
         }).join('')}
       </tbody>
       <tfoot>
         <tr>
           <td>Totals</td>
-          <td class="num">${formatCurrency(cashFlowTotals.inflow)}</td>
-          <td class="num">${formatCurrency(cashFlowTotals.outflow)}</td>
-          <td class="num ${cashFlowTotals.net >= 0 ? 'positive' : 'negative'}">${formatCurrency(cashFlowTotals.net)}</td>
+          <td class="num">${formatCurrencyRaw(cashFlowTotals.inflow)}</td>
+          <td class="num">${formatCurrencyRaw(cashFlowTotals.outflow)}</td>
+          <td class="num ${cashFlowTotals.net >= 0 ? 'positive' : 'negative'}">${formatCurrencyRaw(cashFlowTotals.net)}</td>
         </tr>
       </tfoot>
     </table>
@@ -356,13 +381,13 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
   const buildARAgingTable = () => `
     <table>
       <thead>
-        <tr><th>Customer</th><th class="num">Current</th><th class="num">1–30 Days</th><th class="num">31–60 Days</th><th class="num">61–90 Days</th><th class="num">90+ Days</th></tr>
+        <tr><th>Customer</th><th class="num">Current</th><th class="num">1-30 Days</th><th class="num">31-60 Days</th><th class="num">61-90 Days</th><th class="num">90+ Days</th></tr>
       </thead>
       <tbody>
         ${arAging.map((r) => agingRowHtml(r.customer, r)).join('')}
       </tbody>
       <tfoot>
-        <tr><td colspan="5">Total Outstanding</td><td class="num">${formatCurrency(arTotal)}</td></tr>
+        <tr><td colspan="5">Total Outstanding</td><td class="num">${formatCurrencyRaw(arTotal)}</td></tr>
       </tfoot>
     </table>
   `
@@ -370,13 +395,13 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
   const buildAPAgingTable = () => `
     <table>
       <thead>
-        <tr><th>Supplier</th><th class="num">Current</th><th class="num">1–30 Days</th><th class="num">31–60 Days</th><th class="num">61–90 Days</th><th class="num">90+ Days</th></tr>
+        <tr><th>Supplier</th><th class="num">Current</th><th class="num">1-30 Days</th><th class="num">31-60 Days</th><th class="num">61-90 Days</th><th class="num">90+ Days</th></tr>
       </thead>
       <tbody>
         ${apAging.map((r) => agingRowHtml(r.supplier, r)).join('')}
       </tbody>
       <tfoot>
-        <tr><td colspan="5">Total Outstanding</td><td class="num">${formatCurrency(apTotal)}</td></tr>
+        <tr><td colspan="5">Total Outstanding</td><td class="num">${formatCurrencyRaw(apTotal)}</td></tr>
       </tfoot>
     </table>
   `
@@ -389,16 +414,16 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
       <tbody>
         ${budgetVsActual.map((r) => {
           const variance = r.allocated - r.actual
-          const label = variance >= 0 ? `${formatCurrency(variance)} under` : `${formatCurrency(Math.abs(variance))} over`
-          return `<tr><td>${r.department}</td><td class="num">${formatCurrency(r.allocated)}</td><td class="num">${formatCurrency(r.actual)}</td><td class="num ${variance >= 0 ? 'positive' : 'negative'}">${label}</td></tr>`
+          const label = variance >= 0 ? `${formatCurrencyRaw(variance)} under` : `${formatCurrencyRaw(Math.abs(variance))} over`
+          return `<tr><td>${r.department}</td><td class="num">${formatCurrencyRaw(r.allocated)}</td><td class="num">${formatCurrencyRaw(r.actual)}</td><td class="num ${variance >= 0 ? 'positive' : 'negative'}">${label}</td></tr>`
         }).join('')}
       </tbody>
       <tfoot>
         <tr>
           <td>Totals</td>
-          <td class="num">${formatCurrency(budgetTotals.allocated)}</td>
-          <td class="num">${formatCurrency(budgetTotals.actual)}</td>
-          <td class="num ${budgetTotals.variance >= 0 ? 'positive' : 'negative'}">${budgetTotals.variance >= 0 ? formatCurrency(budgetTotals.variance) + ' under' : formatCurrency(Math.abs(budgetTotals.variance)) + ' over'}</td>
+          <td class="num">${formatCurrencyRaw(budgetTotals.allocated)}</td>
+          <td class="num">${formatCurrencyRaw(budgetTotals.actual)}</td>
+          <td class="num ${budgetTotals.variance >= 0 ? 'positive' : 'negative'}">${budgetTotals.variance >= 0 ? formatCurrencyRaw(budgetTotals.variance) + ' under' : formatCurrencyRaw(Math.abs(budgetTotals.variance)) + ' over'}</td>
         </tr>
       </tfoot>
     </table>
@@ -412,7 +437,7 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
     'budget-vs-actual': { title: 'Budget vs. Actual', table: buildBudgetTable },
   }
 
-  // Exports just the report currently selected on screen — its data is
+  // Exports just the report currently selected on screen  -  its data is
   // already loaded since it's the active tab.
   const handleExportActive = async () => {
     const { title: reportTitle, table } = REPORT_BUILDERS[activeReport]
@@ -420,7 +445,7 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
     printReport(reportTitle, `Period: ${period}`, table(), company)
   }
 
-  // Exports all 5 reports as one document — has to ensure every report's
+  // Exports all 5 reports as one document  -  has to ensure every report's
   // data is actually loaded first (not just whichever tab is active),
   // since the person may never have clicked some of these tabs this
   // session.
@@ -435,7 +460,7 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
           ${REPORT_BUILDERS[card.key].table()}
         </div>
       `).join('')
-      printReport('Financial Reports Package', `Period: ${period} — All Reports`, body, company)
+      printReport('Financial Reports Package', `Period: ${period}  -  All Reports`, body, company)
     } finally {
       setExporting(false)
     }
@@ -540,29 +565,24 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
               <div className="overflow-hidden rounded-t-xl">
                 <table className="w-full text-sm">
                   <tbody>
-                    <tr className="border-b border-border bg-bg/60">
-                      <td className="px-4 py-2.5 font-semibold text-ink text-xs uppercase tracking-wide" colSpan={2}>Revenue</td>
-                    </tr>
-                    {incomeStatement.revenue.map((r) => (
-                      <tr key={r.account} className="border-b border-border last:border-0">
-                        <td className="px-4 py-3 text-ink">{r.account}</td>
-                        <td className="px-4 py-3 text-right tabular-nums text-ink">{formatCurrency(r.amount)}</td>
-                      </tr>
-                    ))}
-                    {incomeStatement.revenue.length === 0 && (
-                      <tr><td colSpan={2} className="px-4 py-3 text-center text-xs text-muted">No revenue posted for this period.</td></tr>
-                    )}
-                    <tr className="border-b border-border bg-bg/60">
-                      <td className="px-4 py-2.5 font-semibold text-ink text-xs uppercase tracking-wide" colSpan={2}>Expenses</td>
-                    </tr>
-                    {incomeStatement.expenses.map((r) => (
-                      <tr key={r.account} className="border-b border-border last:border-0">
-                        <td className="px-4 py-3 text-ink">{r.account}</td>
-                        <td className="px-4 py-3 text-right tabular-nums text-ink">{formatCurrency(r.amount)}</td>
-                      </tr>
-                    ))}
-                    {incomeStatement.expenses.length === 0 && (
-                      <tr><td colSpan={2} className="px-4 py-3 text-center text-xs text-muted">No expenses posted for this period.</td></tr>
+                    {incomeRows.slice(reportStart, reportEnd).map((r, idx) => {
+                      const isFirst = idx === 0 || incomeRows[reportStart + idx - 1]?.section !== r.section
+                      return (
+                        <Fragment key={`${r.section}-${r.account}`}>
+                          {isFirst && (
+                            <tr className="border-b border-border bg-bg/60">
+                              <td className="px-4 py-2.5 font-semibold text-ink text-xs uppercase tracking-wide" colSpan={2}>{r.section}</td>
+                            </tr>
+                          )}
+                          <tr className="border-b border-border last:border-0">
+                            <td className="px-4 py-3 text-ink">{r.account}</td>
+                            <td className="px-4 py-3 text-right tabular-nums text-ink">{formatCurrency(r.amount)}</td>
+                          </tr>
+                        </Fragment>
+                      )
+                    })}
+                    {incomeRows.length === 0 && (
+                      <tr><td colSpan={2} className="px-4 py-3 text-center text-xs text-muted">No revenue or expenses posted for this period.</td></tr>
                     )}
                   </tbody>
                   <tfoot>
@@ -582,6 +602,9 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                     </tr>
                   </tfoot>
                 </table>
+                {incomeRows.length > REPORT_PAGE_SIZE && (
+                  <Pagination page={reportPage} totalPages={Math.max(1, Math.ceil(incomeRows.length / REPORT_PAGE_SIZE))} onPageChange={setReportPage} total={incomeRows.length} label="lines" showRange rangeStart={reportStart + 1} rangeEnd={Math.min(reportEnd, incomeRows.length)} bordered />
+                )}
               </div>
               </>
             )}
@@ -613,7 +636,7 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {cashFlow.map((r) => {
+                    {cashFlow.slice(reportStart, reportEnd).map((r) => {
                       const net = r.inflow - r.outflow
                       return (
                         <tr key={r.account} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
@@ -637,6 +660,9 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                     </tr>
                   </tfoot>
                 </table>
+                {cashFlow.length > REPORT_PAGE_SIZE && (
+                  <Pagination page={reportPage} totalPages={Math.max(1, Math.ceil(cashFlow.length / REPORT_PAGE_SIZE))} onPageChange={setReportPage} total={cashFlow.length} label="cash accounts" showRange rangeStart={reportStart + 1} rangeEnd={Math.min(reportEnd, cashFlow.length)} bordered />
+                )}
               </div>
               </>
             )}
@@ -679,14 +705,14 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                     <tr className="border-b border-border">
                       <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3">Customer</th>
                       <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3">Current</th>
-                      <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3">1–30 Days</th>
-                      <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3">31–60 Days</th>
-                      <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3">61–90 Days</th>
+                      <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3">1-30 Days</th>
+                      <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3">31-60 Days</th>
+                      <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3">61-90 Days</th>
                       <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3">90+ Days</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {arAging.map((r) => (
+                    {arAging.slice(reportStart, reportEnd).map((r) => (
                       <tr key={r.customer} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
                         <td className="px-4 py-3.5 text-ink">{r.customer}</td>
                         <AgingTotalCell value={r.current} />
@@ -710,6 +736,9 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                     </tr>
                   </tfoot>
                 </table>
+                {arAging.length > REPORT_PAGE_SIZE && (
+                  <Pagination page={reportPage} totalPages={Math.max(1, Math.ceil(arAging.length / REPORT_PAGE_SIZE))} onPageChange={setReportPage} total={arAging.length} label="customers" showRange rangeStart={reportStart + 1} rangeEnd={Math.min(reportEnd, arAging.length)} bordered />
+                )}
               </div>
               </>
             )}
@@ -752,14 +781,14 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                     <tr className="border-b border-border">
                       <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3">Supplier</th>
                       <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3">Current</th>
-                      <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3">1–30 Days</th>
-                      <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3">31–60 Days</th>
-                      <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3">61–90 Days</th>
+                      <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3">1-30 Days</th>
+                      <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3">31-60 Days</th>
+                      <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3">61-90 Days</th>
                       <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3">90+ Days</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {apAging.map((r) => (
+                    {apAging.slice(reportStart, reportEnd).map((r) => (
                       <tr key={r.supplier} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
                         <td className="px-4 py-3.5 text-ink">{r.supplier}</td>
                         <AgingTotalCell value={r.current} />
@@ -779,6 +808,9 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                     </tr>
                   </tfoot>
                 </table>
+                {apAging.length > REPORT_PAGE_SIZE && (
+                  <Pagination page={reportPage} totalPages={Math.max(1, Math.ceil(apAging.length / REPORT_PAGE_SIZE))} onPageChange={setReportPage} total={apAging.length} label="suppliers" showRange rangeStart={reportStart + 1} rangeEnd={Math.min(reportEnd, apAging.length)} bordered />
+                )}
               </div>
               </>
             )}
@@ -824,7 +856,7 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {budgetVsActual.map((r) => {
+                    {budgetVsActual.slice(reportStart, reportEnd).map((r) => {
                       const variance = r.allocated - r.actual
                       return (
                         <tr key={r.department} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
@@ -852,6 +884,9 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                     </tr>
                   </tfoot>
                 </table>
+                {budgetVsActual.length > REPORT_PAGE_SIZE && (
+                  <Pagination page={reportPage} totalPages={Math.max(1, Math.ceil(budgetVsActual.length / REPORT_PAGE_SIZE))} onPageChange={setReportPage} total={budgetVsActual.length} label="departments" showRange rangeStart={reportStart + 1} rangeEnd={Math.min(reportEnd, budgetVsActual.length)} bordered />
+                )}
               </div>
               </>
             )}

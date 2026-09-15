@@ -16,9 +16,10 @@ import {
 import Modal from './Modal'
 import Button from './Button'
 import { apiFetch } from '../utils/api'
-import { formatCurrency } from '../utils/formatters'
+import { formatCurrencyRaw } from '../utils/formatters'
 import { useCompany } from '../context/CompanyContext'
 import { useProfileContext } from '../context/ProfileContext'
+import { usePrivacy } from '../context/PrivacyContext'
 
 const BIR_FORM_MAP = {
   'VAT': 'BIR Form 2550M / 2550Q',
@@ -54,6 +55,9 @@ function downloadCsv(filename, rows) {
 export default function TaxComplianceReportModal({ open, onClose }) {
   const company = useCompany()
   const { profile } = useProfileContext()
+
+  // Re-render when the privacy flag flips; this document always shows real amounts.
+  usePrivacy()
 
   const [allObligations, setAllObligations] = useState([])
   const [loading, setLoading] = useState(false)
@@ -221,7 +225,7 @@ export default function TaxComplianceReportModal({ open, onClose }) {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>BIR Tax Compliance & Filing Summary — ${company?.name || 'FMS'}</title>
+          <title>BIR Tax Compliance & Filing Summary  -  ${company?.name || 'FMS'}</title>
           <style>
             * { box-sizing: border-box; }
             body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; color: #0f172a; padding: 40px; margin: 0; line-height: 1.4; }
@@ -470,7 +474,7 @@ export default function TaxComplianceReportModal({ open, onClose }) {
               <div className="p-2.5 rounded-lg border border-border bg-surface">
                 <span className="text-[11px] text-muted block">Total Assessed</span>
                 <span className="text-sm font-bold text-ink truncate block">
-                  {formatCurrency(totals.assessed)}
+                  {formatCurrencyRaw(totals.assessed)}
                 </span>
               </div>
               <div className="p-2.5 rounded-lg border border-emerald-200 bg-emerald-50/50 dark:border-emerald-500/20 dark:bg-emerald-500/5">
@@ -478,7 +482,7 @@ export default function TaxComplianceReportModal({ open, onClose }) {
                   Remitted (Paid)
                 </span>
                 <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400 truncate block">
-                  {formatCurrency(totals.paid)}
+                  {formatCurrencyRaw(totals.paid)}
                 </span>
               </div>
               <div className="p-2.5 rounded-lg border border-red-200 bg-red-50/50 dark:border-red-500/20 dark:bg-red-500/5">
@@ -486,7 +490,7 @@ export default function TaxComplianceReportModal({ open, onClose }) {
                   Outstanding
                 </span>
                 <span className="text-sm font-bold text-red-600 dark:text-red-400 truncate block">
-                  {formatCurrency(totals.outstanding)}
+                  {formatCurrencyRaw(totals.outstanding)}
                 </span>
               </div>
             </div>
@@ -537,7 +541,7 @@ export default function TaxComplianceReportModal({ open, onClose }) {
                           </span>
                         </td>
                         <td className="px-3 py-2 text-right font-medium tabular-nums text-ink">
-                          {formatCurrency(o.amount ?? o.tax_amount ?? 0)}
+                          {formatCurrencyRaw(o.amount ?? o.tax_amount ?? 0)}
                         </td>
                       </tr>
                     ))

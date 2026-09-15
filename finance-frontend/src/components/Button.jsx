@@ -26,7 +26,7 @@ const sizeStyles = {
   lg: 'text-sm px-5 py-2.5 gap-2',
 }
 
-// Square, label-less buttons (e.g. a lone icon in a table row) — pairs well
+// Square, label-less buttons (e.g. a lone icon in a table row)  -  pairs well
 // with the Tooltip component to communicate what the icon does.
 const iconOnlySizeStyles = {
   xs: 'p-1',

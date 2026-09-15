@@ -21,7 +21,7 @@ export function useRoles() {
   const [permSaving, setPermSaving] = useState(false)
   const [permError, setPermError] = useState(null)
 
-  // Fetches both the active and archived lists together — a role only
+  // Fetches both the active and archived lists together  -  a role only
   // ever needs to move between them (on archive/restore), never be
   // partially stale in one while the other refreshes.
   const fetchRoles = useCallback(async () => {
@@ -66,7 +66,7 @@ export function useRoles() {
     fetchPermissions()
   }, [fetchRoles, fetchPermissions])
 
-  // Fetches a single role WITH its permissionIds populated — the list
+  // Fetches a single role WITH its permissionIds populated  -  the list
   // endpoint deliberately omits that to avoid an N+1 join on every row.
   const fetchRoleWithPermissions = useCallback(async (roleId) => {
     setPermError(null)
@@ -145,7 +145,7 @@ export function useRoles() {
   }, [fetchRoles])
 
   // Named archiveRole (not deleteRole) to match the reality of what the
-  // backend does — DELETE /api/roles/{id} is a soft delete, same as
+  // backend does  -  DELETE /api/roles/{id} is a soft delete, same as
   // archiveUser. The HTTP method is historical; the behavior is archive.
   const archiveRole = useCallback(async (roleId) => {
     setDeleteBusy(true)

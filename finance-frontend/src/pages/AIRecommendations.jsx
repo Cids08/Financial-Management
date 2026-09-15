@@ -1,21 +1,22 @@
 import { useMemo, useState, useEffect } from 'react'
 import {
   Search, Sparkles, AlertTriangle, Wallet, TrendingUp, PiggyBank, Info, LineChart,
-  Archive, RotateCcw, ChevronLeft, ChevronRight, X,
+  Archive, RotateCcw, X,
 } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
+import Pagination from '../components/Pagination'
 import AdvisorChatPanel from '../components/AdvisorChatPanel'
 import { useAiRecommendations } from '../hooks/useAiRecommendations'
 
-// Real ai_recommendations_category_check values — confirmed against the
+// Real ai_recommendations_category_check values  -  confirmed against the
 // actual DB constraint. NOT the old 5-value taxonomy (Cash Flow Management,
-// Cost Reduction, Revenue Optimization, Risk Alert, Budget Adjustment) —
+// Cost Reduction, Revenue Optimization, Risk Alert, Budget Adjustment)  - 
 // none of those exist in the schema. Colors match FinancialForecasting's
 // TYPE_STYLES where the category overlaps a forecast_type (Cash Flow,
-// Revenue, Expense↔Expenses) — Budget has no analog there, given its own
+// Revenue, Expense↔Expenses)  -  Budget has no analog there, given its own
 // distinct color (amber) so it doesn't collide with the other three.
 const RECOMMENDATION_TYPES = ['Cash Flow', 'Revenue', 'Expense', 'Budget']
 
@@ -47,7 +48,7 @@ function formatDateTime(value) {
 
 function forecastLabel(r) {
   if (!r) return 'Unlinked forecast'
-  if (r.forecast_type && r.forecast_period) return `${r.forecast_type} — ${r.forecast_period}`
+  if (r.forecast_type && r.forecast_period) return `${r.forecast_type}  -  ${r.forecast_period}`
   return `Forecast #${r.forecast_id}`
 }
 
@@ -115,7 +116,7 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
   const rangeStart = filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
   const rangeEnd = Math.min(page * PAGE_SIZE, filtered.length)
 
-  // Covers every control that can narrow the list — used to show/hide the
+  // Covers every control that can narrow the list  -  used to show/hide the
   // "Clear filters" action, so it only appears when there's actually
   // something to reset.
   const hasActiveFilters = search.trim() !== '' || typeFilter !== 'all' || forecastFilter !== 'all' || activeStat !== 'all' || showArchived
@@ -131,7 +132,7 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
   const stats = useMemo(() => {
     const active = recommendations.filter((r) => !r.is_archived)
     // "Risk Alerts" no longer maps to a real category (Risk Alert never
-    // existed in the DB) — repurposed to count Budget-flagged items instead,
+    // existed in the DB)  -  repurposed to count Budget-flagged items instead,
     // since those are the ones actually meant to draw attention (see
     // MockRecommendationEngine/OpenAiRecommendationEngine: Budget is used
     // specifically for below-60%-confidence flags).
@@ -190,7 +191,7 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
         <div>
           <h1 className="text-xl font-bold tracking-tight text-ink">{title}</h1>
           <p className="mt-1 text-xs text-muted">
-            Generated automatically from each Financial Forecasting run — ask the advisor below for a plain-language read on any of them.
+            Generated automatically from each Financial Forecasting run  -  ask the advisor below for a plain-language read on any of them.
           </p>
         </div>
       </div>
@@ -328,34 +329,16 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
           </div>
 
           {!loading && filtered.length > 0 && (
-            <div className={`${PANEL} flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between`}>
-              <p className="text-xs text-muted">
-                Showing {rangeStart}–{rangeEnd} of {filtered.length} recommendations
-              </p>
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
-                  aria-label="Previous page"
-                >
-                  <ChevronLeft size={15} />
-                </button>
-                <span className="px-2 text-xs font-medium text-ink whitespace-nowrap">
-                  Page {page} of {totalPages}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={page === totalPages}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
-                  aria-label="Next page"
-                >
-                  <ChevronRight size={15} />
-                </button>
-              </div>
-            </div>
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              onPageChange={setPage}
+              total={filtered.length}
+              label="recommendations"
+              showRange
+              rangeStart={rangeStart}
+              rangeEnd={rangeEnd}
+            />
           )}
       </div>
 

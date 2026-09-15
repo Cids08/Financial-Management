@@ -4,10 +4,10 @@ import { UploadCloud, FileText, X, AlertTriangle } from 'lucide-react'
 import Modal from './Modal'
 import Button from './Button'
 
-// Confirmed against UploadExpenseReceiptRequest::rules() — keep these two
+// Confirmed against UploadExpenseReceiptRequest::rules()  -  keep these two
 // constants in sync if that validation rule ever changes. Images/PDF
 // only (no Word/Excel) since this is a receipt scan/photo, not a plan
-// document — matches UploadCollectionProofRequest's same restriction.
+// document  -  matches UploadCollectionProofRequest's same restriction.
 const ALLOWED_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png']
 const ACCEPT = '.pdf,.jpg,.jpeg,.png'
 const MAX_SIZE_MB = 10 // matches 'max:10240' (KB) on the backend
@@ -24,7 +24,7 @@ function formatBytes(bytes) {
  * Props:
  * - open, onClose: standard Modal controls
  * - expense: the expense being attached to (uses expense.id, expense.description)
- * - onUpload: async (file) => { success, message } — call the hook's
+ * - onUpload: async (file) => { success, message }  -  call the hook's
  *   uploadReceipt(expense.id, file) here from the parent page
  */
 export default function ExpenseReceiptUploadModal({ open, onClose, expense, onUpload }) {
@@ -126,7 +126,7 @@ export default function ExpenseReceiptUploadModal({ open, onClose, expense, onUp
           >
             <UploadCloud size={28} className="text-muted" />
             <p className="text-sm font-medium text-ink">Click to browse or drag a file here</p>
-            <p className="text-xs text-muted">PDF, JPG, or PNG — up to {MAX_SIZE_MB}MB</p>
+            <p className="text-xs text-muted">PDF, JPG, or PNG  -  up to {MAX_SIZE_MB}MB</p>
             <input
               ref={inputRef}
               type="file"

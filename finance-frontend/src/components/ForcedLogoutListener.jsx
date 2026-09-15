@@ -9,7 +9,7 @@ import { apiFetch } from '../utils/api'
 /**
  * Mount this once, inside the authenticated layout (alongside where
  * AuthExpiredListener already lives in App.jsx). It needs to know the
- * current user's id to know which private channel to join — rather than
+ * current user's id to know which private channel to join  -  rather than
  * assuming that's available from some existing app-wide context, it
  * fetches its own copy via GET /api/profile on mount. Cheap, one-time
  * call, and keeps this component self-contained regardless of what else
@@ -35,7 +35,7 @@ export default function ForcedLogoutListener() {
 
         channel = echo.private(`user.${userId}`)
           .listen('.forced.logout', (event) => {
-            // This broadcast includes every session kill for this user —
+            // This broadcast includes every session kill for this user  - 
             // including the one that JUST happened because THIS tab is the
             // one that logged in. Ignore that case; only react when some
             // other tab/device triggered it.
@@ -45,7 +45,7 @@ export default function ForcedLogoutListener() {
           })
       })
       .catch(() => {
-        // Profile fetch failing here isn't worth surfacing to the user —
+        // Profile fetch failing here isn't worth surfacing to the user  - 
         // worst case, this device won't get the real-time notice and
         // falls back to the existing 401-on-next-request handling
         // (AuthExpiredListener) once its token is actually revoked.

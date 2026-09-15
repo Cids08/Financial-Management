@@ -10,7 +10,7 @@ import { apiFetch } from '../utils/api'
  *   PATCH  /api/expense-categories/{id}/restore   (withTrashed on the backend)
  *
  * Unlike useExpenses, ExpenseCategoryController::index() returns the full
- * list via ->get() rather than ->paginate() — there's no `meta` here to
+ * list via ->get() rather than ->paginate()  -  there's no `meta` here to
  * track, and no separate stats() endpoint either.
  */
 export function useExpenseCategories() {

@@ -18,8 +18,8 @@ export default function DashboardCard({ title, value, icon: Icon, trend, trendLa
           <p className="text-sm text-muted font-medium truncate">{title}</p>
           <p className="text-2xl font-bold text-ink mt-2 tracking-tight">{value}</p>
         </div>
-        <div className={`shrink-0 w-11 h-11 rounded-xl flex items-center justify-center ${iconBg || 'bg-primary/15'}`}>
-          <Icon size={20} className="text-ink" strokeWidth={2} />
+        <div className={`shrink-0 h-9 w-9 rounded-lg flex items-center justify-center ${iconBg || 'bg-primary/15'}`}>
+          <Icon size={16} className="text-ink" strokeWidth={2} />
         </div>
       </div>
 

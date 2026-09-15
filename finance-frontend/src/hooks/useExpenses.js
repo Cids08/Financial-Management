@@ -12,14 +12,14 @@ import { apiFetch } from '../utils/api'
  *   PATCH  /api/expenses/{id}/reject
  *   PATCH  /api/expenses/{id}/archive
  *   PATCH  /api/expenses/{id}/restore   (withTrashed on the backend)
- *   POST   /api/expenses/{id}/receipt            (multipart — the actual receipt file)
+ *   POST   /api/expenses/{id}/receipt            (multipart  -  the actual receipt file)
  *   GET    /api/expenses/{id}/receipt/view       (inline, current/latest)
  *   GET    /api/expenses/{id}/receipts           (version history list)
  *   GET    /api/expenses/{id}/receipts/{document}/view (inline, specific version)
  *
  * Receipt upload/view functions mirror useBudgets.js's uploadPlan/viewPlan/
  * fetchPlanHistory/viewPlanVersion exactly, including the popup-blocker-safe
- * targetWindow handling — see the comments on viewReceipt() below for why
+ * targetWindow handling  -  see the comments on viewReceipt() below for why
  * that ordering matters.
  */
 export function useExpenses() {
@@ -74,7 +74,7 @@ export function useExpenses() {
       if (!res.ok || !json.success) throw new Error(json.message || 'Failed to load expense stats.')
       setStats(json.data)
     } catch {
-      // Non-critical for the page to function — cards just show 0s.
+      // Non-critical for the page to function  -  cards just show 0s.
     } finally {
       setStatsLoading(false)
     }
@@ -192,7 +192,7 @@ export function useExpenses() {
   }, [runMutation, fetchExpenses, fetchStats])
 
   // Receipt upload is a real file (pdf/jpg/jpeg/png, max 10MB per
-  // UploadExpenseReceiptRequest) sent as multipart/form-data — do NOT set
+  // UploadExpenseReceiptRequest) sent as multipart/form-data  -  do NOT set
   // a Content-Type header here, the browser needs to set its own boundary.
   // Mirrors useBudgets.js's uploadPlan() exactly.
   const uploadReceipt = useCallback(async (id, file) => {
@@ -216,7 +216,7 @@ export function useExpenses() {
     }
   }, [])
 
-  // Types a browser can actually render inline — receipts are restricted
+  // Types a browser can actually render inline  -  receipts are restricted
   // to pdf/jpg/jpeg/png server-side, so in practice this will basically
   // always be true, but the check stays for parity with useBudgets.js and
   // as a safety net if that validation rule ever loosens.
@@ -224,7 +224,7 @@ export function useExpenses() {
   const isInlineViewable = (mimeType) =>
     INLINE_VIEWABLE_TYPES.includes(mimeType) || mimeType?.startsWith('image/')
 
-  // Triggers a normal save-to-disk download from a blob already in hand —
+  // Triggers a normal save-to-disk download from a blob already in hand  - 
   // same <a download> approach as useBudgets.js's triggerDownloadFromBlob.
   const triggerDownloadFromBlob = (blob, disposition, fallbackFilename) => {
     const match = (disposition || '').match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)["']?/i)
@@ -242,11 +242,11 @@ export function useExpenses() {
   // Opens the CURRENT (most recently uploaded) receipt in a new tab
   // instead of downloading it. apiFetch is required (not a plain
   // window.open(url)) because the Authorization header has to go with the
-  // request — a bare <a> tag or window.open() to the raw API URL
+  // request  -  a bare <a> tag or window.open() to the raw API URL
   // wouldn't carry it.
   //
   // `targetWindow` (optional): a tab already opened SYNCHRONOUSLY by the
-  // caller, before this async function's fetch even starts — mirrors
+  // caller, before this async function's fetch even starts  -  mirrors
   // useBudgets.js's viewPlan() exactly. Browsers only reliably allow
   // window.open() to bypass the popup blocker when it happens as the
   // direct, synchronous result of a click event; calling window.open()
@@ -270,13 +270,13 @@ export function useExpenses() {
         } else {
           window.open(url, '_blank', 'noopener,noreferrer')
         }
-        // Deliberately not revoking the object URL immediately — the tab
+        // Deliberately not revoking the object URL immediately  -  the tab
         // needs it to stay valid while it renders the file.
         return { success: true, viewedInline: true }
       }
 
       // Not inline-viewable: close the blank tab rather than leaving it
-      // stuck at about:blank, and download the file instead — using the
+      // stuck at about:blank, and download the file instead  -  using the
       // blob already fetched, no extra request needed.
       targetWindow?.close()
       triggerDownloadFromBlob(blob, res.headers.get('Content-Disposition'), 'receipt')
@@ -287,7 +287,7 @@ export function useExpenses() {
     }
   }, [])
 
-  // Every receipt version ever attached to this expense, newest first — a
+  // Every receipt version ever attached to this expense, newest first  -  a
   // re-upload doesn't erase history, it just adds another row. Mirrors
   // useBudgets.js's fetchPlanHistory() exactly.
   const fetchReceiptHistory = useCallback(async (id) => {
@@ -302,7 +302,7 @@ export function useExpenses() {
   }, [])
 
   // Inline-view equivalent of viewReceipt() above, but for one specific
-  // historical version by its supporting_documents id — same
+  // historical version by its supporting_documents id  -  same
   // synchronous-tab-then-redirect approach, same inline-viewable-type
   // check, same fallback to a background download, same optional
   // targetWindow parameter. Mirrors useBudgets.js's viewPlanVersion()

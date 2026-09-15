@@ -2,12 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiFetch } from '../utils/api'
 
 /**
- * Talks to /api/disbursements via apiFetch — mirrors the shape
+ * Talks to /api/disbursements via apiFetch  -  mirrors the shape
  * DisbursementController / DisbursementService / DisbursementResource
- * return — server does the filtering + pagination, this hook just
+ * return  -  server does the filtering + pagination, this hook just
  * orchestrates requests and keeps local UI state (page, filters) in sync
  * with them. Same apiFetch/res.json()/json.success contract as
- * useBudgets.js and useDepartments.js — this file previously called a
+ * useBudgets.js and useDepartments.js  -  this file previously called a
  * nonexistent `api.get/post/patch` (axios) that was never imported or
  * defined, which is why every request was silently throwing before it hit
  * the network. Fixed to use the apiFetch wrapper that's actually imported.
@@ -19,7 +19,7 @@ export function useDisbursements() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  // Filters — mirrors the old local state names so the component barely
+  // Filters  -  mirrors the old local state names so the component barely
   // has to change.
   const [dSearch, setDSearch] = useState('')
   const [dStatusFilter, setDStatusFilter] = useState('all')
@@ -74,10 +74,10 @@ export function useDisbursements() {
     try {
       const res = await apiFetch('/api/disbursements/stats')
       const json = await res.json()
-      if (!res.ok || !json.success) return // stats are decorative — swallow so a stats failure doesn't blank the table
+      if (!res.ok || !json.success) return // stats are decorative  -  swallow so a stats failure doesn't blank the table
       setStats(json.data)
     } catch {
-      // stats are decorative — swallow so a stats failure doesn't blank the table
+      // stats are decorative  -  swallow so a stats failure doesn't blank the table
     }
   }, [])
 
@@ -160,7 +160,7 @@ export function useDisbursements() {
     return json.data
   }, [refresh])
 
-  // Proof upload is a real file, sent as multipart/form-data — do NOT set
+  // Proof upload is a real file, sent as multipart/form-data  -  do NOT set
   // a Content-Type header here, the browser needs to set its own boundary
   // (same rule as uploadPlan in useBudgets.js).
   const uploadProof = useCallback(async (id, file) => {
@@ -232,7 +232,7 @@ export function useDisbursements() {
     return viewProof(disbursementId, latest.id, targetWindow)
   }, [fetchProofHistory, viewProof])
 
-  // Preview only — see DisbursementService::previewNextVoucherNumber()'s
+  // Preview only  -  see DisbursementService::previewNextVoucherNumber()'s
   // own comment: this shows what the next voucher number will probably
   // be, without reserving it. Returns null on failure instead of
   // throwing, so the caller can just fall back to the "Auto-generated on

@@ -3,6 +3,7 @@ import { Search, Plus, Pencil, Archive, RotateCcw, Tags } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
+import Pagination from '../components/Pagination'
 import Tooltip from '../components/Tooltip'
 import { usePermissions } from '../context/PermissionsContext'
 import { useExpenseCategories } from '../hooks/useExpenseCategories'
@@ -33,10 +34,17 @@ export default function ExpenseCategories({ title = 'Expense Categories', crumbs
   } = useExpenseCategories()
 
   const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
   const runSearch = (value) => {
+    setPage(1)
     setSearch(value)
     setFilter({ search: value })
   }
+
+  const PER_PAGE = 10
+  const totalPages = Math.max(1, Math.ceil(categories.length / PER_PAGE))
+  const rangeStart = (page - 1) * PER_PAGE + 1
+  const rangeEnd = Math.min(page * PER_PAGE, categories.length)
 
   const [modalMode, setModalMode] = useState(null) // 'add' | category object | null
   const [form, setForm] = useState(EMPTY_FORM)
@@ -90,7 +98,7 @@ export default function ExpenseCategories({ title = 'Expense Categories', crumbs
           <p className="mt-1 text-xs text-muted">Categories used to classify expenses across all departments.</p>
         </div>
         {/* Backend already enforces expense-categories.manage on store() via
-            ExpenseCategoryPolicy — this hides the button for Staff (view-only)
+            ExpenseCategoryPolicy  -  this hides the button for Staff (view-only)
             rather than showing something that would 403 on click. */}
         {canManage && (
           <Button variant="primary" size="sm" icon={Plus} onClick={openAdd}>Add Category</Button>
@@ -112,7 +120,7 @@ export default function ExpenseCategories({ title = 'Expense Categories', crumbs
         </div>
         <select
           value={filters.is_active}
-          onChange={(e) => setFilter({ is_active: e.target.value })}
+          onChange={(e) => { setPage(1); setFilter({ is_active: e.target.value }) }}
           className={INPUT}
           style={{ ...INPUT_TEXT_STYLE, width: '12rem' }}
         >
@@ -125,7 +133,7 @@ export default function ExpenseCategories({ title = 'Expense Categories', crumbs
             variant={filters.trashed ? 'primary' : 'secondary'}
             size="sm"
             icon={Archive}
-            onClick={() => setFilter({ trashed: !filters.trashed })}
+            onClick={() => { setPage(1); setFilter({ trashed: !filters.trashed }) }}
             className="shrink-0 whitespace-nowrap"
           >
             Show Archived
@@ -158,7 +166,7 @@ export default function ExpenseCategories({ title = 'Expense Categories', crumbs
                 <tr><td colSpan={canManage ? 6 : 5} className="px-4 py-10 text-center text-sm text-muted">Loading categories…</td></tr>
               ) : categories.length === 0 ? (
                 <tr><td colSpan={canManage ? 6 : 5} className="px-4 py-10 text-center text-sm text-muted">No expense categories found.</td></tr>
-              ) : categories.map((c) => (
+              ) : categories.slice((page - 1) * PER_PAGE, page * PER_PAGE).map((c) => (
                 <tr key={c.id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
                   <td className="px-4 py-3.5 whitespace-nowrap font-medium text-ink">
                     <span className="inline-flex items-center gap-1.5">
@@ -203,6 +211,18 @@ export default function ExpenseCategories({ title = 'Expense Categories', crumbs
           </table>
         </div>
       </div>
+
+      <Pagination
+        page={page}
+        totalPages={totalPages}
+        onPageChange={setPage}
+        total={categories.length}
+        label="expense categories"
+        showRange
+        rangeStart={rangeStart}
+        rangeEnd={rangeEnd}
+        bordered
+      />
 
       <Modal
         open={isModalOpen}

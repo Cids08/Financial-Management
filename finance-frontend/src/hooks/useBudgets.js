@@ -4,7 +4,7 @@ import { apiFetch } from '../utils/api'
 /**
  * Owns all network interaction for the Budgets module (Financial
  * Transactions > Budgets). Budgets.jsx should only call these functions and
- * render `budgets` / `meta` / `stats` — no fetch/apiFetch calls belong in
+ * render `budgets` / `meta` / `stats`  -  no fetch/apiFetch calls belong in
  * the page itself, same convention as useDepartments.
  *
  * Maps to routes/api.php:
@@ -13,7 +13,7 @@ import { apiFetch } from '../utils/api'
  *   GET    /budgets/{budget}
  *   POST   /budgets
  *   PUT    /budgets/{budget}
- *   POST   /budgets/{budget}/plan   (multipart — the actual plan file)
+ *   POST   /budgets/{budget}/plan   (multipart  -  the actual plan file)
  *   GET    /budgets/{budget}/plan            (forces download)
  *   GET    /budgets/{budget}/plan/view       (inline)
  *   GET    /budgets/{budget}/plans/{document}/view (inline, specific version)
@@ -22,12 +22,12 @@ import { apiFetch } from '../utils/api'
  *   PATCH  /budgets/{budget}/archive
  *   PATCH  /budgets/{budget}/restore
  *
- * NOTE: field name is `budget_id`, not `id` — BudgetResource keys off
+ * NOTE: field name is `budget_id`, not `id`  -  BudgetResource keys off
  * budget_id (confirmed against the actual resource), same as
  * useDepartments correctly keying off department_id.
  *
  * NOTE: BudgetResource exposes `status` and `approval_status` as two
- * separate fields. fetchBudgets forwards both as independent filters —
+ * separate fields. fetchBudgets forwards both as independent filters  - 
  * confirm BudgetService::paginate() actually reads `approval_status` from
  * the filters array server-side; if it currently only reads `status`,
  * this filter will be silently ignored rather than erroring, since Laravel
@@ -140,7 +140,7 @@ export function useBudgets() {
   }, [])
 
   // Plan upload is a real file (pdf/doc/docx/xls/xlsx, max 10MB per
-  // UploadBudgetPlanRequest) sent as multipart/form-data — do NOT set a
+  // UploadBudgetPlanRequest) sent as multipart/form-data  -  do NOT set a
   // Content-Type header here, the browser needs to set its own boundary.
   const uploadPlan = useCallback(async (id, file) => {
     setSaving(true)
@@ -225,7 +225,7 @@ export function useBudgets() {
   }, [])
 
   // Forces a browser download via a blob + temporary <a download>, same
-  // as before — kept for whenever an explicit "save to disk" action is
+  // as before  -  kept for whenever an explicit "save to disk" action is
   // wanted, as distinct from viewPlan() below.
   const downloadPlan = useCallback(async (id, fallbackFilename = 'budget-plan') => {
     try {
@@ -255,38 +255,38 @@ export function useBudgets() {
 
   // Opens the plan in a new tab instead of downloading it. apiFetch is
   // still required here (not a plain window.open(url)) because the
-  // Authorization header has to go with the request — a bare <a> tag or
+  // Authorization header has to go with the request  -  a bare <a> tag or
   // window.open() to the raw API URL wouldn't carry it. So: fetch the
   // blob via apiFetch (hits the /plan/view endpoint, which sets
   // Content-Disposition: inline server-side), turn it into an object URL,
   // then point a tab at THAT. Only actually renders inline for file types
-  // the browser has a native viewer for — practically just PDFs;
+  // the browser has a native viewer for  -  practically just PDFs;
   // .doc/.docx/.xls/.xlsx will still trigger a download in most browsers
   // regardless, since there's no browser-native renderer for those.
   //
   // `targetWindow` (optional): a tab already opened SYNCHRONOUSLY by the
   // caller, before this async function's fetch even starts. This fixes a
-  // real bug — window.open() only reliably bypasses the popup blocker
+  // real bug  -  window.open() only reliably bypasses the popup blocker
   // when it happens as the direct, synchronous result of a click event.
   // The previous version called window.open() only after `await
   // res.blob()` resolved, by which point the browser no longer considered
-  // it a direct response to the click and could silently block it —
+  // it a direct response to the click and could silently block it  - 
   // which looks exactly like "View" doing nothing, or falling back to a
   // forced download in browsers/settings that block popups aggressively.
   // If no targetWindow is passed, this falls back to the old
   // window.open(url) behavior so existing callers don't break.
   // Types a browser can actually render inline. Everything else (docx,
-  // xlsx, etc.) has no native viewer in ANY browser — that's a platform
+  // xlsx, etc.) has no native viewer in ANY browser  -  that's a platform
   // limitation, not something a header can fix. Trying to navigate a tab
   // to one of those anyway doesn't error, it just silently triggers a
-  // background download while the tab sits at about:blank forever — which
+  // background download while the tab sits at about:blank forever  -  which
   // is worse than not opening a tab at all, since now there's a dead tab
   // left behind with no indication anything happened.
   const INLINE_VIEWABLE_TYPES = ['application/pdf']
   const isInlineViewable = (mimeType) =>
     INLINE_VIEWABLE_TYPES.includes(mimeType) || mimeType?.startsWith('image/')
 
-  // Triggers a normal save-to-disk download from a blob already in hand —
+  // Triggers a normal save-to-disk download from a blob already in hand  - 
   // same <a download> approach as downloadPlan()/downloadPlanVersion(),
   // just without a second network request since the blob's already here.
   const triggerDownloadFromBlob = (blob, disposition, fallbackFilename) => {
@@ -303,7 +303,7 @@ export function useBudgets() {
   }
 
   // `targetWindow` (optional): a tab already opened SYNCHRONOUSLY by the
-  // caller, before this async function's fetch even starts — see the
+  // caller, before this async function's fetch even starts  -  see the
   // comment further up this file for why that ordering matters for the
   // popup blocker. Return value now includes `viewedInline` so callers can
   // tell the difference between "opened in a tab" and "downloaded instead
@@ -325,14 +325,14 @@ export function useBudgets() {
         } else {
           window.open(url, '_blank', 'noopener,noreferrer')
         }
-        // Deliberately not revoking the object URL immediately — the tab
+        // Deliberately not revoking the object URL immediately  -  the tab
         // needs it to stay valid while it renders the file. The browser
         // releases it when that tab is closed or navigated away.
         return { success: true, viewedInline: true }
       }
 
       // Not inline-viewable: close the blank tab rather than leaving it
-      // stuck at about:blank, and download the file instead — using the
+      // stuck at about:blank, and download the file instead  -  using the
       // blob already fetched, no extra request needed.
       targetWindow?.close()
       triggerDownloadFromBlob(blob, res.headers.get('Content-Disposition'), 'budget-plan')
@@ -343,7 +343,7 @@ export function useBudgets() {
     }
   }, [])
 
-  // Every plan version ever attached to this budget, newest first — a
+  // Every plan version ever attached to this budget, newest first  -  a
   // re-upload doesn't erase history, it just adds another row.
   const fetchPlanHistory = useCallback(async (id) => {
     try {
@@ -384,7 +384,7 @@ export function useBudgets() {
     }
   }, [])
 
-  // Inline-view equivalent of viewPlan() above — same
+  // Inline-view equivalent of viewPlan() above  -  same
   // synchronous-tab-then-redirect approach, same inline-viewable-type
   // check, same fallback to a background download for file types with no
   // browser-native viewer, same optional targetWindow parameter.

@@ -28,7 +28,7 @@ export function useCollectors() {
     return () => clearTimeout(debounceRef.current)
   }, [search])
 
-  // Any filter change resets back to page 1 — staying on page 4 of a
+  // Any filter change resets back to page 1  -  staying on page 4 of a
   // now-different result set would just show an empty/wrong page.
   useEffect(() => {
     setPage(1)
@@ -134,7 +134,7 @@ export function useCollectors() {
 
   /**
    * GET /api/collectors/{id}/efficiency?period=day|week|month|year
-   * A plain fetcher rather than hook-owned state — the efficiency
+   * A plain fetcher rather than hook-owned state  -  the efficiency
    * modal that calls this manages its own loading/data/error, since
    * only one collector's efficiency is ever being viewed at a time.
    */

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, Boxes, Wrench, Truck as TruckIcon, Building2, ChevronLeft, ChevronRight, Loader2, TrendingDown } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, Boxes, Wrench, Truck as TruckIcon, Building2, Loader2, TrendingDown } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
+import Pagination from '../components/Pagination'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
@@ -8,10 +9,11 @@ import { formatCurrency, formatDate } from '../utils/formatters'
 import { useFixedAssets } from '../hooks/useFixedAssets'
 import { apiFetch } from '../utils/api'
 import { useHighlightRow } from '../hooks/useHighlightRow'
+import { usePrivacy } from '../context/PrivacyContext'
 import DepreciationRunModal from '../components/DepreciationRunModal'
 
 
-// asset_category is a plain string column per the ERD (no lookup table) —
+// asset_category is a plain string column per the ERD (no lookup table)  - 
 // this list is just the frontend's suggested set for the dropdown; typing
 // a new one and saving it works fine too since there's no FK to violate.
 const ASSET_CATEGORIES = ['Heavy Equipment', 'Vehicles', 'Office Equipment', 'IT Equipment']
@@ -55,6 +57,8 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
     fetchDepreciationPreview, executeDepreciationRun,
   } = useFixedAssets()
 
+  usePrivacy()
+
   const [showDepreciationModal, setShowDepreciationModal] = useState(false)
 
 
@@ -73,7 +77,7 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
   }, [highlightSearch])
 
   // Departments come from the real API now (see routes: GET /api/departments).
-  // ASSUMPTION: DepartmentResource returns { id, department_name } — the
+  // ASSUMPTION: DepartmentResource returns { id, department_name }  -  the
   // ERD column name. If your actual resource uses different keys, adjust
   // the two references below (department.id / department.department_name).
   const [departments, setDepartments] = useState([])
@@ -81,7 +85,7 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
     apiFetch('/api/departments')
       .then((res) => res.json())
       .then((json) => { if (json.success) setDepartments(json.data) })
-      .catch(() => {}) // non-fatal — form still works with a manual department_id if this fails
+      .catch(() => {}) // non-fatal  -  form still works with a manual department_id if this fails
   }, [])
 
   const [modalMode, setModalMode] = useState(null)
@@ -204,7 +208,7 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
     closeModal()
   }
 
-  // Page-scoped — see Collectors.jsx/CashAccounts.jsx for the same caveat.
+  // Page-scoped  -  see Collectors.jsx/CashAccounts.jsx for the same caveat.
   // meta.total (Total Assets card) is the one accurate global number.
   const maintenanceThisPage = assets.filter((a) => a.status === 'Under Maintenance').length
   const bookValueThisPage = assets.reduce((sum, a) => sum + a.book_value, 0)
@@ -370,19 +374,7 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
           </table>
         </div>
 
-        {meta.last_page > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-border text-xs text-muted">
-            <span>Page {meta.current_page} of {meta.last_page} &middot; {meta.total} total</span>
-            <div className="flex items-center gap-1">
-              <button type="button" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-bg disabled:opacity-40 disabled:pointer-events-none transition-colors duration-150">
-                <ChevronLeft size={14} />
-              </button>
-              <button type="button" disabled={page >= meta.last_page} onClick={() => setPage((p) => p + 1)} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-bg disabled:opacity-40 disabled:pointer-events-none transition-colors duration-150">
-                <ChevronRight size={14} />
-              </button>
-            </div>
-          </div>
-        )}
+        <Pagination page={page} totalPages={meta.last_page} onPageChange={setPage} total={meta.total} label="fixed assets" bordered />
       </div>
 
       <Modal

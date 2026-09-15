@@ -9,13 +9,15 @@ import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
+import Pagination from '../components/Pagination'
 import { formatCurrency } from '../utils/formatters'
+import { usePrivacy } from '../context/PrivacyContext'
 import { useForecasts } from '../hooks/useForecasts'
 
 // Exactly 5 categories per spec: Expense, Accounts Receivable,
 // Collection, Cash Flow, and Budget Utilization forecasts. 'Revenue'
 // removed (not part of the required 5). No standalone 'Invoices'
-// category — invoices remain transactional data feeding AR
+// category  -  invoices remain transactional data feeding AR
 // (Invoice -> AR -> Collection -> Cash Flow). See
 // FinancialForecastService::FORECAST_TYPES on the backend for the
 // matching list; these two arrays must stay in sync or the dropdown
@@ -35,7 +37,7 @@ const TYPE_STYLES = {
 const HIGH_CONFIDENCE_THRESHOLD = 80
 const LOW_ERROR_THRESHOLD = 8
 
-// Above this, MAPE isn't just "not great" — it indicates the model's
+// Above this, MAPE isn't just "not great"  -  it indicates the model's
 // percentage error is large enough that the forecast shouldn't be
 // treated as reliable at all (see the ai-forecasting skill's "communicate
 // poor accuracy honestly" philosophy). MAPE can legitimately spike into
@@ -66,14 +68,14 @@ const SEARCH_INPUT = `w-full h-9 pl-9 pr-3 rounded-lg border border-border bg-su
 
 // Native <option> elements ignore most CSS from their parent <select> in
 // several browsers, but DO respect an explicit background/text color set
-// directly on the <option> itself — this is what actually themes the
+// directly on the <option> itself  -  this is what actually themes the
 // dropdown list's rows in dark mode (color-scheme alone gets the popup
 // chrome right, but not necessarily our custom surface color).
 const OPTION = 'bg-surface text-ink'
 
 const LABEL = 'block text-xs font-medium text-muted mb-1.5'
 
-// Matches FinancialForecastService::HORIZON_LABELS on the backend — the
+// Matches FinancialForecastService::HORIZON_LABELS on the backend  -  the
 // integer `months` per key must line up exactly, since the server derives
 // forecast_period from it.
 const HORIZONS = [
@@ -145,7 +147,7 @@ const ForecastRow = memo(function ForecastRow({ forecast: f, showArchived, onVie
       <td className={`px-2.5 py-2.5 whitespace-nowrap text-right tabular-nums ${mapeColor(f.mape)}`}>
         <span className="inline-flex items-center gap-1 justify-end">
           {unreliable && (
-            <Tooltip label="High error margin — treat this forecast with caution" align="end">
+            <Tooltip label="High error margin  -  treat this forecast with caution" align="end">
               <AlertTriangle size={12} className="shrink-0" />
             </Tooltip>
           )}
@@ -195,11 +197,11 @@ const ForecastRow = memo(function ForecastRow({ forecast: f, showArchived, onVie
 })
 
 /**
- * Backend note: POST /api/forecasts generates AND persists in one call —
+ * Backend note: POST /api/forecasts generates AND persists in one call  - 
  * there's no preview-then-save step server-side (unlike the old
  * client-only version). So here: "Run Auto-Forecast" already saves a real
  * record. "Regenerate" calls the API again, creating a genuinely NEW
- * forecast row (not a redo of a draft) — the previous attempt stays in
+ * forecast row (not a redo of a draft)  -  the previous attempt stays in
  * the list. There's no "Save Forecast" button anymore since there's
  * nothing left to save; "Done" just closes and the list already reflects
  * it (the hook refetches after a successful generate).
@@ -229,7 +231,7 @@ const GenerateForecastModal = memo(function GenerateForecastModal({ open, onClos
     setPhase('running')
     setError('')
     setLoadingStep(0)
-    // Cycles the same three steps while the request is in flight — this is
+    // Cycles the same three steps while the request is in flight  -  this is
     // cosmetic pacing, not tied to real backend progress (the mock engine
     // responds near-instantly; keeping this makes room for when the real
     // ARIMA service is slower and genuinely takes a few seconds).
@@ -280,7 +282,7 @@ const GenerateForecastModal = memo(function GenerateForecastModal({ open, onClos
         {phase !== 'result' && (
           <>
             <p className="text-xs text-muted">
-              Pick what to forecast and how far ahead. The model selects its own training window, fits an ARIMA model, and reports its own confidence and error margin — no numbers to type in.
+              Pick what to forecast and how far ahead. The model selects its own training window, fits an ARIMA model, and reports its own confidence and error margin  -  no numbers to type in.
             </p>
             <div>
               <label className={LABEL}>Forecast Type</label>
@@ -325,7 +327,7 @@ const GenerateForecastModal = memo(function GenerateForecastModal({ open, onClos
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-semibold text-ink">{result.forecast_type} — {result.forecast_period}</p>
+                <p className="text-sm font-semibold text-ink">{result.forecast_type}  -  {result.forecast_period}</p>
                 <p className="text-xs text-muted flex items-center gap-1 mt-0.5"><CalendarRange size={12} /> Trained on {result.historical_period}</p>
               </div>
               <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${TYPE_STYLES[result.forecast_type] || 'bg-gray-100 text-muted'}`}>{result.arima_model}</span>
@@ -412,7 +414,7 @@ const ForecastDetailModal = memo(function ForecastDetailModal({ forecastId, onCl
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-semibold text-ink">{forecast.forecast_type} — {forecast.forecast_period}</p>
+              <p className="text-sm font-semibold text-ink">{forecast.forecast_type}  -  {forecast.forecast_period}</p>
               <p className="text-xs text-muted flex items-center gap-1 mt-0.5"><CalendarRange size={12} /> Trained on {forecast.historical_period}</p>
             </div>
             <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${TYPE_STYLES[forecast.forecast_type] || 'bg-gray-100 text-muted'}`}>{forecast.arima_model}</span>
@@ -480,10 +482,15 @@ export default function FinancialForecasting({ title = 'Financial Forecasting', 
     restoreForecast,
   } = useForecasts()
 
+  usePrivacy()
+
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+
+  const PER_PAGE = 10
+  const [page, setPage] = useState(1)
 
   const [activeStat, setActiveStat] = useState('all')
   const quickFilter = activeStat === 'confidence' ? 'highConfidence' : activeStat === 'mape' ? 'lowError' : 'all'
@@ -513,6 +520,13 @@ export default function FinancialForecasting({ title = 'Financial Forecasting', 
       ? [...rows].sort((a, b) => b.predicted_amount - a.predicted_amount)
       : [...rows].sort((a, b) => (b.generated_at || '').localeCompare(a.generated_at || ''))
   }, [forecasts, search, typeFilter, dateFrom, dateTo, quickFilter, sortBy])
+
+  // Reset to page 1 whenever search/type/date/archived filters change.
+  useEffect(() => { setPage(1) }, [search, typeFilter, dateFrom, dateTo, showArchived])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE))
+  const rangeStart = (page - 1) * PER_PAGE + 1
+  const rangeEnd = Math.min(page * PER_PAGE, filtered.length)
 
   const statCards = useMemo(() => {
     const count = forecasts.length || 1
@@ -665,7 +679,7 @@ export default function FinancialForecasting({ title = 'Financial Forecasting', 
               {forecastsLoading && (
                 <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-muted">Loading forecasts…</td></tr>
               )}
-              {!forecastsLoading && filtered.map((f) => (
+              {!forecastsLoading && filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE).map((f) => (
                 <ForecastRow
                   key={f.forecast_id}
                   forecast={f}
@@ -686,6 +700,18 @@ export default function FinancialForecasting({ title = 'Financial Forecasting', 
           </table>
         </div>
       </div>
+
+      <Pagination
+        page={page}
+        totalPages={totalPages}
+        onPageChange={setPage}
+        total={filtered.length}
+        label="forecasts"
+        showRange
+        rangeStart={rangeStart}
+        rangeEnd={rangeEnd}
+        bordered
+      />
 
       <GenerateForecastModal
         open={modalOpen}

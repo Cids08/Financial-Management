@@ -10,6 +10,7 @@ import { useIdleLogout } from '../hooks/useIdleLogout'
 import { ProfileProvider } from '../context/ProfileContext'
 import { PermissionsProvider } from '../context/PermissionsContext'
 import { NotificationsProvider } from '../context/NotificationsContext'
+import { PrivacyProvider } from '../context/PrivacyContext'
 
 export default function DashboardLayout() {
   const [collapsed, setCollapsed] = useLocalStorage('fms-sidebar-collapsed', false)
@@ -19,7 +20,7 @@ export default function DashboardLayout() {
   const { logout } = useAuth()
 
   // DashboardLayout only ever renders behind ProtectedRoute, so there's
-  // always a session here — no need to gate this on an auth-state check.
+  // always a session here  -  no need to gate this on an auth-state check.
   // Idle logout is silent (no LogoutConfirmModal) since by definition
   // nobody's present to confirm it; that modal is only for the manual
   // "Log out" button in Header/Sidebar.
@@ -35,9 +36,10 @@ export default function DashboardLayout() {
   }
 
   return (
+    <PrivacyProvider>
     <ProfileProvider>
       <PermissionsProvider>
-        {/* Mounted once here — Header's bell, Sidebar's badge, and the
+        {/* Mounted once here  -  Header's bell, Sidebar's badge, and the
             Notifications page all consume this same instance via
             useNotificationsContext() instead of each calling
             useNotifications() on their own. That's what keeps them in
@@ -75,5 +77,6 @@ export default function DashboardLayout() {
         </NotificationsProvider>
       </PermissionsProvider>
     </ProfileProvider>
+    </PrivacyProvider>
   )
 }

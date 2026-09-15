@@ -2,13 +2,13 @@ import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 
 /**
- * Right-side drawer — same visual language as Modal.jsx (bg-surface,
+ * Right-side drawer  -  same visual language as Modal.jsx (bg-surface,
  * border-border, shadow) but for content that benefits from more width
  * and staying anchored to what triggered it (e.g. a chart for a specific
  * table row), rather than a centered overlay that hides the whole page.
  *
  * Animates in via a mount-then-transition pattern (no custom Tailwind
- * keyframes needed) — reuses the ease-in-out-smooth timing function
+ * keyframes needed)  -  reuses the ease-in-out-smooth timing function
  * already defined for Sidebar.jsx's collapse transition.
  */
 export default function SlideOver({ open, onClose, title, subtitle, footer, children, widthClass = 'max-w-md' }) {

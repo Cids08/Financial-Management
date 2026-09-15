@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, Receipt, Wallet, AlertTriangle, Info, Printer, Upload, ScanLine, X, CheckCircle2, ChevronLeft, ChevronRight, FileText, Paperclip } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, Receipt, Wallet, AlertTriangle, Info, Printer, Upload, ScanLine, X, CheckCircle2, FileText, Paperclip } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
+import Pagination from '../components/Pagination'
 import { formatCurrency } from '../utils/formatters'
 import { useAccountsReceivable } from '../hooks/useAccountsReceivable'
 import { apiFetch } from '../utils/api'
 import { usePermissions } from '../context/PermissionsContext'
 import { useProfileContext } from '../context/ProfileContext'
+import { usePrivacy } from '../context/PrivacyContext'
+import { useSearchParams } from 'react-router-dom'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 import AccountsReceivableDocumentModal from '../components/AccountsReceivableDocumentModal'
 import StatementOfAccountModal from '../components/StatementOfAccountModal'
@@ -22,7 +25,7 @@ const MAX_DOC_MB = 10
 const PAGE_SIZE = 10
 
 // Hide the edit button for settled invoices. Only 'Paid' is considered
-// locked — Cancelled records can still be edited (e.g. to correct a mistake).
+// locked  -  Cancelled records can still be edited (e.g. to correct a mistake).
 // NOTE: this is a UX-layer guard only; authoritative enforcement lives in Laravel.
 const LOCKED_STATUSES = ['Paid', 'Cancelled']
 
@@ -91,7 +94,7 @@ const MAX_INVOICE_DATE = new Date().toISOString().slice(0, 10)
 const MAX_DUE_DATE = addDaysISO(365 * 10)
 
 /**
- * Lightweight fetch-on-mount lookups for the form's dropdowns — same
+ * Lightweight fetch-on-mount lookups for the form's dropdowns  -  same
  * pattern used for collectors/budgets/categories elsewhere.
  */
 function useLookup(path) {
@@ -109,7 +112,7 @@ function useLookup(path) {
   return options
 }
 
-// Read-only "detail row" used inside the record info panel — keeps every DB
+// Read-only "detail row" used inside the record info panel  -  keeps every DB
 // column visible somewhere in the UI even when it isn't part of the editable form.
 function DetailRow({ label, value }) {
   return (
@@ -206,7 +209,7 @@ function InvoiceScanUpload({ onScanned, onFileSelected, onClear }) {
         <ScanLine size={15} className="text-primary-dark shrink-0" />
         <p className="text-xs font-semibold text-ink">
           Supporting Document <span className="text-red-500 dark:text-red-400">*</span>
-          <span className="font-normal text-muted ml-1">— upload image or PDF to auto-fill</span>
+          <span className="font-normal text-muted ml-1">Upload image or PDF to auto-fill</span>
         </p>
       </div>
 
@@ -248,7 +251,7 @@ function InvoiceScanUpload({ onScanned, onFileSelected, onClear }) {
             )}
             {status === 'done' && (
               <p className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-                <CheckCircle2 size={13} /> {preview === 'pdf' ? 'PDF verified & fields filled below — please review' : 'Fields filled below — please review before saving'}
+                <CheckCircle2 size={13} /> {preview === 'pdf' ? 'PDF verified & fields filled below  -  please review' : 'Fields filled below  -  please review before saving'}
               </p>
             )}
           </div>
@@ -291,6 +294,8 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
   const users = useLookup('/api/users')
   const collectors = useLookup('/api/collectors?archived=0&per_page=200')
 
+  usePrivacy()
+
   useEffect(() => {
     fetchRecords()
   }, [fetchRecords])
@@ -302,7 +307,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
   // Global search (SearchBar.jsx) navigates here with a highlightId
   // whenever an AR/invoice record is clicked from search results. This
   // table already loads every record client-side (useAccountsReceivable
-  // fetches everything up front — see `filtered` below), so no
+  // fetches everything up front  -  see `filtered` below), so no
   // highlightSearch seeding is needed; just make sure no active filter
   // is hiding the target row.
   const { highlightedId, highlightSearch } = useHighlightRow()
@@ -382,7 +387,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
     })
   }, [records, search, statusFilter, showArchived])
 
-  // Pagination is purely client-side over `filtered` — consistent with the
+  // Pagination is purely client-side over `filtered`  -  consistent with the
   // rest of this page's filtering, which already runs entirely in-browser
   // against the full `records` array (no server-side paging exists here).
   const [page, setPage] = useState(1)
@@ -422,6 +427,19 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
     setServerError('')
     setModalMode('add')
   }
+
+  // Deep-link from the dashboard's "New Transaction" menu: /?new=1 opens
+  // the create form directly, then the param is stripped so a refresh
+  // doesn't re-open it.
+  const [searchParams, setSearchParams] = useSearchParams()
+  useEffect(() => {
+    if (searchParams.get('new') !== '1') return
+    openAdd()
+    const next = new URLSearchParams(searchParams)
+    next.delete('new')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams])
+
   const openEdit = (r) => {
     // Belt-and-suspenders: the Edit button is already hidden/disabled for
     // locked records (see isLocked/LOCKED_STATUSES above), but guard here
@@ -630,7 +648,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
         </div>
         <div className="flex items-center gap-2">
           <Button variant="secondary" size="sm" icon={FileText} onClick={() => setShowSoaModal(true)}>Customer Aging &amp; SOA</Button>
-          {/* Add Invoice hidden entirely for view-only roles (Collector) —
+          {/* Add Invoice hidden entirely for view-only roles (Collector)  - 
               the backend POST route requires ar.manage, which they don't have. */}
           {canManage && <Button variant="primary" size="sm" icon={Plus} onClick={openAdd}>Add Invoice</Button>}
         </div>
@@ -765,7 +783,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                           <Paperclip size={15} />
                         </button>
                       </Tooltip>
-                      {/* Edit hits an ar.manage-gated route — hidden for
+                      {/* Edit hits an ar.manage-gated route  -  hidden for
                           view-only roles (Collector) and also hidden once a
                           record is Paid/Cancelled (locked status). */}
                       {canManage && !locked && (
@@ -795,38 +813,21 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
         </div>
 
         {!loading && filtered.length > 0 && (
-          <div className="flex flex-col gap-2 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs text-muted">
-              Showing {rangeStart}–{rangeEnd} of {filtered.length} invoices
-            </p>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
-                aria-label="Previous page"
-              >
-                <ChevronLeft size={15} />
-              </button>
-              <span className="px-2 text-xs font-medium text-ink whitespace-nowrap">
-                Page {page} of {totalPages}
-              </span>
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
-                aria-label="Next page"
-              >
-                <ChevronRight size={15} />
-              </button>
-            </div>
-          </div>
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            total={filtered.length}
+            label="invoices"
+            showRange
+            rangeStart={rangeStart}
+            rangeEnd={rangeEnd}
+            bordered
+          />
         )}
       </div>
 
-      {/* Add / Edit modal — editable business fields only. Only ever
+      {/* Add / Edit modal  -  editable business fields only. Only ever
           reachable via openAdd/openEdit; openEdit itself now no-ops for
           locked (Paid/Cancelled) records as a second layer of defense,
           on top of the disabled Edit button in the table above. */}
@@ -1097,7 +1098,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
         </form>
       </Modal>
 
-      {/* Full record detail modal — surfaces every column from the accounts_receivable table */}
+      {/* Full record detail modal  -  surfaces every column from the accounts_receivable table */}
       <Modal
         open={!!detailRecord}
         onClose={closeDetail}

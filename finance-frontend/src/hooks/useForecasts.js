@@ -6,7 +6,7 @@ export function useForecasts() {
   const [forecastsLoading, setForecastsLoading] = useState(true)
   const [forecastsError, setForecastsError] = useState(null)
 
-  // Toggles between the active list (default) and the archived list —
+  // Toggles between the active list (default) and the archived list  - 
   // drives the `status` query param the backend uses to switch between
   // FinancialForecast::query() and ::onlyTrashed(). Kept in the hook
   // (not the page) since it's API-fetch state, not UI-only state.
@@ -43,7 +43,7 @@ export function useForecasts() {
   }, [showArchived])
 
   /**
-   * Generates AND persists in one call — the backend has no separate
+   * Generates AND persists in one call  -  the backend has no separate
    * preview/confirm step. The returned forecast already includes `series`
    * (FinancialForecastDetailResource), so the modal's result view can
    * render the chart straight from this response.
@@ -70,7 +70,7 @@ export function useForecasts() {
   }, [fetchForecasts])
 
   /**
-   * The list endpoint omits `series` (perf — see FinancialForecastResource),
+   * The list endpoint omits `series` (perf  -  see FinancialForecastResource),
    * so the detail modal fetches it fresh on open. Note: the mock engine
    * recomputes series with fresh random noise on every call, so re-opening
    * the same forecast's detail can show a slightly different chart until

@@ -3,7 +3,7 @@ import { getEcho } from '../utils/echo'
 
 /**
  * Subscribes to the private-collections channel and calls `onUpdate`
- * whenever a collection.status.changed event arrives — i.e. when any
+ * whenever a collection.status.changed event arrives  -  i.e. when any
  * user confirms or cancels a collection.
  *
  * The callback should be refetch() from useCollections so the page
@@ -13,7 +13,7 @@ import { getEcho } from '../utils/echo'
  * Usage:
  *   useCollectionUpdates(refetch)
  *
- * The channel is left unconditionally — Echo's authorizer will deny
+ * The channel is left unconditionally  -  Echo's authorizer will deny
  * unauthenticated sockets at the Reverb level before any event fires.
  *
  * Cleanup: the channel is left (unsubscribed) when the component that
@@ -26,7 +26,7 @@ export function useCollectionUpdates(onUpdate) {
     const channel = echo.private('collections')
 
     // broadcastAs() in CollectionStatusChanged returns 'collection.status.changed',
-    // which Laravel Echo prefixes with a dot when listening — hence '.collection.status.changed'.
+    // which Laravel Echo prefixes with a dot when listening  -  hence '.collection.status.changed'.
     channel.listen('.collection.status.changed', () => {
       onUpdate()
     })
@@ -34,5 +34,5 @@ export function useCollectionUpdates(onUpdate) {
     return () => {
       echo.leave('collections')
     }
-  }, []) // onUpdate is refetch() from useCollections — stable ref, no dep needed
+  }, []) // onUpdate is refetch() from useCollections  -  stable ref, no dep needed
 }

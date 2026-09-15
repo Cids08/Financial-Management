@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bell, BellOff, Check, CheckCheck, Trash2, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
+import { Bell, BellOff, Check, CheckCheck, Trash2, Loader2 } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
+import Pagination from '../components/Pagination'
 import Button from '../components/Button'
 import Tooltip from '../components/Tooltip'
 import { useNotificationsContext } from '../context/NotificationsContext'
@@ -17,7 +18,7 @@ function formatDateTime(iso) {
 export default function Notifications({ title = 'Notifications', crumbs = ['Notifications'] }) {
   const navigate = useNavigate()
 
-  // Shared instance — mounted once in DashboardLayout via
+  // Shared instance  -  mounted once in DashboardLayout via
   // NotificationsProvider. Marking something read/deleted here updates
   // Header's bell and Sidebar's badge immediately, since they all read
   // from this same state instead of separately polling the API.
@@ -27,7 +28,7 @@ export default function Notifications({ title = 'Notifications', crumbs = ['Noti
   // shared `notifications`/`meta` state. If someone opens that dropdown
   // while this page is also mounted, whichever fetch resolves last wins
   // and the other's list/pagination gets overwritten. Flagging this again
-  // here since it's this page that would visibly "lose" — its list could
+  // here since it's this page that would visibly "lose"  -  its list could
   // silently reset to a 5-item, page-1 preview if the header dropdown is
   // opened in the same tab.
   const {
@@ -59,7 +60,7 @@ export default function Notifications({ title = 'Notifications', crumbs = ['Noti
   }
 
   const groups = useMemo(() => {
-    // Simple "Today / Earlier" grouping — purely a display convenience,
+    // Simple "Today / Earlier" grouping  -  purely a display convenience,
     // no server-side date filter involved.
     const today = new Date().toDateString()
     const todayItems = []
@@ -173,19 +174,7 @@ export default function Notifications({ title = 'Notifications', crumbs = ['Noti
           ))
         )}
 
-        {!loading && meta.total > 0 && (
-          <div className="flex items-center justify-between border-t border-border px-4 py-3">
-            <p className="text-xs text-muted">Page {meta.current_page} of {totalPages} · {meta.total} total</p>
-            <div className="flex items-center gap-1">
-              <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed" aria-label="Previous page">
-                <ChevronLeft size={15} />
-              </button>
-              <button type="button" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed" aria-label="Next page">
-                <ChevronRight size={15} />
-              </button>
-            </div>
-          </div>
-        )}
+        <Pagination page={page} totalPages={totalPages} onPageChange={setPage} total={meta.total} label="notifications" bordered />
       </div>
     </div>
   )

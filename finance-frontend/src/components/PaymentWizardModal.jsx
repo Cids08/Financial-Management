@@ -308,14 +308,14 @@ export default function PaymentWizardModal({
                   onChange={(e) => setCashAccountId(e.target.value)}
                   className="w-full border border-border bg-surface text-ink rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
                 >
-                  <option value="">— Select cash account —</option>
+                  <option value="">Select cash account</option>
                   {cashAccounts.map((ca) => (
                     <option key={ca.id} value={ca.id}>
-                      {ca.account_name ?? ca.name}{ca.bank_name ? ` — ${ca.bank_name}` : ''}
+                      {ca.account_name ?? ca.name}{ca.bank_name ? `  -  ${ca.bank_name}` : ''}
                     </option>
                   ))}
                 </select>
-                {/* Masked balance row — balance hidden by default, revealed via Eye toggle */}
+                {/* Masked balance row  -  balance hidden by default, revealed via Eye toggle */}
                 {cashAccountId && (() => {
                   const ca = cashAccounts.find(c => String(c.id) === String(cashAccountId))
                   return ca ? (
@@ -421,13 +421,13 @@ export default function PaymentWizardModal({
                 </div>
               )}
 
-              {/* Withheld bills notice — "No Document, No Payment" policy */}
+              {/* Withheld bills notice  -  "No Document, No Payment" policy */}
               {(totals.attachment_missing_count ?? 0) > 0 && (
                 <div className="flex items-start gap-2.5 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-800 dark:text-amber-300">
                   <Paperclip className="w-4 h-4 mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
                   <div className="text-sm">
                     <p className="font-semibold text-amber-800 dark:text-amber-300">
-                      {totals.attachment_missing_count} bill{totals.attachment_missing_count === 1 ? '' : 's'} withheld — missing supporting document{totals.attachment_missing_count === 1 ? '' : 's'}
+                      {totals.attachment_missing_count} bill{totals.attachment_missing_count === 1 ? '' : 's'} withheld  -  missing supporting document{totals.attachment_missing_count === 1 ? '' : 's'}
                     </p>
                     <p className="text-amber-700 dark:text-amber-400/90 mt-0.5 text-xs">
                       Company policy requires an attached invoice or delivery receipt before a bill can be included in a payment run.

@@ -1,6 +1,6 @@
 /**
  * Consumes a FLAT array of permission_name strings (e.g. ['users.view',
- * 'ap.manage']) — the exact shape GET /api/me/permissions returns (see
+ * 'ap.manage'])  -  the exact shape GET /api/me/permissions returns (see
  * PermissionController::mine() on the backend). Deliberately NOT
  * dependent on user.role.permissions being eager-loaded on whatever
  * useAuth() returns, since that shape couldn't be confirmed and was the
@@ -20,7 +20,7 @@ export function hasPermission(permissions, permissionName) {
  * Filters menuData down to what this user is actually allowed to see.
  * - A leaf item with no `permission` field is always kept (Dashboard, Settings, Logout).
  * - A leaf item with a `permission` field is kept only if hasPermission() passes.
- * - A parent group (has `children`) is kept only if at least one child survives —
+ * - A parent group (has `children`) is kept only if at least one child survives  - 
  *   otherwise the whole group (e.g. "User Management") disappears rather than
  *   showing an empty section header.
  */

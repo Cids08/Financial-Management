@@ -50,7 +50,7 @@ export function useNotifications() {
       // FIX: the controller returns { data: { unread_count: N } }, not
       // { data: { count: N } } / a bare number. json.data.count was always
       // undefined, and since json.data (an object) is never null/undefined,
-      // the `??` fallback never kicked in either — unreadCount state was
+      // the `??` fallback never kicked in either  -  unreadCount state was
       // being set to the raw {unread_count: N} object instead of a number.
       // That silently broke every numeric comparison downstream
       // (unreadCount === 0, unreadCount > 0, etc. in Notifications.jsx / Header.jsx).

@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 
 // Listens for the 'auth:expired' event dispatched by apiFetch() on a 401
 // and performs a clean client-side redirect to the login page, instead of
-// the previous window.location.href hard navigation — which could paint
+// the previous window.location.href hard navigation  -  which could paint
 // the outgoing authenticated layout and the incoming Login page in the
 // same frame during the transition (visible as a jarring flash/overlap
 // of the sidebar and the login card).

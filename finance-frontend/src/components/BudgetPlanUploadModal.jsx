@@ -4,7 +4,7 @@ import { UploadCloud, FileText, X, AlertTriangle } from 'lucide-react'
 import Modal from './Modal'
 import Button from './Button'
 
-// Confirmed against UploadBudgetPlanRequest::rules() — keep these two
+// Confirmed against UploadBudgetPlanRequest::rules()  -  keep these two
 // constants in sync if that validation rule ever changes.
 const ALLOWED_EXTENSIONS = ['pdf', 'doc', 'docx', 'xls', 'xlsx']
 const ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx'
@@ -22,7 +22,7 @@ function formatBytes(bytes) {
  * Props:
  * - open, onClose: standard Modal controls
  * - budget: the budget being attached to (uses budget.budget_id, budget.budget_name)
- * - onUpload: async (file) => { success, message } — call the hook's
+ * - onUpload: async (file) => { success, message }  -  call the hook's
  *   uploadPlan(budget.budget_id, file) here from the parent page
  */
 export default function BudgetPlanUploadModal({ open, onClose, budget, onUpload }) {
@@ -98,7 +98,7 @@ export default function BudgetPlanUploadModal({ open, onClose, budget, onUpload 
       <div className="space-y-3">
         {budget && (
           <p className="text-xs text-muted">
-            Attaching a plan to <span className="font-medium text-ink">{budget.budget_name}</span> — this budget cannot be approved until a plan is on file.
+            Attaching a plan to <span className="font-medium text-ink">{budget.budget_name}</span>  -  this budget cannot be approved until a plan is on file.
           </p>
         )}
 
@@ -124,7 +124,7 @@ export default function BudgetPlanUploadModal({ open, onClose, budget, onUpload 
           >
             <UploadCloud size={28} className="text-muted" />
             <p className="text-sm font-medium text-ink">Click to browse or drag a file here</p>
-            <p className="text-xs text-muted">PDF, Word, or Excel — up to {MAX_SIZE_MB}MB</p>
+            <p className="text-xs text-muted">PDF, Word, or Excel  -  up to {MAX_SIZE_MB}MB</p>
             <input
               ref={inputRef}
               type="file"

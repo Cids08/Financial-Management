@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Search, Plus, Pencil, Archive, RotateCcw, PiggyBank, TrendingDown, Building2, Info, Printer,
-  CheckCircle2, XCircle, Clock, AlertTriangle, ChevronLeft, ChevronRight, Paperclip, Loader2,
+  CheckCircle2, XCircle, Clock, AlertTriangle, Paperclip, Loader2,
   FileText, History, Activity, TrendingUp, LayoutGrid, List, Filter, ArrowUpRight, Sparkles,
   CalendarRange, X,
 } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
+import Pagination from '../components/Pagination'
 import Tooltip from '../components/Tooltip'
 import BudgetPlanUploadModal from '../components/BudgetPlanUploadModal'
 import BudgetPlanHistoryModal from '../components/BudgetPlanHistoryModal'
@@ -16,11 +17,12 @@ import { useBudgets } from '../hooks/useBudgets'
 import { useDepartments } from '../hooks/useDepartments'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 import { usePermissions } from '../context/PermissionsContext'
+import { usePrivacy } from '../context/PrivacyContext'
 import { hasPermission } from '../utils/permissions'
 
-// status is the ONLY approval-workflow field on Budget — see
+// status is the ONLY approval-workflow field on Budget  -  see
 // status is constrained at the DB level (budgets_status_check) to:
-// Draft, Active, Closed, Cancelled — there is no separate approval_status
+// Draft, Active, Closed, Cancelled  -  there is no separate approval_status
 // column. Draft = awaiting approval, Active = approved & spendable,
 // Cancelled = rejected, Closed = end-of-cycle (a later, separate action).
 const APPROVAL_STYLES = {
@@ -32,7 +34,7 @@ const APPROVAL_ICONS = { Draft: Clock, Active: CheckCircle2, Cancelled: XCircle 
 
 const BUDGET_TYPES = ['Operational', 'Capital', 'Project', 'Emergency', 'Other']
 
-// A new budget's fiscal year has to be the current year or later — a
+// A new budget's fiscal year has to be the current year or later  -  a
 // static "min:2000"-style floor lets someone create a brand-new budget
 // for a fiscal year that's already years in the past, which the
 // start_date/fiscal_year cross-check alone doesn't catch (both fields can
@@ -48,7 +50,7 @@ const EMPTY_FORM = {
   budget_code: '',
   budget_name: '',
   budget_type: '',
-  budget_type_other: '', // only used when budget_type === 'Other' — the actual typed-in category
+  budget_type_other: '', // only used when budget_type === 'Other'  -  the actual typed-in category
   fiscal_year: CURRENT_YEAR,
   allocated_amount: '',
   warning_percentage: '',
@@ -116,7 +118,7 @@ function usedPct(allocated, remaining) {
 
 function TableUtilizationCell({ budget }) {
   if (budget.status !== 'Active') {
-    return <span className="text-xs text-muted">— not yet active</span>
+    return <span className="text-xs text-muted">Not yet active</span>
   }
 
   const {
@@ -298,7 +300,7 @@ function formatDateTime(value) {
   return new Date(value).toLocaleString('en-PH', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-// Bounds a Start/End Date input to the given fiscal year — this is the
+// Bounds a Start/End Date input to the given fiscal year  -  this is the
 // frontend half of fixing "why can I add a budget starting 2020": the
 // year field and the date pickers used to have zero relationship, so
 // nothing stopped picking a start_date years away from fiscal_year. The
@@ -340,6 +342,8 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
   const { permissions, role } = usePermissions()
   const canApproveBudgets = hasPermission(permissions, 'budgets.approve') || role === 'super-admin'
   const canManageBudgets = hasPermission(permissions, 'budgets.manage') || role === 'super-admin'
+
+  usePrivacy()
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all') // Draft / Active / Cancelled / Closed / all
@@ -385,7 +389,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
   const [historyTarget, setHistoryTarget] = useState(null) // budget whose plan version history is open
   const [planFile, setPlanFile] = useState(null) // plan picked inline in the Add Budget modal
   const [planFileError, setPlanFileError] = useState('')
-  // Replacement plan picked inline in the EDIT modal — kept separate from
+  // Replacement plan picked inline in the EDIT modal  -  kept separate from
   // planFile/planFileError above so opening Add right after Edit (or vice
   // versa) never bleeds a leftover selection from one mode into the other.
   const [editPlanFile, setEditPlanFile] = useState(null)
@@ -395,7 +399,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
   const [actionBusyId, setActionBusyId] = useState(null)
   const [pageNotice, setPageNotice] = useState('') // survives modal close, e.g. "budget created but plan failed to attach"
   // Separate from pageNotice: pageNotice renders in the page body, which
-  // is exactly what a modal sits on top of and hides — so a View click
+  // is exactly what a modal sits on top of and hides  -  so a View click
   // made FROM INSIDE the Edit or Detail modal needs its own visible
   // notice, shown inside that modal, or the result (e.g. "downloaded
   // instead of previewed") is invisible until the modal is closed.
@@ -668,7 +672,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
   const closeDetail = () => { setDetailRecord(null); setViewNotice('') }
   const isEditing = modalMode !== null && modalMode !== 'add'
 
-  // Shared by both the Add and Edit plan pickers — validates a chosen
+  // Shared by both the Add and Edit plan pickers  -  validates a chosen
   // file's extension/size and stores it via whichever mode's setters are
   // passed in.
   const handlePlanFileChange = (file, setFile, setError) => {
@@ -688,7 +692,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
   }
 
   // Changing the start date can leave a previously-chosen end date sitting
-  // before it — the <input min=...> on End Date only stops NEW invalid
+  // before it  -  the <input min=...> on End Date only stops NEW invalid
   // picks going forward, it doesn't retroactively fix an end_date that was
   // set before start_date changed to something later. Clear it instead of
   // silently letting an inverted range sit in the form.
@@ -702,7 +706,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
   }
 
   // Fiscal Year drives the valid range for both date pickers (see
-  // yearBounds() above) — if it changes, any already-picked start/end
+  // yearBounds() above)  -  if it changes, any already-picked start/end
   // date that no longer falls inside the new year has to be cleared
   // rather than silently left out-of-range until submit fails.
   const handleFiscalYearChange = (value) => {
@@ -937,18 +941,18 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
     }
   }
 
-  // Opens the plan in a new tab (inline) instead of forcing a download —
+  // Opens the plan in a new tab (inline) instead of forcing a download  - 
   // see useBudgets.js's viewPlan() for how/why. Only PDFs actually
   // render inline in most browsers; Word/Excel plans will still trigger
   // a download regardless, since browsers have no native viewer for those.
   const handleViewPlan = async (b) => {
-    // Open the tab SYNCHRONOUSLY, before any await — browsers only allow
+    // Open the tab SYNCHRONOUSLY, before any await  -  browsers only allow
     // window.open() without triggering the popup blocker when it happens
     // as a direct result of the click event. The previous version awaited
     // the file fetch first and only called window.open() once it
     // resolved, by which point the browser no longer considered it a
     // direct response to the click and could silently block it. The blank
-    // tab gets redirected to the real blob URL once viewPlan() resolves —
+    // tab gets redirected to the real blob URL once viewPlan() resolves  - 
     // or, for a file type with no in-browser viewer (docx/xlsx/etc.),
     // viewPlan() closes this tab itself and downloads the file instead,
     // so nothing stays stuck at about:blank.
@@ -960,7 +964,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
       // in the way), viewNotice covers this same click made from inside
       // the Edit or Detail modal, where pageNotice's spot on the page is
       // hidden behind the modal. Whichever one isn't currently visible
-      // just goes unused — harmless either way.
+      // just goes unused  -  harmless either way.
       setPageNotice(msg)
       setViewNotice(msg)
     } else if (!result.viewedInline) {
@@ -994,7 +998,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
     win.document.write(`
       <html>
         <head>
-          <title>Budget — ${b.department_name || ''} FY${b.fiscal_year}</title>
+          <title>Budget  -  ${b.department_name || ''} FY${b.fiscal_year}</title>
           <style>
             * { box-sizing: border-box; }
             body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #1a1a1a; padding: 48px; }
@@ -1350,20 +1354,17 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
               </table>
             </div>
 
-            {!loading && meta.total > 0 && (
-              <div className="flex flex-col gap-2 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-xs text-muted">Showing {rangeStart}–{rangeEnd} of {meta.total} budgets</p>
-                <div className="flex items-center gap-1">
-                  <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed" aria-label="Previous page">
-                    <ChevronLeft size={15} />
-                  </button>
-                  <span className="px-2 text-xs font-medium text-ink whitespace-nowrap">Page {page} of {totalPages}</span>
-                  <button type="button" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed" aria-label="Next page">
-                    <ChevronRight size={15} />
-                  </button>
-                </div>
-              </div>
-            )}
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              onPageChange={setPage}
+              total={meta.total}
+              label="budgets"
+              showRange
+              rangeStart={rangeStart}
+              rangeEnd={rangeEnd}
+              bordered
+            />
           </div>
         </div>
       )}
@@ -1640,7 +1641,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                   {fieldErrors.fiscal_year ? (
                     <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.fiscal_year}</p>
                   ) : (
-                    <p className="mt-1 text-[11px] text-muted">Must be {CURRENT_YEAR}–{MAX_FISCAL_YEAR} — new budgets can't be backdated to a past fiscal year.</p>
+                    <p className="mt-1 text-[11px] text-muted">Must be {CURRENT_YEAR} - {MAX_FISCAL_YEAR}  -  new budgets can't be backdated to a past fiscal year.</p>
                   )}
                 </>
               )}
@@ -1769,7 +1770,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                   <span className="font-semibold text-ink dark:text-white">
                     {duplicateBudgetWarning.budget_name} ({duplicateBudgetWarning.budget_code})
                   </span>
-                  {' '}— Allocated: {formatCurrency(duplicateBudgetWarning.allocated_amount)}
+                  {' '}Allocated: {formatCurrency(duplicateBudgetWarning.allocated_amount)}
                 </p>
                 <p className="text-[11px] text-amber-700 dark:text-amber-400">
                   A department can have multiple budgets for different purposes (e.g. Capital, Project, Operational), but duplicate budgets of the same type are not permitted in the same fiscal year.
@@ -1896,7 +1897,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
             <input type="text" value={form.remarks} onChange={(e) => setForm((f) => ({ ...f, remarks: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="Optional notes" />
           </div>
 
-          {/* Budget Plan — required file picker when adding; when editing,
+          {/* Budget Plan  -  required file picker when adding; when editing,
               shows what's currently attached (if anything) plus an
               optional "replace" picker. Editing is only reachable while
               status === 'Draft' (see openEdit's guard and
@@ -1920,7 +1921,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
             )}
 
             {/* Shown here, not just via pageNotice, because pageNotice
-                renders in the page body — which this modal is sitting on
+                renders in the page body  -  which this modal is sitting on
                 top of and hiding. Without a copy inside the modal itself,
                 a "downloaded instead of previewed" result from clicking
                 View above is invisible until the modal is closed. */}
@@ -1934,8 +1935,8 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
               <label className="flex items-center justify-center gap-2 rounded-lg border border-dashed border-amber-300 bg-amber-50/50 px-3 py-3 text-xs text-amber-700 cursor-pointer hover:border-amber-400 hover:bg-amber-50 transition-colors duration-150 dark:border-amber-500/30 dark:bg-amber-500/5 dark:text-amber-400 dark:hover:bg-amber-500/10">
                 <Paperclip size={14} />
                 {isEditing
-                  ? (modalMode.has_plan ? 'Replace plan (PDF, Word, or Excel — up to 10MB)' : 'Attach plan (PDF, Word, or Excel — up to 10MB)')
-                  : 'Attach plan (PDF, Word, or Excel — up to 10MB)'}
+                  ? (modalMode.has_plan ? 'Replace plan (PDF, Word, or Excel  -  up to 10MB)' : 'Attach plan (PDF, Word, or Excel  -  up to 10MB)')
+                  : 'Attach plan (PDF, Word, or Excel  -  up to 10MB)'}
                 <input
                   type="file"
                   accept=".pdf,.doc,.docx,.xls,.xlsx"
@@ -1972,9 +1973,9 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
             <p className="mt-1 text-xs text-muted">
               {isEditing
                 ? (editPlanFile
-                    ? 'This adds a new version — the current file stays available in Plan History.'
-                    : 'Optional — pick a file only if you want to replace the current plan.')
-                : 'Required — a budget cannot be created without its plan attached.'}
+                    ? 'This adds a new version  -  the current file stays available in Plan History.'
+                    : 'Optional  -  pick a file only if you want to replace the current plan.')
+                : 'Required  -  a budget cannot be created without its plan attached.'}
             </p>
           </div>
 
@@ -2053,10 +2054,10 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
 
       {/* Detail modal */}
       <Modal
-        // Hidden (not unmounted — detailRecord itself is untouched) while
+        // Hidden (not unmounted  -  detailRecord itself is untouched) while
         // the History or Attach-Plan modal is open on top of it. Both of
         // those are triggered from buttons INSIDE this modal, so without
-        // this they end up stacked behind it rather than in front — this
+        // this they end up stacked behind it rather than in front  -  this
         // makes Budget Details step out of the way and reappear once
         // whichever nested modal closes, instead of fixing z-index (both
         // modals share the same stacking context either way; the real

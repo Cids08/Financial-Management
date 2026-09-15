@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, UserCheck, UserX, Phone, Mail, MapPin, Target, Eye, EyeOff, ChevronLeft, ChevronRight, Loader2, BarChart3, Copy, Check, ShieldCheck } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, UserCheck, UserX, Phone, Mail, MapPin, Target, Eye, EyeOff, Loader2, BarChart3, Copy, Check, ShieldCheck } from 'lucide-react'
 import {
   ResponsiveContainer, ComposedChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Bar, Line, ReferenceLine,
 } from 'recharts'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
+import Pagination from '../components/Pagination'
 import Tooltip2 from '../components/Tooltip'
 import { formatCurrency } from '../utils/formatters'
 import { apiFetch } from '../utils/api'
 import { useCollectors } from '../hooks/useCollectors'
 import { useHighlightRow } from '../hooks/useHighlightRow'
+import { usePrivacy } from '../context/PrivacyContext'
 
 const EMPTY_FORM = { employee_no: '', first_name: '', last_name: '', email: '', contact_no: '', assigned_area: '', service_area_id: '', monthly_target: '', commission_rate: '', is_active: true, user_id: '' }
 
@@ -36,7 +38,7 @@ const PERIODS = [
 // Chart colors sourced from the app's CSS variables (with hardcoded
 // fallbacks) rather than new hex values, so the chart stays in sync with
 // whatever the theme's primary/muted/accent colors actually are, light or
-// dark mode — same pattern already used for chart-adjacent inline styles
+// dark mode  -  same pattern already used for chart-adjacent inline styles
 // elsewhere in this codebase (see AIRecommendations.jsx's INPUT_TEXT_STYLE).
 const CHART_COLORS = {
   collected: 'var(--color-primary, #f59e0b)',
@@ -50,7 +52,7 @@ function initials(first, last) {
   return `${first?.[0] ?? ''}${last?.[0] ?? ''}`.toUpperCase()
 }
 
-// Full mask, not partial — keeps dashes/spaces as visual separators but
+// Full mask, not partial  -  keeps dashes/spaces as visual separators but
 // replaces every other character, and email is a fixed-length placeholder
 // regardless of the real address. A partial mask (last 4 digits visible)
 // leaks information on a short list; this doesn't.
@@ -68,7 +70,7 @@ function maskEmail(value) {
 }
 
 /**
- * /api/service-areas doesn't have its own hook yet — this is a plain
+ * /api/service-areas doesn't have its own hook yet  -  this is a plain
  * fetch-on-mount, same lightweight pattern used for the budget/category
  * lookups on the Expenses page.
  */
@@ -88,7 +90,7 @@ function useServiceAreas() {
 }
 
 /**
- * Users eligible to link to the collector currently being added/edited —
+ * Users eligible to link to the collector currently being added/edited  - 
  * refetched every time the modal opens (not once on page mount) since the
  * eligible set depends on which collector, if any, is being edited: when
  * editing, that collector's own already-linked user must still appear as
@@ -160,7 +162,7 @@ function EfficiencyModal({ collector, onClose, getEfficiency }) {
     <Modal
       open={!!collector}
       onClose={onClose}
-      title={collector ? `Efficiency — ${collector.first_name} ${collector.last_name}` : 'Efficiency'}
+      title={collector ? `Efficiency  -  ${collector.first_name} ${collector.last_name}` : 'Efficiency'}
       maxWidth="max-w-xl"
       footer={<Button variant="secondary" size="md" onClick={onClose}>Close</Button>}
     >
@@ -232,7 +234,7 @@ function EfficiencyModal({ collector, onClose, getEfficiency }) {
                       line itself sits at 0. */}
                   <ReferenceLine yAxisId="pct" y={100} stroke={CHART_COLORS.grid} strokeDasharray="2 4" />
                   <Bar yAxisId="amount" dataKey="collected" name="Collected" fill={CHART_COLORS.collected} radius={[3, 3, 0, 0]} maxBarSize={40} />
-                  {/* Target as a dashed goal line, not a second bar — bar-vs-bar
+                  {/* Target as a dashed goal line, not a second bar  -  bar-vs-bar
                       makes an empty ("no data yet") period look like two
                       competing values instead of "actual against a goal." */}
                   <Line yAxisId="amount" type="stepAfter" dataKey="target" name="Target" stroke={CHART_COLORS.target} strokeWidth={1.5} strokeDasharray="5 4" dot={false} />
@@ -281,6 +283,8 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
     getEfficiency,
   } = useCollectors()
 
+  usePrivacy()
+
   // Global search (SearchBar.jsx) navigates here with a highlightId (and,
   // since this table's `search` filter is server-side/debounced inside
   // useCollectors, a highlightSearch seed) whenever a collector record is
@@ -307,7 +311,7 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
   const isModalOpen = modalMode !== null
   const isEditing = modalMode !== null && modalMode !== 'add'
 
-  // Fetched fresh each time the modal opens — see useAvailableUsers()'s
+  // Fetched fresh each time the modal opens  -  see useAvailableUsers()'s
   // docblock for why this can't just be fetched once on page mount like
   // useServiceAreas() above.
   const { users: availableUsers, loading: usersLoading } = useAvailableUsers(
@@ -316,7 +320,7 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
   )
 
   // Controls visibility of email + employee no. + contact no. together
-  // per row — masked by default, revealed only when the eye icon is
+  // per row  -  masked by default, revealed only when the eye icon is
   // clicked, same pattern as Customers/Suppliers/Users.
   const [revealedIds, setRevealedIds] = useState(new Set())
   const toggleReveal = (id) => {
@@ -327,7 +331,7 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
     })
   }
 
-  // Page-scoped, not global — an accurate all-pages breakdown would need
+  // Page-scoped, not global  -  an accurate all-pages breakdown would need
   // a dedicated /api/collectors/stats endpoint (Customers/Suppliers
   // already have one; Collectors doesn't yet). Total below IS global,
   // since meta.total comes straight from the paginator.
@@ -571,19 +575,7 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
           </table>
         </div>
 
-        {meta.last_page > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-border text-xs text-muted">
-            <span>Page {meta.current_page} of {meta.last_page} &middot; {meta.total} total</span>
-            <div className="flex items-center gap-1">
-              <button type="button" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-bg disabled:opacity-40 disabled:pointer-events-none transition-colors duration-150">
-                <ChevronLeft size={14} />
-              </button>
-              <button type="button" disabled={page >= meta.last_page} onClick={() => setPage((p) => p + 1)} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-bg disabled:opacity-40 disabled:pointer-events-none transition-colors duration-150">
-                <ChevronRight size={14} />
-              </button>
-            </div>
-          </div>
-        )}
+        <Pagination page={page} totalPages={meta.last_page} onPageChange={setPage} total={meta.total} label="collectors" bordered />
       </div>
 
       <Modal

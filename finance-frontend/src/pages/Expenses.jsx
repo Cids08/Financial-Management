@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useProfileContext } from '../context/ProfileContext'
-import { Search, Plus, Pencil, Archive, RotateCcw, Receipt, Wallet, Tag, Info, Printer, CheckCircle2, XCircle, ChevronLeft, ChevronRight, CalendarRange, X, Paperclip, FileText, History, AlertTriangle, Upload, ScanLine, Sparkles } from 'lucide-react'
+import { usePrivacy } from '../context/PrivacyContext'
+import { Search, Plus, Pencil, Archive, RotateCcw, Receipt, Wallet, Tag, Info, Printer, CheckCircle2, XCircle, CalendarRange, X, Paperclip, FileText, History, AlertTriangle, Upload, ScanLine, Sparkles } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
+import Pagination from '../components/Pagination'
 import Tooltip from '../components/Tooltip'
 import ExpenseReceiptUploadModal from '../components/ExpenseReceiptUploadModal'
 import ExpenseReceiptHistoryModal from '../components/ExpenseReceiptHistoryModal'
@@ -11,6 +13,7 @@ import BatchApproveExpensesModal from '../components/BatchApproveExpensesModal'
 import { formatCurrency } from '../utils/formatters'
 import { apiFetch } from '../utils/api'
 import { useExpenses } from '../hooks/useExpenses'
+import { useSearchParams } from 'react-router-dom'
 
 const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const ACCEPTED_DOCUMENT_TYPES = [...ACCEPTED_IMAGE_TYPES, 'application/pdf']
@@ -130,7 +133,7 @@ function ExpenseScanUpload({ onScanned, onFileSelected, onClear }) {
         <ScanLine size={15} className="text-primary-dark shrink-0" />
         <p className="text-xs font-semibold text-ink">
           Official Receipt / Proof <span className="text-red-500 dark:text-red-400">*</span>
-          <span className="font-normal text-muted ml-1">— upload receipt photo or PDF to auto-fill</span>
+          <span className="font-normal text-muted ml-1">Upload receipt photo or PDF to auto-fill</span>
         </p>
       </div>
 
@@ -172,7 +175,7 @@ function ExpenseScanUpload({ onScanned, onFileSelected, onClear }) {
             )}
             {status === 'done' && (
               <p className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-                <CheckCircle2 size={13} /> {preview === 'pdf' ? 'PDF verified & fields filled below — please review' : 'Fields filled below — please review before saving'}
+                <CheckCircle2 size={13} /> {preview === 'pdf' ? 'PDF verified & fields filled below  -  please review' : 'Fields filled below  -  please review before saving'}
               </p>
             )}
           </div>
@@ -202,7 +205,7 @@ const STATUS_STYLES = {
   Rejected: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
 }
 
-// Tax obligations use their own status set — the DB column is only ever
+// Tax obligations use their own status set  -  the DB column is only ever
 // Pending/Paid, but the API derives 'Overdue' live (see
 // TaxObligation::derivedStatus()), so it isn't the same vocabulary as
 // an expense's Pending/Approved/Rejected above.
@@ -235,7 +238,7 @@ function DetailRow({ label, value }) {
 
 /**
  * Budgets and expense categories don't have their own API routes in
- * api.php yet (only /api/suppliers does) — these are simple GET lookups
+ * api.php yet (only /api/suppliers does)  -  these are simple GET lookups
  * assuming the same {success, data:[...]} envelope every other module
  * uses. Add Route::prefix('budgets') / Route::prefix('expense-categories')
  * groups (same shape as the expenses block) if they 404.
@@ -269,6 +272,8 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
     uploadReceipt, viewReceipt, fetchReceiptHistory, viewReceiptVersion,
   } = useExpenses()
 
+  usePrivacy()
+
   // Batch Approval Wizard state
   const [showBatchApproveModal, setShowBatchApproveModal] = useState(false)
 
@@ -297,13 +302,13 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search])
 
-  // Expense-date range filter — sent to the backend the same way as
+  // Expense-date range filter  -  sent to the backend the same way as
   // search/status/category (see useExpenses.buildQuery), so it applies
   // across every page, not just what's currently loaded.
   const hasDateFilter = Boolean(filters.expense_date_from || filters.expense_date_to)
   const clearDateFilter = () => setFilter({ expense_date_from: '', expense_date_to: '' })
 
-  // Pagination is server-side — `expenses` is already just the current
+  // Pagination is server-side  -  `expenses` is already just the current
   // page's rows, and `meta` carries the real totals from the backend's
   // Laravel paginator. Do not re-slice `expenses` here.
   const rangeStart = meta.total === 0 ? 0 : (meta.current_page - 1) * meta.per_page + 1
@@ -352,6 +357,19 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
   }
 
   const openAdd = () => { setForm(EMPTY_FORM); setFormError(''); setFieldErrors({}); setDateErrors({ expense_date: '' }); setReceiptFile(null); setModalMode('add') }
+
+  // Deep-link from the dashboard's "New Transaction" menu: /?new=1 opens
+  // the create form directly, then the param is stripped so a refresh
+  // doesn't re-open it.
+  const [searchParams, setSearchParams] = useSearchParams()
+  useEffect(() => {
+    if (searchParams.get('new') !== '1') return
+    openAdd()
+    const next = new URLSearchParams(searchParams)
+    next.delete('new')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams])
+
   const openEdit = (x) => {
     setForm({
       budget_id: x.budget_id,
@@ -377,11 +395,11 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
 
   // Options for the Add/Edit form specifically: active categories only, so
   // a retired category can't be picked for a new (or newly re-pointed)
-  // expense — but if we're editing an expense that's already assigned an
+  // expense  -  but if we're editing an expense that's already assigned an
   // inactive category, that one stays in the list too, so opening the
   // form doesn't force swapping away from it just to save an unrelated
   // field. The filter-row "All Categories" dropdown above intentionally
-  // keeps using the full `categories` list — filtering historical
+  // keeps using the full `categories` list  -  filtering historical
   // expenses by a since-retired category should still work.
   const categoryOptionsForForm = useMemo(() => {
     const active = categories.filter((c) => c.is_active)
@@ -493,7 +511,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
   const handleArchive = async (x) => { await archiveExpense(x.id) }
 
   // Opens the current receipt in a new tab (inline) instead of forcing a
-  // download — mirrors Budgets.jsx's handleViewPlan() exactly, including
+  // download  -  mirrors Budgets.jsx's handleViewPlan() exactly, including
   // the popup-blocker-safe synchronous window.open().
   const handleViewReceipt = async (x) => {
     const targetWindow = window.open('', '_blank')
@@ -509,7 +527,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
   const handleRestore = async (x) => { await restoreExpense(x.id) }
 
   // The detail view (including linked tax obligations) is only returned
-  // by GET /api/expenses/{id} — the list response intentionally omits it
+  // by GET /api/expenses/{id}  -  the list response intentionally omits it
   // to avoid N+1-loading tax obligations for every row on the page.
   const openDetail = async (x) => {
     setDetailRecord(x)
@@ -582,7 +600,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
     { key: 'total', label: 'Total Expenses', value: statsLoading ? '—' : stats.total, icon: Receipt, iconBg: 'bg-primary/15', iconColor: 'text-primary-dark', isActive: !filters.status && !filters.trashed, onClick: () => setFilter({ status: '', trashed: false }) },
     { key: 'totalAmount', label: 'Total Amount', value: statsLoading ? '—' : formatCurrency(stats.total_amount), icon: Wallet, iconBg: 'bg-blue-50 dark:bg-blue-500/10', iconColor: 'text-blue-600 dark:text-blue-400', isActive: false, onClick: () => setFilter({ status: '', trashed: false }) },
     { key: 'thisMonth', label: `This Month (${CURRENT_MONTH_LABEL})`, value: statsLoading ? '—' : formatCurrency(stats.this_month_amount), icon: Tag, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: false, onClick: () => setFilter({ status: '', trashed: false }) },
-    // Only admins can archive/restore — hide this card for non-admin roles
+    // Only admins can archive/restore  -  hide this card for non-admin roles
     ...(isAdmin ? [{ key: 'archived', label: 'Archived', value: statsLoading ? '—' : stats.archived, icon: Archive, iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-500 dark:text-slate-400', isActive: filters.trashed, onClick: () => setFilter({ trashed: true }) }] : []),
   ]
 
@@ -848,36 +866,17 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
           </table>
         </div>
 
-        {!listLoading && expenses.length > 0 && (
-          <div className="flex flex-col gap-2 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs text-muted">
-              Showing {rangeStart}–{rangeEnd} of {meta.total} expenses
-            </p>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => goToPage(meta.current_page - 1)}
-                disabled={meta.current_page <= 1}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
-                aria-label="Previous page"
-              >
-                <ChevronLeft size={15} />
-              </button>
-              <span className="px-2 text-xs font-medium text-ink whitespace-nowrap">
-                Page {meta.current_page} of {meta.last_page}
-              </span>
-              <button
-                type="button"
-                onClick={() => goToPage(meta.current_page + 1)}
-                disabled={meta.current_page >= meta.last_page}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
-                aria-label="Next page"
-              >
-                <ChevronRight size={15} />
-              </button>
-            </div>
-          </div>
-        )}
+        <Pagination
+          page={meta.current_page}
+          totalPages={meta.last_page}
+          onPageChange={goToPage}
+          total={meta.total}
+          label="expenses"
+          showRange
+          rangeStart={rangeStart}
+          rangeEnd={rangeEnd}
+          bordered
+        />
       </div>
 
       <Modal
@@ -949,7 +948,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                       disabled={state.isDepleted && Number(form.budget_id) !== Number(b.budget_id)}
                       className={state.isDepleted ? 'text-muted' : ''}
                     >
-                      {b.budget_name} ({b.budget_code}){state.isDepleted ? ' — Depleted (Unavailable)' : state.isLow ? ' — Low Balance' : ''}
+                      {b.budget_name} ({b.budget_code}){state.isDepleted ? '  -  Depleted (Unavailable)' : state.isLow ? '  -  Low Balance' : ''}
                     </option>
                   )
                 })}
@@ -1205,7 +1204,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
       <Modal
         open={!!detailRecord}
         onClose={() => setDetailRecord(null)}
-        title={detailRecord ? `Expense Details — #${detailRecord.id}` : 'Expense Details'}
+        title={detailRecord ? `Expense Details  -  #${detailRecord.id}` : 'Expense Details'}
         footer={
           <>
             <Button variant="secondary" size="md" onClick={() => setDetailRecord(null)}>Close</Button>
@@ -1266,7 +1265,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
               <div className="flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
                 <AlertTriangle size={16} className="shrink-0 mt-0.5 text-red-600 dark:text-red-400" />
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-red-700 dark:text-red-400">Missing Budget — Cannot Be Approved</p>
+                  <p className="font-semibold text-red-700 dark:text-red-400">Missing Budget  -  Cannot Be Approved</p>
                   <p className="mt-0.5">
                     This expense is not linked to a valid budget in the system. An active budget must be assigned before it can be approved.
                   </p>
@@ -1278,7 +1277,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
               <div className="flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
                 <AlertTriangle size={16} className="shrink-0 mt-0.5 text-red-600 dark:text-red-400" />
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-red-700 dark:text-red-400">Budget Limit Exceeded — Cannot Be Approved</p>
+                  <p className="font-semibold text-red-700 dark:text-red-400">Budget Limit Exceeded  -  Cannot Be Approved</p>
                   <p className="mt-0.5">
                     This expense of <strong>{formatCurrency(detailRecord.expense_amount)}</strong> exceeds the available budget balance.
                   </p>
@@ -1363,7 +1362,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                       </span>
                     ) : (
                       <button type="button" onClick={() => setReceiptUploadTarget(detailRecord)} className="inline-flex items-center gap-1 font-medium text-amber-600 hover:underline dark:text-amber-400">
-                        <Paperclip size={12} /> Not attached — attach one
+                        <Paperclip size={12} /> Not attached  -  attach one
                       </button>
                     )
                   }
@@ -1396,7 +1395,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
               </div>
             </div>
 
-            {/* Tax obligations traced back to this expense — expense_id on
+            {/* Tax obligations traced back to this expense  -  expense_id on
                 tax_obligations is optional, so most expenses will show
                 nothing here; this only renders once the detail fetch
                 (GET /api/expenses/{id}) returns linked records. */}

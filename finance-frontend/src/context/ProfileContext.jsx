@@ -5,7 +5,7 @@ const ProfileContext = createContext(null)
 
 /**
  * Wrap DashboardLayout (or App) with this once. Every consumer of
- * useProfile() then shares the exact same fetch and state — so
+ * useProfile() then shares the exact same fetch and state  -  so
  * uploading a new avatar from the Profile page, for example, is
  * immediately reflected in the Header too, with no separate re-fetch
  * and no risk of the two views drifting out of sync.

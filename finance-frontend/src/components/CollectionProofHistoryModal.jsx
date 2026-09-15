@@ -28,13 +28,13 @@ function formatDateTime(value) {
  * - First item tagged "Current"
  * - Re-uploading adds a new version rather than replacing
  * - View button opens the file in a new tab (PDF renders inline;
- *   images render inline; other types download — browser limitation)
+ *   images render inline; other types download  -  browser limitation)
  *
  * Props:
- *   open        — boolean
- *   onClose     — () => void
- *   collection  — { id, receipt_number } — the collection whose proofs to show
- *   onUploaded  — () => void — called after a successful upload so the
+ *   open         -  boolean
+ *   onClose      -  () => void
+ *   collection   -  { id, receipt_number }  -  the collection whose proofs to show
+ *   onUploaded   -  () => void  -  called after a successful upload so the
  *                 parent can refetch if needed
  */
 export default function CollectionProofHistoryModal({ open, onClose, collection, onUploaded }) {
@@ -63,7 +63,7 @@ export default function CollectionProofHistoryModal({ open, onClose, collection,
   }, [open, collection])
 
   const handleView = async (doc) => {
-    // Open synchronously before the async fetch — browsers only allow
+    // Open synchronously before the async fetch  -  browsers only allow
     // window.open() to bypass the popup blocker when it's a direct result
     // of a click event. Same pattern as BudgetPlanHistoryModal.
     const targetWindow = window.open('', '_blank')
@@ -78,7 +78,7 @@ export default function CollectionProofHistoryModal({ open, onClose, collection,
       if (doc.mime_type === 'application/pdf' || doc.mime_type?.startsWith('image/')) {
         targetWindow.location.href = url
       } else {
-        // Non-previewable type — download instead and close the blank tab
+        // Non-previewable type  -  download instead and close the blank tab
         targetWindow.close()
         const a = document.createElement('a')
         a.href = url
@@ -129,7 +129,7 @@ export default function CollectionProofHistoryModal({ open, onClose, collection,
       title="Proof of Receipt"
       footer={
         <div className="flex items-center justify-between w-full gap-3">
-          {/* Upload trigger — hidden file input, button opens it (only allowed for Pending collections) */}
+          {/* Upload trigger  -  hidden file input, button opens it (only allowed for Pending collections) */}
           {collection?.status === 'Pending' ? (
             <div>
               <input
@@ -152,7 +152,7 @@ export default function CollectionProofHistoryModal({ open, onClose, collection,
           ) : (
             <span className="inline-flex items-center gap-1.5 text-xs text-muted">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-              Confirmed & locked — proof uploads disabled
+              Confirmed & locked  -  proof uploads disabled
             </span>
           )}
           <Button variant="secondary" size="md" onClick={onClose}>Close</Button>

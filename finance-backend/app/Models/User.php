@@ -28,6 +28,7 @@ class User extends Authenticatable
         'profile_photo',
         'status',
         'role_id',
+        'title_id',
         'department_id',
         'updated_by',
         'deleted_by',
@@ -71,6 +72,11 @@ class User extends Authenticatable
     public function department(): BelongsTo
     {
         return $this->belongsTo(Department::class);
+    }
+
+    public function title(): BelongsTo
+    {
+        return $this->belongsTo(Title::class);
     }
 
     public function updatedBy(): BelongsTo

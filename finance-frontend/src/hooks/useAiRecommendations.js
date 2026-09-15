@@ -25,7 +25,7 @@ export function useAiRecommendations() {
 
   // Both archive/restore patch the single recommendation returned by the
   // backend into local state in place, rather than refetching the whole
-  // list — same trade-off every other module's hooks in this app make,
+  // list  -  same trade-off every other module's hooks in this app make,
   // keeps the UI snappy and avoids losing scroll position / filters.
   const archiveRecommendation = useCallback(async (id) => {
     try {

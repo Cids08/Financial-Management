@@ -6,7 +6,7 @@ import { useNotifications } from '../hooks/useNotifications'
 import { useNotificationsContext } from '../context/NotificationsContext'
 import { notificationTypeMeta } from '../utils/notificationTypes'
 
-// How many notifications the dropdown preview shows — the full list lives
+// How many notifications the dropdown preview shows  -  the full list lives
 // on the Notifications page.
 const PREVIEW_COUNT = 5
 
@@ -29,7 +29,7 @@ export default function Notification() {
 
   // FIX: this dropdown previously read notifications/loading/
   // fetchNotifications/markAsRead/markAllAsRead straight from
-  // NotificationsContext — the SAME shared state the full Notifications
+  // NotificationsContext  -  the SAME shared state the full Notifications
   // page paginates through. Opening this dropdown while that page was
   // mounted would overwrite the page's list with this dropdown's 5-item
   // preview (and vice versa), and would flip the page's `loading` spinner
@@ -37,7 +37,7 @@ export default function Notification() {
   // and the matching one still in Notifications.jsx.
   //
   // Own independent copy of useNotifications() for this dropdown's
-  // preview — its own notifications/loading, completely decoupled from
+  // preview  -  its own notifications/loading, completely decoupled from
   // whatever the Notifications page is showing.
   const {
     notifications,
@@ -48,7 +48,7 @@ export default function Notification() {
     markAllAsRead: markAllAsReadLocal,
   } = useNotifications()
 
-  // unreadCount stays on the shared context on purpose — that's the badge
+  // unreadCount stays on the shared context on purpose  -  that's the badge
   // count and SHOULD stay in sync everywhere (this dropdown, the sidebar
   // badge, the Notifications page header text). fetchUnreadCount() is
   // called explicitly below after a local mark-as-read/mark-all-read,

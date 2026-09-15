@@ -5,8 +5,8 @@ const CompanyContext = createContext(null)
 
 /**
  * Wrap App (or DashboardLayout) with this once. Sidebar, Settings, and any
- * other consumer of useCompany() then share the same fetch/state — same
- * pattern as ProfileContext — instead of each screen holding its own copy
+ * other consumer of useCompany() then share the same fetch/state  -  same
+ * pattern as ProfileContext  -  instead of each screen holding its own copy
  * of company branding.
  *
  * Backed by GET/PUT /api/settings and POST/DELETE /api/settings/logo.
@@ -55,7 +55,7 @@ export function CompanyProvider({ children }) {
 
   /**
    * fields: { name, tagline, address, email, phone, currency, fiscalYear,
-   * defaultTaxRate, forecastMonths } — send only what changed, the backend
+   * defaultTaxRate, forecastMonths }  -  send only what changed, the backend
    * currently persists name/tagline via this endpoint (see note below).
    */
   const updateBranding = useCallback(async (fields) => {

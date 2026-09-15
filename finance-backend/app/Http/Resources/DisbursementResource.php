@@ -88,11 +88,14 @@ class DisbursementResource extends JsonResource
 
             'created_by' => $this->created_by,
             'created_by_name' => $this->whenLoaded('creator', fn () => trim(($this->creator?->first_name ?? '').' '.($this->creator?->last_name ?? ''))),
+            'created_by_position' => $this->whenLoaded('creator', fn () => $this->creator?->title?->name),
             'approved_by' => $this->approved_by,
             'approved_by_name' => $this->whenLoaded('approver', fn () => trim(($this->approver?->first_name ?? '').' '.($this->approver?->last_name ?? ''))),
+            'approved_by_position' => $this->whenLoaded('approver', fn () => $this->approver?->title?->name),
             'approved_at' => $this->approved_at?->toIso8601String(),
             'released_by' => $this->released_by,
             'released_by_name' => $this->whenLoaded('releaser', fn () => trim(($this->releaser?->first_name ?? '').' '.($this->releaser?->last_name ?? ''))),
+            'released_by_position' => $this->whenLoaded('releaser', fn () => $this->releaser?->title?->name),
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
             // Payroll-only — null on AP-sourced records.

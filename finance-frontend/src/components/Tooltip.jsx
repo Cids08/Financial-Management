@@ -40,7 +40,7 @@ export default function Tooltip({ label, children, position = 'top', align = 'ce
     // ── Viewport clamping ───────────────────────────────────────────────────
     // We need the rendered tooltip size to clamp correctly. On the first
     // render the ref isn't attached yet, so fall back to 0 (no clamping)
-    // — the next paint with the ref attached will fix it instantly.
+    //  -  the next paint with the ref attached will fix it instantly.
     const tip = tooltipRef.current
     if (tip) {
       const tw = tip.offsetWidth
@@ -78,7 +78,7 @@ export default function Tooltip({ label, children, position = 'top', align = 'ce
   const show = () => { updatePosition(); setVisible(true) }
   const hide = () => setVisible(false)
 
-  // Reposition on scroll / resize while open — fixed-positioned portal
+  // Reposition on scroll / resize while open  -  fixed-positioned portal
   // won't move with its trigger automatically.
   useEffect(() => {
     if (!visible) return

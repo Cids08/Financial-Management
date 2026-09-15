@@ -5,7 +5,7 @@ import { apiFetch } from '../utils/api'
  * Backend note: the `users` table soft-deletes (deleted_at), it doesn't
  * have a boolean `is_archived` column. GET /api/users?archived=1 returns
  * ONLY trashed rows, and the default (no param) returns only non-trashed
- * rows — it's either/or, not a combined list. So this hook keeps two
+ * rows  -  it's either/or, not a combined list. So this hook keeps two
  * separate arrays (active + archived) and refetches both together after
  * any mutation, rather than trying to filter one combined list
  * client-side the way the old dummy-data version did.
@@ -19,6 +19,10 @@ export function useUsers() {
   const [roles, setRoles] = useState([])
   const [rolesLoading, setRolesLoading] = useState(true)
   const [rolesError, setRolesError] = useState(null)
+
+  const [titles, setTitles] = useState([])
+  const [titlesLoading, setTitlesLoading] = useState(true)
+  const [titlesError, setTitlesError] = useState(null)
 
   const [formSaving, setFormSaving] = useState(false)
   const [formError, setFormError] = useState(null)
@@ -67,10 +71,26 @@ export function useUsers() {
     }
   }, [])
 
+  const fetchTitles = useCallback(async () => {
+    setTitlesLoading(true)
+    setTitlesError(null)
+    try {
+      const res = await apiFetch('/api/titles?per_page=100')
+      const json = await res.json()
+      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to load positions.')
+      setTitles(json.data)
+    } catch (err) {
+      setTitlesError(err.message)
+    } finally {
+      setTitlesLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     fetchUsers()
     fetchRoles()
-  }, [fetchUsers, fetchRoles])
+    fetchTitles()
+  }, [fetchUsers, fetchRoles, fetchTitles])
 
   const createUser = useCallback(async (fields) => {
     setFormSaving(true)
@@ -156,6 +176,9 @@ export function useUsers() {
     roles,
     rolesLoading,
     rolesError,
+    titles,
+    titlesLoading,
+    titlesError,
     formSaving,
     formError,
     actionBusyId,

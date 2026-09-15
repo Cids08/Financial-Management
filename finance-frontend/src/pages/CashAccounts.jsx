@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, Wallet, PiggyBank, Landmark, CreditCard, Eye, EyeOff, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, Wallet, PiggyBank, Landmark, CreditCard, Eye, EyeOff, Loader2 } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
+import Pagination from '../components/Pagination'
 import Tooltip from '../components/Tooltip'
 import { formatCurrency } from '../utils/formatters'
 import { useCashAccounts } from '../hooks/useCashAccounts'
 import { useHighlightRow } from '../hooks/useHighlightRow'
+import { usePrivacy } from '../context/PrivacyContext'
 
 const ACCOUNT_TYPES = ['Checking', 'Savings', 'Petty Cash', 'Money Market']
 
@@ -50,6 +52,8 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
     createAccount, updateAccount, archiveAccount, restoreAccount,
   } = useCashAccounts()
 
+  usePrivacy()
+
   // Global search (SearchBar.jsx) navigates here with a highlightId (and,
   // since this table's `search` filter is server-side/debounced inside
   // useCashAccounts, a highlightSearch seed) whenever a cash account
@@ -77,10 +81,10 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
     })
   }
 
-  // Global balance visibility toggle — balances are hidden by default for privacy
+  // Global balance visibility toggle  -  balances are hidden by default for privacy
   const [revealBalances, setRevealBalances] = useState(false)
 
-  // "This page" totals only — see Collectors.jsx for the same caveat.
+  // "This page" totals only  -  see Collectors.jsx for the same caveat.
   // meta.total (used in the Total Accounts card) IS global/accurate.
   const totalBalanceThisPage = accounts.filter((a) => a.status === 'Active').reduce((sum, a) => sum + a.current_balance, 0)
   const inactiveThisPage = accounts.filter((a) => a.status === 'Inactive').length
@@ -292,19 +296,17 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
           </table>
         </div>
 
-        {meta.last_page > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-border text-xs text-muted">
-            <span>Page {meta.current_page} of {meta.last_page} &middot; {meta.total} total</span>
-            <div className="flex items-center gap-1">
-              <button type="button" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-bg disabled:opacity-40 disabled:pointer-events-none transition-colors duration-150">
-                <ChevronLeft size={14} />
-              </button>
-              <button type="button" disabled={page >= meta.last_page} onClick={() => setPage((p) => p + 1)} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-bg disabled:opacity-40 disabled:pointer-events-none transition-colors duration-150">
-                <ChevronRight size={14} />
-              </button>
-            </div>
-          </div>
-        )}
+        <Pagination
+          page={page}
+          totalPages={meta.last_page}
+          onPageChange={setPage}
+          total={meta.total}
+          label="cash accounts"
+          showRange
+          rangeStart={meta.total === 0 ? 0 : (meta.current_page - 1) * 100 + 1}
+          rangeEnd={Math.min(meta.current_page * 100, meta.total)}
+          bordered
+        />
       </div>
 
       <Modal

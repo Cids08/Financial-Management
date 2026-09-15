@@ -27,7 +27,7 @@ class UserService
      */
     public function list(bool $withArchived = false): Collection
     {
-        $query = User::query()->with('role');
+        $query = User::query()->with(['role', 'title']);
 
         return $withArchived
             ? $query->onlyTrashed()->get()
@@ -57,6 +57,7 @@ class UserService
 
             $user = new User([
                 'role_id' => $data['role_id'],
+                'title_id' => $data['title_id'] ?? null,
                 'employee_no' => $employeeNo,
                 'first_name' => $data['first_name'],
                 'last_name' => $data['last_name'],
@@ -72,7 +73,7 @@ class UserService
                 'action' => 'create',
                 'record_id' => $user->id,
                 'activity_description' => "Created user {$user->first_name} {$user->last_name}.",
-                'new_values' => $user->only(['role_id', 'first_name', 'last_name', 'email', 'status']),
+                'new_values' => $user->only(['role_id', 'title_id', 'first_name', 'last_name', 'email', 'status']),
                 'ip_address' => request()->ip(),
                 'user_agent' => request()->userAgent(),
             ]);
@@ -94,7 +95,7 @@ class UserService
                 Log::warning("Failed to send welcome email to {$user->email}: " . $e->getMessage());
             }
 
-            return $user->load('role');
+            return $user->load(['role', 'title']);
         });
     }
 
@@ -108,10 +109,11 @@ class UserService
         $this->guardAgainstStrandingSuperAdmins($user, $data);
 
         return DB::transaction(function () use ($actor, $user, $data) {
-            $original = $user->only(['role_id', 'first_name', 'last_name', 'email', 'status']);
+            $original = $user->only(['role_id', 'title_id', 'first_name', 'last_name', 'email', 'status']);
 
             $user->fill([
                 'role_id' => $data['role_id'],
+                'title_id' => $data['title_id'] ?? null,
                 'first_name' => $data['first_name'],
                 'last_name' => $data['last_name'],
                 'email' => $data['email'],
@@ -126,7 +128,7 @@ class UserService
                 'record_id' => $user->id,
                 'activity_description' => "Updated user {$user->first_name} {$user->last_name}.",
                 'old_values' => $original,
-                'new_values' => $user->only(['role_id', 'first_name', 'last_name', 'email', 'status']),
+                'new_values' => $user->only(['role_id', 'title_id', 'first_name', 'last_name', 'email', 'status']),
                 'ip_address' => request()->ip(),
                 'user_agent' => request()->userAgent(),
             ]);
@@ -139,7 +141,7 @@ class UserService
             // linked earlier via the Collectors page).
             $this->syncCollectorRecord($actor, $user);
 
-            return $user->load('role');
+            return $user->load(['role', 'title']);
         });
     }
 

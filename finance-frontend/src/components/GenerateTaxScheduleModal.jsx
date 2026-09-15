@@ -59,10 +59,10 @@ const TAX_TYPE_INFO = [
 
 const SCOPE_OPTIONS = [
   { value: 'full_year', label: 'Full Fiscal Year', sub: 'All 12 Months + 4 Quarters' },
-  { value: 'q1', label: 'Quarter 1 (Q1)', sub: 'Jan – Mar' },
-  { value: 'q2', label: 'Quarter 2 (Q2)', sub: 'Apr – Jun' },
-  { value: 'q3', label: 'Quarter 3 (Q3)', sub: 'Jul – Sep' },
-  { value: 'q4', label: 'Quarter 4 (Q4)', sub: 'Oct – Dec' },
+  { value: 'q1', label: 'Quarter 1 (Q1)', sub: 'Jan  -  Mar' },
+  { value: 'q2', label: 'Quarter 2 (Q2)', sub: 'Apr  -  Jun' },
+  { value: 'q3', label: 'Quarter 3 (Q3)', sub: 'Jul  -  Sep' },
+  { value: 'q4', label: 'Quarter 4 (Q4)', sub: 'Oct  -  Dec' },
 ]
 
 export default function GenerateTaxScheduleModal({ open, onClose, onGenerate }) {

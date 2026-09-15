@@ -3,6 +3,7 @@ import { Search, Plus, Pencil, Archive, RotateCcw, Users as UsersIcon, UserCheck
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
+import Pagination from '../components/Pagination'
 import Tooltip from '../components/Tooltip'
 import { apiFetch } from '../utils/api'
 import { useCompany } from '../context/CompanyContext'
@@ -17,7 +18,7 @@ function maskValue(value) {
     .join('')
 }
 
-// Fully masks an email — no part of the local name or domain is shown
+// Fully masks an email  -  no part of the local name or domain is shown
 function maskEmail(value) {
   if (!value) return value
   return '•'.repeat(10)
@@ -29,7 +30,7 @@ function formatCurrency(value, currency = 'PHP') {
 }
 
 // Trimmed to exactly the 7 fields this form should collect. Credit Limit
-// and Status are no longer set here — they keep whatever the backend
+// and Status are no longer set here  -  they keep whatever the backend
 // defaults to on create (credit_limit: 0, status: 'Active', per the
 // customers migration) and are left untouched on edit (StoreCustomer/
 // UpdateCustomerRequest both still accept them as 'sometimes', so not
@@ -83,7 +84,7 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
   const [saving, setSaving] = useState(false)
 
   // Controls visibility of contact number and email together per row
-  // (TIN used to be part of this too — column dropped, so it's gone
+  // (TIN used to be part of this too  -  column dropped, so it's gone
   // from both the mask set and the table).
   const [revealedIds, setRevealedIds] = useState(new Set())
   const toggleReveal = (id) => {
@@ -118,7 +119,7 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
       }
 
       // If an archive/restore emptied the current page, step back a page
-      // instead of showing a blank table — same behavior as Departments.jsx.
+      // instead of showing a blank table  -  same behavior as Departments.jsx.
       if ((json.data || []).length === 0 && page > 1) {
         setPage((p) => p - 1)
       }
@@ -137,7 +138,7 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
         setStats(json.data)
       }
     } catch {
-      // Non-critical — stat cards just keep their last known values.
+      // Non-critical  -  stat cards just keep their last known values.
     }
   }, [])
 
@@ -150,11 +151,11 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
     fetchStats()
   }, [fetchStats])
 
-  // Stats now come from a dedicated /stats endpoint (see fetchStats above) —
+  // Stats now come from a dedicated /stats endpoint (see fetchStats above)  - 
   // they reflect true global counts regardless of the current table filter,
   // rather than being derived from whatever subset is currently loaded.
 
-  // Any filter change invalidates the current page number — jumping back
+  // Any filter change invalidates the current page number  -  jumping back
   // to page 1 avoids landing on an out-of-range page for the new result set.
   const updateFilter = (setter) => (value) => {
     setter(value)
@@ -389,29 +390,13 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
       </div>
 
       {!loading && meta.total > 0 && (
-        <div className="flex items-center justify-between gap-3 text-xs text-muted">
-          <p>
-            Page {meta.currentPage} of {meta.lastPage} · {meta.total} customer{meta.total === 1 ? '' : 's'} total
-          </p>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={meta.currentPage <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-            >
-              Previous
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={meta.currentPage >= meta.lastPage}
-              onClick={() => setPage((p) => Math.min(meta.lastPage, p + 1))}
-            >
-              Next
-            </Button>
-          </div>
-        </div>
+        <Pagination
+          page={meta.currentPage}
+          totalPages={meta.lastPage}
+          onPageChange={setPage}
+          total={meta.total}
+          label="customers"
+        />
       )}
 
       <Modal

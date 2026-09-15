@@ -18,7 +18,7 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false)
   const [code, setCode] = useState('')
   const [resendMessage, setResendMessage] = useState('')
-  // Timestamp when the login form mounted — sent alongside the submit so
+  // Timestamp when the login form mounted  -  sent alongside the submit so
   // the backend honeypot middleware can reject submissions that arrive
   // faster than a human could realistically fill the form.
   const [formRenderedAt] = useState(() => Math.floor(Date.now() / 1000))
@@ -32,7 +32,7 @@ export default function Login() {
     // Enter again while a slow/hanging request from a flaky connection
     // is still in flight). The Button below is visually disabled while
     // loading too, but that disable only takes effect after a re-render,
-    // which can lag behind a fast repeat click/keypress — this check
+    // which can lag behind a fast repeat click/keypress  -  this check
     // closes that gap at the handler level. useAuth's login() also
     // guards against stale in-flight requests independently, so even if
     // a duplicate slips through here, an old response can't clobber a
@@ -62,7 +62,7 @@ export default function Login() {
     cancelTwoFactor()
   }
 
-  // accountLockedFor runs up to 15 minutes — "127s" reads badly at that
+  // accountLockedFor runs up to 15 minutes  -  "127s" reads badly at that
   // length, so format as mm:ss once it's over a minute. The short
   // retryAfter (IP throttle, ~60s max) stays as plain seconds elsewhere.
   const formatLockout = (seconds) => {
@@ -73,7 +73,7 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden">
-      {/* Company cover photo — a wide banner with logo/tagline/contact
+      {/* Company cover photo  -  a wide banner with logo/tagline/contact
           details baked into the bottom third, so object-position is
           pushed toward the top to keep the sky + equipment cluster in
           frame and crop out that dense text band instead of squashing
@@ -85,7 +85,7 @@ export default function Login() {
       />
       {/* Scrim over the photo so the frosted-glass card keeps enough
           contrast regardless of theme or how bright the underlying photo
-          is — a hazy sky can wash out light-mode text just as easily as
+          is  -  a hazy sky can wash out light-mode text just as easily as
           a dark photo can bury dark-mode text, so this needs to be dark
           enough to hold contrast either way, not tuned to one specific
           photo's brightness. */}
@@ -106,7 +106,7 @@ export default function Login() {
         {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
       </button>
 
-      {/* Card opacity bumped up from the original /40·/30 — against a
+      {/* Card opacity bumped up from the original /40·/30  -  against a
           photo background (vs. a flat gradient) the card needs to hold
           its own contrast regardless of what's directly behind it, so
           it's less see-through than a typical glass card would be. */}
@@ -174,7 +174,7 @@ export default function Login() {
 
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">
               {/*
-                Honeypot field. Deliberately NOT type="hidden" — some bots
+                Honeypot field. Deliberately NOT type="hidden"  -  some bots
                 skip those. Hidden via off-screen positioning instead, and
                 excluded from tab order / screen readers so real users and
                 assistive tech never encounter it.
@@ -250,7 +250,7 @@ export default function Login() {
                 disabled={loading || retryAfter > 0 || accountLockedFor > 0}
               >
                 {accountLockedFor > 0
-                  ? `Locked — ${formatLockout(accountLockedFor)}`
+                  ? `Locked  -  ${formatLockout(accountLockedFor)}`
                   : retryAfter > 0
                     ? `Try again in ${retryAfter}s`
                     : loading

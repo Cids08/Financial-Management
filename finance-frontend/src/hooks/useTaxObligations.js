@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { apiFetch } from '../utils/api'
 
-// Types a browser can actually render inline — same limitation as
+// Types a browser can actually render inline  -  same limitation as
 // useBudgets.js's viewPlan()/useExpenses.js's viewReceipt(): everything
 // else has no native viewer in ANY browser, so trying to navigate a tab
 // to one of those just silently triggers a background download while the
@@ -36,7 +36,7 @@ export function useTaxObligations() {
   const [showArchived, setShowArchived] = useState(false)
   const [page, setPage] = useState(1)
 
-  // Due-date range filter — sent to the backend the same way as
+  // Due-date range filter  -  sent to the backend the same way as
   // search/status, so it applies across every page, not just the one
   // currently loaded.
   const [dateFrom, setDateFrom] = useState('')
@@ -156,7 +156,7 @@ export function useTaxObligations() {
   }, [fetchObligations])
 
   // Document upload is a real file (pdf/jpg/jpeg/png, max 10MB per
-  // UploadTaxObligationDocumentRequest) sent as multipart/form-data — do
+  // UploadTaxObligationDocumentRequest) sent as multipart/form-data  -  do
   // NOT set a Content-Type header here, the browser needs to set its own
   // boundary. Endpoint is singular /document, matching
   // AccountsPayableController's real document-route naming.
@@ -171,7 +171,7 @@ export function useTaxObligations() {
       })
       const json = await res.json()
       if (!res.ok || !json.success) throw new Error(json.message || 'Failed to attach document.')
-      // Refetch so has_document flips on the row/button immediately —
+      // Refetch so has_document flips on the row/button immediately  - 
       // same pattern as createObligation/updateObligation/etc. above.
       // Without this, the Attach button stayed muted until the next
       // unrelated filter/page change happened to trigger a reload.
@@ -184,7 +184,7 @@ export function useTaxObligations() {
   }, [fetchObligations])
 
   // Every document version ever attached to this obligation, newest
-  // first — a re-upload doesn't erase history, it just adds another row.
+  // first  -  a re-upload doesn't erase history, it just adds another row.
   const fetchDocumentHistory = useCallback(async (id) => {
     try {
       const res = await apiFetch(`/api/tax-obligations/${id}/document`)
@@ -199,7 +199,7 @@ export function useTaxObligations() {
   // Opens a specific document version inline in a new tab instead of
   // forcing a download. `targetWindow` (optional): a tab already opened
   // SYNCHRONOUSLY by the caller before this async function's fetch even
-  // starts — see useBudgets.js's viewPlan() for the full explanation of
+  // starts  -  see useBudgets.js's viewPlan() for the full explanation of
   // why that ordering matters for the popup blocker.
   const viewDocument = useCallback(async (obligationId, documentId, targetWindow) => {
     try {
@@ -217,7 +217,7 @@ export function useTaxObligations() {
         } else {
           window.open(url, '_blank', 'noopener,noreferrer')
         }
-        // Deliberately not revoking the object URL immediately — the tab
+        // Deliberately not revoking the object URL immediately  -  the tab
         // needs it to stay valid while it renders the file.
         return { success: true, viewedInline: true }
       }

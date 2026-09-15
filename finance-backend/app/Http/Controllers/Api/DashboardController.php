@@ -48,9 +48,10 @@ class DashboardController extends Controller
     /**
      * GET /api/dashboard/charts
      *
-     * All 7 "Charts & Trends" datasets in one payload: revenue_trend,
+     * All "Charts & Trends" datasets in one payload: revenue_trend,
      * expense_trend, cash_flow_trend, collections_trend,
-     * budget_utilization, receivable_aging, payable_aging.
+     * budget_utilization, receivable_aging, payable_aging,
+     * expense_breakdown, cash_distribution.
      */
     public function charts(): JsonResponse
     {

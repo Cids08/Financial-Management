@@ -13,6 +13,7 @@ import Modal from './Modal'
 import Button from './Button'
 import { apiFetch } from '../utils/api'
 import { formatCurrency } from '../utils/formatters'
+import { usePrivacy } from '../context/PrivacyContext'
 
 const ALLOWED_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png']
 const ACCEPT = '.pdf,.jpg,.jpeg,.png'
@@ -45,6 +46,9 @@ export default function RecordTaxPaymentModal({
   onPay,
 }) {
   const todayStr = new Date().toISOString().slice(0, 10)
+
+  usePrivacy()
+
   const [cashAccounts, setCashAccounts] = useState([])
   const [loadingAccounts, setLoadingAccounts] = useState(false)
 

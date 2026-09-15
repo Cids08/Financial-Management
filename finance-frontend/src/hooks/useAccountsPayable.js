@@ -3,7 +3,7 @@ import { apiFetch } from '../utils/api'
 
 /**
  * ASSUMPTION: GET /api/suppliers returns objects shaped like
- * { supplier_id, supplier_name, ... } — matching the user_id/role_id
+ * { supplier_id, supplier_name, ... }  -  matching the user_id/role_id
  * convention used elsewhere. I don't have SupplierController, so if the
  * real shape differs (e.g. plain `id`/`name`), adjust supplierName()
  * usage in AccountsPayable.jsx accordingly.
@@ -11,7 +11,7 @@ import { apiFetch } from '../utils/api'
  * ASSUMPTION: GET /api/audit-logs?module=Accounts+Payable&record_id={id}
  * returns this bill's AuditLog rows. Confirmed from routes/api.php that
  * GET /audit-logs exists (AuditLogController::index, permission:audit-logs.view),
- * but its actual query params aren't confirmed — module/record_id are a
+ * but its actual query params aren't confirmed  -  module/record_id are a
  * guess based on the columns AccountsPayableService::create()/update()/
  * approve()/archive()/restore() already write on every AuditLog row.
  * Verify against the real controller and adjust fetchBillAuditLogs()
@@ -94,9 +94,9 @@ export function useAccountsPayable() {
   }, [])
 
   // Chart of accounts, for the bill's "which account does this debit"
-  // dropdown — see StoreAccountsPayableRequest's now-required account_id.
+  // dropdown  -  see StoreAccountsPayableRequest's now-required account_id.
   // Endpoint confirmed from routes/api.php: GET /general-ledger/chart-of-accounts
-  // (GeneralLedgerController::accounts, gated by permission:general-ledger.view —
+  // (GeneralLedgerController::accounts, gated by permission:general-ledger.view  - 
   // a user without that permission will get a 403 here even if they have
   // ap.manage, which is worth knowing about if AP staff can't see this
   // dropdown populate).
@@ -115,7 +115,7 @@ export function useAccountsPayable() {
     }
   }, [])
 
-  // On-demand, not fetched on mount — called by the component when the
+  // On-demand, not fetched on mount  -  called by the component when the
   // Bill Details modal opens for a specific record, since audit history
   // is per-bill rather than something the whole list view needs upfront.
   const fetchBillAuditLogs = useCallback(async (apId) => {
@@ -224,7 +224,7 @@ export function useAccountsPayable() {
       const json = await res.json()
       if (!res.ok || !json.success) throw new Error(json.message || 'Failed to approve bill.')
       // Approving now posts a journal entry (see AccountsPayableService),
-      // which changes what a bill "owes" means going forward — refresh
+      // which changes what a bill "owes" means going forward  -  refresh
       // stats too, not just the bill list, so the Payable Amount card
       // doesn't go stale after an approval.
       await Promise.all([fetchBills(), fetchStats()])
@@ -257,7 +257,7 @@ export function useAccountsPayable() {
     }
   }, [fetchBills, fetchStats])
 
-  // Attach a supporting document to a bill. multipart/form-data — apiFetch
+  // Attach a supporting document to a bill. multipart/form-data  -  apiFetch
   // must not set a Content-Type header itself (same as BillScanUpload's
   // /api/invoices/scan call) so the browser sets the multipart boundary.
   const attachDocument = useCallback(async (apId, file) => {
@@ -288,7 +288,7 @@ export function useAccountsPayable() {
   }, [])
 
   // targetWindow: a window already opened synchronously by the caller's
-  // click handler (see AccountsPayableDocumentModal's handleView) — popup
+  // click handler (see AccountsPayableDocumentModal's handleView)  -  popup
   // blockers only reliably allow window.open() as a direct result of the
   // click event, not after this async fetch resolves.
   const viewDocument = useCallback(async (apId, documentId, targetWindow) => {
@@ -312,7 +312,7 @@ export function useAccountsPayable() {
   }, [])
 
   // ---------------------------------------------------------------------------
-  // Payment Wizard — Automated Batch Payment Run
+  // Payment Wizard  -  Automated Batch Payment Run
   // ---------------------------------------------------------------------------
 
   /**
@@ -334,7 +334,7 @@ export function useAccountsPayable() {
   }, [])
 
   /**
-   * Execute a Payment Run — creates pending disbursements for selected proposals.
+   * Execute a Payment Run  -  creates pending disbursements for selected proposals.
    * @param {{ cash_account_id: number, payment_method: string, payment_date: string, proposals: Array }} payload
    */
   const executePaymentRun = useCallback(async (payload) => {

@@ -17,7 +17,7 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
   const { name, tagline, logoUrl } = useCompany()
 
   // THE FIX: filterMenuByPermissions() expects a flat array of
-  // permission_name strings (e.g. ['users.view', 'ap.manage']) — exactly
+  // permission_name strings (e.g. ['users.view', 'ap.manage'])  -  exactly
   // what GET /api/me/permissions returns via usePermissions(). The
   // previous version passed useAuth()'s `user` object here instead, which
   // has no .includes() method, so every gated item's hasPermission() check
@@ -30,7 +30,7 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
 
   // Unread badge for the Notifications sidebar item. Reads the shared
   // NotificationsContext (mounted once in DashboardLayout) instead of its
-  // own useNotifications() instance — fetching and polling now happen in
+  // own useNotifications() instance  -  fetching and polling now happen in
   // exactly one place, and marking something read elsewhere (Header's
   // bell, the Notifications page) updates this badge immediately since
   // they all share the same state.
@@ -85,7 +85,7 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
           ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         `}
       >
-        {/* Brand / logo row — reads from CompanyContext, editable in Settings */}
+        {/* Brand / logo row  -  reads from CompanyContext, editable in Settings */}
         <div className="h-16 flex items-center gap-2.5 px-4 border-b border-sidebar-border shrink-0">
           <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center shrink-0 overflow-hidden">
             {logoUrl ? (

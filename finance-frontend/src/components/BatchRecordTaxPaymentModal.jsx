@@ -14,6 +14,7 @@ import Modal from './Modal'
 import Button from './Button'
 import { apiFetch } from '../utils/api'
 import { formatCurrency } from '../utils/formatters'
+import { usePrivacy } from '../context/PrivacyContext'
 
 const ALLOWED_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png']
 const ACCEPT = '.pdf,.jpg,.jpeg,.png'
@@ -46,6 +47,9 @@ export default function BatchRecordTaxPaymentModal({
   onBatchPay,
 }) {
   const todayStr = new Date().toISOString().slice(0, 10)
+
+  usePrivacy()
+
   const [cashAccounts, setCashAccounts] = useState([])
   const [loadingAccounts, setLoadingAccounts] = useState(false)
 
@@ -296,7 +300,7 @@ export default function BatchRecordTaxPaymentModal({
             <option value="">-- Select Cash or Bank Account --</option>
             {cashAccounts.map((acc) => (
               <option key={acc.id} value={acc.id}>
-                {acc.account_name} ({acc.bank_name || acc.account_code || 'Cash'}) — Available: {formatCurrency(acc.current_balance)}
+                {acc.account_name} ({acc.bank_name || acc.account_code || 'Cash'})  -  Available: {formatCurrency(acc.current_balance)}
               </option>
             ))}
           </select>

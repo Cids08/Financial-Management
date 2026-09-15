@@ -20,7 +20,7 @@ export default function Modal({ open, onClose, title, children, footer, maxWidth
   return (
     // items-end on mobile turns this into a bottom sheet; items-center on sm+ centers a normal dialog
     <div className="fixed inset-0 z-60 flex items-end justify-center sm:items-center sm:p-4">
-      {/* Backdrop — blurBackdrop is opt-in per modal instance so this stays unchanged everywhere else */}
+      {/* Backdrop  -  blurBackdrop is opt-in per modal instance so this stays unchanged everywhere else */}
       <div
         className={`absolute inset-0 bg-ink/50 animate-fadeIn ${blurBackdrop ? 'backdrop-blur-md' : ''}`}
         onClick={onClose}

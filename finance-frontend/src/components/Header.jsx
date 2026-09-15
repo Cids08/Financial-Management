@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronDown, PanelLeftClose, PanelLeftOpen, User, Settings, LogOut, Sun, Moon } from 'lucide-react'
+import { ChevronDown, PanelLeftClose, PanelLeftOpen, User, Settings, LogOut, Sun, Moon, Eye, EyeOff } from 'lucide-react'
 import SearchBar from './SearchBar'
 import Notification from './Notification'
 import { useClickOutside } from '../hooks/useClickOutside'
 import { useTheme } from '../context/ThemeContext'
 import { useProfile } from '../hooks/useProfile'
+import { usePrivacy } from '../context/PrivacyContext'
 import { menuData } from '../utils/menuData'
 
 function getGreeting(hour) {
@@ -32,7 +33,7 @@ export default function Header({ onToggleSidebar, collapsed, onLogoutClick }) {
   // Header now pulls the user's identity straight from the backend
   // (same useProfile() hook the Profile page uses) instead of depending
   // on a parent layout to fetch it and pass userName/avatarUrl down as
-  // props — one source of truth, no risk of the two views drifting.
+  // props  -  one source of truth, no risk of the two views drifting.
   const { profile, loading: profileLoading } = useProfile()
 
   const [profileOpen, setProfileOpen] = useState(false)
@@ -41,6 +42,7 @@ export default function Header({ onToggleSidebar, collapsed, onLogoutClick }) {
   const ref = useRef(null)
   const navigate = useNavigate()
   const { theme, toggleTheme } = useTheme()
+  const { privacyOn, togglePrivacy } = usePrivacy()
   useClickOutside(ref, () => setProfileOpen(false))
 
   useEffect(() => {
@@ -154,6 +156,19 @@ export default function Header({ onToggleSidebar, collapsed, onLogoutClick }) {
       </div>
 
       <div className="flex items-center gap-2 shrink-0">
+        <button
+          onClick={togglePrivacy}
+          aria-label={privacyOn ? 'Disable Privacy Mode' : 'Enable Privacy Mode'}
+          title={privacyOn ? 'Privacy Mode On - click to reveal amounts' : 'Privacy Mode Off - click to hide amounts'}
+          className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold border transition-colors duration-150
+            ${privacyOn
+              ? 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400'
+              : 'border-border bg-surface text-muted hover:text-ink hover:border-ink/20'}`}
+        >
+          {privacyOn ? <EyeOff size={14} /> : <Eye size={14} />}
+          {privacyOn ? 'Privacy On' : 'Privacy Off'}
+        </button>
+
         <button
           onClick={toggleTheme}
           aria-label="Toggle dark mode"

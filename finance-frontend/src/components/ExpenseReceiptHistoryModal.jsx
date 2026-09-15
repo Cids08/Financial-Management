@@ -21,10 +21,10 @@ function formatDateTime(value) {
  * - open, onClose: standard Modal controls
  * - expense: the expense whose receipt history is shown (uses expense.id, expense.description)
  * - fetchHistory: async (expenseId) => { success, data, message }
- * - onView: async (expenseId, documentId, targetWindow?) => { success, message } —
+ * - onView: async (expenseId, documentId, targetWindow?) => { success, message }  - 
  *   opens the version inline in a new tab (see useExpenses.js's
  *   viewReceiptVersion). Only PDFs/images actually render inline in most
- *   browsers — same limitation BudgetPlanHistoryModal notes, though for
+ *   browsers  -  same limitation BudgetPlanHistoryModal notes, though for
  *   receipts (PDF/JPG/PNG only) this should basically always preview
  *   inline in practice.
  */
@@ -52,7 +52,7 @@ export default function ExpenseReceiptHistoryModal({ open, onClose, expense, fet
   }, [open, expense, fetchHistory])
 
   const handleView = async (doc) => {
-    // Open the tab SYNCHRONOUSLY, before the await below — same reasoning
+    // Open the tab SYNCHRONOUSLY, before the await below  -  same reasoning
     // as BudgetPlanHistoryModal's handleView(): browsers only reliably
     // allow window.open() to bypass the popup blocker when it's a direct
     // result of the click event, not after an async fetch has already

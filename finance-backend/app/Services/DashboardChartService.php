@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\AccountsPayable;
 use App\Models\AccountsReceivable;
 use App\Models\Budget;
+use App\Models\CashAccount;
 use App\Models\Collection as CollectionModel; // aliased — see note in App\Models\Collection
 use App\Models\Expense;
 use Carbon\Carbon;
@@ -60,6 +61,29 @@ class DashboardChartService
                 'net' => $inflow - $outflow,
             ];
         })->values()->toArray();
+    }
+
+    /**
+     * Where the Available Cash actually sits — one slice per active cash
+     * account with a positive balance, largest first. Zero-balance accounts
+     * are dropped so the donut doesn't draw empty slices. Mirrors
+     * DashboardService::getModuleCards()' "Active" semantics.
+     */
+    public function getCashDistribution(): array
+    {
+        $accounts = CashAccount::query()
+            ->where('status', 'Active')
+            ->where('current_balance', '>', 0)
+            ->orderByDesc('current_balance')
+            ->get(['account_name', 'bank_name', 'current_balance']);
+
+        return $accounts
+            ->map(fn ($account) => [
+                'label' => $account->bank_name ? "{$account->account_name} ({$account->bank_name})" : $account->account_name,
+                'value' => (float) $account->current_balance,
+            ])
+            ->values()
+            ->toArray();
     }
 
     /** Daily collected amount for the last $days, oldest first, zero-filled for empty days. */
@@ -122,7 +146,33 @@ class DashboardChartService
         return $this->agingBuckets(AccountsPayable::class);
     }
 
-    /** All seven chart datasets in one call — mirrors the "one aggregated payload" pattern used for the rest of the dashboard. */
+    /**
+     * Current month's non-rejected expenses grouped by category, largest
+     * first — a composition (donut) slice per category. Expenses without a
+     * category fall into an "Uncategorized" slice so the total still adds
+     * up to the month's expense figure instead of silently missing chunks.
+     */
+    public function getExpenseBreakdown(): array
+    {
+        $today = Carbon::today();
+
+        $rows = Expense::query()
+            ->selectRaw("COALESCE(expense_categories.category_name, 'Uncategorized') as category, SUM(expenses.expense_amount) as total")
+            ->leftJoin('expense_categories', 'expense_categories.id', '=', 'expenses.expense_category_id')
+            ->where('expenses.status', '!=', Expense::STATUS_REJECTED)
+            ->whereMonth('expenses.expense_date', $today->month)
+            ->whereYear('expenses.expense_date', $today->year)
+            ->groupBy('category')
+            ->orderByDesc('total')
+            ->pluck('total', 'category');
+
+        return $rows
+            ->map(fn ($total, $category) => ['label' => $category, 'value' => (float) $total])
+            ->values()
+            ->toArray();
+    }
+
+    /** All eight chart datasets in one call — mirrors the "one aggregated payload" pattern used for the rest of the dashboard. */
     public function getAll(): array
     {
         return [
@@ -133,6 +183,8 @@ class DashboardChartService
             'budget_utilization' => $this->getBudgetUtilization(),
             'receivable_aging' => $this->getReceivableAging(),
             'payable_aging' => $this->getPayableAging(),
+            'expense_breakdown' => $this->getExpenseBreakdown(),
+            'cash_distribution' => $this->getCashDistribution(),
         ];
     }
 

@@ -39,7 +39,7 @@ export async function apiFetch(path, options = {}) {
 
   // Backend flags accounts that must change their password before doing
   // anything else (EnsurePasswordChanged middleware). Broadcasts the same
-  // way as auth:expired — MustChangePasswordListener (mounted in App.jsx)
+  // way as auth:expired  -  MustChangePasswordListener (mounted in App.jsx)
   // picks this up and shows a blocking, non-dismissible modal.
   if (response.status === 423) {
     try {
@@ -49,7 +49,7 @@ export async function apiFetch(path, options = {}) {
         window.dispatchEvent(new Event('auth:must-change-password'))
       }
     } catch {
-      // Body wasn't JSON or already consumed — fall through.
+      // Body wasn't JSON or already consumed  -  fall through.
     }
   }
 

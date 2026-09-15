@@ -8,9 +8,9 @@ import { menuData } from '../utils/menuData'
 
 /* ---------------------------------------------------------------------- */
 /* Two search sources feed this dropdown:                                 */
-/*  1. PAGE_INDEX — static, client-side, instant. Built from menuData, so */
+/*  1. PAGE_INDEX  -  static, client-side, instant. Built from menuData, so */
 /*     typing "settings" or "reports" jumps straight to that page.        */
-/*  2. Live database records — debounced, from GET /api/search?q=...      */
+/*  2. Live database records  -  debounced, from GET /api/search?q=...      */
 /*     (SearchController.php). Both render together, Pages first.        */
 /* ---------------------------------------------------------------------- */
 
@@ -20,7 +20,7 @@ const RECENT_STORAGE_KEY = 'fms_recent_searches_v2'
 const MAX_RECENT = 5
 const MAX_PAGE_MATCHES = 5
 
-// Extra searchable terms per menu item id, beyond its literal label —
+// Extra searchable terms per menu item id, beyond its literal label  - 
 // lets typing "cash" surface "Reports" (cash flow report) etc.
 const EXTRA_KEYWORDS = {
   'cash-accounts': ['cash flow', 'cash transactions', 'bank balance', 'wallet'],
@@ -46,7 +46,7 @@ const EXTRA_KEYWORDS = {
 
 // Flattens menuData's nested {children} into one searchable list, and also
 // serves as the icon lookup for BOTH page matches and live-record category
-// headers below — so every icon in this dropdown is pulled straight from
+// headers below  -  so every icon in this dropdown is pulled straight from
 // menuData/sidebar, never redeclared.
 function buildPageIndex(items, map = { list: [], icons: {} }) {
   items.forEach((item) => {
@@ -112,7 +112,7 @@ export default function SearchBar({ className = '' }) {
     [hasPermission]
   )
 
-  // Instant, synchronous — no debounce needed for a static in-memory list.
+  // Instant, synchronous  -  no debounce needed for a static in-memory list.
   const pageMatches = useMemo(() => {
     if (!isSearching) return []
     const needle = query.trim().toLowerCase()
@@ -180,7 +180,7 @@ export default function SearchBar({ className = '' }) {
       try {
         localStorage.setItem(RECENT_STORAGE_KEY, JSON.stringify(next))
       } catch {
-        // localStorage unavailable — recent searches just won't persist.
+        // localStorage unavailable  -  recent searches just won't persist.
       }
       return next
     })
@@ -203,7 +203,7 @@ export default function SearchBar({ className = '' }) {
 
   const selectNavItem = (entry) => {
     if (entry.kind === 'page') {
-      // A page/module link, not a specific record — nothing to highlight,
+      // A page/module link, not a specific record  -  nothing to highlight,
       // and it doesn't belong in "recent records" search history either.
       navigate(entry.path)
       closeAndReset()
@@ -217,7 +217,7 @@ export default function SearchBar({ className = '' }) {
       return
     }
     // A specific database record: navigate to its module's list page and
-    // pass its id (plus a search_hint, when the backend provided one —
+    // pass its id (plus a search_hint, when the backend provided one  - 
     // see SearchController::searchableEntities()) via router state. The
     // destination page reads this with useHighlightRow() (see
     // hooks/useHighlightRow.js) to seed its own search box if needed,

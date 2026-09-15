@@ -1,11 +1,14 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Pencil, Archive, RotateCcw, ShieldCheck, Users, Lock, Search } from 'lucide-react'
+import { Plus, Pencil, Archive, RotateCcw, ShieldCheck, Users, Lock, Search, ShieldAlert } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
+import Pagination from '../components/Pagination'
 import Tooltip from '../components/Tooltip'
 import { useRoles } from '../hooks/useRoles'
+import { useProfile } from '../hooks/useProfile'
+import { apiFetch } from '../utils/api'
 
 
 const EMPTY_FORM = { role_name: '', description: '' }
@@ -40,7 +43,6 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
     actionBusyId,
     permissions,
     permissionsLoading,
-    permSaving,
     permError,
     createRole,
     updateRole,
@@ -54,7 +56,7 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
   const [showArchived, setShowArchived] = useState(false)
   const sourceRoles = showArchived ? archivedRoles : roles
 
-  // Same search-bar pattern as the other modules — filters by role name
+  // Same search-bar pattern as the other modules  -  filters by role name
   // or description, client-side (role lists are short enough that a
   // dedicated search endpoint isn't worth it).
   const filteredRoles = useMemo(() => {
@@ -64,6 +66,12 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
       role.role_name.toLowerCase().includes(term) ||
       (role.description || '').toLowerCase().includes(term))
   }, [sourceRoles, search])
+
+  const [page, setPage] = useState(1)
+  const PER_PAGE = 10
+  const totalPages = Math.max(1, Math.ceil(filteredRoles.length / PER_PAGE))
+  const rangeStart = (page - 1) * PER_PAGE + 1
+  const rangeEnd = Math.min(page * PER_PAGE, filteredRoles.length)
 
   // Add/Edit modal: null = closed, 'add' = create mode, or the role object being edited
   const [modalMode, setModalMode] = useState(null)
@@ -80,9 +88,36 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
   const [permModalLoading, setPermModalLoading] = useState(false)
   const [permSearch, setPermSearch] = useState('')
 
+  // Per-click re-auth gate. A permission toggle applies immediately, so
+  // instead of a batch "Save" the checkbox click opens a password prompt:
+  // { items: permissions being flipped, adding: true|false }. Only after
+  // the password verifies is that single change PUT to the backend.
+  const [pendingChange, setPendingChange] = useState(null)
+  const [permGatePassword, setPermGatePassword] = useState('')
+  const [permGateError, setPermGateError] = useState('')
+  const [permGateSaving, setPermGateSaving] = useState(false)
+
+  // Current signed-in user. The role you currently hold is locked  -  the
+  // backend rejects edits to it too, so the UI disables the checkboxes to
+  // make that unmistakable. The Super Admin role is likewise sealed off
+  // from anyone who isn't a Super Admin (backend-enforced; this just
+  // surfaces it instead of failing on save).
+  const { profile } = useProfile()
+  const superAdminRoleId = roles.find((r) => r.role_name.toLowerCase() === 'super admin')?.role_id
+  const isSuperAdminActor = profile?.role_slug === 'super-admin'
+  const isOwnRole = permRole != null && Number(permRole.role_id) === Number(profile?.role_id)
+  const isProtectedSuperAdminRole = superAdminRoleId != null &&
+    permRole != null &&
+    Number(permRole.role_id) === Number(superAdminRoleId) &&
+    !isSuperAdminActor
+  const permLocked = isOwnRole || isProtectedSuperAdminRole
+
   const openPermissionsModal = async (role) => {
     setPermRole(role)
     setPermSearch('')
+    setPendingChange(null)
+    setPermGatePassword('')
+    setPermGateError('')
     setPermModalLoading(true)
     const result = await fetchRoleWithPermissions(role.role_id)
     if (result.success) {
@@ -95,39 +130,73 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
     setPermRole(null)
     setCheckedIds(new Set())
     setPermSearch('')
+    setPendingChange(null)
+    setPermGatePassword('')
+    setPermGateError('')
   }
 
   const togglePermission = (permissionId) => {
-    setCheckedIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(permissionId)) next.delete(permissionId)
-      else next.add(permissionId)
-      return next
-    })
+    if (permLocked) return
+    const permission = permissions.find((p) => p.permission_id === permissionId)
+    setPendingChange({ items: [permission], adding: !checkedIds.has(permissionId) })
+    setPermGatePassword('')
+    setPermGateError('')
   }
 
-  // Bulk-toggles every permission within one module at once — flips to
-  // "select all" if any are currently unchecked, "deselect all" only once
-  // the whole module is already fully checked.
+  // Bulk-flips every permission within one module at once ("Select all" /
+  // "Deselect all")  -  still confirmed with a single password prompt, then
+  // applied as one change. "Select all" when any are unchecked, "deselect
+  // all" only once the whole module is already fully checked.
   const toggleModuleAll = (modulePerms) => {
+    if (permLocked) return
     const allChecked = modulePerms.every((p) => checkedIds.has(p.permission_id))
-    setCheckedIds((prev) => {
-      const next = new Set(prev)
-      modulePerms.forEach((p) => {
-        if (allChecked) next.delete(p.permission_id)
-        else next.add(p.permission_id)
-      })
-      return next
-    })
+    setPendingChange({ items: modulePerms, adding: !allChecked })
+    setPermGatePassword('')
+    setPermGateError('')
   }
 
-  const savePermissions = async () => {
-    const result = await updateRolePermissions(permRole.role_id, Array.from(checkedIds))
-    if (result.success) closePermissionsModal()
+  // Verify the admin's password, then apply the single pending toggle. A
+  // wrong password keeps the gate open with an error and changes nothing.
+  const confirmPendingChange = async () => {
+    setPermGateSaving(true)
+    setPermGateError('')
+    try {
+      const res = await apiFetch('/auth/verify-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: permGatePassword }),
+      })
+      const json = await res.json()
+
+      if (!res.ok || !json.success) {
+        setPermGateError(json.message || 'The password is incorrect.')
+        setPermGateSaving(false)
+        return
+      }
+
+      const next = new Set(checkedIds)
+      pendingChange.items.forEach((p) => {
+        if (pendingChange.adding) next.add(p.permission_id)
+        else next.delete(p.permission_id)
+      })
+
+      const result = await updateRolePermissions(permRole.role_id, Array.from(next))
+      if (result.success) {
+        setCheckedIds(next)
+        setPendingChange(null)
+        setPermGatePassword('')
+      } else {
+        setPermGateError(result.message || 'Could not update permissions.')
+      }
+    } catch {
+      setPermGateError('Could not verify your password. Please try again.')
+    } finally {
+      setPermGateSaving(false)
+    }
   }
 
   // Filters by display name or description before grouping, so a search
-  // term can match either — useful since module names alone (e.g.
+  // term can match either  -  useful since module names alone (e.g.
   // "Accounting") are too broad to narrow down a list this long.
   const filteredPermissionGroups = useMemo(() => {
     const term = permSearch.trim().toLowerCase()
@@ -174,7 +243,7 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
     if (result.success) {
       closeModal()
     }
-    // On failure, formError (from the hook) surfaces via the box below —
+    // On failure, formError (from the hook) surfaces via the box below  - 
     // the modal stays open so the person can fix it.
   }
 
@@ -183,7 +252,7 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
     if (result.success) {
       setRoleToArchive(null)
     }
-    // On failure, deleteError surfaces in this same modal — it stays open.
+    // On failure, deleteError surfaces in this same modal  -  it stays open.
   }
 
   // Card body click navigates to Users pre-filtered by this role.
@@ -210,7 +279,7 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
         </Button>
       </div>
 
-      {/* Search + Show Archived — same filter-bar pattern as the other
+      {/* Search + Show Archived  -  same filter-bar pattern as the other
           modules, instead of a lone checkbox up in the header. */}
       <div className={`${PANEL} ${PANEL_PAD} flex flex-col gap-3 sm:flex-row sm:items-center`}>
         <div className="relative flex-1">
@@ -218,7 +287,7 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
           <input
             type="text"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); setPage(1) }}
             placeholder="Search by role name or description..."
             className={`${INPUT} pl-9`}
           />
@@ -227,7 +296,7 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
           variant={showArchived ? 'primary' : 'secondary'}
           size="sm"
           icon={Archive}
-          onClick={() => setShowArchived((prev) => !prev)}
+          onClick={() => { setPage(1); setShowArchived((prev) => !prev) }}
           className="shrink-0 whitespace-nowrap"
         >
           Show Archived
@@ -240,7 +309,7 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
         </div>
       )}
 
-      {/* Role cards — click anywhere on an active card to view its users */}
+      {/* Role cards  -  click anywhere on an active card to view its users */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {rolesLoading && (
           <div className={`${PANEL} p-4 text-center text-sm text-muted sm:col-span-2 xl:col-span-3`}>
@@ -248,7 +317,7 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
           </div>
         )}
 
-        {!rolesLoading && filteredRoles.map((role) => (
+        {!rolesLoading && filteredRoles.slice((page - 1) * PER_PAGE, page * PER_PAGE).map((role) => (
           <div
             key={role.role_id}
             role={showArchived ? undefined : 'button'}
@@ -263,22 +332,33 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/15 text-primary-dark">
                 <ShieldCheck size={18} />
               </div>
-              {/* Manage/Edit cluster — Archive/Restore deliberately kept
+              {/* Manage/Edit cluster  -  Archive/Restore deliberately kept
                   out of this group (see below) so it isn't a third click
                   target sitting right next to two very different-purpose
                   buttons. */}
               {!showArchived && (
                 <div className="flex items-center gap-1">
-                  <Tooltip label="Manage permissions" align="start">
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); openPermissionsModal(role) }}
-                      className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
-                    >
-                      <Lock size={15} />
-                    </button>
-                  </Tooltip>
-                  <Tooltip label="Edit role" align="start">
+                  {(() => {
+                    const ownCard = Number(role.role_id) === Number(profile?.role_id)
+                    const protectedCard = superAdminRoleId != null &&
+                      Number(role.role_id) === Number(superAdminRoleId) &&
+                      !isSuperAdminActor
+                    // Don't render the lock at all when this role can't be
+                    // managed  -  a greyed-out icon only invites a pointless click.
+                    if (ownCard || protectedCard) return null
+                    return (
+                      <Tooltip label="Manage permissions" align="start">
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); openPermissionsModal(role) }}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
+                        >
+                          <Lock size={15} />
+                        </button>
+                      </Tooltip>
+                    )
+                  })()}
+                  <Tooltip label="Edit name & description" align="start">
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); openEditModal(role) }}
@@ -296,7 +376,7 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
               <p className="mt-1 text-xs leading-relaxed text-muted">{role.description}</p>
             </div>
 
-            {/* Archive/Restore lives here instead — bottom row, next to
+            {/* Archive/Restore lives here instead  -  bottom row, next to
                 the user count, separated from Lock/Edit above by the
                 card's own layout rather than just spacing. */}
             <div className="mt-auto flex items-center justify-between gap-2 pt-2 border-t border-border">
@@ -329,6 +409,18 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
           </div>
         )}
       </div>
+
+      <Pagination
+        page={page}
+        totalPages={totalPages}
+        onPageChange={setPage}
+        total={filteredRoles.length}
+        label="roles"
+        showRange
+        rangeStart={rangeStart}
+        rangeEnd={rangeEnd}
+        bordered
+      />
 
       {/* Add / Edit Role modal */}
       <Modal
@@ -412,17 +504,23 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
       <Modal
         open={permRole !== null}
         onClose={closePermissionsModal}
-        title={`Permissions — ${permRole?.role_name ?? ''}`}
+        title={`Permissions for ${permRole?.role_name ?? ''}`}
         footer={
-          <>
-            <Button variant="secondary" size="md" onClick={closePermissionsModal}>Cancel</Button>
-            <Button variant="primary" size="md" onClick={savePermissions} loading={permSaving}>
-              Save Permissions
-            </Button>
-          </>
+          <Button variant="secondary" size="md" onClick={closePermissionsModal}>Done</Button>
         }
       >
         <div className="space-y-3">
+          {permLocked && (
+            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+              <ShieldAlert size={14} className="shrink-0 mt-0.5" />
+              <span>
+                {isProtectedSuperAdminRole
+                  ? 'Only a Super Admin can manage permissions for the Super Admin role.'
+                  : "You can't change permissions for your own role."}
+              </span>
+            </div>
+          )}
+
           {permError && (
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
               {permError}
@@ -439,7 +537,7 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
 
           {!permModalLoading && !permissionsLoading && permissions.length > 0 && (
             <>
-              {/* Search + live selected count — the count updates from
+              {/* Search + live selected count  -  the count updates from
                   checkedIds directly, not from what's currently visible
                   under a search filter, so it always reflects the true
                   total that will be saved. */}
@@ -469,7 +567,8 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
                         <button
                           type="button"
                           onClick={() => toggleModuleAll(perms)}
-                          className="shrink-0 text-[11px] font-medium text-primary-dark hover:underline"
+                          disabled={permLocked}
+                          className="shrink-0 text-[11px] font-medium text-primary-dark hover:underline disabled:cursor-not-allowed disabled:text-muted disabled:hover:no-underline"
                         >
                           {allChecked ? 'Deselect all' : 'Select all'}
                         </button>
@@ -480,14 +579,16 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
                           return (
                             <label
                               key={p.permission_id}
-                              className={`flex items-start gap-2.5 cursor-pointer rounded-lg px-2 py-1.5 -mx-2 transition-colors duration-150
+                              className={`flex items-start gap-2.5 rounded-lg px-2 py-1.5 -mx-2 transition-colors duration-150
+                                ${permLocked ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}
                                 ${checked ? 'bg-primary/5' : 'hover:bg-bg'}`}
                             >
                               <input
                                 type="checkbox"
                                 checked={checked}
                                 onChange={() => togglePermission(p.permission_id)}
-                                className="mt-0.5 rounded border-border accent-primary"
+                                disabled={permLocked}
+                                className="mt-0.5 rounded border-border accent-primary disabled:cursor-not-allowed"
                               />
                               <span>
                                 <span className="block text-sm text-ink">{p.display_name}</span>
@@ -507,6 +608,71 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
               </div>
             </>
           )}
+        </div>
+      </Modal>
+
+      {/* Password gate for permission changes  -  toggling a permission applies
+          immediately to every user on the role, so each click is confirmed
+          with the admin's own password before it's sent. */}
+      <Modal
+        open={pendingChange !== null}
+        onClose={() => { if (!permGateSaving) { setPendingChange(null); setPermGatePassword(''); setPermGateError('') } }}
+        title="Confirm Permission Change"
+        footer={
+          <>
+            <Button variant="secondary" size="md" onClick={() => { if (!permGateSaving) { setPendingChange(null); setPermGatePassword(''); setPermGateError('') } }} disabled={permGateSaving}>
+              Cancel
+            </Button>
+            <Button variant="primary" size="md" onClick={confirmPendingChange} loading={permGateSaving}>
+              Confirm &amp; Apply
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+            <ShieldAlert size={14} className="shrink-0 mt-0.5" />
+            <span>
+              {pendingChange ? (
+                pendingChange.items.length === 1 ? (
+                  <>
+                    <span className="font-medium text-ink">{pendingChange.adding ? 'Grant' : 'Revoke'}</span>{' '}
+                    "<span className="font-medium text-ink">{pendingChange.items[0].display_name}</span>"{' '}
+                    {pendingChange.adding ? 'to' : 'from'}{' '}
+                    <span className="font-medium text-ink">{permRole?.role_name}</span>. Takes effect immediately for
+                    every user with this role.
+                  </>
+                ) : (
+                  <>
+                    <span className="font-medium text-ink">{pendingChange.adding ? 'Grant' : 'Revoke'}</span>{' '}
+                    <span className="font-medium text-ink">{pendingChange.items.length} permissions</span>{' '}
+                    {pendingChange.adding ? 'to' : 'from'}{' '}
+                    <span className="font-medium text-ink">{permRole?.role_name}</span>. Takes effect immediately for
+                    every user with this role.
+                  </>
+                )
+              ) : null}
+            </span>
+          </div>
+
+          {permGateError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+              {permGateError}
+            </div>
+          )}
+
+          <div>
+            <label className={LABEL}>Your Password <span className="text-red-500">*</span></label>
+            <input
+              type="password"
+              value={permGatePassword}
+              onChange={(e) => { setPermGatePassword(e.target.value); setPermGateError('') }}
+              placeholder="Enter your password to confirm"
+              className={INPUT}
+              autoFocus
+            />
+            <p className="mt-1 text-[11px] text-muted">Proving it's you before this change is applied.</p>
+          </div>
         </div>
       </Modal>
     </div>

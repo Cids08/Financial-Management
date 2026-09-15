@@ -4,7 +4,7 @@ import { apiFetch } from '../utils/api'
 /**
  * Talks to the real /api/ai-advisor endpoints (AiAdvisorController). Lazily
  * creates one conversation per mount on first send, then reuses it for
- * every message after — the backend handles memory/summarization, this
+ * every message after  -  the backend handles memory/summarization, this
  * hook just needs to remember the conversation id.
  *
  * Mirrors useAiRecommendations' apiFetch + { success, message, data }

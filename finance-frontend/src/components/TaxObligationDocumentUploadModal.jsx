@@ -4,10 +4,10 @@ import { UploadCloud, FileText, X, AlertTriangle } from 'lucide-react'
 import Modal from './Modal'
 import Button from './Button'
 
-// Confirmed against UploadTaxObligationDocumentRequest::rules() — keep
+// Confirmed against UploadTaxObligationDocumentRequest::rules()  -  keep
 // these two constants in sync if that validation rule ever changes.
 // Images/PDF only (no Word/Excel) since this is a receipt/proof scan,
-// not a plan document — matches UploadExpenseReceiptRequest's and
+// not a plan document  -  matches UploadExpenseReceiptRequest's and
 // UploadCollectionProofRequest's same restriction.
 const ALLOWED_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png']
 const ACCEPT = '.pdf,.jpg,.jpeg,.png'
@@ -27,7 +27,7 @@ function formatBytes(bytes) {
  * - open, onClose: standard Modal controls
  * - obligation: the tax obligation being attached to (uses obligation.id,
  *   obligation.tax_type, obligation.tax_period)
- * - onUpload: async (file) => { success, message } — call the hook's
+ * - onUpload: async (file) => { success, message }  -  call the hook's
  *   uploadDocument(obligation.id, file) here from the parent page
  */
 export default function TaxObligationDocumentUploadModal({ open, onClose, obligation, onUpload }) {
@@ -103,7 +103,7 @@ export default function TaxObligationDocumentUploadModal({ open, onClose, obliga
       <div className="space-y-3">
         {obligation && (
           <p className="text-xs text-muted">
-            Attaching a document to <span className="font-medium text-ink">{obligation.tax_type} — {obligation.tax_period}</span>.
+            Attaching a document to <span className="font-medium text-ink">{obligation.tax_type}  -  {obligation.tax_period}</span>.
           </p>
         )}
 
@@ -129,7 +129,7 @@ export default function TaxObligationDocumentUploadModal({ open, onClose, obliga
           >
             <UploadCloud size={28} className="text-muted" />
             <p className="text-sm font-medium text-ink">Click to browse or drag a file here</p>
-            <p className="text-xs text-muted">PDF, JPG, or PNG — up to {MAX_SIZE_MB}MB</p>
+            <p className="text-xs text-muted">PDF, JPG, or PNG  -  up to {MAX_SIZE_MB}MB</p>
             <input
               ref={inputRef}
               type="file"

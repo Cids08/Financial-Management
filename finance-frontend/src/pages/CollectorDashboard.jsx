@@ -7,6 +7,7 @@ import {
 import Breadcrumb from '../components/Breadcrumb'
 import { formatCurrency } from '../utils/formatters'
 import { useAccountsReceivable } from '../hooks/useAccountsReceivable'
+import { usePrivacy } from '../context/PrivacyContext'
 import { apiFetch } from '../utils/api'
 
 const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
@@ -54,7 +55,7 @@ function StatCard({ label, value, icon: Icon, iconBg, iconColor }) {
   )
 }
 
-// One of the three permitted-access shortcut tiles at the top — routes
+// One of the three permitted-access shortcut tiles at the top  -  routes
 // match App.jsx's existing paths for these pages.
 function QuickLinkCard({ label, description, icon: Icon, iconBg, iconColor, onClick }) {
   return (
@@ -79,15 +80,17 @@ function QuickLinkCard({ label, description, icon: Icon, iconBg, iconColor, onCl
 export default function CollectorDashboard({ title = 'Dashboard', crumbs = ['Dashboard'] }) {
   const navigate = useNavigate()
 
-  // Accounts Receivable — reuses the same hook AccountsReceivable.jsx
+  // Accounts Receivable  -  reuses the same hook AccountsReceivable.jsx
   // itself uses, so this page's numbers can never drift from that page's.
   const { records: arRecords, loading: arLoading, error: arError, fetchRecords } = useAccountsReceivable()
+
+  usePrivacy()
 
   useEffect(() => {
     fetchRecords()
   }, [fetchRecords])
 
-  // Collections — no dedicated hook exists yet (Collections.jsx is still
+  // Collections  -  no dedicated hook exists yet (Collections.jsx is still
   // mock-only as of this page being built), so this fetches the real
   // endpoint directly. If/when a useCollections hook gets built, swap
   // this block for that instead of duplicating the fetch logic twice.
@@ -114,7 +117,7 @@ export default function CollectorDashboard({ title = 'Dashboard', crumbs = ['Das
     fetchCollections()
   }, [fetchCollections])
 
-  // Customers — just the stats endpoint (already built for Customers.jsx),
+  // Customers  -  just the stats endpoint (already built for Customers.jsx),
   // no need for the full list here.
   const [customerStats, setCustomerStats] = useState({ total: 0, active: 0 })
 
@@ -122,7 +125,7 @@ export default function CollectorDashboard({ title = 'Dashboard', crumbs = ['Das
     apiFetch('/api/customers/stats')
       .then((res) => res.json())
       .then((json) => { if (json.success) setCustomerStats(json.data) })
-      .catch(() => {}) // non-fatal — the stat card just shows 0 if this fails
+      .catch(() => {}) // non-fatal  -  the stat card just shows 0 if this fails
   }, [])
 
   const activeAR = useMemo(() => arRecords.filter((r) => !r.is_archived), [arRecords])
@@ -144,7 +147,7 @@ export default function CollectorDashboard({ title = 'Dashboard', crumbs = ['Das
     return { outstanding, overdueCount, collectedThisMonth, pendingCollections }
   }, [activeAR, activeCollections])
 
-  // Top of the "needs attention" list — unpaid balances, soonest due date first.
+  // Top of the "needs attention" list  -  unpaid balances, soonest due date first.
   const outstandingInvoices = useMemo(() => {
     return [...activeAR]
       .filter((r) => r.status !== 'Paid' && r.status !== 'Cancelled')
@@ -189,7 +192,7 @@ export default function CollectorDashboard({ title = 'Dashboard', crumbs = ['Das
         ))}
       </div>
 
-      {/* Quick links — exactly the three pages this role has access to */}
+      {/* Quick links  -  exactly the three pages this role has access to */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <QuickLinkCard
           label="Customers"
@@ -233,7 +236,7 @@ export default function CollectorDashboard({ title = 'Dashboard', crumbs = ['Das
           <div className="divide-y divide-border">
             {loading && <p className="px-4 py-6 text-center text-sm text-muted">Loading…</p>}
             {!loading && outstandingInvoices.length === 0 && (
-              <p className="px-4 py-6 text-center text-sm text-muted">No outstanding invoices — everything's settled.</p>
+              <p className="px-4 py-6 text-center text-sm text-muted">No outstanding invoices  -  everything's settled.</p>
             )}
             {!loading && outstandingInvoices.map((r) => (
               <div key={r.ar_id} className="flex items-center justify-between gap-3 px-4 py-3">

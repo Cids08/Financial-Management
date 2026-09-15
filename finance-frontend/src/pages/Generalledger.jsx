@@ -3,8 +3,10 @@ import { Search, BookOpen, Scale, TrendingUp, TrendingDown, Info, ListTree, Rows
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
+import Pagination from '../components/Pagination'
 import Tooltip from '../components/Tooltip'
 import { formatCurrency } from '../utils/formatters'
+import { usePrivacy } from '../context/PrivacyContext'
 import { apiFetch } from '../utils/api'
 
 const REFERENCE_TYPES = ['Collections', 'Disbursements', 'Accounts Receivable', 'Accounts Payable', 'Expenses', 'Tax Obligations']
@@ -141,14 +143,16 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  usePrivacy()
+
   // Debounce free-text search so it doesn't fire a request on every keystroke.
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 350)
     return () => clearTimeout(t)
   }, [search])
 
-  // Chart of accounts for the filter dropdown — fetched once.
-  // FIX: was hitting /api/chart-of-accounts, which doesn't exist — the
+  // Chart of accounts for the filter dropdown  -  fetched once.
+  // FIX: was hitting /api/chart-of-accounts, which doesn't exist  -  the
   // route is nested under the general-ledger prefix in routes/api.php
   // (Route::prefix('general-ledger')->group(...) -> '/chart-of-accounts'
   // resolves to /api/general-ledger/chart-of-accounts).
@@ -173,7 +177,7 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
   // Reset to page 1 whenever a filter changes (not on page changes themselves).
   useEffect(() => { setPage(1) }, [filterParams])
 
-  // Journal lines — depends on filters + page.
+  // Journal lines  -  depends on filters + page.
   useEffect(() => {
     if (view !== 'journal') return
     setLoading(true)
@@ -192,7 +196,7 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, filterParams, page])
 
-  // Trial balance — depends on filters only (no pagination).
+  // Trial balance  -  depends on filters only (no pagination).
   useEffect(() => {
     if (view !== 'trial-balance') return
     setLoading(true)
@@ -294,7 +298,7 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
         </p>
       </div>
 
-      {/* Stat cards — clickable quick filters */}
+      {/* Stat cards  -  clickable quick filters */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {statCards.map((card) => {
           const Icon = card.icon
@@ -444,7 +448,7 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
                   >
                     <td className="px-4 py-3.5 whitespace-nowrap text-ink text-xs">{formatDate(e.transaction_date)}</td>
                     <td className="px-4 py-3.5 text-ink text-xs">
-                      <span className="block truncate" title={`${e.account_code} — ${e.account_name}`}>{e.account_code} — {e.account_name}</span>
+                      <span className="block truncate" title={`${e.account_code}  -  ${e.account_name}`}>{e.account_code}  -  {e.account_name}</span>
                     </td>
                     <td className="px-4 py-3.5 text-ink text-xs">
                       <span className="block truncate" title={e.description}>{e.description}</span>
@@ -478,15 +482,14 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
             </table>
           </div>
 
-          {meta.last_page > 1 && (
-            <div className="flex items-center justify-between border-t border-border px-4 py-3 text-xs text-muted">
-              <span>Page {meta.current_page} of {meta.last_page} · {meta.total} lines</span>
-              <div className="flex gap-2">
-                <Button variant="secondary" size="sm" disabled={meta.current_page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Previous</Button>
-                <Button variant="secondary" size="sm" disabled={meta.current_page >= meta.last_page} onClick={() => setPage((p) => p + 1)}>Next</Button>
-              </div>
-            </div>
-          )}
+          <Pagination
+            page={meta.current_page}
+            totalPages={meta.last_page}
+            onPageChange={setPage}
+            total={meta.total}
+            label="lines"
+            bordered
+          />
         </div>
       )}
 
@@ -511,7 +514,7 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
                       onClick={() => { setAccountFilter(String(row.account_id)); setView('journal') }}
                       className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150 cursor-pointer"
                     >
-                      <td className="px-4 py-3.5 text-ink text-xs">{row.account_code} — {row.account_name}</td>
+                      <td className="px-4 py-3.5 text-ink text-xs">{row.account_code}  -  {row.account_name}</td>
                       <td className="px-4 py-3.5 whitespace-nowrap text-right tabular-nums text-ink text-xs">{row.total_debit ? formatCurrency(row.total_debit) : '—'}</td>
                       <td className="px-4 py-3.5 whitespace-nowrap text-right tabular-nums text-ink text-xs">{row.total_credit ? formatCurrency(row.total_credit) : '—'}</td>
                       <td className={`px-4 py-3.5 whitespace-nowrap text-right tabular-nums font-medium text-xs ${net > 0 ? 'text-emerald-600 dark:text-emerald-400' : net < 0 ? 'text-purple-600 dark:text-purple-400' : 'text-muted'}`}>
@@ -558,7 +561,7 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
             <div className="rounded-lg border border-border divide-y divide-border">
               {detailGroup.lines.map((line) => (
                 <div key={line.id} className="px-3 py-2">
-                  <DetailRow label="Account" value={`${line.account_code} — ${line.account_name}`} />
+                  <DetailRow label="Account" value={`${line.account_code}  -  ${line.account_name}`} />
                   <DetailRow label="Debit" value={line.debit ? formatCurrency(line.debit) : '—'} />
                   <DetailRow label="Credit" value={line.credit ? formatCurrency(line.credit) : '—'} />
                   <DetailRow label="Posted" value={formatDateTime(line.created_at)} />

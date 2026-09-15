@@ -4,8 +4,11 @@
     <meta charset="utf-8">
     <title>Dashboard Summary</title>
     <style>
-        /* dompdf has limited CSS support — keep this simple: no flexbox/grid. */
-        body { font-family: 'Helvetica', sans-serif; font-size: 11px; color: #1e293b; }
+        /* dompdf has limited CSS support  -  keep this simple: no flexbox/grid. */
+        /* DejaVu Sans (embedded TTF) instead of 'Helvetica' (core WinAnsi
+           font) so the PHP peso sign U+20B1 has a glyph  -  Helvetica would
+           render &#8369; as a literal "?". */
+        body { font-family: 'DejaVu Sans', sans-serif; font-size: 11px; color: #1e293b; }
         h1 { font-size: 18px; margin-bottom: 2px; }
         .subtitle { font-size: 10px; color: #64748b; margin-bottom: 20px; }
         h2 { font-size: 13px; margin: 22px 0 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
@@ -14,35 +17,42 @@
         th { background: #f8fafc; font-size: 10px; text-transform: uppercase; letter-spacing: 0.03em; color: #64748b; }
         .overview-grid td { width: 25%; }
         .metric-label { font-size: 9px; color: #64748b; text-transform: uppercase; }
+        .metric-note { font-size: 8px; color: #94a3b8; }
+        .muted-note { text-transform: none; font-weight: normal; }
         .metric-value { font-size: 15px; font-weight: bold; }
         .trend-up { color: #059669; }
         .trend-down { color: #dc2626; }
         .amount { text-align: right; }
         .empty { color: #94a3b8; font-style: italic; }
+        .disclaimer { margin-top: 18px; padding-top: 8px; border-top: 1px solid #e2e8f0; font-size: 8px; color: #94a3b8; }
     </style>
 </head>
 <body>
     <h1>Financial Dashboard Summary</h1>
-    <p class="subtitle">Generated {{ $generated_at->format('F j, Y \a\t g:i A') }}</p>
+    <p class="subtitle">Data as of {{ $generated_at->format('F j, Y \a\t g:i A') }} · {{ config('app.timezone') }} (live snapshot  -  not a financial statement)</p>
 
     <h2>Financial Overview</h2>
     <table class="overview-grid">
         <tr>
             <td>
-                <div class="metric-label">Total Revenue</div>
+                <div class="metric-label">Total Revenue <span class="muted-note">(this month)</span></div>
                 <div class="metric-value">&#8369;{{ number_format($overview['total_revenue']['value'] ?? 0, 2) }}</div>
+                <div class="metric-note">Cash collected via Collections</div>
             </td>
             <td>
-                <div class="metric-label">Total Expenses</div>
+                <div class="metric-label">Total Expenses <span class="muted-note">(this month)</span></div>
                 <div class="metric-value">&#8369;{{ number_format($overview['total_expenses']['value'] ?? 0, 2) }}</div>
+                <div class="metric-note">Posted expense vouchers</div>
             </td>
             <td>
-                <div class="metric-label">Available Cash</div>
+                <div class="metric-label">Available Cash <span class="muted-note">(as of now)</span></div>
                 <div class="metric-value">&#8369;{{ number_format($overview['available_cash']['value'] ?? 0, 2) }}</div>
+                <div class="metric-note">Point-in-time balance</div>
             </td>
             <td>
-                <div class="metric-label">Net Cash Flow</div>
+                <div class="metric-label">Net Cash Flow <span class="muted-note">(this month)</span></div>
                 <div class="metric-value">&#8369;{{ number_format($overview['net_cash_flow']['value'] ?? 0, 2) }}</div>
+                <div class="metric-note">Revenue − Expenses</div>
             </td>
         </tr>
     </table>
@@ -80,6 +90,7 @@
     </table>
 
     <h2>Recent Transactions</h2>
+    <p class="subtitle">Showing the latest {{ count($recent_transactions) }} entries, newest first  -  as recorded in the system at the timestamp above.</p>
     @if (count($recent_transactions) === 0)
         <p class="empty">No recent transactions.</p>
     @else
@@ -104,6 +115,13 @@
             @endforeach
         </table>
     @endif
+
+    <div class="disclaimer">
+        This document is a live dashboard snapshot generated for quick reference on
+        {{ $generated_at->format('F j, Y \a\t g:i A') }}. It is not a prepared financial
+        statement. Amounts reflect records currently in the system and may change as
+        transactions are recorded, approved, or amended after this snapshot was taken.
+    </div>
 </body>
 </html>
 

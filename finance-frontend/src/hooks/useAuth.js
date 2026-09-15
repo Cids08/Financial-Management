@@ -13,13 +13,13 @@ export function useAuth() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
-  // Two DISTINCT countdowns, deliberately not shared — they mean different
+  // Two DISTINCT countdowns, deliberately not shared  -  they mean different
   // things and have very different durations:
   //  - retryAfter: the per-IP throttle (throttle:5,1 route middleware).
   //    Resets in ~60s, applies to the address, not the account.
   //  - accountLockedFor: AuthService's account-level lockout after 5 wrong
   //    passwords on ONE account. Lasts 15 minutes and is independent of
-  //    the IP throttle's clock — they can (and did, in testing) both fire
+  //    the IP throttle's clock  -  they can (and did, in testing) both fire
   //    from the same burst of attempts, which is confusing if shown with
   //    identical wording/countdown. Login.jsx renders these as visually
   //    separate notices so it's obvious they're not the same thing.
@@ -36,7 +36,7 @@ export function useAuth() {
   // CompanyProvider is now scoped inside App.jsx to the authenticated
   // layout route (not around the whole router in main.jsx), so it mounts
   // for the first time only once the router reaches /dashboard post-login
-  // — by which point the token is already set. Its own useEffect fetches
+  //  -  by which point the token is already set. Its own useEffect fetches
   // company settings on that mount, so there's nothing left for login()
   // to trigger here.
 
@@ -76,11 +76,11 @@ export function useAuth() {
           website,
           form_rendered_at,
           // Identifies this tab so this device can be excluded from its
-          // own "you were signed out elsewhere" broadcast — see
+          // own "you were signed out elsewhere" broadcast  -  see
           // authToken.js and ForcedLogoutListener for the full flow.
           client_session_id: getClientSessionId(),
         }),
-        // A 401 here means "invalid credentials," not "session expired" —
+        // A 401 here means "invalid credentials," not "session expired"  - 
         // there's no session yet. Let it fall through to the res.ok check
         // below instead of being intercepted as an auth-expiry redirect.
         skipAuthRedirect: true,
@@ -88,7 +88,7 @@ export function useAuth() {
       const json = await res.json()
 
       if (res.status === 423) {
-        // Account-level lockout — distinct from the 429 IP throttle below.
+        // Account-level lockout  -  distinct from the 429 IP throttle below.
         const seconds = json.data?.retryAfter ?? 900
         startCountdown(seconds, setAccountLockedFor, lockIntervalRef)
         throw new Error(json.message || 'Too many failed attempts. Your account is temporarily locked.')
@@ -128,7 +128,7 @@ export function useAuth() {
 
   // Step 2 of a 2FA login: exchange pendingToken + emailed code for a
   // real token. Mirrors AuthController::verifyTwoFactor. client_session_id
-  // doesn't need to be sent again here — it was already captured and
+  // doesn't need to be sent again here  -  it was already captured and
   // cached against the pendingToken back in step 1's login() call.
   const verifyTwoFactor = useCallback(async (code) => {
     if (!twoFactorPending) return { success: false, message: 'No login in progress.' }
@@ -152,7 +152,7 @@ export function useAuth() {
 
       if (!res.ok || !json.success) {
         // If the pending login session has fully expired (backend deleted it from
-        // cache), there's no point staying on the 2FA screen — the pendingToken
+        // cache), there's no point staying on the 2FA screen  -  the pendingToken
         // is dead and even Resend will fail. Auto-cancel back to the credential
         // form and surface the expiry message there so the user knows to re-login.
         const msg = json.message || 'That code is incorrect or has expired.'

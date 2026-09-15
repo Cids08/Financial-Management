@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, Receipt, CheckCircle2, Clock3, AlertTriangle, Info, Printer, Sparkles, Eye, EyeOff, ChevronLeft, ChevronRight, Loader2, CalendarRange, X, Paperclip, History, FileText, Calculator, FileSpreadsheet } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, Receipt, CheckCircle2, Clock3, AlertTriangle, Info, Printer, Sparkles, Eye, EyeOff, Loader2, CalendarRange, X, Paperclip, History, FileText, Calculator, FileSpreadsheet } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
+import Pagination from '../components/Pagination'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
@@ -13,14 +14,15 @@ import TaxComplianceReportModal from '../components/TaxComplianceReportModal'
 import { formatCurrency } from '../utils/formatters'
 import { useTaxObligations } from '../hooks/useTaxObligations'
 import { useHighlightRow } from '../hooks/useHighlightRow'
+import { usePrivacy } from '../context/PrivacyContext'
 
 const pad = (n) => String(n).padStart(2, '0')
-const QUARTER_LABELS = { 1: 'Q1 (Jan–Mar)', 2: 'Q2 (Apr–Jun)', 3: 'Q3 (Jul–Sep)', 4: 'Q4 (Oct–Dec)' }
+const QUARTER_LABELS = { 1: 'Q1 (Jan - Mar)', 2: 'Q2 (Apr - Jun)', 3: 'Q3 (Jul - Sep)', 4: 'Q4 (Oct - Dec)' }
 
 // AUTOMATION: each tax type carries its own filing cadence, BIR form code, and
-// statutory due-date rule, so the form only ever asks "which period?" — the
+// statutory due-date rule, so the form only ever asks "which period?"  -  the
 // due date and reference-number prefix are computed, never typed from scratch.
-// Also carries a suggested default tax_rate, since the ERD requires one —
+// Also carries a suggested default tax_rate, since the ERD requires one  - 
 // still fully editable, this is just a sane starting point per tax type.
 const TAX_TYPE_CONFIG = {
   'VAT': {
@@ -152,6 +154,8 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
     calculateTaxBase, recordTaxPayment, batchRecordTaxPayment, generateTaxSchedule,
   } = useTaxObligations()
 
+  usePrivacy()
+
   // Multi-row selection for batch payment
   const [selectedTaxIds, setSelectedTaxIds] = useState([])
   const [showBatchModal, setShowBatchModal] = useState(false)
@@ -267,14 +271,14 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
     }
   }
 
-  // Supporting document upload/history — same uploadTarget/historyTarget
+  // Supporting document upload/history  -  same uploadTarget/historyTarget
   // pattern as Budgets.jsx's plan attach/history, just without a has_plan
   // style gate: a tax obligation's document is optional documentation,
   // not a precondition for any workflow action here.
   const [uploadTarget, setUploadTarget] = useState(null)
   const [historyTarget, setHistoryTarget] = useState(null)
   const [paymentTarget, setPaymentTarget] = useState(null)
-  // Surfaces a failure from handleViewDocument() below — same reasoning
+  // Surfaces a failure from handleViewDocument() below  -  same reasoning
   // as Budgets.jsx's viewNotice: this page has no other place to show a
   // "couldn't open this file" message.
   const [docNotice, setDocNotice] = useState('')
@@ -284,7 +288,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
   const hasDateFilter = Boolean(dateFrom || dateTo)
   const clearDateFilter = () => { setDateFrom(''); setDateTo('') }
 
-  // Per-row "reveal amount" toggle — masked by default everywhere a
+  // Per-row "reveal amount" toggle  -  masked by default everywhere a
   // money figure shows (table + detail modal), same pattern as the
   // phone/account-number masking on Collectors/CashAccounts.
   const [revealedIds, setRevealedIds] = useState(new Set())
@@ -296,7 +300,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
     })
   }
 
-  // Page-scoped — meta.total (Total Obligations card) is the one
+  // Page-scoped  -  meta.total (Total Obligations card) is the one
   // accurate global number; see Collectors.jsx for the same caveat.
   const pageStats = useMemo(() => ({
     paid: obligations.filter((o) => o.status === 'Paid').length,
@@ -305,7 +309,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
   }), [obligations])
 
   // AUTOMATION: changing tax type or period recomputes tax_period + due_date
-  // together — the person never types either one directly.
+  // together  -  the person never types either one directly.
   const updatePeriod = (patch) => {
     setCalcResult(null)
     setCalcNotice('')
@@ -402,7 +406,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
     })
   }
 
-  // Live-computed preview only — the authoritative tax_amount is always
+  // Live-computed preview only  -  the authoritative tax_amount is always
   // recalculated server-side in TaxObligationService from the same two
   // inputs, so this can never drift from what actually gets saved.
   const computedTaxAmount = (Number(form.taxable_amount) || 0) * (Number(form.tax_rate) || 0) / 100
@@ -479,7 +483,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
 
   // Opens the current (latest) attached document in a new tab instead of
   // requiring History-then-View. Same synchronous-tab-then-redirect
-  // approach as Budgets.jsx's handleViewPlan() — the tab has to open
+  // approach as Budgets.jsx's handleViewPlan()  -  the tab has to open
   // BEFORE the await below, or most browsers' popup blockers no longer
   // consider it a direct result of the click and may silently block it.
   const handleViewDocument = async (o) => {
@@ -512,7 +516,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
     win.document.write(`
       <html>
         <head>
-          <title>${o.tax_type} — ${o.tax_period}</title>
+          <title>${o.tax_type}  -  ${o.tax_period}</title>
           <style>
             * { box-sizing: border-box; }
             body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #1a1a1a; padding: 48px; }
@@ -554,7 +558,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
   const isEditing = modalMode !== null && modalMode !== 'add'
   // Mirrors TaxObligationService::update()'s actual guard exactly: once
   // expense_id is set, tax_type/period/rate/amount/due_date/is_paid are
-  // rejected server-side if changed — remarks/payment_date/reference_number
+  // rejected server-side if changed  -  remarks/payment_date/reference_number
   // are NOT locked (pure documentation, no financial impact). Rather than
   // hide the whole Edit action (which would also block those still-legal
   // edits), lock only the fields the backend actually rejects, so the
@@ -566,7 +570,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
 
   // meta doesn't carry per_page from the backend, so derive it from the
   // current page's row count (falls back to 1 to avoid a divide-by-zero
-  // on an empty last page) — same "Showing X–Y of Z" shape as Expenses.
+  // on an empty last page)  -  same "Showing X–Y of Z" shape as Expenses.
   const perPage = obligations.length || 1
   const rangeStart = meta.total === 0 ? 0 : (meta.current_page - 1) * perPage + 1
   const rangeEnd = Math.min((meta.current_page - 1) * perPage + obligations.length, meta.total)
@@ -579,7 +583,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
         <div className="min-w-0 pr-4">
           <h1 className="text-xl font-bold tracking-tight text-ink">{title}</h1>
           <p className="mt-1 text-xs text-muted">
-            Track statutory tax filings and payments. Obligations automatically flip to <span className="font-medium text-red-500">Overdue</span> once their due date passes — no manual update needed.
+            Track statutory tax filings and payments. Obligations automatically flip to <span className="font-medium text-red-500">Overdue</span> once their due date passes  -  no manual update needed.
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -761,9 +765,9 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                 Clear
               </button>
               <Button
-                variant="primary"
+                variant="secondary"
                 size="sm"
-                icon={Receipt}
+                icon={Sparkles}
                 onClick={() => setShowBatchModal(true)}
               >
                 Batch Pay ({selectedTaxIds.length})
@@ -958,36 +962,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
           </table>
         </div>
 
-        {!loading && obligations.length > 0 && (
-          <div className="flex flex-col gap-2 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs text-muted">
-              Showing {rangeStart}–{rangeEnd} of {meta.total} tax obligations
-            </p>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page <= 1}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
-                aria-label="Previous page"
-              >
-                <ChevronLeft size={15} />
-              </button>
-              <span className="px-2 text-xs font-medium text-ink whitespace-nowrap">
-                Page {meta.current_page} of {meta.last_page}
-              </span>
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.min(meta.last_page, p + 1))}
-                disabled={page >= meta.last_page}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
-                aria-label="Next page"
-              >
-                <ChevronRight size={15} />
-              </button>
-            </div>
-          </div>
-        )}
+        <Pagination page={page} totalPages={meta.last_page} onPageChange={setPage} total={meta.total} label="tax obligations" showRange rangeStart={rangeStart} rangeEnd={rangeEnd} bordered />
       </div>
 
       <Modal
@@ -1008,7 +983,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
 
           {isLockedObligation && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
-              This obligation's payment has already been posted as an approved expense — tax type, period, rate, taxable amount, due date, and the paid checkbox are locked. Remarks, payment date, and reference number can still be edited. To correct the amount or dates, archive this obligation instead.
+              This obligation's payment has already been posted as an approved expense  -  tax type, period, rate, taxable amount, due date, and the paid checkbox are locked. Remarks, payment date, and reference number can still be edited. To correct the amount or dates, archive this obligation instead.
             </div>
           )}
 
@@ -1072,7 +1047,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
           <div className="rounded-lg border border-border bg-bg px-3 py-2.5 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-xs text-muted">
               <Sparkles size={14} className="text-primary-dark shrink-0" />
-              <span>Auto-computed from filing rules for <strong className="text-ink">{TAX_TYPE_CONFIG[form.tax_type].code}</strong> — adjust if BIR grants an extension.</span>
+              <span>Auto-computed from filing rules for <strong className="text-ink">{TAX_TYPE_CONFIG[form.tax_type].code}</strong>  -  adjust if BIR grants an extension.</span>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -1170,7 +1145,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
             </div>
           )}
 
-          {/* Taxable amount + rate are the real ERD inputs — tax_amount
+          {/* Taxable amount + rate are the real ERD inputs  -  tax_amount
               (shown as "Amount" elsewhere) is always derived from these
               two, both here for preview and again server-side as the
               value of record. */}
@@ -1240,7 +1215,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
             />
             Already paid / filed
           </label>
-          <p className="-mt-2 text-xs text-muted">Leave unchecked to keep as Pending — it will automatically show as Overdue past the due date, no need to set that manually.</p>
+          <p className="-mt-2 text-xs text-muted">Leave unchecked to keep as Pending  -  it will automatically show as Overdue past the due date, no need to set that manually.</p>
 
           {form.is_paid && (
             <div className="grid grid-cols-2 gap-3">
@@ -1464,7 +1439,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
         )}
       </Modal>
 
-      {/* Attach supporting document modal — triggered from a row action or
+      {/* Attach supporting document modal  -  triggered from a row action or
           from inside the Detail modal above. */}
       <TaxObligationDocumentUploadModal
         open={!!uploadTarget}
@@ -1478,7 +1453,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
         }}
       />
 
-      {/* Document version history modal — same trigger points as above. */}
+      {/* Document version history modal  -  same trigger points as above. */}
       <TaxObligationDocumentHistoryModal
         open={!!historyTarget}
         onClose={() => setHistoryTarget(null)}

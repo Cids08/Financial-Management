@@ -21,7 +21,7 @@ export default function SidebarItem({ item, collapsed, onNavigate, onLogoutClick
          : 'text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-ink'
      }`
 
-  // Left accent bar rendered only for the active item — extra visual cue
+  // Left accent bar rendered only for the active item  -  extra visual cue
   // beyond the fill color so the current page is unmistakable.
   const ActiveBar = ({ isActive }) =>
     isActive ? (
@@ -30,7 +30,7 @@ export default function SidebarItem({ item, collapsed, onNavigate, onLogoutClick
 
   // Unread-style badge for a leaf item. Expanded: a numeric pill pushed to
   // the end of the row (99+ cap so it never stretches the sidebar width).
-  // Collapsed: just a small dot on the icon's corner — no room for a
+  // Collapsed: just a small dot on the icon's corner  -  no room for a
   // number at that width, and a dot is enough to say "something's here".
   const hasBadge = typeof badge === 'number' && badge > 0
   const BadgePill = () =>
@@ -44,7 +44,7 @@ export default function SidebarItem({ item, collapsed, onNavigate, onLogoutClick
       <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-sidebar" />
     ) : null
 
-  // Parent item with children — static section, no dropdown
+  // Parent item with children  -  static section, no dropdown
   if (hasChildren) {
     return (
       <li className="pt-3 mt-2 border-t border-sidebar-border first:mt-0 first:pt-0 first:border-t-0">
@@ -85,7 +85,7 @@ export default function SidebarItem({ item, collapsed, onNavigate, onLogoutClick
     )
   }
 
-  // Logout item — button, not a route link, so it can trigger a confirm modal
+  // Logout item  -  button, not a route link, so it can trigger a confirm modal
   if (item.isLogout) {
     return (
       <li>

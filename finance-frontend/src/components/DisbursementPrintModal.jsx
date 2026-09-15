@@ -194,6 +194,7 @@ export default function DisbursementPrintModal({
             .sig-title { font-weight: 700; color: #4b5563; margin-bottom: 28px; text-transform: uppercase; font-size: 10px; }
             .sig-name { font-weight: 700; color: #111827; border-top: 1px solid #111827; padding-top: 4px; text-align: center; }
             .sig-date { font-size: 10px; color: #6b7280; text-align: center; margin-top: 2px; }
+            .sig-position { font-size: 10px; color: #6b7280; text-align: center; margin-top: 1px; }
             @media print { .no-print { display: none; } }
           </style>
         </head>
@@ -206,8 +207,8 @@ export default function DisbursementPrintModal({
               </td>
               <td style="text-align: right;">
                 <div class="doc-title">${isCheck ? 'Check Disbursement Voucher' : 'Disbursement Voucher'}</div>
-                <div style="font-size: 14px; font-weight: 700; color: #1e3a8a; margin-top: 4px;"># ${v.voucher_number || '—'}</div>
-                <div style="font-size: 11px; color: #6b7280;">Date: ${v.payment_date || '—'}</div>
+                <div style="font-size: 14px; font-weight: 700; color: #1e3a8a; margin-top: 4px;"># ${v.voucher_number || '-'}</div>
+                <div style="font-size: 11px; color: #6b7280;">Date: ${v.payment_date || '-'}</div>
               </td>
             </tr>
           </table>
@@ -217,18 +218,18 @@ export default function DisbursementPrintModal({
               <div class="check-header">
                 <div>
                   <div style="font-weight: 800; font-size: 14px; color: #1e3a8a;">${cash.bank_name || 'BANK CHECK'}</div>
-                  <div style="font-size: 10px; color: #6b7280;">Acct: ${cash.account_number || '—'} &middot; ${cash.account_name || ''}</div>
+                  <div style="font-size: 10px; color: #6b7280;">Acct: ${cash.account_number || '-'} &middot; ${cash.account_name || ''}</div>
                 </div>
                 <div style="text-align: right;">
                   <div style="font-size: 10px; color: #6b7280;">CHECK DATE</div>
-                  <div style="font-weight: 700;">${v.payment_date || '—'}</div>
+                  <div style="font-weight: 700;">${v.payment_date || '-'}</div>
                 </div>
               </div>
               <table style="width: 100%; margin-bottom: 8px;">
                 <tr>
                   <td style="width: 80px; font-weight: 700; font-size: 11px; color: #4b5563;">PAY TO THE ORDER OF</td>
                   <td style="border-bottom: 1px solid #111827; font-weight: 800; font-size: 13px; color: #111827; padding-left: 8px;">
-                    ${v.payee || '—'}
+                    ${v.payee || '-'}
                   </td>
                   <td style="width: 130px; text-align: right; font-family: monospace; font-size: 14px; font-weight: 800; border: 1px solid #111827; padding: 4px 8px; background: #fff;">
                     ${fmt(v.amount_paid)}
@@ -249,25 +250,25 @@ export default function DisbursementPrintModal({
           <table class="meta-grid">
             <tr>
               <td class="meta-label">Payee / Beneficiary:</td>
-              <td style="font-weight: 700; color: #111827;">${v.payee || '—'}</td>
+              <td style="font-weight: 700; color: #111827;">${v.payee || '-'}</td>
               <td class="meta-label">Payment Method:</td>
-              <td style="font-weight: 600;">${v.payment_method || '—'}</td>
+              <td style="font-weight: 600;">${v.payment_method || '-'}</td>
             </tr>
             <tr>
               <td class="meta-label">Supplier TIN:</td>
-              <td>${s.tin || '—'}</td>
+              <td>${s.tin || '-'}</td>
               <td class="meta-label">Cash Account:</td>
-              <td>${cash.account_name || '—'} (${cash.bank_name || ''})</td>
+              <td>${cash.account_name || '-'} (${cash.bank_name || ''})</td>
             </tr>
             <tr>
               <td class="meta-label">Supplier Address:</td>
-              <td>${s.address || '—'}</td>
+              <td>${s.address || '-'}</td>
               <td class="meta-label">Reference Number:</td>
-              <td style="font-family: monospace;">${v.reference_number || '—'}</td>
+              <td style="font-family: monospace;">${v.reference_number || '-'}</td>
             </tr>
             <tr>
               <td class="meta-label">Related AP Bill:</td>
-              <td>${bill.invoice_number ? `${bill.invoice_number} (Due: ${bill.due_date || '—'})` : '— (Direct / Payroll)'}</td>
+              <td>${bill.invoice_number ? `${bill.invoice_number} (Due: ${bill.due_date || '-'})` : '- (Direct / Payroll)'}</td>
               <td class="meta-label">Total Amount Paid:</td>
               <td style="font-weight: 800; color: #1e3a8a; font-family: monospace; font-size: 13px;">${fmt(v.amount_paid)}</td>
             </tr>
@@ -292,8 +293,8 @@ export default function DisbursementPrintModal({
                 <tr>
                   <td style="font-family: monospace; font-weight: 600;">${e.account_code}</td>
                   <td>${e.account_name} ${e.remarks ? `<span style="font-size: 10px; color: #6b7280;">(${e.remarks})</span>` : ''}</td>
-                  <td class="num">${e.debit > 0 ? fmt(e.debit) : '—'}</td>
-                  <td class="num">${e.credit > 0 ? fmt(e.credit) : '—'}</td>
+                  <td class="num">${e.debit > 0 ? fmt(e.debit) : '-'}</td>
+                  <td class="num">${e.credit > 0 ? fmt(e.credit) : '-'}</td>
                 </tr>
               `).join('')}
             </tbody>
@@ -311,17 +312,20 @@ export default function DisbursementPrintModal({
               <td>
                 <div class="sig-title">Prepared By</div>
                 <div class="sig-name">${sig.prepared_by || 'Accounting Staff'}</div>
-                <div class="sig-date">Date: ${sig.prepared_at || v.payment_date || '—'}</div>
+                <div class="sig-position">${sig.prepared_by_position || 'Accounting Staff'}</div>
+                <div class="sig-date">Date: ${sig.prepared_at || v.payment_date || '-'}</div>
               </td>
               <td>
                 <div class="sig-title">Checked / Verified By</div>
-                <div class="sig-name">Financial Controller</div>
+                <div class="sig-name">Finance Manager</div>
+                <div class="sig-position">${sig.verified_by_position || 'Finance Manager'}</div>
                 <div class="sig-date">Date: _______________</div>
               </td>
               <td>
                 <div class="sig-title">Approved By</div>
                 <div class="sig-name">${sig.approved_by || 'Finance Director'}</div>
-                <div class="sig-date">Date: ${sig.approved_at || '—'}</div>
+                <div class="sig-position">${sig.approved_by_position || 'Finance Officer'}</div>
+                <div class="sig-date">Date: ${sig.approved_at || '-'}</div>
               </td>
               <td>
                 <div class="sig-title">Received By (Payee)</div>
@@ -349,7 +353,7 @@ export default function DisbursementPrintModal({
 
     const period = birData?.period || {}
     const payor = birData?.payor || {}
-    const payeeName = voucherData?.voucher?.payee || birData?.payee?.registered_name || '—'
+    const payeeName = voucherData?.voucher?.payee || birData?.payee?.registered_name || '-'
     const matchedAtc = (birData?.atc_codes || []).find((a) => a.code === selectedAtc)
 
     win.document.write(`
@@ -385,11 +389,11 @@ export default function DisbursementPrintModal({
             <div class="bir-title">Certificate of Creditable Tax Withheld at Source</div>
             <div class="bir-subtitle">BIR Form No. 2307 &middot; Republic Act No. 8424 / Tax Reform Act of 1997</div>
             <div style="font-size: 9.5px; font-weight: 700; margin-top: 4px;">
-              For the Period: From <u>${period.from || '—'}</u> To <u>${period.to || '—'}</u> &middot; Applicable Quarter: <u>${period.quarter || '—'} ${period.year || ''}</u>
+              For the Period: From <u>${period.from || '-'}</u> To <u>${period.to || '-'}</u> &middot; Applicable Quarter: <u>${period.quarter || '-'} ${period.year || ''}</u>
             </div>
           </div>
 
-          <div class="part-header">Part I — Payee Information (Recipient of Income / Supplier)</div>
+          <div class="part-header">Part I  -  Payee Information (Recipient of Income / Supplier)</div>
           <table class="box-table">
             <tr>
               <td style="width: 35%;">
@@ -409,7 +413,7 @@ export default function DisbursementPrintModal({
             </tr>
           </table>
 
-          <div class="part-header">Part II — Payor Information (Withholding Agent)</div>
+          <div class="part-header">Part II  -  Payor Information (Withholding Agent)</div>
           <table class="box-table">
             <tr>
               <td style="width: 35%;">
@@ -429,7 +433,7 @@ export default function DisbursementPrintModal({
             </tr>
           </table>
 
-          <div class="part-header">Part III — Details of Monthly/Quarterly Income Payments & Taxes Withheld</div>
+          <div class="part-header">Part III  -  Details of Monthly/Quarterly Income Payments & Taxes Withheld</div>
           <table class="tax-table">
             <thead>
               <tr>
@@ -450,9 +454,9 @@ export default function DisbursementPrintModal({
               <tr>
                 <td><strong>${matchedAtc?.nature || 'Professional / Supplier Payments'}</strong><br><span style="font-size: 8.5px; color: #4b5563;">${matchedAtc?.description || ''}</span></td>
                 <td style="text-align: center; font-family: monospace; font-weight: 800;">${selectedAtc}</td>
-                <td class="num">${period.month_index_in_quarter === 1 ? fmt(grossIncome) : '—'}</td>
-                <td class="num">${period.month_index_in_quarter === 2 ? fmt(grossIncome) : '—'}</td>
-                <td class="num">${period.month_index_in_quarter === 3 ? fmt(grossIncome) : '—'}</td>
+                <td class="num">${period.month_index_in_quarter === 1 ? fmt(grossIncome) : '-'}</td>
+                <td class="num">${period.month_index_in_quarter === 2 ? fmt(grossIncome) : '-'}</td>
+                <td class="num">${period.month_index_in_quarter === 3 ? fmt(grossIncome) : '-'}</td>
                 <td class="num" style="font-size: 11px;">${fmt(grossIncome)}</td>
                 <td style="text-align: center; font-weight: 700;">${overrideRate}%</td>
                 <td class="num" style="font-size: 11px; color: #991b1b;">${fmt(taxWithheld)}</td>
@@ -462,7 +466,7 @@ export default function DisbursementPrintModal({
               <tr style="background: #f9fafb; font-weight: 800;">
                 <td colspan="5" style="text-align: right; text-transform: uppercase;">Total Taxes Withheld for the Period</td>
                 <td class="num">${fmt(grossIncome)}</td>
-                <td style="text-align: center;">—</td>
+                <td style="text-align: center;">-</td>
                 <td class="num" style="color: #991b1b; border-bottom: 3px double #000;">${fmt(taxWithheld)}</td>
               </tr>
             </tfoot>
@@ -513,7 +517,7 @@ export default function DisbursementPrintModal({
                 Disbursement Documents &amp; Tax Certification
               </h2>
               <p className="text-xs text-muted">
-                Voucher {v.voucher_number || '—'} &middot; Payee: {v.payee || '—'}
+                Voucher {v.voucher_number || '-'} &middot; Payee: {v.payee || '-'}
               </p>
             </div>
           </div>
@@ -614,7 +618,7 @@ export default function DisbursementPrintModal({
                     <div className="text-right">
                       <div className="text-[10px] text-muted uppercase font-semibold">Date</div>
                       <div className="text-sm font-bold text-ink font-mono">
-                        {v.payment_date || '—'}
+                        {v.payment_date || '-'}
                       </div>
                     </div>
                   </div>
@@ -654,15 +658,15 @@ export default function DisbursementPrintModal({
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="p-3 bg-surface rounded-xl border border-border">
                     <div className="text-xs text-muted font-medium">Voucher Number</div>
-                    <div className="text-base font-bold text-primary-dark dark:text-primary font-mono">{v.voucher_number || '—'}</div>
+                    <div className="text-base font-bold text-primary-dark dark:text-primary font-mono">{v.voucher_number || '-'}</div>
                   </div>
                   <div className="p-3 bg-surface rounded-xl border border-border">
                     <div className="text-xs text-muted font-medium">Payment Date</div>
-                    <div className="text-sm font-bold text-ink">{v.payment_date || '—'}</div>
+                    <div className="text-sm font-bold text-ink">{v.payment_date || '-'}</div>
                   </div>
                   <div className="p-3 bg-surface rounded-xl border border-border">
                     <div className="text-xs text-muted font-medium">Payment Method</div>
-                    <div className="text-sm font-bold text-ink">{v.payment_method || '—'}</div>
+                    <div className="text-sm font-bold text-ink">{v.payment_method || '-'}</div>
                   </div>
                   <div className="p-3 bg-primary/10 rounded-xl border border-primary/20">
                     <div className="text-xs text-primary-dark dark:text-primary font-medium">Amount Paid</div>
@@ -700,10 +704,10 @@ export default function DisbursementPrintModal({
                             {e.remarks && <span className="text-xs text-muted ml-1">({e.remarks})</span>}
                           </td>
                           <td className="px-4 py-2.5 text-right font-mono font-medium text-ink">
-                            {e.debit > 0 ? fmt(e.debit) : '—'}
+                            {e.debit > 0 ? fmt(e.debit) : '-'}
                           </td>
                           <td className="px-4 py-2.5 text-right font-mono font-medium text-ink">
-                            {e.credit > 0 ? fmt(e.credit) : '—'}
+                            {e.credit > 0 ? fmt(e.credit) : '-'}
                           </td>
                         </tr>
                       ))}
@@ -728,17 +732,19 @@ export default function DisbursementPrintModal({
                 <div className="p-3 bg-surface rounded-lg border border-border text-xs">
                   <div className="text-muted font-semibold uppercase text-[10px]">Prepared By</div>
                   <div className="font-bold text-ink mt-1">{voucherData?.signatories?.prepared_by || 'Staff'}</div>
-                  <div className="text-muted text-[10px]">{voucherData?.signatories?.prepared_at || '—'}</div>
+                  <div className="text-muted text-[10px]">{voucherData?.signatories?.prepared_by_position || 'Accounting Staff'}</div>
+                  <div className="text-muted text-[10px]">{voucherData?.signatories?.prepared_at || '-'}</div>
                 </div>
                 <div className="p-3 bg-surface rounded-lg border border-border text-xs">
                   <div className="text-muted font-semibold uppercase text-[10px]">Verified By</div>
-                  <div className="font-bold text-ink mt-1">Financial Controller</div>
+                  <div className="font-bold text-ink mt-1">{voucherData?.signatories?.verified_by_position || 'Finance Manager'}</div>
                   <div className="text-muted text-[10px]">Audit Clearance</div>
                 </div>
                 <div className="p-3 bg-surface rounded-lg border border-border text-xs">
                   <div className="text-muted font-semibold uppercase text-[10px]">Approved By</div>
                   <div className="font-bold text-ink mt-1">{voucherData?.signatories?.approved_by || 'Finance Officer'}</div>
-                  <div className="text-muted text-[10px]">{voucherData?.signatories?.approved_at || '—'}</div>
+                  <div className="text-muted text-[10px]">{voucherData?.signatories?.approved_by_position || 'Finance Officer'}</div>
+                  <div className="text-muted text-[10px]">{voucherData?.signatories?.approved_at || '-'}</div>
                 </div>
                 <div className="p-3 bg-surface rounded-lg border border-border text-xs">
                   <div className="text-muted font-semibold uppercase text-[10px]">Received By</div>
@@ -770,7 +776,7 @@ export default function DisbursementPrintModal({
                     >
                       {(birData?.atc_codes || []).map((atc) => (
                         <option key={atc.code} value={atc.code} className="bg-surface text-ink">
-                          {atc.code} ({atc.rate}%) — {atc.description}
+                          {atc.code} ({atc.rate}%)  -  {atc.description}
                         </option>
                       ))}
                     </select>
@@ -822,13 +828,13 @@ export default function DisbursementPrintModal({
 
                 <div className="grid grid-cols-2 gap-4 text-xs">
                   <div className="p-3 bg-bg/50 rounded-lg border border-border">
-                    <div className="font-bold text-muted uppercase text-[10px] mb-1">Part I — Payee (Supplier)</div>
+                    <div className="font-bold text-muted uppercase text-[10px] mb-1">Part I  -  Payee (Supplier)</div>
                     <div className="font-bold text-ink">{v.payee}</div>
                     <div className="font-mono text-muted text-[11px]">TIN: {payeeTin}</div>
                     <div className="text-muted text-[11px] mt-0.5">{payeeAddress}</div>
                   </div>
                   <div className="p-3 bg-bg/50 rounded-lg border border-border">
-                    <div className="font-bold text-muted uppercase text-[10px] mb-1">Part II — Payor (Withholding Agent)</div>
+                    <div className="font-bold text-muted uppercase text-[10px] mb-1">Part II  -  Payor (Withholding Agent)</div>
                     <div className="font-bold text-ink">{company?.name || birData?.payor?.registered_name}</div>
                     <div className="font-mono text-muted text-[11px]">TIN: {birData?.payor?.tin}</div>
                     <div className="text-muted text-[11px] mt-0.5">{company?.address || birData?.payor?.address}</div>

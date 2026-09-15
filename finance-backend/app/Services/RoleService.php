@@ -268,6 +268,15 @@ class RoleService
     {
         $this->guardAgainstUnauthorizedSuperAdminRoleEdit($actor, $role, 'have its permissions changed');
 
+        // You can't change the access rules for the role you're currently
+        // holding — otherwise anyone with roles.manage could quietly grant
+        // themselves more power. Guarded for every role, Super Admin included.
+        if ((int) $role->id === (int) $actor->role_id) {
+            throw ValidationException::withMessages([
+                'role' => ['You cannot change permissions for your own role.'],
+            ]);
+        }
+
         return DB::transaction(function () use ($actor, $role, $permissionIds) {
             $before = $role->permissions()->pluck('permissions.id')->all();
             $role->permissions()->sync($permissionIds);

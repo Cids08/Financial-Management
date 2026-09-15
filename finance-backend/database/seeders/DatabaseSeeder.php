@@ -16,6 +16,7 @@ class DatabaseSeeder extends Seeder
 
             // 2. Foundational Organizational Units & Entities
             DepartmentSeeder::class,
+            TitleSeeder::class,
             ServiceAreaSeeder::class,
             CustomerSeeder::class,
             SupplierSeeder::class,

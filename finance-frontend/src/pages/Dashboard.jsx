@@ -29,8 +29,6 @@ import {
   ChevronRight,
   Activity,
   Loader2,
-  Eye,
-  EyeOff,
 } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import DashboardCard from '../components/DashboardCard'
@@ -38,6 +36,7 @@ import Table from '../components/Table'
 import Button from '../components/Button'
 import { formatCurrency, formatDate } from '../utils/formatters'
 import { apiFetch } from '../utils/api'
+import { usePrivacy } from '../context/PrivacyContext'
 import { useProfile } from '../hooks/useProfile'
 import { usePermissions } from '../context/PermissionsContext'
 import {
@@ -48,6 +47,9 @@ import {
   Area,
   BarChart,
   Bar,
+  PieChart,
+  Pie,
+  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -56,7 +58,7 @@ import {
 } from 'recharts'
 
 /* ---------------------------------------------------------------------- */
-/* Presentation config — icons/colors/routes per API field, since the API */
+/* Presentation config  -  icons/colors/routes per API field, since the API */
 /* returns raw numbers/labels and doesn't know about lucide-react.        */
 /* ---------------------------------------------------------------------- */
 
@@ -104,6 +106,7 @@ const CHART_COLORS = {
 
 const AXIS_STYLE = { fontSize: 11, fill: 'var(--color-muted, #64748b)' }
 const CHART_MARGIN = { top: 5, right: 24, left: 0, bottom: 0 }
+const PIE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#a855f7', '#ef4444', '#06b6d4', '#8b5cf6', '#f43f5e', '#64748b']
 const shortMonthTick = (label) => (typeof label === 'string' ? label.split(' ')[0] : label)
 
 /** Evenly-spaced tick labels (both endpoints included) for a dense series like 30 daily points. */
@@ -160,13 +163,13 @@ const FORECAST_ICON = { revenue: TrendingUp, expense: TrendingDown, expenses: Tr
 // Each entry maps to a real create-form route for that transaction type, and
 // the backend permission (see routes/api.php) required to actually submit
 // that form. The menu only shows options the current user holds the
-// permission for — otherwise they'd reach a form just to get a 403 on submit.
+// permission for  -  otherwise they'd reach a form just to get a 403 on submit.
 const NEW_TRANSACTION_OPTIONS = [
-  { label: 'Receivable Invoice', icon: FileText, route: '/transactions/receivable/new', permission: 'ar.manage' },
-  { label: 'Payable Invoice', icon: CreditCard, route: '/transactions/payable/new', permission: 'ap.manage' },
-  { label: 'Expense', icon: Receipt, route: '/transactions/expenses/new', permission: 'expenses.manage' },
-  { label: 'Collection', icon: HandCoins, route: '/transactions/collections/new', permission: 'collections.manage' },
-  { label: 'Disbursement', icon: Banknote, route: '/transactions/disbursements/new', permission: 'disbursements.manage' },
+  { label: 'Receivable Invoice', icon: FileText, route: '/transactions/receivable?new=1', permission: 'ar.manage' },
+  { label: 'Payable Invoice', icon: CreditCard, route: '/transactions/payable?new=1', permission: 'ap.manage' },
+  { label: 'Expense', icon: Receipt, route: '/transactions/expenses?new=1', permission: 'expenses.manage' },
+  { label: 'Collection', icon: HandCoins, route: '/transactions/collections?new=1', permission: 'collections.manage' },
+  { label: 'Disbursement', icon: Banknote, route: '/transactions/disbursements?new=1', permission: 'disbursements.manage' },
 ]
 
 /* ---------------------------------------------------------------------- */
@@ -190,7 +193,7 @@ function iconForForecast(target) {
   return Target
 }
 
-function ChartCard({ title, subtitle, route, navigate, empty, children }) {
+function ChartCard({ title, subtitle, route, navigate, empty, contentClassName = 'h-36', children }) {
   return (
     <div
       role={route ? 'button' : undefined}
@@ -203,18 +206,18 @@ function ChartCard({ title, subtitle, route, navigate, empty, children }) {
         <p className={`mt-0.5 ${SECTION_SUBTITLE}`}>{subtitle}</p>
       </div>
       {empty ? (
-        <div className="flex h-40 items-center justify-center rounded-lg border border-dashed border-border bg-bg">
+        <div className={`flex ${contentClassName} items-center justify-center rounded-lg border border-dashed border-border bg-bg`}>
           <p className="text-xs font-medium text-muted">No data for this period yet.</p>
         </div>
       ) : (
-        <div className="h-40">{children}</div>
+        <div className={contentClassName}>{children}</div>
       )}
     </div>
   )
 }
 
 /**
- * "New Transaction" split button — picks a transaction type, then routes to
+ * "New Transaction" split button  -  picks a transaction type, then routes to
  * its create form. Options are filtered to whatever the current user has
  * the corresponding *.manage permission for; the whole button hides itself
  * if the user can't create any transaction type at all.
@@ -294,7 +297,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  // Charts load separately from the cards/lists above — heavier grouped
+  // Charts load separately from the cards/lists above  -  heavier grouped
   // queries on the backend, and there's no reason the rest of the
   // dashboard should wait on them.
   const [chartData, setChartData] = useState(null)
@@ -305,8 +308,12 @@ export default function Dashboard() {
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState(null)
 
-  // Privacy Mode — hides all currency figures when enabled
-  const [privacyMode, setPrivacyMode] = useState(false)
+  // Privacy Mode  -  hides all currency figures when enabled.
+  // Defaults to ON and remembers the choice between visits. The state now
+  // lives in PrivacyContext (shared with the Header toggle + every other
+  // page) instead of a local copy, so toggling it here or up top stays in
+  // sync everywhere.
+  const { privacyOn: privacyMode } = usePrivacy()
 
   useEffect(() => {
     setLoading(true)
@@ -390,6 +397,11 @@ export default function Dashboard() {
 
   const MASKED = '₱ ••••••'
 
+  // Chart helpers respect Privacy Mode too  -  otherwise the Y-axis ticks and
+  // hover tooltips would still leak the real figures the cards are hiding.
+  const chartTick = (v) => (privacyMode ? '•••' : formatCurrency(v))
+  const chartTooltip = (v) => (privacyMode ? MASKED : formatCurrency(v))
+
   const overviewCards = OVERVIEW_CARD_CONFIG.map((cfg) => {
     const entry = overview[cfg.key] || {}
     return {
@@ -431,20 +443,6 @@ export default function Dashboard() {
           )}
         </div>
         <div className="flex items-center gap-2">
-          {/* Privacy Mode toggle — masks all currency values on this page */}
-          <button
-            type="button"
-            onClick={() => setPrivacyMode(m => !m)}
-            className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs transition-colors duration-150 ${
-              privacyMode
-                ? 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400'
-                : 'border-border bg-surface text-muted hover:text-ink'
-            }`}
-            title={privacyMode ? 'Disable Privacy Mode' : 'Enable Privacy Mode'}
-          >
-            {privacyMode ? <EyeOff size={13} /> : <Eye size={13} />}
-            {privacyMode ? 'Privacy On' : 'Privacy Mode'}
-          </button>
           <Button variant="secondary" size="sm" icon={Download} onClick={handleExport} disabled={exporting}>
             {exporting ? 'Exporting…' : 'Export'}
           </Button>
@@ -542,7 +540,7 @@ export default function Dashboard() {
                     <Icon size={15} />
                   </div>
                   <p className="text-xs text-muted">Predicted {card.forecast_target}</p>
-                  <p className="mt-0.5 text-base font-bold text-ink">{formatCurrency(card.predicted_amount)}</p>
+                  <p className="mt-0.5 text-base font-bold text-ink">{privacyMode ? MASKED : formatCurrency(card.predicted_amount)}</p>
                   {hasTrend && (
                     <p className={`mt-1 flex items-center gap-1 text-[11px] font-semibold ${card.trend >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                       <TrendIcon size={12} /> {Math.abs(card.trend)}% vs. actual
@@ -571,8 +569,8 @@ export default function Dashboard() {
                 onClick={() => handleModuleClick(card.route)}
                 className={`group flex items-center gap-3 ${PANEL} p-3 text-left ${CLICKABLE_ROW}`}
               >
-                <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${card.iconBg}`}>
-                  <Icon size={16} className={card.iconColor} />
+                <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${card.iconBg}`}>
+                  <Icon size={14} className={card.iconColor} />
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-medium text-muted">{card.title}</p>
@@ -588,7 +586,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Charts section — real data from /api/dashboard/charts */}
+      {/* Charts section  -  real data from /api/dashboard/charts */}
       <div>
         <h2 className={`mb-2 ${SECTION_TITLE}`}>Charts &amp; Trends</h2>
 
@@ -610,8 +608,8 @@ export default function Dashboard() {
                 <LineChart data={chartData?.revenue_trend} margin={CHART_MARGIN}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e2e8f0)" />
                   <XAxis dataKey="label" tick={AXIS_STYLE} interval={0} tickFormatter={shortMonthTick} />
-                  <YAxis tick={AXIS_STYLE} tickFormatter={(v) => formatCurrency(v)} width={70} />
-                  <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={(v) => formatCurrency(v)} />
+                  <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={70} />
+                  <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
                   <Line type="monotone" dataKey="value" name="Revenue" stroke={CHART_COLORS.revenue} strokeWidth={2} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
@@ -622,8 +620,8 @@ export default function Dashboard() {
                 <LineChart data={chartData?.expense_trend} margin={CHART_MARGIN}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e2e8f0)" />
                   <XAxis dataKey="label" tick={AXIS_STYLE} interval={0} tickFormatter={shortMonthTick} />
-                  <YAxis tick={AXIS_STYLE} tickFormatter={(v) => formatCurrency(v)} width={70} />
-                  <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={(v) => formatCurrency(v)} />
+                  <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={70} />
+                  <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
                   <Line type="monotone" dataKey="value" name="Expenses" stroke={CHART_COLORS.expense} strokeWidth={2} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
@@ -634,8 +632,8 @@ export default function Dashboard() {
                 <AreaChart data={chartData?.collections_trend} margin={CHART_MARGIN}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e2e8f0)" />
                   <XAxis dataKey="label" tick={AXIS_STYLE} interval={0} ticks={evenTicks(chartData?.collections_trend, 7)} />
-                  <YAxis tick={AXIS_STYLE} tickFormatter={(v) => formatCurrency(v)} width={70} />
-                  <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={(v) => formatCurrency(v)} />
+                  <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={70} />
+                  <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
                   <Area type="monotone" dataKey="value" name="Collected" stroke={CHART_COLORS.collections} fill={CHART_COLORS.collections} fillOpacity={0.15} />
                 </AreaChart>
               </ResponsiveContainer>
@@ -646,12 +644,60 @@ export default function Dashboard() {
                 <BarChart data={chartData?.cash_flow_trend} margin={CHART_MARGIN}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e2e8f0)" />
                   <XAxis dataKey="label" tick={AXIS_STYLE} interval={0} tickFormatter={shortMonthTick} />
-                  <YAxis tick={AXIS_STYLE} tickFormatter={(v) => formatCurrency(v)} width={70} />
-                  <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={(v) => formatCurrency(v)} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={70} />
+                  <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} formatter={(value) => (value?.length > 16 ? `${value.slice(0, 14)}…` : value)} />
                   <Bar dataKey="inflow" name="Inflow" fill={CHART_COLORS.inflow} radius={[3, 3, 0, 0]} />
                   <Bar dataKey="outflow" name="Outflow" fill={CHART_COLORS.outflow} radius={[3, 3, 0, 0]} />
                 </BarChart>
+              </ResponsiveContainer>
+            </ChartCard>
+
+            <ChartCard title="Cash Account Distribution" subtitle="Available cash by account" route="/master-data/cash-accounts" navigate={navigate} empty={!chartData?.cash_distribution?.length}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={chartData?.cash_distribution}
+                    dataKey="value"
+                    nameKey="label"
+                    cx="50%"
+                    cy="45%"
+                    innerRadius={38}
+                    outerRadius={58}
+                    paddingAngle={2}
+                    strokeWidth={0}
+                  >
+                    {chartData?.cash_distribution?.map((entry, idx) => (
+                      <Cell key={entry.label} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} formatter={(value) => (value?.length > 16 ? `${value.slice(0, 14)}…` : value)} />
+                </PieChart>
+              </ResponsiveContainer>
+            </ChartCard>
+
+            <ChartCard title="Expenses by Category" subtitle="This month" route={CHART_ROUTES.expense_trend} navigate={navigate} empty={!chartData?.expense_breakdown?.length}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={chartData?.expense_breakdown}
+                    dataKey="value"
+                    nameKey="label"
+                    cx="50%"
+                    cy="45%"
+                    innerRadius={38}
+                    outerRadius={58}
+                    paddingAngle={2}
+                    strokeWidth={0}
+                  >
+                    {chartData?.expense_breakdown?.map((entry, idx) => (
+                      <Cell key={entry.label} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} formatter={(value) => (value?.length > 16 ? `${value.slice(0, 14)}…` : value)} />
+                </PieChart>
               </ResponsiveContainer>
             </ChartCard>
 
@@ -660,9 +706,9 @@ export default function Dashboard() {
                 <BarChart data={chartData?.budget_utilization} margin={CHART_MARGIN}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e2e8f0)" />
                   <XAxis dataKey="label" tick={AXIS_STYLE} interval={0} angle={-15} textAnchor="end" height={40} />
-                  <YAxis tick={AXIS_STYLE} tickFormatter={(v) => formatCurrency(v)} width={70} />
-                  <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={(v) => formatCurrency(v)} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={70} />
+                  <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} formatter={(value) => (value?.length > 16 ? `${value.slice(0, 14)}…` : value)} />
                   <Bar dataKey="allocated" name="Allocated" fill={CHART_COLORS.allocated} radius={[3, 3, 0, 0]} />
                   <Bar dataKey="used" name="Used" fill={CHART_COLORS.used} radius={[3, 3, 0, 0]} />
                 </BarChart>
@@ -674,8 +720,8 @@ export default function Dashboard() {
                 <BarChart data={chartData?.receivable_aging} margin={CHART_MARGIN}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e2e8f0)" />
                   <XAxis dataKey="label" tick={AXIS_STYLE} interval={0} />
-                  <YAxis tick={AXIS_STYLE} tickFormatter={(v) => formatCurrency(v)} width={70} />
-                  <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={(v) => formatCurrency(v)} />
+                  <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={70} />
+                  <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
                   <Bar dataKey="value" name="Outstanding" fill={CHART_COLORS.aging} radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -686,8 +732,8 @@ export default function Dashboard() {
                 <BarChart data={chartData?.payable_aging} margin={CHART_MARGIN}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e2e8f0)" />
                   <XAxis dataKey="label" tick={AXIS_STYLE} interval={0} />
-                  <YAxis tick={AXIS_STYLE} tickFormatter={(v) => formatCurrency(v)} width={70} />
-                  <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={(v) => formatCurrency(v)} />
+                  <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={70} />
+                  <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
                   <Bar dataKey="value" name="Outstanding" fill={CHART_COLORS.outflow} radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -707,7 +753,7 @@ export default function Dashboard() {
         </div>
         <Table
           columns={COLUMNS}
-          data={transactions.map((t) => ({ ...t, date: formatDate(t.date), amount: formatCurrency(t.amount) }))}
+          data={transactions.map((t) => ({ ...t, date: formatDate(t.date), amount: privacyMode ? MASKED : formatCurrency(t.amount) }))}
           onRowClick={(row) => row.route && navigate(row.route)}
         />
         {transactions.length === 0 && (

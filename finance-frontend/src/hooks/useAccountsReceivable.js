@@ -4,7 +4,7 @@ import { apiFetch } from '../utils/api'
 /**
  * Owns all network interaction for the Accounts Receivable module.
  * AccountsReceivable.jsx should only call these functions and render
- * `records` — no fetch/apiFetch calls belong in the page itself.
+ * `records`  -  no fetch/apiFetch calls belong in the page itself.
  */
 export function useAccountsReceivable() {
   const [records, setRecords] = useState([])
@@ -12,7 +12,7 @@ export function useAccountsReceivable() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
-  // No filters passed by default — returns the full set (active + archived)
+  // No filters passed by default  -  returns the full set (active + archived)
   // in one call so the page can keep doing its own client-side filtering,
   // search, and stats the same way it already does.
   const fetchRecords = useCallback(async () => {
