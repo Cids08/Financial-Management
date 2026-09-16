@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\GeoIpService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -64,6 +65,13 @@ class AuthService
 
         if (! $user || ! Hash::check($password, $user->password)) {
             if ($user) {
+                Log::channel('security')->warning('Failed login attempt', [
+                    'user_id' => $user->id,
+                    'email'   => $email,
+                    'ip'      => request()->ip(),
+                    'agent'   => request()->userAgent(),
+                ]);
+
                 $this->registerFailedAttempt($user);
 
                 // The attempt that just ran may have been the one that
@@ -86,6 +94,12 @@ class AuthService
                         )],
                     ]);
                 }
+            } else {
+                Log::channel('security')->warning('Failed login attempt (unknown email)', [
+                    'email' => $email,
+                    'ip'    => request()->ip(),
+                    'agent' => request()->userAgent(),
+                ]);
             }
 
             throw ValidationException::withMessages([
@@ -94,6 +108,14 @@ class AuthService
         }
 
         if ($user->status !== 'Active') {
+            Log::channel('security')->warning('Login attempt on inactive account', [
+                'user_id' => $user->id,
+                'email'   => $email,
+                'status'  => $user->status,
+                'ip'      => request()->ip(),
+                'agent'   => request()->userAgent(),
+            ]);
+
             throw ValidationException::withMessages([
                 'email' => ['This account is not active. Contact your administrator.'],
             ]);
@@ -102,8 +124,21 @@ class AuthService
         $this->clearFailedAttempts($user);
 
         if ($user->two_factor_confirmed_at) {
+            Log::channel('security')->info('Login password verified, 2FA required', [
+                'user_id' => $user->id,
+                'email'   => $email,
+                'ip'      => request()->ip(),
+            ]);
+
             return $this->issuePendingLogin($user, $remember, $clientSessionId);
         }
+
+        Log::channel('security')->info('Successful login', [
+            'user_id' => $user->id,
+            'email'   => $email,
+            'ip'      => request()->ip(),
+            'agent'   => request()->userAgent(),
+        ]);
 
         $user->forceFill(['last_login' => now()])->save();
 
@@ -128,6 +163,10 @@ class AuthService
         $pending = Cache::get($this->pendingCacheKey($pendingToken));
 
         if (! $pending) {
+            Log::channel('security')->warning('2FA verification attempt on expired pending login', [
+                'ip' => request()->ip(),
+            ]);
+
             throw ValidationException::withMessages([
                 'code' => ['This login has expired. Please sign in again.'],
             ]);
@@ -136,6 +175,12 @@ class AuthService
         $hashed = Cache::get($this->codeCacheKey($pendingToken));
 
         if (! $hashed || ! Hash::check($code, $hashed)) {
+            Log::channel('security')->warning('2FA code incorrect', [
+                'user_id' => $pending['user_id'],
+                'ip'      => request()->ip(),
+                'agent'   => request()->userAgent(),
+            ]);
+
             throw ValidationException::withMessages([
                 'code' => ['That code is incorrect or has expired.'],
             ]);
@@ -145,6 +190,13 @@ class AuthService
 
         Cache::forget($this->pendingCacheKey($pendingToken));
         Cache::forget($this->codeCacheKey($pendingToken));
+
+        Log::channel('security')->info('Successful login via 2FA', [
+            'user_id' => $user->id,
+            'email'   => $user->email,
+            'ip'      => request()->ip(),
+            'agent'   => request()->userAgent(),
+        ]);
 
         $user->forceFill(['last_login' => now()])->save();
 
@@ -164,12 +216,21 @@ class AuthService
         $pending = Cache::get($this->pendingCacheKey($pendingToken));
 
         if (! $pending) {
+            Log::channel('security')->warning('2FA code resend on expired pending login', [
+                'ip' => request()->ip(),
+            ]);
+
             throw ValidationException::withMessages([
                 'code' => ['This login has expired. Please sign in again.'],
             ]);
         }
 
         $user = User::findOrFail($pending['user_id']);
+
+        Log::channel('security')->info('2FA login code resent', [
+            'user_id' => $user->id,
+            'ip'      => request()->ip(),
+        ]);
 
         // Refresh the ticket's TTL alongside the new code so a resend near
         // the end of the window doesn't leave the user stuck.
@@ -182,6 +243,12 @@ class AuthService
 
     public function logout(User $user): void
     {
+        Log::channel('security')->info('User logged out', [
+            'user_id' => $user->id,
+            'email'   => $user->email,
+            'ip'      => request()->ip(),
+        ]);
+
         $user->currentAccessToken()?->delete();
     }
 
@@ -318,6 +385,14 @@ class AuthService
         if ($attempts >= self::MAX_FAILED_ATTEMPTS) {
             $update['locked_until'] = now()->addMinutes(self::LOCKOUT_MINUTES);
             $update['failed_login_attempts'] = 0; // reset counter, lock takes over
+
+            Log::channel('security')->warning('Account locked due to failed login attempts', [
+                'user_id' => $user->id,
+                'email'   => $user->email,
+                'ip'      => request()->ip(),
+                'locked_minutes' => self::LOCKOUT_MINUTES,
+                'failed_attempts' => self::MAX_FAILED_ATTEMPTS,
+            ]);
 
             $this->log($user, 'Account Locked', 'Authentication', sprintf(
                 'Account locked for %d minutes after %d failed login attempts.',
