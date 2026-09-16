@@ -13,6 +13,7 @@ import Pagination from '../components/Pagination'
 import { formatCurrency } from '../utils/formatters'
 import { usePrivacy } from '../context/PrivacyContext'
 import { useForecasts } from '../hooks/useForecasts'
+import { useProfile } from '../hooks/useProfile'
 
 // Exactly 5 categories per spec: Expense, Accounts Receivable,
 // Collection, Cash Flow, and Budget Utilization forecasts. 'Revenue'
@@ -167,7 +168,7 @@ const ForecastRow = memo(function ForecastRow({ forecast: f, showArchived, onVie
               <Info size={15} />
             </button>
           </Tooltip>
-          {showArchived ? (
+          {isAdmin && (showArchived ? (
             <Tooltip label="Restore forecast" align="end">
               <button
                 type="button"
@@ -189,7 +190,7 @@ const ForecastRow = memo(function ForecastRow({ forecast: f, showArchived, onVie
                 <Archive size={15} />
               </button>
             </Tooltip>
-          )}
+          ))}
         </div>
       </td>
     </tr>
@@ -483,6 +484,9 @@ export default function FinancialForecasting({ title = 'Financial Forecasting', 
   } = useForecasts()
 
   usePrivacy()
+
+  const { profile } = useProfile()
+  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
 
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')

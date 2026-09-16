@@ -8,6 +8,9 @@ import Tooltip from '../components/Tooltip'
 import { apiFetch } from '../utils/api'
 import { useCompany } from '../context/CompanyContext'
 import { useHighlightRow } from '../hooks/useHighlightRow'
+import { usePrivacy } from '../context/PrivacyContext'
+import { formatCurrency } from '../utils/formatters'
+import { useProfile } from '../hooks/useProfile'
 
 // Masks every character (keeps dashes/spaces as visual separators)
 function maskValue(value) {
@@ -22,11 +25,6 @@ function maskValue(value) {
 function maskEmail(value) {
   if (!value) return value
   return '•'.repeat(10)
-}
-
-function formatCurrency(value, currency = 'PHP') {
-  const amount = Number(value) || 0
-  return amount.toLocaleString('en-PH', { style: 'currency', currency })
 }
 
 // Trimmed to exactly the 7 fields this form should collect. Credit Limit
@@ -52,6 +50,9 @@ const STATUS_STYLES = {
 }
 
 export default function Customers({ title = 'Customers', crumbs = ['Master Data', 'Customers'] }) {
+  usePrivacy()
+  const { profile } = useProfile()
+  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
   const { currency } = useCompany()
   const [customers, setCustomers] = useState([])
   const [stats, setStats] = useState({ total: 0, active: 0, inactive: 0, archived: 0 })
@@ -373,11 +374,13 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
                               <Pencil size={15} />
                             </button>
                           </Tooltip>
-                          <Tooltip label={c.is_archived ? 'Restore customer' : 'Archive customer'} align="end">
-                            <button type="button" onClick={() => toggleArchive(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                              {c.is_archived ? <RotateCcw size={15} /> : <Archive size={15} />}
-                            </button>
-                          </Tooltip>
+                          {isAdmin && (
+                            <Tooltip label={c.is_archived ? 'Restore customer' : 'Archive customer'} align="end">
+                              <button type="button" onClick={() => toggleArchive(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                                {c.is_archived ? <RotateCcw size={15} /> : <Archive size={15} />}
+                              </button>
+                            </Tooltip>
+                          )}
                         </div>
                       </td>
                     </tr>

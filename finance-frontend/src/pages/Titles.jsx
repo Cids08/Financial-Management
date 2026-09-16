@@ -7,6 +7,7 @@ import Pagination from '../components/Pagination'
 import Tooltip from '../components/Tooltip'
 import { useTitles } from '../hooks/useTitles'
 import { useHighlightRow } from '../hooks/useHighlightRow'
+import { useProfile } from '../hooks/useProfile'
 
 const EMPTY_FORM = { name: '', is_active: true }
 
@@ -22,6 +23,8 @@ const STATUS_STYLES = {
 }
 
 export default function Titles({ title = 'Titles', crumbs = ['Master Data', 'Titles'] }) {
+  const { profile } = useProfile()
+  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
   const {
     titles,
     meta,
@@ -182,6 +185,7 @@ export default function Titles({ title = 'Titles', crumbs = ['Master Data', 'Tit
                 </div>
                 <div className="flex items-center gap-1">
                   {showArchived ? (
+                    isAdmin && (
                     <Tooltip label="Restore position" align="end">
                       <button
                         type="button"
@@ -192,18 +196,20 @@ export default function Titles({ title = 'Titles', crumbs = ['Master Data', 'Tit
                         <RotateCcw size={15} />
                       </button>
                     </Tooltip>
-                  ) : (
+                    )) : (
                     <>
                       <Tooltip label="Edit position" align="start">
                         <button type="button" onClick={() => openEdit(t)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                           <Pencil size={15} />
                         </button>
                       </Tooltip>
-                      <Tooltip label="Archive position" align="end">
-                        <button type="button" onClick={() => { setTitleToArchive(t); setArchiveError('') }} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 transition-colors duration-150">
-                          <Archive size={15} />
-                        </button>
-                      </Tooltip>
+                      {isAdmin && (
+                          <Tooltip label="Archive position" align="end">
+                            <button type="button" onClick={() => { setTitleToArchive(t); setArchiveError('') }} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 transition-colors duration-150">
+                              <Archive size={15} />
+                            </button>
+                          </Tooltip>
+                        )}
                     </>
                   )}
                 </div>

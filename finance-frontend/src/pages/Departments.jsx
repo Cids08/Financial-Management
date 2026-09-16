@@ -7,6 +7,7 @@ import Pagination from '../components/Pagination'
 import Tooltip from '../components/Tooltip'
 import { apiFetch } from '../utils/api'
 import { useHighlightRow } from '../hooks/useHighlightRow'
+import { useProfile } from '../hooks/useProfile'
 
 // Masks every character (keeps dashes/spaces as visual separators)
 function maskValue(value) {
@@ -37,6 +38,8 @@ const STATUS_STYLES = {
 }
 
 export default function Departments({ title = 'Departments', crumbs = ['Master Data', 'Departments'] }) {
+  const { profile } = useProfile()
+  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
   const [departments, setDepartments] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
@@ -271,6 +274,7 @@ export default function Departments({ title = 'Departments', crumbs = ['Master D
                 </div>
                 <div className="flex items-center gap-1">
                   {showArchived ? (
+                    isAdmin && (
                     <Tooltip label="Restore department" align="end">
                       <button
                         type="button"
@@ -281,18 +285,20 @@ export default function Departments({ title = 'Departments', crumbs = ['Master D
                         <RotateCcw size={15} />
                       </button>
                     </Tooltip>
-                  ) : (
+                    )) : (
                     <>
                       <Tooltip label="Edit department" align="start">
                         <button type="button" onClick={() => openEdit(d)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                           <Pencil size={15} />
                         </button>
                       </Tooltip>
-                      <Tooltip label="Archive department" align="end">
-                        <button type="button" onClick={() => { setDeptToArchive(d); setArchiveError('') }} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 transition-colors duration-150">
-                          <Archive size={15} />
-                        </button>
-                      </Tooltip>
+                      {isAdmin && (
+                          <Tooltip label="Archive department" align="end">
+                            <button type="button" onClick={() => { setDeptToArchive(d); setArchiveError('') }} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 transition-colors duration-150">
+                              <Archive size={15} />
+                            </button>
+                          </Tooltip>
+                        )}
                     </>
                   )}
                 </div>

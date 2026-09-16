@@ -15,6 +15,7 @@ import { formatCurrency } from '../utils/formatters'
 import { useTaxObligations } from '../hooks/useTaxObligations'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 import { usePrivacy } from '../context/PrivacyContext'
+import { useProfile } from '../hooks/useProfile'
 
 const pad = (n) => String(n).padStart(2, '0')
 const QUARTER_LABELS = { 1: 'Q1 (Jan - Mar)', 2: 'Q2 (Apr - Jun)', 3: 'Q3 (Jul - Sep)', 4: 'Q4 (Oct - Dec)' }
@@ -155,6 +156,9 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
   } = useTaxObligations()
 
   usePrivacy()
+
+  const { profile } = useProfile()
+  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
 
   // Multi-row selection for batch payment
   const [selectedTaxIds, setSelectedTaxIds] = useState([])
@@ -927,7 +931,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                         {/* Archive / Restore:
                             - Only Paid obligations can be archived
                             - In archived view, Restore button is shown */}
-                        {showArchived ? (
+                        {isAdmin && (showArchived ? (
                           <Tooltip label="Restore obligation" align="end">
                             <button
                               type="button"
@@ -947,7 +951,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                               <Archive size={14} />
                             </button>
                           </Tooltip>
-                        ) : null}
+                        ) : null)}
                       </div>
                     </td>
                   </tr>

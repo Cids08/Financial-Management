@@ -7,6 +7,7 @@ import Pagination from '../components/Pagination'
 import Tooltip from '../components/Tooltip'
 import { usePermissions } from '../context/PermissionsContext'
 import { useExpenseCategories } from '../hooks/useExpenseCategories'
+import { useProfile } from '../hooks/useProfile'
 
 const EMPTY_FORM = { category_code: '', category_name: '', description: '', is_active: true }
 
@@ -25,6 +26,8 @@ const ACTIVE_STYLES = {
 
 export default function ExpenseCategories({ title = 'Expense Categories', crumbs = ['Master Data', 'Expense Categories'] }) {
   const { hasPermission } = usePermissions()
+  const { profile } = useProfile()
+  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
   const canManage = hasPermission('expense-categories.manage')
 
   const {
@@ -192,16 +195,18 @@ export default function ExpenseCategories({ title = 'Expense Categories', crumbs
                             </button>
                           </Tooltip>
                         )}
-                        <Tooltip label={filters.trashed ? 'Restore category' : 'Archive category'} align="end">
-                          <button
-                            type="button"
-                            onClick={() => (filters.trashed ? handleRestore(c) : handleArchive(c))}
-                            disabled={mutating}
-                            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-50"
-                          >
-                            {filters.trashed ? <RotateCcw size={15} /> : <Archive size={15} />}
-                          </button>
-                        </Tooltip>
+                        {isAdmin && (
+                          <Tooltip label={filters.trashed ? 'Restore category' : 'Archive category'} align="end">
+                            <button
+                              type="button"
+                              onClick={() => (filters.trashed ? handleRestore(c) : handleArchive(c))}
+                              disabled={mutating}
+                              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-50"
+                            >
+                              {filters.trashed ? <RotateCcw size={15} /> : <Archive size={15} />}
+                            </button>
+                          </Tooltip>
+                        )}
                       </div>
                     </td>
                   )}

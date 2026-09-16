@@ -13,6 +13,7 @@ import { apiFetch } from '../utils/api'
 import { useCollectors } from '../hooks/useCollectors'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 import { usePrivacy } from '../context/PrivacyContext'
+import { useProfile } from '../hooks/useProfile'
 
 const EMPTY_FORM = { employee_no: '', first_name: '', last_name: '', email: '', contact_no: '', assigned_area: '', service_area_id: '', monthly_target: '', commission_rate: '', is_active: true, user_id: '' }
 
@@ -285,6 +286,9 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
 
   usePrivacy()
 
+  const { profile } = useProfile()
+  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
+
   // Global search (SearchBar.jsx) navigates here with a highlightId (and,
   // since this table's `search` filter is server-side/debounced inside
   // useCollectors, a highlightSearch seed) whenever a collector record is
@@ -554,15 +558,17 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
                             <Pencil size={15} />
                           </button>
                         </Tooltip2>
-                        <Tooltip2 label={showArchived ? 'Restore collector' : 'Archive collector'} align="end">
-                          <button
-                            type="button"
-                            onClick={() => (showArchived ? restoreCollector(c.collector_id) : archiveCollector(c.collector_id))}
-                            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
-                          >
-                            {showArchived ? <RotateCcw size={15} /> : <Archive size={15} />}
-                          </button>
-                        </Tooltip2>
+                        {isAdmin && (
+                          <Tooltip2 label={showArchived ? 'Restore collector' : 'Archive collector'} align="end">
+                            <button
+                              type="button"
+                              onClick={() => (showArchived ? restoreCollector(c.collector_id) : archiveCollector(c.collector_id))}
+                              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
+                            >
+                              {showArchived ? <RotateCcw size={15} /> : <Archive size={15} />}
+                            </button>
+                          </Tooltip2>
+                        )}
                       </div>
                     </td>
                   </tr>

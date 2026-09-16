@@ -9,6 +9,7 @@ import { formatCurrency } from '../utils/formatters'
 import { useCashAccounts } from '../hooks/useCashAccounts'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 import { usePrivacy } from '../context/PrivacyContext'
+import { useProfile } from '../hooks/useProfile'
 
 const ACCOUNT_TYPES = ['Checking', 'Savings', 'Petty Cash', 'Money Market']
 
@@ -53,6 +54,9 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
   } = useCashAccounts()
 
   usePrivacy()
+
+  const { profile } = useProfile()
+  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
 
   // Global search (SearchBar.jsx) navigates here with a highlightId (and,
   // since this table's `search` filter is server-side/debounced inside
@@ -275,15 +279,17 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
                             <Pencil size={15} />
                           </button>
                         </Tooltip>
-                        <Tooltip label={showArchived ? 'Restore account' : 'Archive account'} align="end">
-                          <button
-                            type="button"
-                            onClick={() => (showArchived ? restoreAccount(a.cash_account_id) : archiveAccount(a.cash_account_id))}
-                            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
-                          >
-                            {showArchived ? <RotateCcw size={15} /> : <Archive size={15} />}
-                          </button>
-                        </Tooltip>
+                        {isAdmin && (
+                          <Tooltip label={showArchived ? 'Restore account' : 'Archive account'} align="end">
+                            <button
+                              type="button"
+                              onClick={() => (showArchived ? restoreAccount(a.cash_account_id) : archiveAccount(a.cash_account_id))}
+                              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
+                            >
+                              {showArchived ? <RotateCcw size={15} /> : <Archive size={15} />}
+                            </button>
+                          </Tooltip>
+                        )}
                       </div>
                     </td>
                   </tr>

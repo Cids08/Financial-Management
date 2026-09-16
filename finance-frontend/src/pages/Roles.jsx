@@ -103,6 +103,7 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
   // from anyone who isn't a Super Admin (backend-enforced; this just
   // surfaces it instead of failing on save).
   const { profile } = useProfile()
+  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
   const superAdminRoleId = roles.find((r) => r.role_name.toLowerCase() === 'super admin')?.role_id
   const isSuperAdminActor = profile?.role_slug === 'super-admin'
   const isOwnRole = permRole != null && Number(permRole.role_id) === Number(profile?.role_id)
@@ -384,19 +385,21 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
                 <Users size={13} />
                 {role.userCount} {role.userCount === 1 ? 'user' : 'users'} assigned
               </span>
-              <Tooltip label={showArchived ? 'Restore role' : 'Archive role'} align="end">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    showArchived ? restoreRole(role.role_id) : setRoleToArchive(role)
-                  }}
-                  disabled={actionBusyId === role.role_id}
-                  className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-50"
-                >
-                  {showArchived ? <RotateCcw size={14} /> : <Archive size={14} />}
-                </button>
-              </Tooltip>
+              {isAdmin && (
+                <Tooltip label={showArchived ? 'Restore role' : 'Archive role'} align="end">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      showArchived ? restoreRole(role.role_id) : setRoleToArchive(role)
+                    }}
+                    disabled={actionBusyId === role.role_id}
+                    className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-50"
+                  >
+                    {showArchived ? <RotateCcw size={14} /> : <Archive size={14} />}
+                  </button>
+                </Tooltip>
+              )}
             </div>
           </div>
         ))}

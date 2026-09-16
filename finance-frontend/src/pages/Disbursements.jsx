@@ -915,7 +915,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                           )
                         )}
 
-                        {d.is_archived ? (
+                        {isAdmin && (d.is_archived ? (
                           <Tooltip label="Restore disbursement" align="end">
                             <button
                               type="button"
@@ -935,7 +935,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                               <Archive size={14} />
                             </button>
                           </Tooltip>
-                        ) : null}
+                        ) : null)}
                       </div>
                     </td>
                   </tr>
@@ -1329,7 +1329,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                 </button>
               )
             )}
-            {dDetailRecord && !dDetailRecord.is_archived && ['Released', 'Rejected'].includes(dDetailRecord.status) && (
+            {isAdmin && dDetailRecord && !dDetailRecord.is_archived && ['Released', 'Rejected'].includes(dDetailRecord.status) && (
               <button
                 type="button"
                 onClick={() => {
@@ -1343,7 +1343,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                 Archive
               </button>
             )}
-            {dDetailRecord && dDetailRecord.is_archived && (
+            {isAdmin && dDetailRecord && dDetailRecord.is_archived && (
               <button
                 type="button"
                 onClick={() => {

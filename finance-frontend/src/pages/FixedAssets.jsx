@@ -10,6 +10,7 @@ import { useFixedAssets } from '../hooks/useFixedAssets'
 import { apiFetch } from '../utils/api'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 import { usePrivacy } from '../context/PrivacyContext'
+import { useProfile } from '../hooks/useProfile'
 import DepreciationRunModal from '../components/DepreciationRunModal'
 
 
@@ -58,6 +59,9 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
   } = useFixedAssets()
 
   usePrivacy()
+
+  const { profile } = useProfile()
+  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
 
   const [showDepreciationModal, setShowDepreciationModal] = useState(false)
 
@@ -353,15 +357,17 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
                             <Pencil size={15} />
                           </button>
                         </Tooltip>
-                        <Tooltip label={showArchived ? 'Restore asset' : 'Archive asset'} align="end">
-                          <button
-                            type="button"
-                            onClick={() => (showArchived ? restoreAsset(a.id) : archiveAsset(a.id))}
-                            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
-                          >
-                            {showArchived ? <RotateCcw size={15} /> : <Archive size={15} />}
-                          </button>
-                        </Tooltip>
+                        {isAdmin && (
+                          <Tooltip label={showArchived ? 'Restore asset' : 'Archive asset'} align="end">
+                            <button
+                              type="button"
+                              onClick={() => (showArchived ? restoreAsset(a.id) : archiveAsset(a.id))}
+                              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
+                            >
+                              {showArchived ? <RotateCcw size={15} /> : <Archive size={15} />}
+                            </button>
+                          </Tooltip>
+                        )}
                       </div>
                     </td>
                   </tr>

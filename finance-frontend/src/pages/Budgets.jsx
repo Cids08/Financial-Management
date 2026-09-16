@@ -17,6 +17,7 @@ import { useBudgets } from '../hooks/useBudgets'
 import { useDepartments } from '../hooks/useDepartments'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 import { usePermissions } from '../context/PermissionsContext'
+import { useProfile } from '../hooks/useProfile'
 import { usePrivacy } from '../context/PrivacyContext'
 import { hasPermission } from '../utils/permissions'
 
@@ -340,6 +341,8 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
 
   const { departments, fetchDepartments } = useDepartments()
   const { permissions, role } = usePermissions()
+  const { profile } = useProfile()
+  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
   const canApproveBudgets = hasPermission(permissions, 'budgets.approve') || role === 'super-admin'
   const canManageBudgets = hasPermission(permissions, 'budgets.manage') || role === 'super-admin'
 
@@ -1338,7 +1341,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                                 </button>
                               </Tooltip>
                             )}
-                            {canManageBudgets && (
+                            {isAdmin && (
                               <Tooltip label={b.deleted_at ? 'Restore budget' : 'Archive budget'} align="end">
                                 <button type="button" onClick={() => handleArchiveToggle(b)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                                   {b.deleted_at ? <RotateCcw size={15} /> : <Archive size={15} />}

@@ -10,6 +10,7 @@ import Tooltip from '../components/Tooltip'
 import Pagination from '../components/Pagination'
 import AdvisorChatPanel from '../components/AdvisorChatPanel'
 import { useAiRecommendations } from '../hooks/useAiRecommendations'
+import { useProfile } from '../hooks/useProfile'
 
 // Real ai_recommendations_category_check values  -  confirmed against the
 // actual DB constraint. NOT the old 5-value taxonomy (Cash Flow Management,
@@ -54,6 +55,8 @@ function forecastLabel(r) {
 
 export default function AIRecommendations({ title = 'AI Financial Recommendations', crumbs = ['Analytics', 'AI Financial Recommendations'] }) {
   const { recommendations, loading, error, fetchRecommendations, archiveRecommendation, restoreRecommendation } = useAiRecommendations()
+  const { profile } = useProfile()
+  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
 
   useEffect(() => {
     fetchRecommendations()
@@ -301,16 +304,18 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
                           <Info size={15} />
                         </button>
                       </Tooltip>
-                      <Tooltip label={r.is_archived ? 'Restore recommendation' : 'Archive recommendation'} align="end">
-                        <button
-                          type="button"
-                          onClick={() => handleToggleArchive(r)}
-                          disabled={archivingId === r.recommendation_id}
-                          className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-50"
-                        >
-                          {r.is_archived ? <RotateCcw size={15} /> : <Archive size={15} />}
-                        </button>
-                      </Tooltip>
+                      {isAdmin && (
+                        <Tooltip label={r.is_archived ? 'Restore recommendation' : 'Archive recommendation'} align="end">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleArchive(r)}
+                            disabled={archivingId === r.recommendation_id}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-50"
+                          >
+                            {r.is_archived ? <RotateCcw size={15} /> : <Archive size={15} />}
+                          </button>
+                        </Tooltip>
+                      )}
                     </div>
                   </div>
                   <p className="text-sm text-ink leading-relaxed">{r.summary}</p>

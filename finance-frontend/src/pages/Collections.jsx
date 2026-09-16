@@ -220,6 +220,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
   usePrivacy()
 
   const { profile } = useProfile()
+  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
   const isCollectorUser = profile?.role_slug === 'collector' || profile?.role?.toLowerCase() === 'collector'
   const userCollectorId = profile?.collector_id ? String(profile.collector_id) : null
 
@@ -741,7 +742,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                             <button type="button" onClick={() => openEdit(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"><Pencil size={15} /></button>
                           </Tooltip>
                         )}
-                        {(c.deleted_at || ['Confirmed', 'Cancelled'].includes(c.status)) && (
+                        {isAdmin && (c.deleted_at || ['Confirmed', 'Cancelled'].includes(c.status)) && (
                           <Tooltip label={c.deleted_at ? 'Restore collection' : 'Archive collection'} align="end">
                             <button type="button" onClick={() => handleArchive(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                               {c.deleted_at ? <RotateCcw size={15} /> : <Archive size={15} />}

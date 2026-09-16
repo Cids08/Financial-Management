@@ -324,6 +324,7 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
   // Current signed-in user  -  lets the edit modal lock the Role field when
   // editing your own account, since the backend rejects self role-changes.
   const { profile } = useProfile()
+  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
 
   // A row arriving via search highlight should always be visible  -  clear
   // any active filter that could otherwise hide it (e.g. landing here
@@ -787,16 +788,18 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
                             </button>
                           </Tooltip>
                         )}
-                        <Tooltip label={u.is_archived ? 'Restore user' : 'Archive user'} align="end">
-                          <button
-                            type="button"
-                            onClick={() => toggleArchive(u)}
-                            disabled={actionBusyId === u.user_id}
-                            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-50"
-                          >
-                            {u.is_archived ? <RotateCcw size={15} /> : <Archive size={15} />}
-                          </button>
-                        </Tooltip>
+                        {isAdmin && (
+                          <Tooltip label={u.is_archived ? 'Restore user' : 'Archive user'} align="end">
+                            <button
+                              type="button"
+                              onClick={() => toggleArchive(u)}
+                              disabled={actionBusyId === u.user_id}
+                              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-50"
+                            >
+                              {u.is_archived ? <RotateCcw size={15} /> : <Archive size={15} />}
+                            </button>
+                          </Tooltip>
+                        )}
                       </div>
                     </td>
                   </tr>

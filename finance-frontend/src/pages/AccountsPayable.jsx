@@ -11,6 +11,7 @@ import { apiFetch } from '../utils/api'
 import AccountsPayableDocumentModal from '../components/AccountsPayableDocumentModal'
 import PaymentWizardModal from '../components/PaymentWizardModal'
 import { usePermissions } from '../context/PermissionsContext'
+import { useProfile } from '../hooks/useProfile'
 import { usePrivacy } from '../context/PrivacyContext'
 import { useSearchParams } from 'react-router-dom'
 
@@ -287,6 +288,8 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
   } = useAccountsPayable()
 
   const { hasPermission } = usePermissions()
+  const { profile } = useProfile()
+  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
   const canApprove = hasPermission('ap.approve')
   const canManage = hasPermission('ap.manage')
   // Payment Wizard execution requires elevated permission  -  staff with only ap.manage cannot access it
@@ -450,7 +453,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
   // Mirrors AccountsPayablePolicy::archive()  -  only completed/settled bills
   // (Paid or Cancelled) can be archived. In-flight bills (Pending, Partially Paid, Overdue)
   // must remain in the active operational queue until fully resolved.
-  const canArchiveBill = (r) => canManage && ['Paid', 'Cancelled'].includes(r.status)
+  const canArchiveBill = (r) => isAdmin && ['Paid', 'Cancelled'].includes(r.status)
 
   const sourceList = showArchived ? archivedBills : bills
 
@@ -986,7 +989,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                       )}
 
                       {/* Archive / Restore bill  -  only rendered when actionable */}
-                      {r.is_archived ? (
+                      {isAdmin && (r.is_archived ? (
                         <Tooltip label="Restore bill" align="end">
                           <button
                             type="button"
@@ -1008,7 +1011,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                             <Archive size={14} />
                           </button>
                         </Tooltip>
-                      ) : null}
+                      ) : null)}
                     </div>
                   </td>
                 </tr>

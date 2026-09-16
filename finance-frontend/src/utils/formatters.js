@@ -12,14 +12,14 @@ export const setPrivacyMasking = (on) => {
   privacymasking = on
 }
 
-const realFormatCurrency = (value) =>
+const realFormatCurrency = (value, currency = 'PHP') =>
   new Intl.NumberFormat('en-PH', {
     style: 'currency',
-    currency: 'PHP',
+    currency: currency || 'PHP',
     minimumFractionDigits: 2,
-  }).format(value)
+  }).format(Number(value) || 0)
 
-export const formatCurrency = (value) => (privacymasking ? MASKED_CURRENCY : realFormatCurrency(value))
+export const formatCurrency = (value, currency = 'PHP') => (privacymasking ? MASKED_CURRENCY : realFormatCurrency(value, currency))
 
 // Documents, print-outs, CSV/PDF exports and official statements must show the
 // REAL amounts even when Privacy Mode is on -  those are explicit "produce
