@@ -42,7 +42,7 @@ export default function Header({ onToggleSidebar, collapsed, onLogoutClick }) {
   const ref = useRef(null)
   const navigate = useNavigate()
   const { theme, toggleTheme } = useTheme()
-  const { privacyOn, togglePrivacy } = usePrivacy()
+  const { privacyOn, togglePrivacy, cooldownActive } = usePrivacy()
   useClickOutside(ref, () => setProfileOpen(false))
 
   useEffect(() => {
@@ -158,9 +158,10 @@ export default function Header({ onToggleSidebar, collapsed, onLogoutClick }) {
       <div className="flex items-center gap-2 shrink-0">
         <button
           onClick={togglePrivacy}
+          disabled={cooldownActive}
           aria-label={privacyOn ? 'Disable Privacy Mode' : 'Enable Privacy Mode'}
           title={privacyOn ? 'Privacy Mode On - click to reveal amounts' : 'Privacy Mode Off - click to hide amounts'}
-          className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold border transition-colors duration-150
+          className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold border transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed
             ${privacyOn
               ? 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400'
               : 'border-border bg-surface text-muted hover:text-ink hover:border-ink/20'}`}
