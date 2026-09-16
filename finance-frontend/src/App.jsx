@@ -4,6 +4,7 @@ import RequirePermission from './components/RequirePermission'
 import AuthExpiredListener from './components/AuthExpiredListener'
 import ForcedLogoutListener from './components/ForcedLogoutListener'
 import MustChangePasswordListener from './components/MustChangePasswordListener'
+import SingleTabSessionGuard from './components/SingleTabSessionGuard'
 import { CompanyProvider } from './context/CompanyContext'
 import DashboardLayout from './layouts/DashboardLayout'
 import DashboardRouter from './pages/DashboardRouter'
@@ -40,6 +41,7 @@ export default function App() {
   return (
     <>
       <AuthExpiredListener />
+      <SingleTabSessionGuard />
       <MustChangePasswordListener />
       <Routes>
       {/* Standalone  -  no sidebar/header/footer chrome */}

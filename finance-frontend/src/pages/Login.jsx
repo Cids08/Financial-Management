@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { LogIn, Mail, Lock, Eye, EyeOff, AlertCircle, Sun, Moon, ShieldCheck, ArrowLeft, ShieldOff, AlertTriangle } from 'lucide-react'
 import Button from '../components/Button'
 import OtpInput from '../components/OtpInput'
@@ -14,6 +15,10 @@ export default function Login() {
     twoFactorPending, verifyTwoFactor, resendTwoFactor, cancelTwoFactor,
   } = useAuth()
   const { theme, toggleTheme } = useTheme()
+  const location = useLocation()
+  // Set by SingleTabSessionGuard when another tab superseded this one's
+  // login. Read here so the sign-in page can explain why the session ended.
+  const authNotice = location.state?.authNotice
   const [form, setForm] = useState({ email: '', password: '', website: '' })
   const [showPassword, setShowPassword] = useState(false)
   const [code, setCode] = useState('')
@@ -129,6 +134,16 @@ export default function Login() {
                 <span>
                   Too many failed attempts. Your account is locked for{' '}
                   <span className="font-semibold tabular-nums">{formatLockout(accountLockedFor)}</span>.
+                </span>
+              </div>
+            )}
+
+            {authNotice === 'signedOutElsewhere' && (
+              <div className="flex items-start gap-2 mt-5 px-3 py-2.5 rounded-lg bg-sky-50/70 border border-sky-200/70 text-xs text-sky-700 backdrop-blur-sm dark:border-sky-500/25 dark:bg-sky-500/10 dark:text-sky-400">
+                <ShieldCheck size={14} className="shrink-0 mt-0.5" />
+                <span>
+                  You were signed out because you signed in from another tab
+                  in this browser. Only one signed-in tab is allowed at a time.
                 </span>
               </div>
             )}

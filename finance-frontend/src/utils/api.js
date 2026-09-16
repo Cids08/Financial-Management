@@ -28,7 +28,13 @@ export async function apiFetch(path, options = {}) {
   })
 
   if (response.status === 401 && !skipAuthRedirect) {
-    clearToken()
+    // Only clear the token if it's the SAME one this request used. Each
+    // tab shares localStorage, so if another tab logged in as a different
+    // user, the token under this key is no longer ours  -  wiping it here
+    // would sign that freshly-logged-in tab right back out.
+    if (getToken() === token) {
+      clearToken()
+    }
 
     if (!isOnLoginPage()) {
       notifyAuthExpired()
