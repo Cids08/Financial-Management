@@ -2,12 +2,12 @@ import { useState, useCallback, useEffect } from 'react'
 import { apiFetch } from '../utils/api'
 
 /**
- * Account security concerns for the Settings page: password change,
+ * Account security concerns for the Profile page: password change,
  * two-factor authentication, active sessions, recent security activity,
  * and account deactivation.
  *
  * Kept separate from useProfile/useCompany because it's only ever
- * consumed by Settings.jsx  -  no shared-state need for a Context here,
+ * consumed by Profile.jsx  -  no shared-state need for a Context here,
  * per "only create a new hook when necessary."
  *
  * Backed by:

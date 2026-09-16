@@ -86,7 +86,7 @@ export default function Header({ onToggleSidebar, collapsed, onLogoutClick }) {
 
   const profileMenuItems = [
     { id: 'profile', label: 'My Profile', icon: User, onClick: () => goTo(PROFILE_PATH) },
-    { id: 'settings', label: 'Account Settings', icon: Settings, onClick: () => goTo(SETTINGS_PATH) },
+    { id: 'settings', label: 'Settings', icon: Settings, onClick: () => goTo(SETTINGS_PATH) },
     {
       id: 'logout',
       label: 'Logout',

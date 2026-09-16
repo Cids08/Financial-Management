@@ -157,11 +157,12 @@ export const menuData = [
     label: 'Settings',
     icon: Settings,
     path: '/settings',
-    // No `permission` field, on purpose  -  Settings is "my account"
-    // (password, 2FA, sessions, activity, deactivate), not a module.
-    // It needs to be visible to every authenticated user the same way
-    // Logout is. Company Branding EDIT inside the page checks
-    // settings.manage directly in Settings.jsx  -  that's the correct
+    // No `permission` field, on purpose  -  Settings is the organization
+    // config page (Company Branding + Regional & Financial Defaults), not a
+    // module. Account security (password, 2FA, sessions, activity,
+    // deactivate) lives on the Profile page now. It needs to be visible to
+    // every authenticated user the same way Logout is. The edit forms here
+    // check settings.manage directly in Settings.jsx  -  that's the correct
     // place for that narrower restriction.
   },
   {
