@@ -131,7 +131,7 @@ const StatCard = memo(function StatCard({ label, value, icon: Icon, iconBg, icon
   )
 })
 
-const ForecastRow = memo(function ForecastRow({ forecast: f, showArchived, onViewDetail, onArchive, onRestore }) {
+const ForecastRow = memo(function ForecastRow({ forecast: f, showArchived, isAdmin, onViewDetail, onArchive, onRestore }) {
   const unreliable = isMapeUnreliable(f.mape)
   return (
     <tr
@@ -688,6 +688,7 @@ export default function FinancialForecasting({ title = 'Financial Forecasting', 
                   key={f.forecast_id}
                   forecast={f}
                   showArchived={showArchived}
+                  isAdmin={isAdmin}
                   onViewDetail={handleViewDetail}
                   onArchive={setArchiveTarget}
                   onRestore={handleRestore}
