@@ -325,6 +325,11 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
   // editing your own account, since the backend rejects self role-changes.
   const { profile } = useProfile()
   const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
+  // Only a Super Admin can assign/edit the Super Admin role  -  backend
+  // enforces it (UserService::guardAgainstUnauthorizedSuperAdminAssignment),
+  // this keeps the option off the screen for everyone else too, and hides
+  // the Edit action on Super Admin accounts they're not allowed to touch.
+  const isSuperAdmin = profile?.role === 'Super Admin'
 
   // A row arriving via search highlight should always be visible  -  clear
   // any active filter that could otherwise hide it (e.g. landing here
@@ -777,7 +782,7 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
                             <IdCard size={15} />
                           </button>
                         </Tooltip>
-                        {!u.is_archived && (
+                        {!u.is_archived && (isSuperAdmin || roleName(u.role_id) !== 'Super Admin') && (
                           <Tooltip label="Edit user" align="start">
                             <button
                               type="button"
@@ -904,9 +909,11 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
                 disabled={isEditing && Number(modalMode.user_id) === Number(profile?.id)}
                 className={`${INPUT} disabled:cursor-not-allowed disabled:opacity-60`}
               >
-                {roles.map((r) => (
-                  <option key={r.role_id} value={r.role_id}>{r.role_name}</option>
-                ))}
+                {roles
+                  .filter((r) => isSuperAdmin || r.role_name !== 'Super Admin')
+                  .map((r) => (
+                    <option key={r.role_id} value={r.role_id}>{r.role_name}</option>
+                  ))}
               </select>
               {isEditing && Number(modalMode.user_id) === Number(profile?.id) && (
                 <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">You can't change your own role.</p>

@@ -17,7 +17,12 @@ return [
     |
     */
 
-    'default' => env('DB_CONNECTION', 'sqlite'),
+    // Default to SQLite ONLY for local dev (no DB host configured). If a
+    // DB host is present (HostForge injects the managed PostgreSQL host/user/
+    // pass/db but is not guaranteed to set DB_CONNECTION), resolve to pgsql.
+    // Otherwise a missing DB_CONNECTION silently routes all writes to an
+    // in-container database.sqlite that is recreated empty on every redeploy.
+    'default' => env('DB_CONNECTION', env('DB_HOST') ? 'pgsql' : 'sqlite'),
 
     /*
     |--------------------------------------------------------------------------

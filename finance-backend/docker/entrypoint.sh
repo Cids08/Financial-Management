@@ -8,6 +8,13 @@ until php -r "new PDO('pgsql:host=${DB_HOST};port=${DB_PORT:-5432};dbname=${DB_D
 done
 echo "==> PostgreSQL is ready."
 
+# Echo the resolved DB target so a bad deploy is obvious instead of silent.
+# config/database.php maps "DB_HOST set but DB_CONNECTION unset" to pgsql;
+# if it ever shows sqlite while DB_HOST is set, the Postgres env vars are
+# not reaching this container and every redeploy would wipe the data.
+echo "==> DB_CONNECTION=${DB_CONNECTION:-auto} DB_HOST=${DB_HOST:-(none)} DB_DATABASE=${DB_DATABASE:-(unset)}"
+php artisan tinker --execute="echo '==> Laravel will use the [' . config('database.default') . '] connection' . PHP_EOL;"
+
 # Full wipe: set APP_RESET_ON_BOOT=true in HostForge before deploying to
 # drop every table, re-migrate from scratch, and re-seed the base auth
 # data (roles/permissions + super admin). Numbering restarts; super admin

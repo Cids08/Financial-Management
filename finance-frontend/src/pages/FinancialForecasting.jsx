@@ -483,7 +483,7 @@ export default function FinancialForecasting({ title = 'Financial Forecasting', 
     restoreForecast,
   } = useForecasts()
 
-  usePrivacy()
+  const { privacyOn } = usePrivacy()
 
   const { profile } = useProfile()
   const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
@@ -563,7 +563,7 @@ export default function FinancialForecasting({ title = 'Financial Forecasting', 
         onClick: () => toggleStat('mape'),
       },
     ]
-  }, [forecasts, activeStat])
+  }, [forecasts, activeStat, privacyOn])
 
   const openGenerate = useCallback(() => setModalOpen(true), [])
   const closeGenerateModal = useCallback(() => setModalOpen(false), [])
@@ -689,6 +689,7 @@ export default function FinancialForecasting({ title = 'Financial Forecasting', 
                   forecast={f}
                   showArchived={showArchived}
                   isAdmin={isAdmin}
+                  privacyOn={privacyOn}
                   onViewDetail={handleViewDetail}
                   onArchive={setArchiveTarget}
                   onRestore={handleRestore}
@@ -723,8 +724,9 @@ export default function FinancialForecasting({ title = 'Financial Forecasting', 
         onClose={closeGenerateModal}
         generateForecast={generateForecast}
         generating={generating}
+        privacyOn={privacyOn}
       />
-      <ForecastDetailModal forecastId={detailId} onClose={closeDetail} fetchForecastDetail={fetchForecastDetail} />
+      <ForecastDetailModal forecastId={detailId} onClose={closeDetail} fetchForecastDetail={fetchForecastDetail} privacyOn={privacyOn} />
 
       <Modal
         open={!!archiveTarget}
