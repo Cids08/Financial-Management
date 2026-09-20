@@ -10,6 +10,7 @@ import CollectionProofHistoryModal from '../components/CollectionProofHistoryMod
 import { useCollectionUpdates } from '../hooks/useCollectionUpdates'
 import { useProfile } from '../hooks/useProfile'
 import { formatCurrency } from '../utils/formatters'
+import { MIN_COLLECTION_AMOUNT, minHint, formatBaseAmount } from '../utils/business'
 import { apiFetch } from '../utils/api'
 import { useSearchParams } from 'react-router-dom'
 import { usePrivacy } from '../context/PrivacyContext'
@@ -110,7 +111,8 @@ function useLookups() {
   useEffect(() => {
     const errors = []
     Promise.all([
-      // AR  -  primary key is ar_id
+      // AR  -  primary key is ar_id (server-scoped to the collector's own
+      // assigned invoices for Collector-role users)
       apiFetch('/api/accounts-receivable?per_page=500')
         .then((r) => r.json())
         .then((j) => {
@@ -121,35 +123,21 @@ function useLookups() {
         })
         .catch((e) => errors.push(`AR records: ${e.message}`)),
 
-      // Collectors  -  primary key is collector_id
-      apiFetch('/api/collectors?per_page=500')
+      // Collectors / cash accounts / users for the form's dropdowns.
+      // The dedicated /api/collections/lookups endpoint returns exactly
+      // these under collections.view — cash-accounts.view and
+      // collectors.view aren't granted to Collector-role users, so the
+      // master-data endpoints would 403 and leave the dropdowns empty.
+      apiFetch('/api/collections/lookups')
         .then((r) => r.json())
         .then((j) => {
-          if (!j.success) throw new Error(j.message || 'Failed to load collectors.')
-          const data = Array.isArray(j.data) ? j.data : j.data?.data ?? []
-          setCollectors(data.map((c) => ({ ...c, _key: c.collector_id ?? c.id })))
+          if (!j.success) throw new Error(j.message || 'Failed to load form lookups.')
+          const d = j.data || {}
+          setCollectors((d.collectors || []).map((c) => ({ ...c, _key: c.id })))
+          setCashAccounts((d.cash_accounts || []).map((a) => ({ ...a, _key: a.id })))
+          setUsers((d.users || []).map((u) => ({ ...u, _key: u.id })))
         })
-        .catch((e) => errors.push(`collectors: ${e.message}`)),
-
-      // Cash accounts  -  primary key is id
-      apiFetch('/api/cash-accounts?per_page=500')
-        .then((r) => r.json())
-        .then((j) => {
-          if (!j.success) throw new Error(j.message || 'Failed to load cash accounts.')
-          const data = Array.isArray(j.data) ? j.data : j.data?.data ?? []
-          setCashAccounts(data.map((a) => ({ ...a, _key: a.cash_account_id ?? a.id })))
-        })
-        .catch((e) => errors.push(`cash accounts: ${e.message}`)),
-
-      // Users  -  primary key is user_id or id
-      apiFetch('/api/users?per_page=500')
-        .then((r) => r.json())
-        .then((j) => {
-          if (!j.success) throw new Error(j.message || 'Failed to load users.')
-          const data = Array.isArray(j.data) ? j.data : j.data?.data ?? []
-          setUsers(data.map((u) => ({ ...u, _key: u.user_id ?? u.id })))
-        })
-        .catch((e) => errors.push(`users: ${e.message}`)),
+        .catch((e) => errors.push(`lookups: ${e.message}`)),
     ]).finally(() => {
       if (errors.length) setLookupErrors(errors)
       setLookupsReady(true)
@@ -436,10 +424,10 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
 
     if (!form.amount_received) {
       errors.amount_received = 'Amount received is required.'
-    } else if (isNaN(amt) || amt <= 0) {
-      errors.amount_received = 'Amount received must be greater than zero.'
+    } else if (isNaN(amt) || amt < MIN_COLLECTION_AMOUNT) {
+      errors.amount_received = `Amount received must be at least ${formatBaseAmount(MIN_COLLECTION_AMOUNT)}.`
     } else if (amt > maxBalance) {
-      errors.amount_received = `Amount received exceeds invoice remaining balance of ₱${maxBalance.toLocaleString('en-PH', { minimumFractionDigits: 2 })}.`
+      errors.amount_received = `Amount received exceeds invoice remaining balance of ${formatBaseAmount(maxBalance)}.`
     }
 
     if (form.reference_number && form.reference_number.trim()) {
@@ -814,7 +802,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                   const bal = a.balance ?? a.remaining_balance
                   return (
                     <option key={a._key} value={a._key}>
-                      {a.invoice_number}  -  {a.customer_name} {bal !== undefined ? `(Bal: ₱${Number(bal).toLocaleString('en-PH', { minimumFractionDigits: 2 })})` : ''}
+                      {a.invoice_number}  -  {a.customer_name} {bal !== undefined ? `(Bal: ${formatBaseAmount(bal)})` : ''}
                     </option>
                   )
                 })}
@@ -881,22 +869,29 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                   <>
                     <div className="flex items-center justify-between mb-1.5">
                       <label className="block text-xs font-medium text-muted">Amount Received <span className="text-red-500 dark:text-red-400">*</span></label>
-                      {currentBal !== null && currentBal > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setForm((f) => ({ ...f, amount_received: String(currentBal) }))
-                            setFieldErrors((fe) => ({ ...fe, amount_received: '' }))
-                          }}
-                          className="text-[11px] font-medium text-primary hover:underline"
-                        >
-                          Pay Full (₱{currentBal.toLocaleString('en-PH', { minimumFractionDigits: 2 })})
-                        </button>
+                      {currentBal !== null && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] text-muted">
+                            Highest allowed: <span className="font-medium tabular-nums text-ink">{formatBaseAmount(currentBal)}</span>
+                          </span>
+                          {currentBal > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setForm((f) => ({ ...f, amount_received: String(currentBal) }))
+                                setFieldErrors((fe) => ({ ...fe, amount_received: '' }))
+                              }}
+                              className="text-[11px] font-medium text-primary hover:underline"
+                            >
+                              Pay Full
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                     <input
                       type="number"
-                      min="0.01"
+                      min={MIN_COLLECTION_AMOUNT}
                       step="any"
                       value={form.amount_received}
                       onChange={(e) => {
@@ -907,17 +902,17 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                           setFieldErrors((fe) => ({ ...fe, amount_received: '' }))
                         } else if (Number(val) < 0) {
                           setFieldErrors((fe) => ({ ...fe, amount_received: 'Amount received cannot be negative.' }))
-                        } else if (Number(val) === 0) {
-                          setFieldErrors((fe) => ({ ...fe, amount_received: 'Amount received must be greater than zero.' }))
+                        } else if (Number(val) < MIN_COLLECTION_AMOUNT) {
+                          setFieldErrors((fe) => ({ ...fe, amount_received: `Amount received must be at least ${formatBaseAmount(MIN_COLLECTION_AMOUNT)}.` }))
                         } else if (currentBal !== null && Number(val) > currentBal) {
                           setFieldErrors((fe) => ({
                             ...fe,
-                            amount_received: `Amount exceeds invoice balance (₱${currentBal.toLocaleString('en-PH', { minimumFractionDigits: 2 })}).`,
+                            amount_received: `Amount exceeds invoice balance (${formatBaseAmount(currentBal)}).`,
                           }))
                         }
                       }}
                       className={`${INPUT} ${fieldErrors.amount_received ? 'border-red-400 dark:border-red-500' : ''}`}
-                      placeholder="0.00"
+                      placeholder={minHint(MIN_COLLECTION_AMOUNT)}
                     />
                     {fieldErrors.amount_received && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.amount_received}</p>}
                   </>

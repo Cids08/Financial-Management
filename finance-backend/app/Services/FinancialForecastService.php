@@ -6,10 +6,12 @@ use App\Contracts\ForecastEngine;
 use App\Jobs\GenerateAiRecommendations;
 use App\Models\AuditLog;
 use App\Models\FinancialForecast;
+use App\Models\Setting;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Carbon;
+use RuntimeException;
 
 class FinancialForecastService
 {
@@ -57,6 +59,40 @@ class FinancialForecastService
         'next_fiscal_year' => ['months' => 12, 'lookback_months' => 24],
     ];
 
+    // The extra horizon key the UI offers on top of the fixed ones above.
+    // Its window length comes from Settings (forecast_months), so changing
+    // "Forecast Horizon (months)" there actually changes what the next
+    // generated forecast covers.
+    public const CONFIGURED_HORIZON_KEY = 'configured';
+
+    /**
+     * Resolves a horizon key to its ['months', 'lookback_months'] window.
+     * 'configured' reads the company's Forecast Horizon (months) setting;
+     * training window is kept at twice the horizon (bounded 12–60) so
+     * longer horizons still have enough history to fit. Returns null for
+     * an unknown key so callers can fail loudly.
+     */
+    public static function horizonFor(string $horizonKey): ?array
+    {
+        if ($horizonKey === self::CONFIGURED_HORIZON_KEY) {
+            $months = (int) (Setting::current()->forecast_months ?: 12);
+            $months = max(1, min(60, $months));
+
+            return [
+                'months' => $months,
+                'lookback_months' => max(12, min(60, $months * 2)),
+            ];
+        }
+
+        return self::HORIZON_LABELS[$horizonKey] ?? null;
+    }
+
+    /** Every horizon key accepted by generate() — fixed three + configured. */
+    public static function horizonKeys(): array
+    {
+        return array_merge(array_keys(self::HORIZON_LABELS), [self::CONFIGURED_HORIZON_KEY]);
+    }
+
     public function __construct(protected ForecastEngine $engine)
     {
     }
@@ -89,7 +125,10 @@ class FinancialForecastService
     public function generate(User $actor, string $forecastType, string $horizonKey): FinancialForecast
     {
         return DB::transaction(function () use ($actor, $forecastType, $horizonKey) {
-            $horizon = self::HORIZON_LABELS[$horizonKey];
+            $horizon = self::horizonFor($horizonKey);
+            if ($horizon === null) {
+                throw new RuntimeException("Unknown horizon key: {$horizonKey}");
+            }
             $result = $this->engine->generate($forecastType, $horizonKey);
 
             // Built from the SAME engine call/request cycle as $result above

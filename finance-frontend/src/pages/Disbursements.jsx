@@ -12,6 +12,7 @@ import Tooltip from '../components/Tooltip'
 import DisbursementProofModal from '../components/DisbursementProofModal'
 import DisbursementPrintModal from '../components/DisbursementPrintModal'
 import { formatCurrency } from '../utils/formatters'
+import { MIN_COLLECTION_AMOUNT, minHint } from '../utils/business'
 import { usePermissions } from '../context/PermissionsContext'
 import { useProfileContext } from '../context/ProfileContext'
 import { usePrivacy } from '../context/PrivacyContext'
@@ -462,8 +463,8 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
     const amt = Number(dForm.amount_paid)
     if (!dForm.amount_paid) {
       errors.amount_paid = 'Amount paid is required.'
-    } else if (amt <= 0) {
-      errors.amount_paid = 'Amount must be greater than zero.'
+    } else if (amt < MIN_COLLECTION_AMOUNT) {
+      errors.amount_paid = `Amount must be at least ${formatCurrency(MIN_COLLECTION_AMOUNT)}.`
     } else if (dForm.cash_account_id) {
       const selectedAcc = cashAccountsMap.get(String(dForm.cash_account_id))
       if (selectedAcc && amt > Number(selectedAcc.current_balance)) {
@@ -1065,7 +1066,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
               <label className={LABEL}>Amount Paid <span className="text-red-500 dark:text-red-400">*</span></label>
               <input
                 type="number"
-                min="0.01"
+                min={MIN_COLLECTION_AMOUNT}
                 step="any"
                 value={dForm.amount_paid}
                 onChange={(e) => {
@@ -1076,8 +1077,8 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                     setFieldErrors((fe) => ({ ...fe, amount_paid: '' }))
                   } else if (Number(val) < 0) {
                     setFieldErrors((fe) => ({ ...fe, amount_paid: 'Amount paid cannot be negative.' }))
-                  } else if (Number(val) === 0) {
-                    setFieldErrors((fe) => ({ ...fe, amount_paid: 'Amount paid must be greater than zero.' }))
+                  } else if (Number(val) < MIN_COLLECTION_AMOUNT) {
+                    setFieldErrors((fe) => ({ ...fe, amount_paid: `Amount paid must be at least ${formatCurrency(MIN_COLLECTION_AMOUNT)}.` }))
                   } else if (dForm.cash_account_id) {
                     const acc = cashAccountsMap.get(String(dForm.cash_account_id))
                     if (acc && Number(val) > Number(acc.current_balance)) {
@@ -1087,7 +1088,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                 }}
                 className={`${INPUT} ${fieldErrors.amount_paid ? 'border-red-400 dark:border-red-500' : ''}`}
                 style={INPUT_TEXT_STYLE}
-                placeholder="0.00"
+                placeholder={minHint(MIN_COLLECTION_AMOUNT)}
               />
               {fieldErrors.amount_paid && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.amount_paid}</p>}
             </div>

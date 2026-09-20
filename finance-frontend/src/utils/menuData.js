@@ -157,13 +157,14 @@ export const menuData = [
     label: 'Settings',
     icon: Settings,
     path: '/settings',
-    // No `permission` field, on purpose  -  Settings is the organization
-    // config page (Company Branding + Regional & Financial Defaults), not a
-    // module. Account security (password, 2FA, sessions, activity,
-    // deactivate) lives on the Profile page now. It needs to be visible to
-    // every authenticated user the same way Logout is. The edit forms here
-    // check settings.manage directly in Settings.jsx  -  that's the correct
-    // place for that narrower restriction.
+    // Organization config page (Company Branding + Regional & Financial
+    // Defaults)  -  every form on it is gated by settings.manage on the
+    // backend, so for staff/collector (who only hold settings.view for the
+    // sidebar logo) the page is an empty shell. Gate the nav entry here too:
+    // Sidebar/Header swap it for a "My Profile" item, and App.jsx redirects
+    // a direct /settings URL to /profile. settings.view still works for
+    // everyone via CompanyContext, which reads GET /api/settings on its own.
+    permission: 'settings.manage',
   },
   {
     id: 'logout',

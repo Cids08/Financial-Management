@@ -29,7 +29,7 @@ class StoreBudgetRequest extends FormRequest
             // year (plus a small forward window for planning ahead) closes
             // that gap at its actual source instead of patching around it.
             'fiscal_year' => ['required', 'digits:4', 'integer', 'min:'.now()->year, 'max:'.(now()->year + 5)],
-            'allocated_amount' => ['required', 'numeric', 'min:0.01'],
+            'allocated_amount' => ['required', 'numeric', 'min:' . config('business.min_invoice_amount')],
             'warning_percentage' => ['nullable', 'numeric', 'min:1', 'max:100'],
             'start_date' => ['required', 'date'],
             'end_date' => ['required', 'date', 'after_or_equal:start_date'],

@@ -30,7 +30,7 @@ class UpdateAccountsReceivableRequest extends FormRequest
             ],
             'invoice_date' => ['required', 'date'],
             'due_date' => ['required', 'date', 'after_or_equal:invoice_date'],
-            'original_amount' => ['required', 'numeric', 'min:0'],
+            'original_amount' => ['required', 'numeric', 'min:' . config('business.min_invoice_amount')],
             'balance' => ['nullable', 'numeric', 'min:0'],
             'payment_method' => ['nullable', 'string', Rule::in(self::PAYMENT_METHODS)],
             'payment_terms' => ['nullable', 'string', 'max:255'],

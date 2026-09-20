@@ -6,6 +6,7 @@ import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
 import { formatCurrency, formatDate } from '../utils/formatters'
+import { MIN_INVOICE_AMOUNT, minHint } from '../utils/business'
 import { useFixedAssets } from '../hooks/useFixedAssets'
 import { apiFetch } from '../utils/api'
 import { useHighlightRow } from '../hooks/useHighlightRow'
@@ -171,8 +172,8 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
     if (form.useful_life_years !== '' && (isNaN(Number(form.useful_life_years)) || Number(form.useful_life_years) < 1)) {
       errors.useful_life_years = 'Useful life must be at least 1 year.'
     }
-    if (form.purchase_cost !== '' && Number(form.purchase_cost) < 0) {
-      errors.purchase_cost = 'Purchase cost cannot be negative.'
+    if (form.purchase_cost !== '' && Number(form.purchase_cost) < MIN_INVOICE_AMOUNT) {
+      errors.purchase_cost = `Purchase cost must be at least ${formatCurrency(MIN_INVOICE_AMOUNT)}.`
     }
     if (form.salvage_value !== '' && Number(form.salvage_value) < 0) {
       errors.salvage_value = 'Salvage value cannot be negative.'
@@ -513,21 +514,21 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
               <label className={LABEL}>Purchase Cost</label>
               <input
                 type="number"
-                min="0"
+                min={MIN_INVOICE_AMOUNT}
                 step="any"
                 value={form.purchase_cost}
                 onChange={(e) => {
                   const val = e.target.value
                   setFieldErrors((fe) => ({ ...fe, purchase_cost: '' }))
                   setForm((f) => ({ ...f, purchase_cost: val }))
-                  if (val !== '' && Number(val) < 0) {
-                    setCostErrors((ce) => ({ ...ce, purchase_cost: 'Purchase cost cannot be negative.' }))
+                  if (val !== '' && Number(val) < MIN_INVOICE_AMOUNT) {
+                    setCostErrors((ce) => ({ ...ce, purchase_cost: `Purchase cost must be at least ${formatCurrency(MIN_INVOICE_AMOUNT)}.` }))
                   } else {
                     setCostErrors((ce) => ({ ...ce, purchase_cost: '' }))
                   }
                 }}
                 className={`${INPUT} ${(costErrors.purchase_cost || fieldErrors.purchase_cost) ? 'border-red-400 dark:border-red-500' : ''}`}
-                placeholder="8500000"
+                placeholder={minHint(MIN_INVOICE_AMOUNT)}
               />
               {(costErrors.purchase_cost || fieldErrors.purchase_cost) && (
                 <p className="mt-1 text-xs text-red-500 dark:text-red-400">{costErrors.purchase_cost || fieldErrors.purchase_cost}</p>

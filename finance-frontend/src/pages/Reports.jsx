@@ -9,7 +9,7 @@ import {
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Pagination from '../components/Pagination'
-import { formatCurrency, formatCurrencyRaw } from '../utils/formatters'
+import { formatCurrency, formatCurrencyRaw, currencySymbol, convertAmount } from '../utils/formatters'
 import { useReports } from '../hooks/useReports'
 import { useCompany } from '../context/CompanyContext'
 import { usePrivacy } from '../context/PrivacyContext'
@@ -66,7 +66,7 @@ const TOOLTIP_STYLE = {
 }
 
 const AXIS_TICK = { fontSize: 11, fill: '#6B7280' }
-const CURRENCY_TICK = (v) => `₱${(v / 1000).toFixed(0)}k`
+const CURRENCY_TICK = (v) => `${currencySymbol()}${(convertAmount(v) / 1000).toFixed(0)}k`
 
 function ChartPanel({ title, height = 260, children }) {
   return (

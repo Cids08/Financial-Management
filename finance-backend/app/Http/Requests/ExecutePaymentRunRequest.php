@@ -27,7 +27,7 @@ class ExecutePaymentRunRequest extends FormRequest
             'department_id'           => ['nullable', 'integer', 'exists:departments,id'],
             'proposals'               => ['required', 'array', 'min:1'],
             'proposals.*.ap_id'       => ['required', 'integer', 'exists:accounts_payable,id'],
-            'proposals.*.amount_to_pay' => ['required', 'numeric', 'min:0.01'],
+            'proposals.*.amount_to_pay' => ['required', 'numeric', 'min:' . config('business.min_collection_amount')],
             'proposals.*.remarks'     => ['nullable', 'string', 'max:255'],
             'proposals.*.reference_number' => ['nullable', 'string', 'max:100'],
         ];
@@ -43,7 +43,7 @@ class ExecutePaymentRunRequest extends FormRequest
             'proposals.required'       => 'Please select at least one bill to disburse.',
             'proposals.min'            => 'Please select at least one bill to disburse.',
             'proposals.*.ap_id.exists' => 'One or more selected bills are invalid.',
-            'proposals.*.amount_to_pay.min' => 'Payment amount must be greater than zero.',
+            'proposals.*.amount_to_pay.min' => 'Payment amount must be at least ₱' . number_format(config('business.min_collection_amount')),
         ];
     }
 }

@@ -76,7 +76,7 @@ class PythonArimaForecastEngine implements ForecastEngine
 
     public function generate(string $forecastType, string $horizonKey): array
     {
-        $horizon = FinancialForecastService::HORIZON_LABELS[$horizonKey] ?? null;
+        $horizon = FinancialForecastService::horizonFor($horizonKey);
         if ($horizon === null) {
             throw new RuntimeException("Unknown horizon key: {$horizonKey}");
         }
@@ -162,7 +162,8 @@ class PythonArimaForecastEngine implements ForecastEngine
             );
         }
 
-        $horizon = FinancialForecastService::HORIZON_LABELS[$horizonKey];
+        $horizon = FinancialForecastService::horizonFor($horizonKey)
+            ?? throw new RuntimeException("Unknown horizon key: {$horizonKey}");
         $historicalData = $this->historicalActualsFor($forecastType, $horizon['lookback_months']);
 
         $series = [];

@@ -10,7 +10,7 @@ import { useCompany } from '../context/CompanyContext'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 import { usePrivacy } from '../context/PrivacyContext'
 import { formatCurrency } from '../utils/formatters'
-import { useProfile } from '../hooks/useProfile'
+import { usePermissions } from '../context/PermissionsContext'
 
 // Masks every character (keeps dashes/spaces as visual separators)
 function maskValue(value) {
@@ -51,8 +51,11 @@ const STATUS_STYLES = {
 
 export default function Customers({ title = 'Customers', crumbs = ['Master Data', 'Customers'] }) {
   usePrivacy()
-  const { profile } = useProfile()
-  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
+  // Role-agnostic gate matching the backend: collector has customers.view
+  // (for lookup) but not customers.manage, so Add/Edit/Archive must not
+  // render for them — backend would 403 those endpoints anyway.
+  const { hasPermission } = usePermissions()
+  const canManage = hasPermission('customers.manage')
   const { currency } = useCompany()
   const [customers, setCustomers] = useState([])
   const [stats, setStats] = useState({ total: 0, active: 0, inactive: 0, archived: 0 })
@@ -261,7 +264,7 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
           <h1 className="text-xl font-bold tracking-tight text-ink">{title}</h1>
           <p className="mt-1 text-xs text-muted">Manage customer accounts used across receivables and collections.</p>
         </div>
-        <Button variant="primary" size="sm" icon={Plus} onClick={openAdd}>Add Customer</Button>
+        {canManage && <Button variant="primary" size="sm" icon={Plus} onClick={openAdd}>Add Customer</Button>}
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -369,12 +372,14 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
                       </td>
                       <td className="px-4 py-3.5 whitespace-nowrap text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <Tooltip label="Edit customer" align="start">
-                            <button type="button" onClick={() => openEdit(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                              <Pencil size={15} />
-                            </button>
-                          </Tooltip>
-                          {isAdmin && (
+                          {canManage && (
+                            <Tooltip label="Edit customer" align="start">
+                              <button type="button" onClick={() => openEdit(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                                <Pencil size={15} />
+                              </button>
+                            </Tooltip>
+                          )}
+                          {canManage && (
                             <Tooltip label={c.is_archived ? 'Restore customer' : 'Archive customer'} align="end">
                               <button type="button" onClick={() => toggleArchive(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                                 {c.is_archived ? <RotateCcw size={15} /> : <Archive size={15} />}

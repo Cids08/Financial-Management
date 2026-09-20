@@ -171,6 +171,23 @@ class RolesAndPermissionsSeeder extends Seeder
             'disbursements.view', 'disbursements.manage', 'disbursements.release', // NOT disbursements.approve
             'budgets.view', 'budgets.manage', // NOT budgets.approve — final approval is Admin/CEO-only
             'expense-categories.view', // read-only dropdown source
+            // read-only dropdown sources — the Department and Cash Account
+            // selects on the Expense/Disbursement/Budget Add/Edit forms are
+            // populated from /api/departments and /api/cash-accounts. Staff
+            // NEEDS these view permissions or the dropdowns come back empty
+            // (403 → no options) while admin/collector still see them. NOT
+            // the .manage twins — keeping read-only on purpose.
+            'departments.view',
+            'cash-accounts.view',
+            // Read-only dropdown sources for the Add/Edit forms. Staff routinely
+            // records expenses, disbursements and budget requests, and those
+            // forms' department and cash-account selects are populated straight
+            // from /api/departments and /api/cash-accounts (both gated by the
+            // corresponding *-accounts/*-department VIEW permission). Without
+            // these the dropdowns come back EMPTY for staff, so grant the
+            // view-only permissions (never the manage twins).
+            'departments.view', // read-only dropdown source
+            'cash-accounts.view', // read-only dropdown source
         ],
         'collector' => [
             'settings.view', // sidebar logo/name — see class docblock
@@ -244,6 +261,29 @@ class RolesAndPermissionsSeeder extends Seeder
             );
             $roleModels[$roleName]->permissions()->sync($permissionIds);
             $this->command->info("Assigned default permissions to newly-created role '{$roleName}'.");
+        }
+
+        // ─────────────────────────────────────────────────────────────
+        // Additive reconciliation for EXISTING staff roles (idempotent).
+        //
+        // The wasRecentlyCreated gate above leaves pre-existing roles
+        // completely untouched, so a redeploy (entrypoint re-runs this
+        // seeder every boot) would NEVER grant the read-only dropdown
+        // perms to a staff role that predates them — which is exactly the
+        // bug that made the Department / Cash Account selects come back
+        // EMPTY for staff (403 on the /api/departments + /api/cash-accounts
+        // dropdown sources). syncWithoutDetaching is additive-only: it
+        // never detaches an admin's customizations, it just tops the role
+        // up with the two view-only dropdown sources if they're missing.
+        // Repeat-boot safe (no-op when already attached).
+        $staffDropdownViewPerms = array_map(
+            fn ($name) => $permissionModels[$name]->id,
+            ['departments.view', 'cash-accounts.view']
+        );
+        $existingStaff = $roleModels['staff'] ?? null;
+        if ($existingStaff && $existingStaff?->permissions()->whereIn('permission_name', ['departments.view', 'cash-accounts.view'])->count() !== 2) {
+            $existingStaff->permissions()->syncWithoutDetaching($staffDropdownViewPerms);
+            $this->command->warn("Topped up existing 'staff' role with read-only dropdown view permissions (departments.view, cash-accounts.view).");
         }
 
         $this->command->info('Roles and permissions seeded (single source of truth).');

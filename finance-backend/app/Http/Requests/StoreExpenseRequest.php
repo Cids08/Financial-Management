@@ -24,7 +24,7 @@ class StoreExpenseRequest extends FormRequest
             'supplier_id' => ['nullable', 'integer', 'exists:suppliers,id'],
             'expense_date' => ['required', 'date'],
             'receipt_number' => ['nullable', 'string', 'max:100'],
-            'expense_amount' => ['required', 'numeric', 'min:0.01'],
+            'expense_amount' => ['required', 'numeric', 'min:' . config('business.min_collection_amount')],
             'cash_account_id' => ['required', 'integer', 'exists:cash_accounts,id'],
             'expense_source' => ['nullable', 'string', 'max:50'],
             'receipt_status' => ['nullable', 'in:' . implode(',', [

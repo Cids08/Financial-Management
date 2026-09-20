@@ -67,6 +67,7 @@ class AccountSecurityService
 
         return [
             'maskedEmail' => $this->maskEmail($user->email),
+            'codeExpiresInSeconds' => self::SETUP_CODE_TTL_MINUTES * 60,
         ];
     }
 
@@ -134,17 +135,6 @@ class AccountSecurityService
         $currentId = optional($user->currentAccessToken())->id;
         $user->tokens()->when($currentId, fn ($q) => $q->where('id', '!=', $currentId))->delete();
         $this->log($user, 'Signed Out Other Sessions', 'Settings', 'All other sessions were revoked.');
-    }
-
-    public function deactivate(User $user): void
-    {
-        $user->update([
-            'status' => 'inactive',
-            'updated_by' => $user->id,
-        ]);
-
-        $user->tokens()->delete();
-        $this->log($user, 'Account Deactivated', 'Settings', 'Account was deactivated by the user.');
     }
 
     protected function setupCacheKey(User $user): string

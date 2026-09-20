@@ -6,10 +6,12 @@ import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
 import Pagination from '../components/Pagination'
 import { formatCurrency } from '../utils/formatters'
+import { MIN_INVOICE_AMOUNT, minHint, formatBaseAmount } from '../utils/business'
 import { useAccountsReceivable } from '../hooks/useAccountsReceivable'
 import { apiFetch } from '../utils/api'
 import { usePermissions } from '../context/PermissionsContext'
 import { useProfileContext } from '../context/ProfileContext'
+import { useCompany } from '../context/CompanyContext'
 import { usePrivacy } from '../context/PrivacyContext'
 import { useSearchParams } from 'react-router-dom'
 import { useHighlightRow } from '../hooks/useHighlightRow'
@@ -285,6 +287,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
   } = useAccountsReceivable()
   const { hasPermission } = usePermissions()
   const { profile } = useProfileContext()
+  const { defaultPenaltyRate } = useCompany()
   // Admin-only gate for archiving/restoring invoices: in corporate finance systems,
   // destructive status actions (archiving/unarchiving financial records) are restricted
   // strictly to Admin and Super Admin roles. Non-admin users (Staff, Collectors) cannot archive.
@@ -422,6 +425,8 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
       ...EMPTY_FORM,
       customer_id: customers[0]?.customer_id ?? '',
       reference_no: getNextReferenceNo(records),
+      // Pre-fill the company-wide penalty rate from Settings; still editable.
+      penalty_rate: Number(defaultPenaltyRate) > 0 ? String(defaultPenaltyRate) : '',
     })
     setFieldErrors({})
     setServerError('')
@@ -562,8 +567,8 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
     if (!form.due_date) errors.due_date = 'Due date is required.'
     if (!form.original_amount) {
       errors.original_amount = 'Original amount is required.'
-    } else if (Number(form.original_amount) <= 0) {
-      errors.original_amount = 'Original amount must be greater than zero.'
+    } else if (Number(form.original_amount) < MIN_INVOICE_AMOUNT) {
+      errors.original_amount = `Original amount must be at least ${formatBaseAmount(MIN_INVOICE_AMOUNT)}.`
     }
     if (form.balance !== '' && Number(form.balance) < 0) {
       errors.balance = 'Balance cannot be negative.'
@@ -647,7 +652,10 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
           <p className="mt-1 text-xs text-muted">Track customer invoices, balances, and aging.</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="secondary" size="sm" icon={FileText} onClick={() => setShowSoaModal(true)}>Customer Aging &amp; SOA</Button>
+          {/* Aging summary & per-customer SOA are AR-management features -
+              collectors already see outstanding/overdue aging on their own
+              dashboard, so this stays with ar.manage (hidden for Collector). */}
+          {canManage && <Button variant="secondary" size="sm" icon={FileText} onClick={() => setShowSoaModal(true)}>Customer Aging &amp; SOA</Button>}
           {/* Add Invoice hidden entirely for view-only roles (Collector)  - 
               the backend POST route requires ar.manage, which they don't have. */}
           {canManage && <Button variant="primary" size="sm" icon={Plus} onClick={openAdd}>Add Invoice</Button>}
@@ -930,7 +938,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
               <label className={LABEL}>Original Amount <span className="text-red-500 dark:text-red-400">*</span></label>
               <input
                 type="number"
-                min="0.01"
+                min={MIN_INVOICE_AMOUNT}
                 step="any"
                 value={form.original_amount}
                 onChange={(e) => {
@@ -940,14 +948,14 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                     setFieldErrors((fe) => ({ ...fe, original_amount: '' }))
                   } else if (Number(val) < 0) {
                     setFieldErrors((fe) => ({ ...fe, original_amount: 'Original amount cannot be negative.' }))
-                  } else if (Number(val) === 0) {
-                    setFieldErrors((fe) => ({ ...fe, original_amount: 'Original amount must be greater than zero.' }))
+                  } else if (Number(val) < MIN_INVOICE_AMOUNT) {
+                    setFieldErrors((fe) => ({ ...fe, original_amount: `Original amount must be at least ${formatBaseAmount(MIN_INVOICE_AMOUNT)}.` }))
                   } else {
                     setFieldErrors((fe) => ({ ...fe, original_amount: '' }))
                   }
                 }}
                 className={`${INPUT} ${fieldErrors.original_amount ? 'border-red-400 dark:border-red-500' : ''}`}
-                placeholder="0.00"
+                placeholder={minHint(MIN_INVOICE_AMOUNT)}
               />
               {fieldErrors.original_amount && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.original_amount}</p>}
             </div>

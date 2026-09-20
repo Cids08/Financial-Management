@@ -24,9 +24,15 @@ class AuthService
     }
 
     // How long a pending (password-verified, awaiting emailed code) login
-    // stays valid. Public so TwoFactorCodeMail can read it without
-    // duplicating the number in the email template.
-    public const PENDING_LOGIN_TTL_MINUTES = 3;
+    // stays valid. This is intentionally LONGER than the code's own TTL so
+    // that once a code expires the user can still request a fresh one from
+    // the same ticket instead of being bounced back to the password form.
+    public const PENDING_LOGIN_TTL_MINUTES = 10;
+
+    // How long an emailed login code is valid. Kept short (the email states
+    // this number) while the ticket above outlives it. Public so
+    // TwoFactorCodeMail can read it without duplicating the number.
+    public const LOGIN_CODE_TTL_MINUTES = 3;
 
     // Account-level lockout, separate from the per-IP throttle:5,1 on the
     // route. The IP throttle stops rapid-fire attempts from one address;
@@ -238,7 +244,10 @@ class AuthService
 
         $this->sendLoginCode($user, $pendingToken);
 
-        return ['maskedEmail' => $this->maskEmail($user->email)];
+        return [
+            'maskedEmail' => $this->maskEmail($user->email),
+            'codeExpiresInSeconds' => self::LOGIN_CODE_TTL_MINUTES * 60,
+        ];
     }
 
     public function logout(User $user): void
@@ -268,6 +277,7 @@ class AuthService
             'requiresTwoFactor' => true,
             'pendingToken' => $pendingToken,
             'maskedEmail' => $this->maskEmail($user->email),
+            'codeExpiresInSeconds' => self::LOGIN_CODE_TTL_MINUTES * 60,
         ];
     }
 
@@ -278,10 +288,10 @@ class AuthService
         Cache::put(
             $this->codeCacheKey($pendingToken),
             Hash::make($code),
-            now()->addMinutes(self::PENDING_LOGIN_TTL_MINUTES)
+            now()->addMinutes(self::LOGIN_CODE_TTL_MINUTES)
         );
 
-        Mail::to($user->email)->send(new TwoFactorCodeMail($code, self::PENDING_LOGIN_TTL_MINUTES));
+        Mail::to($user->email)->send(new TwoFactorCodeMail($code, self::LOGIN_CODE_TTL_MINUTES));
     }
 
     // Captures a friendly device label + IP/location on the token row

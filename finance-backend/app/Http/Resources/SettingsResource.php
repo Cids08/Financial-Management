@@ -17,8 +17,11 @@ class SettingsResource extends JsonResource
             'phone' => $this->company_phone,
             'logoUrl' => $this->company_logo ? asset('storage/' . ltrim($this->company_logo, '/')) : null,
             'currency' => $this->currency,
+            'baseCurrency' => $this->base_currency,
+            'exchangeRates' => $this->exchange_rates ?? (object) [],
             'fiscalYear' => $this->fiscal_year,
             'defaultTaxRate' => $this->default_tax_rate,
+            'defaultPenaltyRate' => $this->default_penalty_rate,
             'forecastMonths' => $this->forecast_months,
         ];
     }

@@ -47,7 +47,7 @@ class StoreAccountsPayableRequest extends FormRequest
             // 'amount' here is the frontend's field name for original_amount —
             // mapped in the controller, not renamed here, so the form's
             // error keys line up with what Users.jsx-style forms expect.
-            'amount' => ['required', 'numeric', 'min:0.01'],
+            'amount' => ['required', 'numeric', 'min:' . config('business.min_invoice_amount')],
             'payment_method' => ['nullable', 'string', 'max:255'],
             'billing_address' => ['nullable', 'string', 'max:1000'],
             'description' => ['nullable', 'string', 'max:1000'],

@@ -3,8 +3,7 @@ import { apiFetch } from '../utils/api'
 
 /**
  * Account security concerns for the Profile page: password change,
- * two-factor authentication, active sessions, recent security activity,
- * and account deactivation.
+ * two-factor authentication, active sessions, and recent security activity.
  *
  * Kept separate from useProfile/useCompany because it's only ever
  * consumed by Profile.jsx  -  no shared-state need for a Context here,
@@ -20,7 +19,6 @@ import { apiFetch } from '../utils/api'
  *   DELETE /api/settings/sessions/{id}
  *   DELETE /api/settings/sessions
  *   GET    /api/settings/activity
- *   POST   /api/settings/deactivate
  */
 export function useAccountSecurity() {
   /* Password */
@@ -79,7 +77,7 @@ export function useAccountSecurity() {
       const res = await apiFetch('/api/settings/2fa/initiate', { method: 'POST' })
       const json = await res.json()
       if (!res.ok || !json.success) throw new Error(json.message || 'Failed to start 2FA setup.')
-      // { secret, qrCodeUrl }
+      // { maskedEmail, codeExpiresInSeconds }
       return { success: true, ...json.data }
     } catch (err) {
       setTwoFAError(err.message)
@@ -208,26 +206,6 @@ export function useAccountSecurity() {
     }
   }, [])
 
-  /* Deactivate account */
-  const [deactivating, setDeactivating] = useState(false)
-  const [deactivateError, setDeactivateError] = useState('')
-
-  const deactivateAccount = useCallback(async () => {
-    setDeactivating(true)
-    setDeactivateError('')
-    try {
-      const res = await apiFetch('/api/settings/deactivate', { method: 'POST' })
-      const json = await res.json()
-      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to deactivate account.')
-      return { success: true }
-    } catch (err) {
-      setDeactivateError(err.message)
-      return { success: false, message: err.message }
-    } finally {
-      setDeactivating(false)
-    }
-  }, [])
-
   useEffect(() => {
     fetchSessions()
     fetchActivity()
@@ -259,9 +237,5 @@ export function useAccountSecurity() {
     activityLoading,
     activityError,
     refetchActivity: fetchActivity,
-    // deactivate
-    deactivating,
-    deactivateError,
-    deactivateAccount,
   }
 }

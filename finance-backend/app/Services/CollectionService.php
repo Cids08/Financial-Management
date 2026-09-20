@@ -13,6 +13,7 @@ use App\Models\JournalEntry;
 use App\Models\Notification;
 use App\Models\SupportingDocument;
 use App\Models\User;
+use App\Support\Money;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -85,7 +86,7 @@ class CollectionService
                 ]);
             }
 
-            if (bccomp((string) $data['amount_received'], (string) $ar->remaining_balance, 2) > 0) {
+            if (Money::comp((string) $data['amount_received'], (string) $ar->remaining_balance, 2) > 0) {
                 throw ValidationException::withMessages([
                     'amount_received' => sprintf(
                         'Amount received (%.2f) exceeds the invoice\'s remaining balance (%.2f).',
@@ -194,18 +195,18 @@ class CollectionService
             /** @var CashAccount $cashAccount */
             $cashAccount = CashAccount::query()->lockForUpdate()->findOrFail($collection->cash_account_id);
 
-            $newPaid           = bcadd((string) $ar->paid_amount, (string) $collection->amount_received, 2);
-            $newRemaining      = bcsub((string) $ar->original_amount, $newPaid, 2);
+            $newPaid           = Money::add((string) $ar->paid_amount, (string) $collection->amount_received, 2);
+            $newRemaining      = Money::sub((string) $ar->original_amount, $newPaid, 2);
             $cashBalanceBefore = $cashAccount->current_balance;
 
             $ar->update([
                 'paid_amount'       => $newPaid,
                 'remaining_balance' => max('0.00', $newRemaining),
-                'status'            => bccomp($newRemaining, '0', 2) <= 0 ? 'Paid' : 'Partially Paid',
+                'status'            => Money::comp($newRemaining, '0', 2) <= 0 ? 'Paid' : 'Partially Paid',
             ]);
 
             $cashAccount->update([
-                'current_balance' => bcadd((string) $cashAccount->current_balance, (string) $collection->amount_received, 2),
+                'current_balance' => Money::add((string) $cashAccount->current_balance, (string) $collection->amount_received, 2),
             ]);
 
             $collection->update([
@@ -233,7 +234,7 @@ class CollectionService
 
             $formattedAmount = number_format((float) $collection->amount_received, 2);
             $invoiceNo = $ar->invoice_number ?? 'Invoice';
-            $isPaidInFull = bccomp($newRemaining, '0', 2) <= 0;
+            $isPaidInFull = Money::comp($newRemaining, '0', 2) <= 0;
 
             if ($isPaidInFull) {
                 $confirmTitle = 'Invoice Collected in Full';
@@ -269,7 +270,7 @@ class CollectionService
                     $ar->invoice_number,
                     $cashAccount->account_name,
                     max(0, (float) $newRemaining),
-                    bccomp($newRemaining, '0', 2) <= 0 ? ' — PAID IN FULL' : '',
+                    Money::comp($newRemaining, '0', 2) <= 0 ? ' — PAID IN FULL' : '',
                     $journalEntry->transaction_no
                 ),
                 'new_values' => [

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo, useCallback, memo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronDown, PanelLeftClose, PanelLeftOpen, User, Settings, LogOut, Sun, Moon, Eye, EyeOff } from 'lucide-react'
 import SearchBar from './SearchBar'
@@ -7,6 +7,7 @@ import { useClickOutside } from '../hooks/useClickOutside'
 import { useTheme } from '../context/ThemeContext'
 import { useProfile } from '../hooks/useProfile'
 import { usePrivacy } from '../context/PrivacyContext'
+import { usePermissions } from '../context/PermissionsContext'
 import { menuData } from '../utils/menuData'
 
 function getGreeting(hour) {
@@ -29,7 +30,21 @@ function getInitials(name) {
   return (first + last).toUpperCase()
 }
 
-export default function Header({ onToggleSidebar, collapsed, onLogoutClick }) {
+// Pure presentational  -  hoisted out of the render body so it isn't
+// recreated (and re-verified against React's reconciler) on every render.
+function ProfileAvatar({ size, showImage, url, name, initials, onError }) {
+  return (
+    <div className={`${size} rounded-full bg-primary/20 flex items-center justify-center shrink-0 overflow-hidden`}>
+      {showImage ? (
+        <img src={url} alt={name} className="w-full h-full object-cover" onError={onError} />
+      ) : (
+        <span className="text-primary-dark font-semibold text-xs">{initials}</span>
+      )}
+    </div>
+  )
+}
+
+export default memo(function Header({ onToggleSidebar, collapsed, onLogoutClick }) {
   // Header now pulls the user's identity straight from the backend
   // (same useProfile() hook the Profile page uses) instead of depending
   // on a parent layout to fetch it and pass userName/avatarUrl down as
@@ -43,6 +58,8 @@ export default function Header({ onToggleSidebar, collapsed, onLogoutClick }) {
   const navigate = useNavigate()
   const { theme, toggleTheme } = useTheme()
   const { privacyOn, togglePrivacy, cooldownActive } = usePrivacy()
+  const { hasPermission } = usePermissions()
+  const canManageSettings = hasPermission('settings.manage')
   useClickOutside(ref, () => setProfileOpen(false))
 
   useEffect(() => {
@@ -79,15 +96,22 @@ export default function Header({ onToggleSidebar, collapsed, onLogoutClick }) {
   const initials = getInitials(userName)
   const showImage = avatarUrl && !imgError
 
-  const goTo = (path) => {
+  // Stable identity so the memo-wrapped Header's re-render scope stays tight.
+  const goTo = useCallback((path) => {
     setProfileOpen(false)
     navigate(path)
-  }
+  }, [navigate])
 
-  const profileMenuItems = [
-    { id: 'profile', label: 'My Profile', icon: User, onClick: () => goTo(PROFILE_PATH) },
-    { id: 'settings', label: 'Settings', icon: Settings, onClick: () => goTo(SETTINGS_PATH) },
-    {
+  // Settings is org config (settings.manage)  -  for everyone else the
+  // dropdown is just My Profile + Logout, mirroring the sidebar footer.
+  const profileMenuItems = useMemo(() => {
+    const items = [
+      { id: 'profile', label: 'My Profile', icon: User, onClick: () => goTo(PROFILE_PATH) },
+    ]
+    if (canManageSettings) {
+      items.push({ id: 'settings', label: 'Settings', icon: Settings, onClick: () => goTo(SETTINGS_PATH) })
+    }
+    items.push({
       id: 'logout',
       label: 'Logout',
       icon: LogOut,
@@ -97,18 +121,9 @@ export default function Header({ onToggleSidebar, collapsed, onLogoutClick }) {
         setProfileOpen(false)
         onLogoutClick?.()
       },
-    },
-  ]
-
-  const Avatar = ({ size }) => (
-    <div className={`${size} rounded-full bg-primary/20 flex items-center justify-center shrink-0 overflow-hidden`}>
-      {showImage ? (
-        <img src={avatarUrl} alt={userName} className="w-full h-full object-cover" onError={() => setImgError(true)} />
-      ) : (
-        <span className="text-primary-dark font-semibold text-xs">{initials}</span>
-      )}
-    </div>
-  )
+    })
+    return items
+  }, [canManageSettings, goTo, onLogoutClick])
 
   return (
     <header
@@ -187,7 +202,7 @@ export default function Header({ onToggleSidebar, collapsed, onLogoutClick }) {
             onClick={() => setProfileOpen((o) => !o)}
             className="flex items-center gap-2.5 pl-1.5 pr-2 py-1.5 rounded-lg hover:bg-bg transition-colors duration-150"
           >
-            <Avatar size="w-8 h-8" />
+            <ProfileAvatar size="w-8 h-8" showImage={showImage} url={avatarUrl} name={userName} initials={initials} onError={() => setImgError(true)} />
             <div className={`${collapsed ? 'block' : 'hidden lg:block'} text-left leading-tight`}>
               <p className="text-sm font-semibold text-ink">{userName}</p>
               <p className="text-xs text-muted">{role}</p>
@@ -202,7 +217,7 @@ export default function Header({ onToggleSidebar, collapsed, onLogoutClick }) {
             <div className="absolute right-0 mt-2 w-56 bg-surface rounded-xl border border-border
                 shadow-dropdown animate-fadeIn origin-top-right z-50 py-1.5">
               <div className="px-3.5 py-2.5 border-b border-border flex items-center gap-2.5">
-                <Avatar size="w-9 h-9" />
+                <ProfileAvatar size="w-9 h-9" showImage={showImage} url={avatarUrl} name={userName} initials={initials} onError={() => setImgError(true)} />
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-ink truncate">{userName}</p>
                   <p className="text-xs text-muted">{role}</p>
@@ -228,4 +243,4 @@ export default function Header({ onToggleSidebar, collapsed, onLogoutClick }) {
       </div>
     </header>
   )
-}
+})

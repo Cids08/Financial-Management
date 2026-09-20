@@ -11,6 +11,7 @@ import ExpenseReceiptUploadModal from '../components/ExpenseReceiptUploadModal'
 import ExpenseReceiptHistoryModal from '../components/ExpenseReceiptHistoryModal'
 import BatchApproveExpensesModal from '../components/BatchApproveExpensesModal'
 import { formatCurrency } from '../utils/formatters'
+import { MIN_COLLECTION_AMOUNT, minHint } from '../utils/business'
 import { apiFetch } from '../utils/api'
 import { useExpenses } from '../hooks/useExpenses'
 import { useSearchParams } from 'react-router-dom'
@@ -435,8 +436,8 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
     const amt = Number(form.expense_amount)
     if (!form.expense_amount) {
       errors.expense_amount = 'Amount is required.'
-    } else if (amt <= 0) {
-      errors.expense_amount = 'Amount must be greater than zero.'
+    } else if (amt < MIN_COLLECTION_AMOUNT) {
+      errors.expense_amount = `Amount must be at least ${formatCurrency(MIN_COLLECTION_AMOUNT)}.`
     } else if (form.cash_account_id) {
       const selectedAcc = cashAccounts.find((a) => a.id === Number(form.cash_account_id))
       if (selectedAcc && amt > Number(selectedAcc.current_balance)) {
@@ -1062,7 +1063,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
               <label className={LABEL}>Amount <span className="text-red-500 dark:text-red-400">*</span></label>
               <input
                 type="number"
-                min="0.01"
+                min={MIN_COLLECTION_AMOUNT}
                 step="any"
                 value={form.expense_amount}
                 onChange={(e) => {
@@ -1073,8 +1074,8 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                     setFieldErrors((fe) => ({ ...fe, expense_amount: '' }))
                   } else if (Number(val) < 0) {
                     setFieldErrors((fe) => ({ ...fe, expense_amount: 'Amount cannot be negative.' }))
-                  } else if (Number(val) === 0) {
-                    setFieldErrors((fe) => ({ ...fe, expense_amount: 'Amount must be greater than zero.' }))
+                  } else if (Number(val) < MIN_COLLECTION_AMOUNT) {
+                    setFieldErrors((fe) => ({ ...fe, expense_amount: `Amount must be at least ${formatCurrency(MIN_COLLECTION_AMOUNT)}.` }))
                   } else if (form.budget_id && (() => {
                     const b = budgets.find((item) => Number(item.budget_id) === Number(form.budget_id))
                     return b && Number(val) > Number(b.remaining_amount)
@@ -1089,7 +1090,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                 }}
                 className={`${INPUT} ${fieldErrors.expense_amount ? 'border-red-400 dark:border-red-500' : ''}`}
                 style={INPUT_TEXT_STYLE}
-                placeholder="0.00"
+                placeholder={minHint(MIN_COLLECTION_AMOUNT)}
               />
               {fieldErrors.expense_amount && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.expense_amount}</p>}
             </div>

@@ -13,6 +13,7 @@ import {
   Loader2,
 } from 'lucide-react'
 import { apiFetch } from '../utils/api'
+import { currencySymbol } from '../utils/formatters'
 import { useCompany } from '../context/CompanyContext'
 
 // ---------------------------------------------------------------------------
@@ -284,8 +285,8 @@ export default function DisbursementPrintModal({
               <tr>
                 <th style="width: 15%;">Account Code</th>
                 <th style="width: 45%;">Account Title</th>
-                <th style="width: 20%; text-align: right;">Debit (₱)</th>
-                <th style="width: 20%; text-align: right;">Credit (₱)</th>
+                <th style="width: 20%; text-align: right;">Debit ({currencySymbol()})</th>
+                <th style="width: 20%; text-align: right;">Credit ({currencySymbol()})</th>
               </tr>
             </thead>
             <tbody>
@@ -440,9 +441,9 @@ export default function DisbursementPrintModal({
                 <th rowspan="2" style="width: 35%;">Nature of Income Payment</th>
                 <th rowspan="2" style="width: 10%;">ATC</th>
                 <th colspan="3" style="width: 25%;">Amount of Income Payments</th>
-                <th rowspan="2" style="width: 15%;">Total Income (₱)</th>
+                <th rowspan="2" style="width: 15%;">Total Income ({currencySymbol()})</th>
                 <th rowspan="2" style="width: 8%;">Tax Rate</th>
-                <th rowspan="2" style="width: 15%;">Tax Withheld (₱)</th>
+                <th rowspan="2" style="width: 15%;">Tax Withheld ({currencySymbol()})</th>
               </tr>
               <tr>
                 <th style="font-size: 8px;">1st Month</th>
@@ -691,8 +692,8 @@ export default function DisbursementPrintModal({
                       <tr>
                         <th className="px-4 py-2.5 text-left font-semibold text-muted text-xs uppercase">Account Code</th>
                         <th className="px-4 py-2.5 text-left font-semibold text-muted text-xs uppercase">Account Title</th>
-                        <th className="px-4 py-2.5 text-right font-semibold text-muted text-xs uppercase">Debit (₱)</th>
-                        <th className="px-4 py-2.5 text-right font-semibold text-muted text-xs uppercase">Credit (₱)</th>
+                        <th className="px-4 py-2.5 text-right font-semibold text-muted text-xs uppercase">Debit ({currencySymbol()})</th>
+                        <th className="px-4 py-2.5 text-right font-semibold text-muted text-xs uppercase">Credit ({currencySymbol()})</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">

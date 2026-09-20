@@ -7,8 +7,11 @@ use App\Http\Requests\StoreCollectionRequest;
 use App\Http\Requests\UpdateCollectionRequest;
 use App\Http\Requests\UploadCollectionProofRequest;
 use App\Http\Resources\CollectionResource;
+use App\Models\CashAccount;
 use App\Models\Collection;
+use App\Models\Collector;
 use App\Models\SupportingDocument;
+use App\Models\User;
 use App\Services\CollectionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -50,6 +53,46 @@ class CollectionController extends Controller
                 'last_page'    => $paginated->lastPage(),
                 'per_page'     => $paginated->perPage(),
                 'total'        => $paginated->total(),
+            ],
+        ]);
+    }
+
+    /**
+     * GET /api/collections/lookups
+     *
+     * Dropdown data for the Add/Edit Collection form. The master-data
+     * endpoints (cash-accounts, collectors, users) are gated behind their
+     * own module permissions that Collector-role users don't hold, so this
+     * exposes just the lists the form needs under the collections.view
+     * permission they DO have. Keeps collectors out of the Cash Accounts /
+     * Collectors master-data modules while still letting them pick a
+     * deposit account. User names are omitted for collectors — their
+     * collection records carry created_by_name from the resource anyway.
+     */
+    public function lookups(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $isCollector = $user->role?->name === 'collector';
+
+        return response()->json([
+            'success' => true,
+            'message' => '',
+            'data'    => [
+                'cash_accounts' => CashAccount::query()
+                    ->whereNull('deleted_at')
+                    ->orderBy('account_name')
+                    ->get(['id', 'account_name']),
+                'collectors' => Collector::query()
+                    ->where('status', 'Active')
+                    ->whereNull('deleted_at')
+                    ->orderBy('first_name')
+                    ->get(['id', 'first_name', 'last_name']),
+                'users' => $isCollector
+                    ? collect()
+                    : User::query()
+                        ->whereNull('deleted_at')
+                        ->orderBy('first_name')
+                        ->get(['id', 'first_name', 'last_name']),
             ],
         ]);
     }

@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useLocation } from 'react-router-dom'
-import { LogIn, Mail, Lock, Eye, EyeOff, AlertCircle, Sun, Moon, ShieldCheck, ArrowLeft, ShieldOff, AlertTriangle } from 'lucide-react'
+import { LogIn, Mail, Lock, Eye, EyeOff, AlertCircle, Sun, Moon, ShieldCheck, ArrowLeft, ShieldOff, AlertTriangle, Clock, RefreshCw } from 'lucide-react'
 import Button from '../components/Button'
 import OtpInput from '../components/OtpInput'
 import { useAuth } from '../hooks/useAuth'
+import { useCountdown, formatCountdown } from '../hooks/useCountdown'
 import { useTheme } from '../context/ThemeContext'
 import logo from '../assets/logo.svg'
 import logoDark from '../assets/logo-dark.svg'
@@ -27,6 +28,12 @@ export default function Login() {
   // the backend honeypot middleware can reject submissions that arrive
   // faster than a human could realistically fill the form.
   const [formRenderedAt] = useState(() => Math.floor(Date.now() / 1000))
+
+  // Seconds left before the emailed code expires; when it hits 0 we swap
+  // the countdown for a Resend button instead of letting the user submit a
+  // code the backend will reject as expired.
+  const codeSecondsLeft = useCountdown(twoFactorPending?.codeExpiresAt)
+  const codeExpired = codeSecondsLeft <= 0
 
   const handleChange = (field) => (e) =>
     setForm((f) => ({ ...f, [field]: e.target.value }))
@@ -307,7 +314,7 @@ export default function Login() {
                 value={code}
                 onChange={setCode}
                 onComplete={(completedCode) => verifyTwoFactor(completedCode)}
-                disabled={loading || retryAfter > 0}
+                disabled={loading || retryAfter > 0 || codeExpired}
                 hasError={Boolean(error)}
                 autoFocus
               />
@@ -317,7 +324,7 @@ export default function Login() {
                 variant="primary"
                 size="md"
                 className="w-full"
-                disabled={loading || code.length !== 6 || retryAfter > 0}
+                disabled={loading || code.length !== 6 || retryAfter > 0 || codeExpired}
               >
                 {retryAfter > 0
                   ? `Try again in ${retryAfter}s`
@@ -334,14 +341,30 @@ export default function Login() {
                 >
                   <ArrowLeft size={12} /> Back
                 </button>
-                <button
-                  type="button"
-                  onClick={handleResend}
-                  disabled={loading}
-                  className="text-xs font-medium text-primary-dark hover:underline disabled:opacity-50 disabled:pointer-events-none"
-                >
-                  Didn't get a code? Resend
-                </button>
+                {codeExpired ? (
+                  <button
+                    type="button"
+                    onClick={handleResend}
+                    disabled={loading}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary-dark ring-1 ring-primary/25 hover:bg-primary/15 disabled:opacity-50 disabled:pointer-events-none transition-colors duration-150"
+                  >
+                    <RefreshCw size={13} /> Resend code
+                  </button>
+                ) : (
+                  <span className="text-xs text-muted">
+                    Code expires in{' '}
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-semibold tabular-nums transition-colors duration-300 ${
+                        codeSecondsLeft <= 30
+                          ? 'border-red-300/70 bg-red-50/80 text-red-600 animate-pulse dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400'
+                          : 'border-amber-300/70 bg-amber-50/80 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400'
+                      }`}
+                    >
+                      <Clock size={11} />
+                      {formatCountdown(codeSecondsLeft)}
+                    </span>
+                  </span>
+                )}
               </div>
             </form>
           </>

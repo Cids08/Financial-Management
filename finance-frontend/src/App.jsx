@@ -6,6 +6,7 @@ import ForcedLogoutListener from './components/ForcedLogoutListener'
 import MustChangePasswordListener from './components/MustChangePasswordListener'
 import SingleTabSessionGuard from './components/SingleTabSessionGuard'
 import { CompanyProvider } from './context/CompanyContext'
+import { usePermissions } from './context/PermissionsContext'
 import DashboardLayout from './layouts/DashboardLayout'
 import DashboardRouter from './pages/DashboardRouter'
 import PlaceholderPage from './pages/PlaceholderPage'
@@ -36,6 +37,14 @@ import AuditLogs from './pages/AuditLogs'
 import Settings from './pages/Settings'
 import Logout from './pages/Logout'
 import Login from './pages/Login'
+
+/** Settings only has settings.manage forms  -  staff/collector get bounced to
+ *  My Profile instead of a page that would render as an empty shell. */
+function SettingsGate({ children }) {
+  const { hasPermission, loading } = usePermissions()
+  if (loading) return null
+  return hasPermission('settings.manage') ? children : <Navigate to="/profile" replace />
+}
 
 export default function App() {
   return (
@@ -219,7 +228,7 @@ export default function App() {
               The Company Branding EDIT form inside Settings.jsx checks
               settings.manage itself, which is the correct place for that
               narrower restriction. */}
-          <Route path="/settings" element={<Settings crumbs={['Settings']} />} />
+          <Route path="/settings" element={<SettingsGate><Settings crumbs={['Settings']} /></SettingsGate>} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/notifications" element={<Notifications crumbs={['Notifications']} />} />
         </Route>

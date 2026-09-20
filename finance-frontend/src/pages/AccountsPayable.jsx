@@ -5,7 +5,8 @@ import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
 import Pagination from '../components/Pagination'
-import { formatCurrency } from '../utils/formatters'
+import { formatCurrency, currencySymbol, getActiveBaseCurrency } from '../utils/formatters'
+import { MIN_INVOICE_AMOUNT, MIN_COLLECTION_AMOUNT, minHint } from '../utils/business'
 import { useAccountsPayable } from '../hooks/useAccountsPayable'
 import { apiFetch } from '../utils/api'
 import AccountsPayableDocumentModal from '../components/AccountsPayableDocumentModal'
@@ -375,8 +376,8 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
       setPayError('Please select a payment cash or bank account.')
       return
     }
-    if (!amt || amt <= 0) {
-      setPayError('Payment amount must be greater than zero.')
+    if (!amt || amt < MIN_COLLECTION_AMOUNT) {
+      setPayError(`Payment amount must be at least ${formatCurrency(MIN_COLLECTION_AMOUNT)}.`)
       return
     }
     const maxPayable = Number(payTarget.remaining_balance ?? payTarget.amount ?? 0)
@@ -660,8 +661,8 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
     const parsedAmount = Number(form.amount)
     if (!form.amount) {
       errors.amount = 'Original amount is required.'
-    } else if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-      errors.amount = 'Amount must be greater than zero.'
+    } else if (!Number.isFinite(parsedAmount) || parsedAmount < MIN_INVOICE_AMOUNT) {
+      errors.amount = `Amount must be at least ${formatCurrency(MIN_INVOICE_AMOUNT)}.`
     } else if (isEditing && parsedAmount < Number(modalMode.paid_amount || 0)) {
       errors.amount = `Amount cannot be less than paid amount (${formatCurrency(modalMode.paid_amount)}).`
     }
@@ -1147,7 +1148,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
               <label className={LABEL}>Original Amount <span className="text-red-500 dark:text-red-400">*</span></label>
               <input
                 type="number"
-                min="0.01"
+                min={MIN_INVOICE_AMOUNT}
                 step="any"
                 value={form.amount}
                 onChange={(e) => {
@@ -1158,12 +1159,12 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                     setFieldErrors((fe) => ({ ...fe, amount: '' }))
                   } else if (Number(val) < 0) {
                     setFieldErrors((fe) => ({ ...fe, amount: 'Amount cannot be negative.' }))
-                  } else if (Number(val) === 0) {
-                    setFieldErrors((fe) => ({ ...fe, amount: 'Amount must be greater than zero.' }))
+                  } else if (Number(val) < MIN_INVOICE_AMOUNT) {
+                    setFieldErrors((fe) => ({ ...fe, amount: `Amount must be at least ${formatCurrency(MIN_INVOICE_AMOUNT)}.` }))
                   }
                 }}
                 className={`${INPUT} ${fieldErrors.amount ? 'border-red-400 dark:border-red-500' : ''}`}
-                placeholder="0.00"
+                placeholder={minHint(MIN_INVOICE_AMOUNT)}
               />
               {fieldErrors.amount && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.amount}</p>}
             </div>
@@ -1559,7 +1560,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-xs font-medium text-muted">
-                  Payment Amount (₱) <span className="text-red-500 dark:text-red-400">*</span>
+                  Payment Amount ({currencySymbol(getActiveBaseCurrency())}) <span className="text-red-500 dark:text-red-400">*</span>
                 </label>
                 <div className="flex items-center gap-2">
                   <button
@@ -1583,7 +1584,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
               <input
                 type="number"
                 step="0.01"
-                min="0.01"
+                min={MIN_COLLECTION_AMOUNT}
                 max={payTarget.remaining_balance}
                 value={payForm.amount_to_pay}
                 onChange={(e) => {
@@ -1592,7 +1593,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                 }}
                 className={INPUT}
                 style={INPUT_TEXT_STYLE}
-                placeholder="0.00"
+                placeholder={minHint(MIN_COLLECTION_AMOUNT)}
                 required
               />
               <p className="text-[11px] text-muted mt-1">

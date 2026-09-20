@@ -12,6 +12,7 @@ use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
 use App\Models\Notification;
 use App\Models\SupportingDocument;
+use App\Support\Money;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -816,8 +817,8 @@ class DisbursementService
 
             // ── Budget Utilization Deduction ─────────────────────────────
             // Deduct the payroll amount from the locked active budget.
-            $newUsed      = bcadd((string) $budget->used_amount, (string) $disbursement->amount_paid, 2);
-            $newRemaining = bcsub((string) $budget->allocated_amount, $newUsed, 2);
+            $newUsed      = Money::add((string) $budget->used_amount, (string) $disbursement->amount_paid, 2);
+            $newRemaining = Money::sub((string) $budget->allocated_amount, $newUsed, 2);
 
             $budget->update([
                 'used_amount'      => $newUsed,

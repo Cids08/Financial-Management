@@ -30,8 +30,10 @@ export function useAuth() {
   const lockIntervalRef = useRef(null)
 
   // Set once login() gets requiresTwoFactor back. Login.jsx switches to
-  // the code-entry step when twoFactorPending is truthy.
-  const [twoFactorPending, setTwoFactorPending] = useState(null) // { pendingToken, maskedEmail } | null
+  // the code-entry step when twoFactorPending is truthy. codeExpiresAt is
+  // an absolute timestamp the screen counts down to; it's replaced every
+  // time a fresh code is issued (login or resend).
+  const [twoFactorPending, setTwoFactorPending] = useState(null) // { pendingToken, maskedEmail, codeExpiresAt } | null
 
   // CompanyProvider is now scoped inside App.jsx to the authenticated
   // layout route (not around the whole router in main.jsx), so it mounts
@@ -108,6 +110,7 @@ export function useAuth() {
         setTwoFactorPending({
           pendingToken: json.data.pendingToken,
           maskedEmail: json.data.maskedEmail,
+          codeExpiresAt: Date.now() + (json.data.codeExpiresInSeconds ?? 180) * 1000,
         })
         return { success: true, requiresTwoFactor: true }
       }
@@ -211,7 +214,11 @@ export function useAuth() {
         throw new Error(msg)
       }
 
-      setTwoFactorPending((p) => ({ ...p, maskedEmail: json.data.maskedEmail }))
+      setTwoFactorPending((p) => ({
+        ...p,
+        maskedEmail: json.data.maskedEmail,
+        codeExpiresAt: Date.now() + (json.data.codeExpiresInSeconds ?? 180) * 1000,
+      }))
       return { success: true }
     } catch (err) {
       setError(err.message)

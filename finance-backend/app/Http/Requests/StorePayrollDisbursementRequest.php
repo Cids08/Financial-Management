@@ -21,7 +21,7 @@ class StorePayrollDisbursementRequest extends FormRequest
             'pay_period_end' => ['required', 'date', 'after_or_equal:pay_period_start'],
             'payment_date' => ['required', 'date'],
             'employee_count' => ['required', 'integer', 'min:1'],
-            'amount_paid' => ['required', 'numeric', 'min:0.01'],
+            'amount_paid' => ['required', 'numeric', 'min:' . config('business.min_collection_amount')],
             'currency' => ['nullable', 'string', 'size:3'],
             'payment_method' => ['nullable', 'string', 'in:Bank Transfer,Check,Cash,GCash'],
             'cash_account_id' => ['nullable', 'integer', 'exists:cash_accounts,id'],

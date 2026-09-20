@@ -17,7 +17,7 @@ class GenerateForecastRequest extends FormRequest
     {
         return [
             'forecast_type' => ['required', 'string', Rule::in(FinancialForecastService::FORECAST_TYPES)],
-            'horizon_key' => ['required', 'string', Rule::in(array_keys(FinancialForecastService::HORIZON_LABELS))],
+            'horizon_key' => ['required', 'string', Rule::in(FinancialForecastService::horizonKeys())],
         ];
     }
 }

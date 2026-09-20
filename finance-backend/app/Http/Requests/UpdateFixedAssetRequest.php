@@ -26,7 +26,7 @@ class UpdateFixedAssetRequest extends FormRequest
             'model'               => ['nullable', 'string', 'max:255'],
             'location'            => ['nullable', 'string', 'max:255'],
             'purchase_date'       => ['required', 'date'],
-            'purchase_cost'       => ['required', 'numeric', 'min:0'],
+            'purchase_cost'       => ['required', 'numeric', 'min:' . config('business.min_invoice_amount')],
             'salvage_value'       => ['nullable', 'numeric', 'min:0'],
             'useful_life_years'   => ['required', 'integer', 'min:1'],
             'depreciation_method' => ['nullable', Rule::in(['Straight Line'])],

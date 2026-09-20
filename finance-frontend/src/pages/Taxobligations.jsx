@@ -12,10 +12,12 @@ import BatchRecordTaxPaymentModal from '../components/BatchRecordTaxPaymentModal
 import GenerateTaxScheduleModal from '../components/GenerateTaxScheduleModal'
 import TaxComplianceReportModal from '../components/TaxComplianceReportModal'
 import { formatCurrency } from '../utils/formatters'
+import { MIN_INVOICE_AMOUNT, minHint } from '../utils/business'
 import { useTaxObligations } from '../hooks/useTaxObligations'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 import { usePrivacy } from '../context/PrivacyContext'
 import { useProfile } from '../hooks/useProfile'
+import { useCompany } from '../context/CompanyContext'
 
 const pad = (n) => String(n).padStart(2, '0')
 const QUARTER_LABELS = { 1: 'Q1 (Jan - Mar)', 2: 'Q2 (Apr - Jun)', 3: 'Q3 (Jul - Sep)', 4: 'Q4 (Oct - Dec)' }
@@ -78,7 +80,7 @@ function suggestReference(taxType, dueDate) {
   return `BIR-${TAX_TYPE_CONFIG[taxType].code}-${m}${d}`
 }
 
-function buildEmptyForm() {
+function buildEmptyForm(defaultRate) {
   const now = new Date()
   const year = now.getFullYear()
   const month = now.getMonth() + 1
@@ -87,7 +89,9 @@ function buildEmptyForm() {
   const { tax_period, due_date } = computePeriodAndDue(taxType, year, month, quarter)
   return {
     tax_type: taxType, period_year: year, period_month: month, period_quarter: quarter,
-    tax_period, due_date, tax_rate: TAX_TYPE_CONFIG[taxType].defaultRate, taxable_amount: '',
+    tax_period, due_date,
+    tax_rate: Number(defaultRate) > 0 ? defaultRate : TAX_TYPE_CONFIG[taxType].defaultRate,
+    taxable_amount: '',
     is_paid: false, payment_date: '', reference_number: '', remarks: '',
   }
 }
@@ -217,6 +221,8 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
   }
 
   const [modalMode, setModalMode] = useState(null)
+  // Company default tax rate (Settings) seeds new tax obligations.
+  const { defaultTaxRate } = useCompany()
   const [form, setForm] = useState(buildEmptyForm)
   const [formError, setFormError] = useState('')
   const [fieldErrors, setFieldErrors] = useState({})
@@ -321,14 +327,14 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
       const next = { ...f, ...patch }
       const { tax_period, due_date } = computePeriodAndDue(next.tax_type, next.period_year, next.period_month, next.period_quarter)
       const nextForm = { ...next, tax_period, due_date }
-      if (patch.tax_type) nextForm.tax_rate = TAX_TYPE_CONFIG[patch.tax_type].defaultRate
+      if (patch.tax_type) nextForm.tax_rate = Number(defaultTaxRate) > 0 ? defaultTaxRate : TAX_TYPE_CONFIG[patch.tax_type].defaultRate
       if (nextForm.is_paid && !refTouched) nextForm.reference_number = suggestReference(nextForm.tax_type, nextForm.due_date)
       return nextForm
     })
   }
 
   const openAdd = () => {
-    setForm(buildEmptyForm())
+    setForm(buildEmptyForm(defaultTaxRate))
     setFormError('')
     setFieldErrors({})
     setDateErrors({ due_date: '', payment_date: '' })
@@ -422,10 +428,8 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
 
     if (!form.taxable_amount && form.taxable_amount !== 0) {
       errors.taxable_amount = 'Taxable amount is required.'
-    } else if (Number(form.taxable_amount) < 0) {
-      errors.taxable_amount = 'Taxable amount cannot be negative.'
-    } else if (Number(form.taxable_amount) === 0) {
-      errors.taxable_amount = 'Taxable amount must be greater than zero.'
+    } else if (Number(form.taxable_amount) < MIN_INVOICE_AMOUNT) {
+      errors.taxable_amount = `Taxable amount must be at least ${formatCurrency(MIN_INVOICE_AMOUNT)}.`
     }
 
     if (form.tax_rate !== '' && Number(form.tax_rate) < 0) {
@@ -1158,7 +1162,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
               <label className={LABEL}>Taxable Amount <span className="text-red-500">*</span></label>
               <input
                 type="number"
-                min="0.01"
+                min={MIN_INVOICE_AMOUNT}
                 step="any"
                 value={form.taxable_amount}
                 onChange={(e) => {
@@ -1169,15 +1173,15 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                     setAmountError('')
                   } else if (Number(val) < 0) {
                     setAmountError('Taxable amount cannot be negative.')
-                  } else if (Number(val) === 0) {
-                    setAmountError('Taxable amount must be greater than zero.')
+                  } else if (Number(val) < MIN_INVOICE_AMOUNT) {
+                    setAmountError(`Taxable amount must be at least ${formatCurrency(MIN_INVOICE_AMOUNT)}.`)
                   } else {
                     setAmountError('')
                   }
                 }}
                 className={`${INPUT} ${(amountError || fieldErrors.taxable_amount) ? 'border-red-400 dark:border-red-500' : ''}`}
                 style={INPUT_TEXT_STYLE}
-                placeholder="0.00"
+                placeholder={minHint(MIN_INVOICE_AMOUNT)}
                 disabled={isLockedObligation}
               />
               {(amountError || fieldErrors.taxable_amount) && (

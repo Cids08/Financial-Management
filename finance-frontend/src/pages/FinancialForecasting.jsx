@@ -14,6 +14,7 @@ import { formatCurrency } from '../utils/formatters'
 import { usePrivacy } from '../context/PrivacyContext'
 import { useForecasts } from '../hooks/useForecasts'
 import { useProfile } from '../hooks/useProfile'
+import { useCompany } from '../context/CompanyContext'
 
 // Exactly 5 categories per spec: Expense, Accounts Receivable,
 // Collection, Cash Flow, and Budget Utilization forecasts. 'Revenue'
@@ -76,10 +77,14 @@ const OPTION = 'bg-surface text-ink'
 
 const LABEL = 'block text-xs font-medium text-muted mb-1.5'
 
-// Matches FinancialForecastService::HORIZON_LABELS on the backend  -  the
-// integer `months` per key must line up exactly, since the server derives
-// forecast_period from it.
-const HORIZONS = [
+// Mirrors FinancialForecastService::HORIZON_LABELS on the backend for the
+// fixed windows. The 'configured' key has no fixed months here — its
+// window length comes from Settings (Forecast Horizon) and is resolved
+// server-side by FinancialForecastService::horizonFor(), so the two stay
+// in sync automatically when that setting changes.
+const CONFIGURED_HORIZON_KEY = 'configured'
+
+const FIXED_HORIZONS = [
   { key: 'next_month', label: 'Next Month' },
   { key: 'next_quarter', label: 'Next Quarter' },
   { key: 'next_fiscal_year', label: 'Next Fiscal Year' },
@@ -210,17 +215,28 @@ const ForecastRow = memo(function ForecastRow({ forecast: f, showArchived, isAdm
 const GenerateForecastModal = memo(function GenerateForecastModal({ open, onClose, generateForecast, generating }) {
   const [phase, setPhase] = useState('setup')
   const [forecastType, setForecastType] = useState(FORECAST_TYPES[0])
-  const [horizonKey, setHorizonKey] = useState(HORIZONS[0].key)
+  const [horizonKey, setHorizonKey] = useState(CONFIGURED_HORIZON_KEY)
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
   const [loadingStep, setLoadingStep] = useState(0)
   const timerRef = useRef(null)
 
+  // The configured window is offered first (and is the default) so the
+  // company's Forecast Horizon setting is what actually drives the run.
+  const { forecastMonths } = useCompany()
+  const horizons = useMemo(() => {
+    const months = Number(forecastMonths) || 12
+    return [
+      { key: CONFIGURED_HORIZON_KEY, label: `Next ${months} Months` },
+      ...FIXED_HORIZONS,
+    ]
+  }, [forecastMonths])
+
   useEffect(() => {
     if (open) {
       setPhase('setup')
       setForecastType(FORECAST_TYPES[0])
-      setHorizonKey(HORIZONS[0].key)
+      setHorizonKey(CONFIGURED_HORIZON_KEY)
       setResult(null)
       setError('')
       setLoadingStep(0)
@@ -293,8 +309,8 @@ const GenerateForecastModal = memo(function GenerateForecastModal({ open, onClos
             </div>
             <div>
               <label className={LABEL}>Forecast Horizon</label>
-              <div className="grid grid-cols-3 gap-2">
-                {HORIZONS.map((h) => (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {horizons.map((h) => (
                   <button
                     key={h.key}
                     type="button"

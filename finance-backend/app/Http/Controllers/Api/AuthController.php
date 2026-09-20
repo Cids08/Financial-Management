@@ -52,6 +52,7 @@ class AuthController extends Controller
                     'requiresTwoFactor' => true,
                     'pendingToken' => $result['pendingToken'],
                     'maskedEmail' => $result['maskedEmail'],
+                    'codeExpiresInSeconds' => $result['codeExpiresInSeconds'],
                 ],
             ]);
         }
@@ -115,7 +116,10 @@ class AuthController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'A new code has been sent.',
-            'data'    => ['maskedEmail' => $result['maskedEmail']],
+            'data'    => [
+                'maskedEmail' => $result['maskedEmail'],
+                'codeExpiresInSeconds' => $result['codeExpiresInSeconds'],
+            ],
         ]);
     }
 

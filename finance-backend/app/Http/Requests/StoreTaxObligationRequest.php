@@ -32,7 +32,7 @@ class StoreTaxObligationRequest extends FormRequest
             'tax_period'        => ['required', 'string', 'max:255'],
             'due_date'          => ['required', 'date'],
             'tax_rate'          => ['required', 'numeric', 'min:0', 'max:100'],
-            'taxable_amount'    => ['required', 'numeric', 'min:0'],
+            'taxable_amount'    => ['required', 'numeric', 'min:' . config('business.min_invoice_amount')],
             'is_paid'           => ['sometimes', 'boolean'],
             'payment_date'      => ['required_if:is_paid,true', 'nullable', 'date'],
             'reference_number'  => [

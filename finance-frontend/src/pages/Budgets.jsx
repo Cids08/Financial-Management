@@ -12,12 +12,14 @@ import Pagination from '../components/Pagination'
 import Tooltip from '../components/Tooltip'
 import BudgetPlanUploadModal from '../components/BudgetPlanUploadModal'
 import BudgetPlanHistoryModal from '../components/BudgetPlanHistoryModal'
-import { formatCurrency } from '../utils/formatters'
+import { formatCurrency, currencySymbol, convertAmount, getActiveCurrency } from '../utils/formatters'
+import { MIN_INVOICE_AMOUNT, minHint } from '../utils/business'
 import { useBudgets } from '../hooks/useBudgets'
 import { useDepartments } from '../hooks/useDepartments'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 import { usePermissions } from '../context/PermissionsContext'
 import { useProfile } from '../hooks/useProfile'
+import { useCompany } from '../context/CompanyContext'
 import { usePrivacy } from '../context/PrivacyContext'
 import { hasPermission } from '../utils/permissions'
 
@@ -380,6 +382,9 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
 
   const [modalMode, setModalMode] = useState(null) // null | 'add' | budget object being edited
   const [form, setForm] = useState(EMPTY_FORM)
+  // Company default fiscal year (Settings) seeds new budgets; falls back to
+  // the current year if the setting is outside the allowed range.
+  const { fiscalYear: settingsFiscalYear } = useCompany()
   const [serverError, setServerError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const [successVisible, setSuccessVisible] = useState(false)   // drives fade-in / fade-out
@@ -526,15 +531,16 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
     if (val == null || val === '—') return '—'
     const num = Number(val)
     if (isNaN(num)) return val
-    if (Math.abs(num) >= 1_000_000_000) {
-      return `₱${(num / 1_000_000_000).toLocaleString('en-PH', { maximumFractionDigits: 2 })}B`
+    const converted = convertAmount(num)
+    if (Math.abs(converted) >= 1_000_000_000) {
+      return `${currencySymbol()}${(converted / 1_000_000_000).toLocaleString('en-PH', { maximumFractionDigits: 2 })}B`
     }
     return new Intl.NumberFormat('en-PH', {
       style: 'currency',
-      currency: 'PHP',
-      minimumFractionDigits: num % 1 === 0 ? 0 : 2,
+      currency: getActiveCurrency(),
+      minimumFractionDigits: converted % 1 === 0 ? 0 : 2,
       maximumFractionDigits: 2,
-    }).format(num)
+    }).format(converted)
   }
 
   const statCards = useMemo(() => {
@@ -623,7 +629,9 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
   }
 
   const openAdd = () => {
-    setForm(EMPTY_FORM)
+    const fy = Number(settingsFiscalYear)
+    const defaultFiscalYear = (fy && fy >= CURRENT_YEAR && fy <= MAX_FISCAL_YEAR) ? fy : CURRENT_YEAR
+    setForm({ ...EMPTY_FORM, fiscal_year: defaultFiscalYear })
     setCodeIsAuto(true)
     setServerError('')
     setFieldErrors({})
@@ -766,10 +774,8 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
 
     if (!form.allocated_amount && form.allocated_amount !== 0) {
       errors.allocated_amount = 'Allocated amount is required.'
-    } else if (Number(form.allocated_amount) < 0) {
-      errors.allocated_amount = 'Allocated amount cannot be negative.'
-    } else if (Number(form.allocated_amount) === 0) {
-      errors.allocated_amount = 'Allocated amount must be greater than zero.'
+    } else if (Number(form.allocated_amount) < MIN_INVOICE_AMOUNT) {
+      errors.allocated_amount = `Allocated amount must be at least ${formatCurrency(MIN_INVOICE_AMOUNT)}.`
     }
 
     if (form.warning_percentage !== '' && (Number(form.warning_percentage) < 1 || Number(form.warning_percentage) > 100)) {
@@ -1811,7 +1817,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
               <label className={LABEL}>Allocated Amount <span className="text-red-500">*</span></label>
               <input
                 type="number"
-                min="0.01"
+                min={MIN_INVOICE_AMOUNT}
                 step="any"
                 value={form.allocated_amount}
                 onChange={(e) => {
@@ -1822,15 +1828,15 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                     setAmountError('')
                   } else if (Number(val) < 0) {
                     setAmountError('Allocated amount cannot be negative.')
-                  } else if (Number(val) === 0) {
-                    setAmountError('Allocated amount must be greater than zero.')
+                  } else if (Number(val) < MIN_INVOICE_AMOUNT) {
+                    setAmountError(`Allocated amount must be at least ${formatCurrency(MIN_INVOICE_AMOUNT)}.`)
                   } else {
                     setAmountError('')
                   }
                 }}
                 className={`${INPUT} ${(amountError || fieldErrors.allocated_amount) ? 'border-red-400 dark:border-red-500' : ''}`}
                 style={INPUT_TEXT_STYLE}
-                placeholder="0.00"
+                placeholder={minHint(MIN_INVOICE_AMOUNT)}
               />
               {(amountError || fieldErrors.allocated_amount) && (
                 <p className="mt-1 text-xs text-red-500 dark:text-red-400">{amountError || fieldErrors.allocated_amount}</p>

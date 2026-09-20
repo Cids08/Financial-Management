@@ -37,7 +37,7 @@ const BUCKET_LABELS = {
 
 function printSingleSOA(soa) {
   const { customer, aging, total_outstanding, invoices, as_of_date } = soa
-  const fmt = (v) => `₱ ${Number(v).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`
+  const fmt = (v) => formatCurrencyRaw(v)
 
   const invoiceRows = invoices.map((inv) => `
     <tr style="border-bottom:1px solid #e2e8f0">
@@ -108,7 +108,7 @@ function printSingleSOA(soa) {
 }
 
 function printBatchSOA(batch) {
-  const fmt = (v) => `₱ ${Number(v).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`
+  const fmt = (v) => formatCurrencyRaw(v)
 
   const pages = batch.map((soa) => {
     const { customer, aging, total_outstanding, invoices, as_of_date } = soa

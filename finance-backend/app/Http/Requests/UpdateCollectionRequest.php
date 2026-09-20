@@ -28,7 +28,7 @@ class UpdateCollectionRequest extends FormRequest
             'or_number'        => ['nullable', 'string', 'max:255'],
             'collection_date'  => ['sometimes', 'required', 'date', 'before_or_equal:today'],
             'deposit_date'     => ['nullable', 'date', 'after_or_equal:collection_date'],
-            'amount_received'  => ['sometimes', 'required', 'numeric', 'min:0.01'],
+            'amount_received'  => ['sometimes', 'required', 'numeric', 'min:' . config('business.min_collection_amount')],
             'payment_method'   => ['sometimes', 'required', 'string', 'max:255'],
             'reference_number' => [
                 'nullable',

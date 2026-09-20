@@ -12,6 +12,7 @@ use App\Models\JournalEntry;
 use App\Models\Notification;
 use App\Models\SupportingDocument;
 use App\Models\User;
+use App\Support\Money;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -262,9 +263,9 @@ class ExpenseService
                 ]);
             }
 
-            $newUsed = bcadd((string) $budget->used_amount, (string) $expense->expense_amount, 2);
-            $newRemaining = bcsub((string) $budget->allocated_amount, $newUsed, 2);
-            $isOverBudget = bccomp($newRemaining, '0', 2) < 0;
+            $newUsed = Money::add((string) $budget->used_amount, (string) $expense->expense_amount, 2);
+            $newRemaining = Money::sub((string) $budget->allocated_amount, $newUsed, 2);
+            $isOverBudget = Money::comp($newRemaining, '0', 2) < 0;
 
             if ($isOverBudget) {
                 throw ValidationException::withMessages([
@@ -290,8 +291,8 @@ class ExpenseService
                 'approved_at'  => now(),
             ]);
 
-            $usedPercentage = bccomp((string) $budget->allocated_amount, '0', 2) > 0
-                ? (float) bcmul(bcdiv($newUsed, (string) $budget->allocated_amount, 4), '100', 2)
+            $usedPercentage = Money::comp((string) $budget->allocated_amount, '0', 2) > 0
+                ? (float) Money::mul(Money::div($newUsed, (string) $budget->allocated_amount, 4), '100', 2)
                 : 0.0;
 
             if ($isOverBudget || $usedPercentage >= (float) $budget->warning_percentage) {
@@ -478,7 +479,7 @@ class ExpenseService
                     $budget = Budget::lockForUpdate()->find($budgetId);
                     if ($budget) {
                         $totalGroupAmount = (string) $group->sum('expense_amount');
-                        if (bccomp($totalGroupAmount, (string) $budget->remaining_amount, 2) > 0) {
+                        if (Money::comp($totalGroupAmount, (string) $budget->remaining_amount, 2) > 0) {
                             throw ValidationException::withMessages([
                                 'expense_ids' => sprintf(
                                     'Cannot approve batch: Total expense amount (₱%s) for budget "%s" exceeds its available balance (₱%s). Budget overrun is not permitted.',

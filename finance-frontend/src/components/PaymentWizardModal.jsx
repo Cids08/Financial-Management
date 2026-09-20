@@ -12,12 +12,13 @@ import {
   Sparkles,
   X,
 } from 'lucide-react'
+import { MIN_COLLECTION_AMOUNT, formatBaseAmount } from '../utils/business'
+import { formatCurrency, maskedAmount } from '../utils/formatters'
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-const fmt = (n) =>
-  Number(n).toLocaleString('en-PH', { style: 'currency', currency: 'PHP' })
+const fmt = (n) => formatCurrency(n)
 
 const URGENCY_COLOR = {
   Overdue: 'bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-500/15 dark:text-rose-400 dark:border-rose-500/30',
@@ -137,6 +138,12 @@ export default function PaymentWizardModal({
 
     if (selectedProposals.length === 0) {
       setExecError('No bills selected or all amounts are zero.')
+      setExecuting(false)
+      return
+    }
+
+    if (selectedProposals.some((p) => p.amount_to_pay < MIN_COLLECTION_AMOUNT)) {
+      setExecError(`Each payment amount must be at least ${formatBaseAmount(MIN_COLLECTION_AMOUNT)}.`)
       setExecuting(false)
       return
     }
@@ -322,7 +329,7 @@ export default function PaymentWizardModal({
                     <div className="mt-1 flex items-center gap-2 text-xs text-muted">
                       <span>Available Balance:</span>
                       <span className="font-mono font-semibold text-ink">
-                        {revealBalance ? fmt(ca.current_balance) : '₱ ••••••'}
+                        {revealBalance ? fmt(ca.current_balance) : maskedAmount()}
                       </span>
                       <button
                         type="button"
@@ -399,7 +406,7 @@ export default function PaymentWizardModal({
                   <div className={`flex-1 min-w-35 p-3 rounded-xl border ${isOverdraft ? 'bg-rose-500/10 border-rose-500/20' : 'bg-bg/40 border-border'}`}>
                     <div className={`text-xs font-medium ${isOverdraft ? 'text-rose-600 dark:text-rose-400' : 'text-muted'}`}>Cash Balance</div>
                     <div className={`text-lg font-bold ${isOverdraft ? 'text-rose-700 dark:text-rose-400' : 'text-ink'} flex items-center gap-1.5`}>
-                      {revealBalance ? fmt(cashAccount.current_balance) : '₱ ••••••'}
+                      {revealBalance ? fmt(cashAccount.current_balance) : maskedAmount()}
                       <button
                         type="button"
                         onClick={() => setRevealBalance(r => !r)}
@@ -498,7 +505,7 @@ export default function PaymentWizardModal({
                               {isChecked ? (
                                 <input
                                   type="number"
-                                  min={0}
+                                  min={MIN_COLLECTION_AMOUNT}
                                   max={p.available_to_pay}
                                   step="0.01"
                                   value={selected[p.ap_id] ?? ''}

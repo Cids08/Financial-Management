@@ -98,19 +98,9 @@ class AccountSecurityController extends Controller
         ]);
     }
 
-    // Deactivation is irreversible-by-the-user and signs them out
-    // everywhere. Require the current password rather than trusting the
-    // frontend's "type DEACTIVATE" text field, which the API never sees.
-    public function deactivate(ConfirmPasswordRequest $request): JsonResponse
-    {
-        $this->security->deactivate($request->user());
-
-        return response()->json(['success' => true, 'message' => 'Account deactivated.']);
-    }
-
     /**
- * GET /api/settings/2fa
- */
+     * GET /api/settings/2fa
+     */
     public function status(Request $request): JsonResponse
     {
         return response()->json([

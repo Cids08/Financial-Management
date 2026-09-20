@@ -25,7 +25,7 @@ import {
   Tooltip as RechartsTooltip,
   Legend,
 } from 'recharts'
-import { formatCurrency } from '../utils/formatters'
+import { formatCurrency, currencySymbol, convertAmount } from '../utils/formatters'
 import { usePrivacy } from '../context/PrivacyContext'
 import { apiFetch } from '../utils/api'
 
@@ -141,7 +141,7 @@ export default function CollectionEfficiencyPanel() {
               <YAxis
                 yAxisId="currency"
                 tick={{ fontSize: 10 }}
-                tickFormatter={(v) => `₱${(v / 1000).toFixed(0)}k`}
+                tickFormatter={(v) => `${currencySymbol()}${(convertAmount(v) / 1000).toFixed(0)}k`}
                 width={48}
               />
               <YAxis

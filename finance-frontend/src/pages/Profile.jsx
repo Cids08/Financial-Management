@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   User, Mail, Phone, Briefcase, Camera, Save, X, Upload, Trash2, AlertCircle,
   Lock, ShieldCheck, Smartphone, Monitor, LogOut, Eye, EyeOff, CheckCircle2,
-  AlertTriangle, UserX, KeyRound, Clock, CalendarRange, Copy, Download,
+  AlertTriangle, UserX, KeyRound, Clock, CalendarRange, Copy, Download, RefreshCw,
 } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
@@ -12,6 +12,7 @@ import Pagination from '../components/Pagination'
 import OtpInput from '../components/OtpInput'
 import { useProfile } from '../hooks/useProfile'
 import { useAccountSecurity } from '../hooks/useAccountSecurity'
+import { useCountdown, formatCountdown } from '../hooks/useCountdown'
 
 const ACTIVITY_ICON = {
   Login: CheckCircle2,
@@ -250,6 +251,18 @@ export default function Profile() {
   const [verifyCode, setVerifyCode] = useState('')
   const [recoveryCodes, setRecoveryCodes] = useState(null)
 
+  // Counts down to the setup code's expiry; once it hits 0 we disable the
+  // input and offer a Resend button instead.
+  const setupSecondsLeft = useCountdown(setupData?.codeExpiresAt)
+  const setupExpired = Boolean(setupData) && setupSecondsLeft <= 0
+
+  // Attach an absolute expiry timestamp so the modal can count down; the
+  // backend returns the remaining seconds alongside maskedEmail.
+  const withCodeExpiry = (result) => ({
+    ...result,
+    codeExpiresAt: Date.now() + (result.codeExpiresInSeconds ?? 600) * 1000,
+  })
+
   const handleToggle2FA = async () => {
     if (security.twoFAEnabled) {
       setDisable2FAModalOpen(true)
@@ -259,7 +272,7 @@ export default function Profile() {
     setRecoveryCodes(null)
     const result = await security.initiateTwoFactor()
     if (result.success) {
-      setSetupData(result)
+      setSetupData(withCodeExpiry(result))
       setTwoFAModalOpen(true)
     }
   }
@@ -274,7 +287,7 @@ export default function Profile() {
   const resendCode = async () => {
     setVerifyCode('')
     const result = await security.initiateTwoFactor()
-    if (result.success) setSetupData(result)
+    if (result.success) setSetupData(withCodeExpiry(result))
   }
 
   const closeTwoFAModal = () => {
@@ -347,27 +360,6 @@ export default function Profile() {
   useEffect(() => {
     setActivityPage(1)
   }, [filteredActivity.length])
-
-  const [deactivateModalOpen, setDeactivateModalOpen] = useState(false)
-  const [deactivateConfirmText, setDeactivateConfirmText] = useState('')
-  const [deactivatePassword, setDeactivatePassword] = useState('')
-
-  const canDeactivate =
-    deactivateConfirmText.trim().toUpperCase() === 'DEACTIVATE' && deactivatePassword.length > 0
-
-  const closeDeactivateModal = () => {
-    setDeactivateModalOpen(false)
-    setDeactivateConfirmText('')
-    setDeactivatePassword('')
-  }
-
-  const handleDeactivate = async () => {
-    const result = await security.deactivateAccount(deactivatePassword)
-    if (result.success) {
-      setDeactivateModalOpen(false)
-      window.location.href = '/login'
-    }
-  }
 
   if (loading) {
     return (
@@ -695,22 +687,6 @@ export default function Profile() {
         )}
       </div>
 
-      {/* Danger Zone */}
-      <div className="rounded-xl border border-red-200 bg-red-50/50 p-5 dark:border-red-500/20 dark:bg-red-500/5">
-        <div className="flex items-center gap-2.5 mb-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-red-100 text-red-600 dark:bg-red-500/10 dark:text-red-400">
-            <UserX size={17} />
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-red-700 dark:text-red-400">Danger Zone</p>
-            <p className="text-xs text-red-600/80 dark:text-red-400/70 mt-0.5">Deactivating your account will sign you out everywhere.</p>
-          </div>
-        </div>
-        <Button variant="danger" size="sm" onClick={() => setDeactivateModalOpen(true)}>
-          Deactivate Account
-        </Button>
-      </div>
-
       {/* Enable 2FA modal */}
       <Modal
         open={twoFAModalOpen}
@@ -760,19 +736,35 @@ export default function Profile() {
                 value={verifyCode}
                 onChange={setVerifyCode}
                 onComplete={confirmEnable2FA}
-                disabled={security.twoFABusy}
+                disabled={security.twoFABusy || setupExpired}
                 hasError={Boolean(security.twoFAError)}
                 autoFocus
               />
             </div>
-            <button
-              type="button"
-              onClick={resendCode}
-              disabled={security.twoFABusy}
-              className="text-xs font-medium text-primary-dark hover:underline disabled:opacity-50 disabled:pointer-events-none"
-            >
-              Didn't get a code? Resend
-            </button>
+            {setupExpired ? (
+              <button
+                type="button"
+                onClick={resendCode}
+                disabled={security.twoFABusy}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary-dark ring-1 ring-primary/25 hover:bg-primary/15 disabled:opacity-50 disabled:pointer-events-none transition-colors duration-150"
+              >
+                <RefreshCw size={13} /> Resend code
+              </button>
+            ) : (
+              <p className="text-xs text-muted">
+                Code expires in{' '}
+                <span
+                  className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-semibold tabular-nums transition-colors duration-300 ${
+                    setupSecondsLeft <= 30
+                      ? 'border-red-300/70 bg-red-50/80 text-red-600 animate-pulse dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400'
+                      : 'border-amber-300/70 bg-amber-50/80 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400'
+                  }`}
+                >
+                  <Clock size={11} />
+                  {formatCountdown(setupSecondsLeft)}
+                </span>
+              </p>
+            )}
           </div>
         )}
       </Modal>
@@ -827,46 +819,6 @@ export default function Profile() {
         <p className="text-sm text-ink">
           This will sign you out on all devices except this one. You'll need to log in again on those devices.
         </p>
-      </Modal>
-
-      {/* Deactivate account modal */}
-      <Modal
-        open={deactivateModalOpen}
-        onClose={closeDeactivateModal}
-        title="Deactivate Account"
-        maxWidth="max-w-sm"
-        footer={
-          <>
-            <Button variant="secondary" size="md" onClick={closeDeactivateModal}>
-              Cancel
-            </Button>
-            <Button variant="danger" size="md" disabled={!canDeactivate} loading={security.deactivating} onClick={handleDeactivate}>
-              Deactivate
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-3">
-          <p className="text-sm text-ink">
-            This will deactivate your account and sign you out everywhere. This action may need an administrator to reverse.
-          </p>
-          <InlineError message={security.deactivateError} />
-          <PasswordInput
-            label="Current Password"
-            value={deactivatePassword}
-            onChange={(e) => setDeactivatePassword(e.target.value)}
-          />
-          <div>
-            <label className={LABEL}>Type DEACTIVATE to confirm</label>
-            <input
-              type="text"
-              value={deactivateConfirmText}
-              onChange={(e) => setDeactivateConfirmText(e.target.value)}
-              placeholder="DEACTIVATE"
-              className={INPUT}
-            />
-          </div>
-        </div>
       </Modal>
 
       {modalOpen && (

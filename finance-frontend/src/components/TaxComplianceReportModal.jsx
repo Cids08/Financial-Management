@@ -206,9 +206,9 @@ export default function TaxComplianceReportModal({ open, onClose }) {
           <td>
             <span class="badge badge-${(o.status || 'Pending').toLowerCase()}">${o.status}</span>
           </td>
-          <td class="num">₱${Number(o.taxable_amount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          <td class="num">${formatCurrencyRaw(o.taxable_amount || 0)}</td>
           <td class="num">${o.tax_rate}%</td>
-          <td class="num font-bold">₱${Number(o.amount ?? o.tax_amount ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          <td class="num font-bold">${formatCurrencyRaw(o.amount ?? o.tax_amount ?? 0)}</td>
           <td>
             ${
               o.status === 'Paid'
@@ -294,15 +294,15 @@ export default function TaxComplianceReportModal({ open, onClose }) {
             </div>
             <div class="card">
               <div class="lbl">Total Assessed Tax</div>
-              <div class="val">₱${totals.assessed.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              <div class="val">${formatCurrencyRaw(totals.assessed)}</div>
             </div>
             <div class="card">
               <div class="lbl">Total Remitted (Paid)</div>
-              <div class="val" style="color: #16a34a;">₱${totals.paid.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              <div class="val" style="color: #16a34a;">${formatCurrencyRaw(totals.paid)}</div>
             </div>
             <div class="card">
               <div class="lbl">Outstanding Payable</div>
-              <div class="val" style="color: #dc2626;">₱${totals.outstanding.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              <div class="val" style="color: #dc2626;">${formatCurrencyRaw(totals.outstanding)}</div>
             </div>
           </div>
 
@@ -327,8 +327,8 @@ export default function TaxComplianceReportModal({ open, onClose }) {
                 <td colspan="4">TOTALS (${totals.count} obligations)</td>
                 <td class="num">—</td>
                 <td class="num">—</td>
-                <td class="num">₱${totals.assessed.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                <td><strong>Paid: ₱${totals.paid.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></td>
+                <td class="num">${formatCurrencyRaw(totals.assessed)}</td>
+                <td><strong>Paid: ${formatCurrencyRaw(totals.paid)}</strong></td>
               </tr>
             </tfoot>
           </table>

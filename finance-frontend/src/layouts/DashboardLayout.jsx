@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { Outlet } from 'react-router-dom'
 import Header from '../components/Header'
 import Sidebar from '../components/Sidebar'
@@ -27,13 +27,18 @@ export default function DashboardLayout() {
   useIdleLogout({ onIdle: logout, timeoutMinutes: 20 })
 
   // On desktop the hamburger toggles collapse; on mobile it opens the drawer.
-  const handleHeaderToggle = () => {
+  const handleHeaderToggle = useCallback(() => {
     if (window.innerWidth >= 1024) {
       setCollapsed((c) => !c)
     } else {
       setMobileOpen((o) => !o)
     }
-  }
+  }, [])
+
+  // Stable identities  -  Header is memo()-wrapped, so keeping these
+  // functions referentially stable stops the header from re-rendering when
+  // DashboardLayout does for unrelated reasons (mobile drawer, logout modal).
+  const handleLogoutClick = useCallback(() => setLogoutModalOpen(true), [])
 
   return (
     <PrivacyProvider>
@@ -50,7 +55,7 @@ export default function DashboardLayout() {
             <Header
               onToggleSidebar={handleHeaderToggle}
               collapsed={collapsed}
-              onLogoutClick={() => setLogoutModalOpen(true)}
+              onLogoutClick={handleLogoutClick}
             />
 
             <Sidebar
@@ -58,7 +63,7 @@ export default function DashboardLayout() {
               onToggleCollapse={() => setCollapsed((c) => !c)}
               mobileOpen={mobileOpen}
               onCloseMobile={() => setMobileOpen(false)}
-              onLogoutClick={() => setLogoutModalOpen(true)}
+              onLogoutClick={handleLogoutClick}
             />
 
             <div

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Money;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -76,7 +77,7 @@ class Supplier extends Model
 
         $oldBalance = (string) $supplier->current_balance;
 
-        if (bccomp($oldBalance, (string) $newBalance, 2) === 0) {
+        if (Money::comp($oldBalance, (string) $newBalance, 2) === 0) {
             return;
         }
 

@@ -55,7 +55,7 @@ class UpdateAccountsPayableRequest extends FormRequest
             'amount' => [
                 'required',
                 'numeric',
-                'min:0.01',
+                'min:' . config('business.min_invoice_amount'),
                 function ($attribute, $value, $fail) {
                     // paid_amount isn't editable from this form (no
                     // "record a payment" flow yet — see AccountsPayableService),

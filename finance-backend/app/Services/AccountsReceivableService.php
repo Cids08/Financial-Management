@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\AccountsReceivable;
 use App\Models\AuditLog;
 use App\Models\Customer;
+use App\Models\Setting;
 use App\Models\SupportingDocument;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
@@ -62,7 +63,9 @@ class AccountsReceivableService
     {
         return DB::transaction(function () use ($actor, $data) {
             $balance = $data['balance'] ?? $data['original_amount'];
-            $penaltyRate = $data['penalty_rate'] ?? 0;
+            // Fall back to the company-wide default from Settings when the
+            // invoice doesn't carry its own penalty rate.
+            $penaltyRate = $data['penalty_rate'] ?? Setting::current()->default_penalty_rate;
             $penaltyAmount = $penaltyRate > 0
                 ? round(($data['original_amount'] * $penaltyRate) / 100, 2)
                 : 0;
@@ -113,7 +116,9 @@ class AccountsReceivableService
             $original = $ar->only(array_keys($data) + ['id']);
 
             $balance = $data['balance'] ?? $data['original_amount'];
-            $penaltyRate = $data['penalty_rate'] ?? 0;
+            // Same Settings fallback as create(): an update that omits the
+            // penalty rate adopts the company default rather than silently 0.
+            $penaltyRate = $data['penalty_rate'] ?? Setting::current()->default_penalty_rate;
             $penaltyAmount = $penaltyRate > 0
                 ? round(($data['original_amount'] * $penaltyRate) / 100, 2)
                 : 0;
@@ -267,8 +272,12 @@ class AccountsReceivableService
      * Returns an aging summary matrix: one row per customer with subtotals
      * for each aging bucket (Current, 1-30, 31-60, 61-90, 90+ days overdue).
      * Only non-archived, non-paid, non-cancelled active invoices are counted.
+     *
+     * $collectorId narrows the summary to a single collector's assigned
+     * invoices (Collector-role callers must never see other collectors'
+     * customers' aging).
      */
-    public function getAgingSummary(): array
+    public function getAgingSummary(?int $collectorId = null): array
     {
         $today = Carbon::today();
 
@@ -276,6 +285,7 @@ class AccountsReceivableService
             ->with('customer:id,customer_name,customer_code,email,contact_person,contact_number,address')
             ->where('is_archived', false)
             ->whereNotIn('status', ['Paid', 'Cancelled'])
+            ->when($collectorId, fn ($q) => $q->where('collector_id', $collectorId))
             ->whereNull('deleted_at')
             ->get();
 
@@ -333,8 +343,11 @@ class AccountsReceivableService
     /**
      * Returns a full Statement of Account for a single customer:
      * customer header, aging buckets, and a line-by-line invoice list.
+     *
+     * $collectorId limits which invoices go on the statement (Collector-role
+     * callers only ever see their own assigned invoices).
      */
-    public function getStatementOfAccount(int $customerId): array
+    public function getStatementOfAccount(int $customerId, ?int $collectorId = null): array
     {
         $today    = Carbon::today();
         $customer = Customer::findOrFail($customerId);
@@ -343,6 +356,7 @@ class AccountsReceivableService
             ->where('customer_id', $customerId)
             ->where('is_archived', false)
             ->whereNotIn('status', ['Paid', 'Cancelled'])
+            ->when($collectorId, fn ($q) => $q->where('collector_id', $collectorId))
             ->whereNull('deleted_at')
             ->orderBy('due_date')
             ->get();
@@ -432,5 +446,26 @@ class AccountsReceivableService
         usort($result, fn ($a, $b) => $b['total_outstanding'] <=> $a['total_outstanding']);
 
         return $result;
+    }
+
+    /**
+     * Re-apply the company-wide default penalty rate to every unpaid
+     * (non-Paid, non-Cancelled, non-archived) invoice. Called by
+     * SettingsService when the default changes.
+     *
+     * Deliberately a bulk query-builder update: it skips Eloquent model
+     * events, which is what we want here — remaining_balance is untouched,
+     * so recalculating every customer's balance row-by-row would be pure
+     * overhead. Returns the number of invoices updated.
+     */
+    public function applyDefaultPenaltyRate(float $rate): int
+    {
+        return AccountsReceivable::query()
+            ->whereNotIn('status', ['Paid', 'Cancelled'])
+            ->where('is_archived', false)
+            ->update([
+                'penalty_rate' => $rate,
+                'penalty_amount' => DB::raw('ROUND(original_amount * ' . $rate . ' / 100, 2)'),
+            ]);
     }
 }

@@ -34,7 +34,7 @@ import Breadcrumb from '../components/Breadcrumb'
 import DashboardCard from '../components/DashboardCard'
 import Table from '../components/Table'
 import Button from '../components/Button'
-import { formatCurrency, formatDate } from '../utils/formatters'
+import { formatCurrency, formatDate, maskedAmount } from '../utils/formatters'
 import { apiFetch } from '../utils/api'
 import { usePrivacy } from '../context/PrivacyContext'
 import { useProfile } from '../hooks/useProfile'
@@ -395,7 +395,7 @@ export default function Dashboard() {
     forecast_summary: forecastSummary = [],
   } = data
 
-  const MASKED = '₱ ••••••'
+  const MASKED = maskedAmount()
 
   // Chart helpers respect Privacy Mode too  -  otherwise the Y-axis ticks and
   // hover tooltips would still leak the real figures the cards are hiding.

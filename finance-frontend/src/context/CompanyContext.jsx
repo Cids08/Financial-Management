@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { apiFetch } from '../utils/api'
+import { setActiveConversion } from '../utils/formatters'
 
 const CompanyContext = createContext(null)
 
@@ -13,9 +14,9 @@ const CompanyContext = createContext(null)
  *
  * NOTE: the `settings` table has several columns the old local-only
  * CompanyContext never exposed (company_address, company_email,
- * company_phone, currency, fiscal_year, default_tax_rate,
- * forecast_months). They're included here so Settings.jsx can surface
- * and edit them.
+ * company_phone, currency, base_currency, exchange_rates, fiscal_year,
+ * default_tax_rate, default_penalty_rate, forecast_months). They're
+ * included here so Settings.jsx can surface and edit them.
  */
 export function CompanyProvider({ children }) {
   const [company, setCompany] = useState({
@@ -26,8 +27,11 @@ export function CompanyProvider({ children }) {
     phone: '',
     logoUrl: null,
     currency: 'PHP',
+    baseCurrency: 'PHP',
+    exchangeRates: {},
     fiscalYear: new Date().getFullYear(),
     defaultTaxRate: 0,
+    defaultPenaltyRate: 0,
     forecastMonths: 12,
   })
   const [loading, setLoading] = useState(true)
@@ -52,6 +56,17 @@ export function CompanyProvider({ children }) {
   useEffect(() => {
     fetchCompany()
   }, [fetchCompany])
+
+  // Keep the app-wide currency formatter in sync with the Settings values so
+  // switching Peso <-> Dollar (plus the base currency + exchange rates) both
+  // relabels AND converts amounts everywhere, not just here.
+  useEffect(() => {
+    setActiveConversion({
+      currency: company.currency,
+      baseCurrency: company.baseCurrency,
+      exchangeRates: company.exchangeRates,
+    })
+  }, [company.currency, company.baseCurrency, company.exchangeRates])
 
   /**
    * fields: { name, tagline, address, email, phone, currency, fiscalYear,

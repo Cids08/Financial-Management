@@ -15,9 +15,10 @@ import {
   TrendingDown,
   X,
 } from 'lucide-react'
+import { formatCurrency } from '../utils/formatters'
+import { useCompany } from '../context/CompanyContext'
 
-const fmt = (n) =>
-  Number(n || 0).toLocaleString('en-PH', { style: 'currency', currency: 'PHP' })
+const fmt = (n) => formatCurrency(n)
 
 const MONTHS = [
   { value: 1, label: 'January' },
@@ -52,8 +53,9 @@ export default function DepreciationRunModal({
 }) {
   const [step, setStep] = useState(0)
 
-  // Step 0 config
-  const [fiscalYear, setFiscalYear] = useState(() => new Date().getFullYear())
+  // Step 0 config — fiscal year defaults from Settings.
+  const { fiscalYear: settingsFiscalYear } = useCompany()
+  const [fiscalYear, setFiscalYear] = useState(() => Number(settingsFiscalYear) || new Date().getFullYear())
   const [period, setPeriod] = useState('monthly')
   const [month, setMonth] = useState(() => new Date().getMonth() + 1)
   const [category, setCategory] = useState('all')

@@ -133,8 +133,8 @@ export default function StaffDashboard({ title = 'Dashboard', crumbs = ['Dashboa
 
       {/* Summary stat cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        {statCards.map((card) => (
-          <StatCard key={card.key} {...card} loading={loading} />
+        {statCards.map(({ key, ...card }) => (
+          <StatCard key={key} {...card} loading={loading} />
         ))}
       </div>
 

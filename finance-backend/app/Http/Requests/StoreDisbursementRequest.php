@@ -26,7 +26,7 @@ class StoreDisbursementRequest extends FormRequest
             // ignored rather than validated.
             'payee' => ['required', 'string', 'max:255'],
             'payment_date' => ['required', 'date'],
-            'amount_paid' => ['required', 'numeric', 'min:0.01'],
+            'amount_paid' => ['required', 'numeric', 'min:' . config('business.min_collection_amount')],
             'currency' => ['required', 'string', 'max:10'],
             'payment_method' => ['required', 'string', 'max:50'],
             'reference_number' => [

@@ -23,15 +23,20 @@ class Setting extends Model
         'company_phone',
         'company_logo',
         'currency',
+        'base_currency',
+        'exchange_rates',
         'fiscal_year',
         'default_tax_rate',
+        'default_penalty_rate',
         'forecast_months',
     ];
 
     protected $casts = [
         'fiscal_year' => 'integer',
         'default_tax_rate' => 'decimal:2',
+        'default_penalty_rate' => 'decimal:2',
         'forecast_months' => 'integer',
+        'exchange_rates' => 'array',
     ];
 
     /**
@@ -56,8 +61,11 @@ class Setting extends Model
             'company_phone' => null,
             'company_logo' => null,
             'currency' => 'PHP',
+            'base_currency' => 'PHP',
+            'exchange_rates' => [],
             'fiscal_year' => now()->year,
             'default_tax_rate' => 12,
+            'default_penalty_rate' => 0,
             'forecast_months' => 12,
         ]);
     }

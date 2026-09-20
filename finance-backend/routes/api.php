@@ -98,7 +98,6 @@ Route::middleware(['auth:sanctum', 'require.password.change'])->group(function (
         Route::middleware('throttle:10,1')->group(function () {
             Route::put('/password', [AccountSecurityController::class, 'updatePassword']);
             Route::delete('/2fa', [AccountSecurityController::class, 'disableTwoFactor']);
-            Route::post('/deactivate', [AccountSecurityController::class, 'deactivate']);
             Route::get('/2fa', [AccountSecurityController::class, 'status']);
         });
     });
@@ -332,6 +331,10 @@ Route::middleware(['auth:sanctum', 'require.password.change'])->group(function (
         Route::get('/', [CollectionController::class, 'index'])->middleware('permission:collections.view');
         Route::post('/', [CollectionController::class, 'store'])->middleware('permission:collections.manage');
         Route::get('/efficiency', [CollectionController::class, 'efficiency'])->middleware('permission:collections.view');
+        // Dropdown data for the Add/Edit form — includes cash accounts for
+        // the deposit target, which collectors need but cash-accounts.view
+        // is not granted to. Static route, must come before /{collection}.
+        Route::get('/lookups', [CollectionController::class, 'lookups'])->middleware('permission:collections.view');
 
         // Parameterised routes — model-bound, must come after static routes above
         Route::put('/{collection}', [CollectionController::class, 'update'])->middleware('permission:collections.manage');

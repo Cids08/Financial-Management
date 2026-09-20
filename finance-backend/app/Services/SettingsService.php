@@ -14,6 +14,10 @@ class SettingsService
     protected const LOGO_DISK = 'public';
     protected const LOGO_DIR = 'branding';
 
+    public function __construct(protected AccountsReceivableService $accountsReceivable)
+    {
+    }
+
     public function get(): Setting
     {
         return Setting::current();
@@ -29,15 +33,30 @@ class SettingsService
             $setting = Setting::current();
             $original = $setting->only(array_keys($data));
 
+            // Only re-apply when the default actually changes, so saving
+            // unrelated settings (branding, tax, etc.) never clobbers
+            // per-invoice penalty edits.
+            $penaltyRateChanged = array_key_exists('default_penalty_rate', $data)
+                && (float) $setting->default_penalty_rate !== (float) $data['default_penalty_rate'];
+
             $setting->fill($data);
             $setting->save();
+
+            $affected = 0;
+            if ($penaltyRateChanged) {
+                $affected = $this->accountsReceivable->applyDefaultPenaltyRate(
+                    (float) $data['default_penalty_rate']
+                );
+            }
 
             AuditLog::create([
                 'user_id' => $actor->id,
                 'module' => 'Settings',
                 'action' => 'update',
                 'record_id' => $setting->id,
-                'activity_description' => 'Updated company branding and financial settings.',
+                'activity_description' => $penaltyRateChanged
+                    ? "Updated company settings; re-applied the default AR penalty rate to {$affected} unpaid invoice(s)."
+                    : 'Updated company branding and financial settings.',
                 'old_values' => $original,
                 'new_values' => $setting->only(array_keys($data)),
                 'ip_address' => request()->ip(),
