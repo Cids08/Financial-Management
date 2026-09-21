@@ -109,6 +109,15 @@ const CHART_MARGIN = { top: 5, right: 24, left: 0, bottom: 0 }
 const PIE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#a855f7', '#ef4444', '#06b6d4', '#8b5cf6', '#f43f5e', '#64748b']
 const shortMonthTick = (label) => (typeof label === 'string' ? label.split(' ')[0] : label)
 
+/** Compact Y-axis tick: ₱1.2M, ₱148.5K, ₱500 — prevents the full peso label from being clipped */
+function compactPeso(v) {
+  if (v === 0) return '₱0'
+  const abs = Math.abs(v)
+  if (abs >= 1_000_000) return `₱${(v / 1_000_000).toFixed(abs % 1_000_000 === 0 ? 0 : 1)}M`
+  if (abs >= 1_000) return `₱${(v / 1_000).toFixed(abs % 1_000 === 0 ? 0 : 1)}K`
+  return `₱${v}`
+}
+
 /** Evenly-spaced tick labels (both endpoints included) for a dense series like 30 daily points. */
 function evenTicks(data, count = 7) {
   if (!data || data.length === 0) return []
@@ -399,7 +408,7 @@ export default function Dashboard() {
 
   // Chart helpers respect Privacy Mode too  -  otherwise the Y-axis ticks and
   // hover tooltips would still leak the real figures the cards are hiding.
-  const chartTick = (v) => (privacyMode ? '•••' : formatCurrency(v))
+  const chartTick = (v) => (privacyMode ? '•••' : compactPeso(v))
   const chartTooltip = (v) => (privacyMode ? MASKED : formatCurrency(v))
 
   const overviewCards = OVERVIEW_CARD_CONFIG.map((cfg) => {
@@ -608,7 +617,7 @@ export default function Dashboard() {
                 <LineChart data={chartData?.revenue_trend} margin={CHART_MARGIN}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e2e8f0)" />
                   <XAxis dataKey="label" tick={AXIS_STYLE} interval={0} tickFormatter={shortMonthTick} />
-                  <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={70} />
+                  <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={62} />
                   <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
                   <Line type="monotone" dataKey="value" name="Revenue" stroke={CHART_COLORS.revenue} strokeWidth={2} dot={false} />
                 </LineChart>
@@ -620,7 +629,7 @@ export default function Dashboard() {
                 <LineChart data={chartData?.expense_trend} margin={CHART_MARGIN}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e2e8f0)" />
                   <XAxis dataKey="label" tick={AXIS_STYLE} interval={0} tickFormatter={shortMonthTick} />
-                  <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={70} />
+                  <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={62} />
                   <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
                   <Line type="monotone" dataKey="value" name="Expenses" stroke={CHART_COLORS.expense} strokeWidth={2} dot={false} />
                 </LineChart>
@@ -632,7 +641,7 @@ export default function Dashboard() {
                 <AreaChart data={chartData?.collections_trend} margin={CHART_MARGIN}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e2e8f0)" />
                   <XAxis dataKey="label" tick={AXIS_STYLE} interval={0} ticks={evenTicks(chartData?.collections_trend, 7)} />
-                  <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={70} />
+                  <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={62} />
                   <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
                   <Area type="monotone" dataKey="value" name="Collected" stroke={CHART_COLORS.collections} fill={CHART_COLORS.collections} fillOpacity={0.15} />
                 </AreaChart>
@@ -644,7 +653,7 @@ export default function Dashboard() {
                 <BarChart data={chartData?.cash_flow_trend} margin={CHART_MARGIN}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e2e8f0)" />
                   <XAxis dataKey="label" tick={AXIS_STYLE} interval={0} tickFormatter={shortMonthTick} />
-                  <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={70} />
+                  <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={62} />
                   <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
                   <Legend wrapperStyle={{ fontSize: 11 }} formatter={(value) => (value?.length > 16 ? `${value.slice(0, 14)}…` : value)} />
                   <Bar dataKey="inflow" name="Inflow" fill={CHART_COLORS.inflow} radius={[3, 3, 0, 0]} />
@@ -653,7 +662,7 @@ export default function Dashboard() {
               </ResponsiveContainer>
             </ChartCard>
 
-            <ChartCard title="Cash Account Distribution" subtitle="Available cash by account" route="/master-data/cash-accounts" navigate={navigate} empty={!chartData?.cash_distribution?.length}>
+            <ChartCard title="Cash Account Distribution" subtitle="Available cash by account" route="/master-data/cash-accounts" navigate={navigate} empty={!chartData?.cash_distribution?.length} contentClassName="h-52">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -661,9 +670,9 @@ export default function Dashboard() {
                     dataKey="value"
                     nameKey="label"
                     cx="50%"
-                    cy="45%"
-                    innerRadius={38}
-                    outerRadius={58}
+                    cy="40%"
+                    innerRadius={30}
+                    outerRadius={48}
                     paddingAngle={2}
                     strokeWidth={0}
                   >
@@ -672,7 +681,12 @@ export default function Dashboard() {
                     ))}
                   </Pie>
                   <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} formatter={(value) => (value?.length > 16 ? `${value.slice(0, 14)}…` : value)} />
+                  <Legend
+                    layout="vertical"
+                    align="center"
+                    verticalAlign="bottom"
+                    wrapperStyle={{ fontSize: 10, lineHeight: '1.8', paddingTop: 4 }}
+                  />
                 </PieChart>
               </ResponsiveContainer>
             </ChartCard>
@@ -706,7 +720,7 @@ export default function Dashboard() {
                 <BarChart data={chartData?.budget_utilization} margin={CHART_MARGIN}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e2e8f0)" />
                   <XAxis dataKey="label" tick={AXIS_STYLE} interval={0} angle={-15} textAnchor="end" height={40} />
-                  <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={70} />
+                  <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={62} />
                   <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
                   <Legend wrapperStyle={{ fontSize: 11 }} formatter={(value) => (value?.length > 16 ? `${value.slice(0, 14)}…` : value)} />
                   <Bar dataKey="allocated" name="Allocated" fill={CHART_COLORS.allocated} radius={[3, 3, 0, 0]} />
@@ -720,7 +734,7 @@ export default function Dashboard() {
                 <BarChart data={chartData?.receivable_aging} margin={CHART_MARGIN}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e2e8f0)" />
                   <XAxis dataKey="label" tick={AXIS_STYLE} interval={0} />
-                  <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={70} />
+                  <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={62} />
                   <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
                   <Bar dataKey="value" name="Outstanding" fill={CHART_COLORS.aging} radius={[3, 3, 0, 0]} />
                 </BarChart>
@@ -732,7 +746,7 @@ export default function Dashboard() {
                 <BarChart data={chartData?.payable_aging} margin={CHART_MARGIN}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e2e8f0)" />
                   <XAxis dataKey="label" tick={AXIS_STYLE} interval={0} />
-                  <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={70} />
+                  <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={62} />
                   <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
                   <Bar dataKey="value" name="Outstanding" fill={CHART_COLORS.outflow} radius={[3, 3, 0, 0]} />
                 </BarChart>
