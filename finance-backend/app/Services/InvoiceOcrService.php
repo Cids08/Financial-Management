@@ -30,23 +30,25 @@ class InvoiceOcrService
      */
     protected const RECEIPT_KEYWORDS = [
         'invoice', 'receipt', 'bill', 'billing', 'total', 'amount', 'due', 'date',
-        'qty', 'quantity', 'subtotal', 'vat', 'tax', 'payment', 'balance',
+        'qty', 'quantity', 'subtotal', 'vat', 'tax', 'payment', 'balance', 'cash', 'change',
         'php', '₱', 'reference', 'po no', 'purchase order', 'statement of account',
         'soa', 'sales invoice', 'official receipt', 'delivery receipt', 'remittance',
         'description', 'unit price', 'amount due', 'vendor', 'supplier', 'customer',
+        'item', 'items', 'paid', 'trans', 'or#', 'or no', 'inv#', 'inv no', 'tin',
     ];
 
     protected const MIN_KEYWORD_MATCHES = 2;
 
     /**
      * Phrases strongly associated with bank/e-wallet transfer confirmation
-     * screens rather than vendor invoices or receipts.
+     * screens rather than vendor invoices or receipts. Note: only use unambiguous
+     * multi-word phrases so receipts that mention payment via BDO/BPI/GCash or have
+     * account numbers are not falsely rejected.
      */
     protected const TRANSFER_EXCLUSION_KEYWORDS = [
         'transfer successful', 'transfer result', 'transfer fee',
         'transfer amount', 'sent to', 'send money', 'you sent',
-        'gcash', 'maya', 'mariBank', 'bpi', 'bdo', 'unionbank', 'grabpay',
-        'account no', 'acct. no', 'acct no',
+        'payment successful', 'express send', 'send via gcash',
     ];
 
     /**
@@ -181,6 +183,10 @@ class InvoiceOcrService
             || str_contains($normalized, 'bill')
             || str_contains($normalized, 'billing')
             || str_contains($normalized, 'total')
+            || str_contains($normalized, 'subtotal')
+            || str_contains($normalized, 'amount')
+            || str_contains($normalized, 'cash')
+            || str_contains($normalized, 'paid')
             || str_contains($normalized, 'statement')
             || str_contains($normalized, 'soa')
             || str_contains($normalized, 'amount due')

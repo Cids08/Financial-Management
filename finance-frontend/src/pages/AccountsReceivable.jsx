@@ -708,18 +708,18 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
       </div>
 
       <div className={PANEL}>
-        <div className="overflow-hidden rounded-t-xl">
-          <table className="w-full text-sm table-fixed">
+        <div className="overflow-x-auto rounded-t-xl">
+          <table className="w-full text-sm">
             <thead className="bg-surface">
               <tr className="border-b border-border">
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-2 xl:px-4 py-3 w-[14%] whitespace-nowrap">Invoice</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-2 xl:px-4 py-3 w-[18%] whitespace-nowrap">Customer / Collector</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-2 xl:px-4 py-3 w-[11%] whitespace-nowrap">Terms / PO</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-2 xl:px-4 py-3 w-[12%] whitespace-nowrap">Due Date</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-2 xl:px-4 py-3 w-[15%] whitespace-nowrap">Original / Balance</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-2 xl:px-4 py-3 w-[9%] whitespace-nowrap">Penalty</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-2 xl:px-4 py-3 w-[9%] whitespace-nowrap">Status</th>
-                <th className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wide px-2 xl:px-4 py-3 w-[12%] whitespace-nowrap">Actions</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3 whitespace-nowrap">Invoice</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3">Customer / Collector</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3 whitespace-nowrap">Terms / PO</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3 whitespace-nowrap">Due Date</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3 whitespace-nowrap">Original / Balance</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3 whitespace-nowrap">Penalty</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3 whitespace-nowrap">Status</th>
+                <th className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3 whitespace-nowrap min-w-[140px]">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -735,29 +735,29 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                   className={`border-b border-border last:border-0 transition-colors duration-300
                     ${highlightedId === r.ar_id ? 'bg-primary/10' : 'hover:bg-bg'}`}
                 >
-                  <td className="px-2 xl:px-4 py-3.5 min-w-0">
+                  <td className="px-3 xl:px-4 py-3.5 min-w-0">
                     <p className="font-medium text-ink truncate" title={r.invoice_number}>{r.invoice_number}</p>
                     <p className="text-xs text-muted truncate" title={`${r.reference_no} · ${r.payment_method}`}>{r.reference_no} &middot; {r.payment_method}</p>
                   </td>
-                  <td className="px-2 xl:px-4 py-3.5 text-ink min-w-0">
+                  <td className="px-3 xl:px-4 py-3.5 text-ink min-w-0">
                     <p className="truncate font-medium" title={customerName(r.customer_id)}>{customerName(r.customer_id)}</p>
                     <p className={`text-xs truncate ${r.collector_id ? 'text-muted' : 'text-amber-600 dark:text-amber-400'}`} title={collectorName(r.collector_id)}>
                       {collectorName(r.collector_id)}
                     </p>
                   </td>
-                  <td className="px-2 xl:px-4 py-3.5 text-ink text-xs min-w-0">
+                  <td className="px-3 xl:px-4 py-3.5 text-ink text-xs min-w-0">
                     <p className="truncate">{r.payment_terms}</p>
                     <p className="text-muted truncate" title={r.purchase_order_no}>{r.purchase_order_no || '—'}</p>
                   </td>
-                  <td className="px-2 xl:px-4 py-3.5 text-ink min-w-0">
+                  <td className="px-3 xl:px-4 py-3.5 text-ink min-w-0">
                     <p className="whitespace-nowrap">{formatDate(r.due_date)}</p>
                     <p className="text-xs text-muted whitespace-nowrap">Inv: {formatDate(r.invoice_date)}</p>
                   </td>
-                  <td className="px-2 xl:px-4 py-3.5 min-w-0">
+                  <td className="px-3 xl:px-4 py-3.5 min-w-0">
                     <p className="text-ink tabular-nums whitespace-nowrap font-medium">{formatCurrency(r.original_amount)}</p>
                     <p className="text-xs text-muted tabular-nums whitespace-nowrap">Bal: {formatCurrency(r.balance)}</p>
                   </td>
-                  <td className="px-2 xl:px-4 py-3.5 text-xs min-w-0">
+                  <td className="px-3 xl:px-4 py-3.5 text-xs min-w-0">
                     {r.penalty_rate > 0 ? (
                       <>
                         <p className="text-red-600 dark:text-red-400 tabular-nums whitespace-nowrap">{r.penalty_rate}%</p>
@@ -765,10 +765,10 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                       </>
                     ) : <span className="text-muted">—</span>}
                   </td>
-                  <td className="px-2 xl:px-4 py-3.5 whitespace-nowrap min-w-0">
+                  <td className="px-3 xl:px-4 py-3.5 whitespace-nowrap min-w-0">
                     <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[r.status]}`}>{r.status}</span>
                   </td>
-                  <td className="px-2 xl:px-4 py-3.5 whitespace-nowrap text-right min-w-0">
+                  <td className="px-3 xl:px-4 py-3.5 whitespace-nowrap text-right min-w-[140px]">
                     <div className="flex items-center justify-end gap-1">
                       <Tooltip label="View full record" align="start">
                         <button type="button" onClick={() => openDetail(r)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
