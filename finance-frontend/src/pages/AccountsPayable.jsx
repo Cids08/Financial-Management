@@ -17,7 +17,7 @@ import { usePrivacy } from '../context/PrivacyContext'
 import { useSearchParams } from 'react-router-dom'
 
 
-const PAYMENT_METHODS = ['Bank Transfer', 'Check', 'Cash', 'Credit Card', 'GCash']
+const PAYMENT_METHODS = ['Bank Transfer', 'Check', 'Cash', 'GCash']
 // Confirmed via pg_get_constraintdef on accounts_payable_status_check  - 
 // same allowed set as accounts_receivable.
 const STATUS_OPTIONS = ['Pending', 'Partially Paid', 'Paid', 'Overdue', 'Cancelled']
