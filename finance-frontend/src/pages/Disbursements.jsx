@@ -582,8 +582,8 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
     { key: 'released', label: 'Released Amount', value: formatCurrency(stats.total_paid), icon: CheckCircle2, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: dStatusFilter === 'Released' && !dShowArchived, onClick: () => { setDStatusFilter('Released'); setDShowArchived(false) } },
     { key: 'pending', label: 'Pending', value: stats.pending, icon: Clock3, iconBg: 'bg-amber-50 dark:bg-amber-500/10', iconColor: 'text-amber-600 dark:text-amber-400', isActive: dStatusFilter === 'Pending' && !dShowArchived, onClick: () => { setDStatusFilter('Pending'); setDShowArchived(false) } },
     { key: 'payroll_pending', label: 'Payroll Pending', value: payrollPendingCount, icon: Users, iconBg: 'bg-violet-50 dark:bg-violet-500/10', iconColor: 'text-violet-600 dark:text-violet-400', isActive: dSourceFilter === 'payroll' && dStatusFilter === 'Pending' && !dShowArchived, onClick: () => { setDStatusFilter('Pending'); setDShowArchived(false); setDSourceFilter('payroll') } },
-    // Only admins can archive/restore disbursements  -  hide this card for non-admin roles
-    ...(isAdmin ? [{ key: 'archived', label: 'Archived', value: stats.archived, icon: Archive, iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-500 dark:text-slate-400', isActive: dShowArchived, onClick: () => setDShowArchived(true) }] : []),
+    // Archived card is visible to all users who can view disbursements — archive/restore actions remain admin-only
+    { key: 'archived', label: 'Archived', value: stats.archived, icon: Archive, iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-500 dark:text-slate-400', isActive: dShowArchived, onClick: () => setDShowArchived(true) },
   ]
 
   const isDisbursementModalOpen = dModalMode !== null
