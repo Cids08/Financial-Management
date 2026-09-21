@@ -52,6 +52,16 @@ function isLocked(record) {
   return LOCKED_STATUSES.includes(record.status)
 }
 
+function isOverdueRecord(record) {
+  if (record.status === 'Overdue') return true
+  if (['Paid', 'Cancelled'].includes(record.status)) return false
+  if (!record.due_date) return false
+  const due = new Date(record.due_date)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return due < today
+}
+
 function getNextReferenceNo(records = []) {
   const existingRefs = new Set(
     records.map((r) => (r.reference_no || '').trim().toLowerCase())
@@ -516,7 +526,11 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
       ['Reference No.', r.reference_no || '—'],
       ['Original Amount', formatCurrency(r.original_amount)],
       ['Balance', formatCurrency(r.balance)],
-      ...(r.penalty_rate ? [['Penalty', `${r.penalty_rate}% (${formatCurrency(r.penalty_amount)})`]] : []),
+      ...(r.penalty_rate
+        ? isOverdueRecord(r)
+          ? [['Penalty', `${r.penalty_rate}% (${formatCurrency(r.penalty_amount)})`]]
+          : [['Penalty Rate', `${r.penalty_rate}% (applies when overdue)`]]
+        : []),
       ['Status', r.status],
       ...(r.remarks ? [['Remarks', r.remarks]] : []),
     ]
@@ -759,10 +773,17 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                   </td>
                   <td className="px-3 xl:px-4 py-3.5 text-xs min-w-0">
                     {r.penalty_rate > 0 ? (
-                      <>
-                        <p className="text-red-600 dark:text-red-400 tabular-nums whitespace-nowrap">{r.penalty_rate}%</p>
-                        <p className="text-muted tabular-nums whitespace-nowrap">{formatCurrency(r.penalty_amount)}</p>
-                      </>
+                      isOverdueRecord(r) ? (
+                        <>
+                          <p className="text-red-600 dark:text-red-400 tabular-nums whitespace-nowrap">{r.penalty_rate}%</p>
+                          <p className="text-muted tabular-nums whitespace-nowrap">{formatCurrency(r.penalty_amount)}</p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-muted tabular-nums whitespace-nowrap">{r.penalty_rate}%</p>
+                          <p className="text-[10px] text-muted whitespace-nowrap">On overdue</p>
+                        </>
+                      )
                     ) : <span className="text-muted">—</span>}
                   </td>
                   <td className="px-3 xl:px-4 py-3.5 whitespace-nowrap min-w-0">
@@ -1152,7 +1173,11 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
               </div>
               <div className="px-3 py-2">
                 <DetailRow label="Penalty Rate" value={detailRecord.penalty_rate ? `${detailRecord.penalty_rate}%` : '—'} />
-                <DetailRow label="Penalty Amount" value={formatCurrency(detailRecord.penalty_amount)} />
+                {isOverdueRecord(detailRecord) ? (
+                  <DetailRow label="Penalty Amount" value={formatCurrency(detailRecord.penalty_amount)} />
+                ) : detailRecord.penalty_rate ? (
+                  <DetailRow label="Penalty Amount" value={<span className="text-muted text-xs italic">Applies when overdue</span>} />
+                ) : null}
                 <DetailRow label="Remarks" value={detailRecord.remarks || '—'} />
               </div>
               <div className="px-3 py-2">
