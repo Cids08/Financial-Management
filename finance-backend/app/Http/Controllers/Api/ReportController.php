@@ -16,40 +16,76 @@ class ReportController extends Controller
     {
     }
 
-    protected function validatedPeriod(Request $request): string
+    protected function resolveRequestPeriods(Request $request): array
     {
-        $request->validate(['period' => ['sometimes', Rule::in(self::PERIODS)]]);
+        $request->validate([
+            'period'       => ['sometimes', 'nullable', 'string'],
+            'start_date'   => ['sometimes', 'nullable', 'date'],
+            'end_date'     => ['sometimes', 'nullable', 'date'],
+            'compare'      => ['sometimes'],
+            'compare_mode' => ['sometimes', Rule::in(['prior_period', 'prior_year'])],
+        ]);
 
-        return $request->string('period')->toString() ?: 'This Month';
+        $period = $request->string('period')->toString() ?: null;
+        $startDate = $request->string('start_date')->toString() ?: null;
+        $endDate = $request->string('end_date')->toString() ?: null;
+        $shouldCompare = $request->boolean('compare');
+        $compareMode = $request->string('compare_mode')->toString() ?: 'prior_period';
+
+        $current = $this->reportService->resolvePeriod($period, $startDate, $endDate);
+
+        $prior = null;
+        if ($shouldCompare) {
+            $prior = $this->reportService->resolveComparisonPeriod($current['start'], $current['end'], $compareMode);
+        }
+
+        return [
+            'current' => $current,
+            'prior'   => $prior,
+        ];
     }
 
     /**
-     * GET /api/reports/income-statement?period=This Quarter
+     * GET /api/reports/income-statement
      */
     public function incomeStatement(Request $request): JsonResponse
     {
-        $period = $this->validatedPeriod($request);
-        ['start' => $start, 'end' => $end] = $this->reportService->resolvePeriod($period);
+        ['current' => $curr, 'prior' => $prior] = $this->resolveRequestPeriods($request);
+        $data = $this->reportService->incomeStatement(
+            $curr['start'],
+            $curr['end'],
+            $prior ? $prior['start'] : null,
+            $prior ? $prior['end'] : null,
+            $curr['label'],
+            $prior ? $prior['label'] : null,
+        );
 
         return response()->json([
             'success' => true,
             'message' => '',
-            'data'    => $this->reportService->incomeStatement($start, $end),
+            'data'    => $data,
         ]);
     }
 
     /**
-     * GET /api/reports/cash-flow?period=This Quarter
+     * GET /api/reports/cash-flow
      */
     public function cashFlow(Request $request): JsonResponse
     {
-        $period = $this->validatedPeriod($request);
-        ['start' => $start, 'end' => $end] = $this->reportService->resolvePeriod($period);
+        ['current' => $curr, 'prior' => $prior] = $this->resolveRequestPeriods($request);
+        $data = $this->reportService->cashFlow(
+            $curr['start'],
+            $curr['end'],
+            $prior ? $prior['start'] : null,
+            $prior ? $prior['end'] : null,
+            $curr['label'],
+            $prior ? $prior['label'] : null,
+        );
 
         return response()->json([
             'success' => true,
             'message' => '',
-            'data'    => $this->reportService->cashFlow($start, $end),
+            'data'    => $data,
         ]);
     }
 
@@ -79,17 +115,21 @@ class ReportController extends Controller
     }
 
     /**
-     * GET /api/reports/budget-vs-actual?period=This Quarter
+     * GET /api/reports/budget-vs-actual
      */
     public function budgetVsActual(Request $request): JsonResponse
     {
-        $period = $this->validatedPeriod($request);
-        ['start' => $start] = $this->reportService->resolvePeriod($period);
+        ['current' => $curr, 'prior' => $prior] = $this->resolveRequestPeriods($request);
+        $currentYear = (int) $curr['start']->year;
+        $compareYear = $prior ? (int) $prior['start']->year : null;
+        if ($compareYear && $compareYear === $currentYear) {
+            $compareYear = $currentYear - 1;
+        }
 
         return response()->json([
             'success' => true,
             'message' => '',
-            'data'    => $this->reportService->budgetVsActual($start->year),
+            'data'    => $this->reportService->budgetVsActual($currentYear, $compareYear),
         ]);
     }
 }

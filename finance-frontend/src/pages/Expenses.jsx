@@ -601,8 +601,9 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
     { key: 'total', label: 'Total Expenses', value: statsLoading ? '—' : stats.total, icon: Receipt, iconBg: 'bg-primary/15', iconColor: 'text-primary-dark', isActive: !filters.status && !filters.trashed, onClick: () => setFilter({ status: '', trashed: false }) },
     { key: 'totalAmount', label: 'Total Amount', value: statsLoading ? '—' : formatCurrency(stats.total_amount), icon: Wallet, iconBg: 'bg-blue-50 dark:bg-blue-500/10', iconColor: 'text-blue-600 dark:text-blue-400', isActive: false, onClick: () => setFilter({ status: '', trashed: false }) },
     { key: 'thisMonth', label: `This Month (${CURRENT_MONTH_LABEL})`, value: statsLoading ? '—' : formatCurrency(stats.this_month_amount), icon: Tag, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: false, onClick: () => setFilter({ status: '', trashed: false }) },
-    // Only admins can archive/restore  -  hide this card for non-admin roles
-    ...(isAdmin ? [{ key: 'archived', label: 'Archived', value: statsLoading ? '—' : stats.archived, icon: Archive, iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-500 dark:text-slate-400', isActive: filters.trashed, onClick: () => setFilter({ trashed: true }) }] : []),
+    // Archived count is visible to all roles (read-only for non-admins).
+    // Admin gets a clickable filter; Staff sees the count but cannot click.
+    { key: 'archived', label: 'Archived', value: statsLoading ? '—' : stats.archived, icon: Archive, iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-500 dark:text-slate-400', isActive: filters.trashed, readOnly: !isAdmin, onClick: isAdmin ? () => setFilter({ trashed: true }) : undefined },
   ]
 
   return (
@@ -630,15 +631,10 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {statCards.map((card) => {
           const Icon = card.icon
-          return (
-            <button
-              key={card.key}
-              type="button"
-              onClick={card.onClick}
-              className={`${PANEL} ${PANEL_PAD} flex items-center gap-2.5 text-left cursor-pointer
-                transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0
-                ${card.isActive ? 'ring-2 ring-primary/50 border-primary/50' : ''}`}
-            >
+          const cardClass = `${PANEL} ${PANEL_PAD} flex items-center gap-2.5 text-left
+            ${card.isActive ? 'ring-2 ring-primary/50 border-primary/50' : ''}`
+          const inner = (
+            <>
               <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${card.iconBg}`}>
                 <Icon size={15} className={card.iconColor} />
               </div>
@@ -646,6 +642,18 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                 <p className="text-xs text-muted">{card.label}</p>
                 <p className="text-lg font-bold text-ink">{card.value}</p>
               </div>
+            </>
+          )
+          return card.readOnly ? (
+            <div key={card.key} className={cardClass}>{inner}</div>
+          ) : (
+            <button
+              key={card.key}
+              type="button"
+              onClick={card.onClick}
+              className={`${cardClass} cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0`}
+            >
+              {inner}
             </button>
           )
         })}

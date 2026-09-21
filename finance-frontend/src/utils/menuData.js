@@ -85,13 +85,16 @@ export const menuData = [
       { id: 'customers', label: 'Customers', icon: Users, path: '/master-data/customers', permission: 'customers.view' },
       { id: 'suppliers', label: 'Suppliers', icon: Truck, path: '/master-data/suppliers', permission: 'suppliers.view' },
       { id: 'collectors', label: 'Collectors', icon: UserCheck, path: '/master-data/collectors', permission: 'collectors.view' },
-      { id: 'departments', label: 'Departments', icon: Building2, path: '/master-data/departments', permission: 'departments.view' },
-      { id: 'cash-accounts', label: 'Cash Accounts', icon: Wallet, path: '/master-data/cash-accounts', permission: 'cash-accounts.view' },
+      // departments.manage required for nav — staff keeps departments.view
+      // only as a silent API permission so the department dropdown on
+      // Expense/Budget forms is populated. They don't need the page itself.
+      { id: 'departments', label: 'Departments', icon: Building2, path: '/master-data/departments', permission: 'departments.manage' },
+      // Same reasoning as departments above — cash-accounts.view stays on
+      // staff for the dropdown source; .manage gates the sidebar link.
+      { id: 'cash-accounts', label: 'Cash Accounts', icon: Wallet, path: '/master-data/cash-accounts', permission: 'cash-accounts.manage' },
       { id: 'fixed-assets', label: 'Fixed Assets', icon: Boxes, path: '/master-data/fixed-assets', permission: 'fixed-assets.view' },
-      // New  -  ExpenseCategoryController/Service/Policy already existed on
-      // the backend with no frontend page anywhere; expense-categories.view
-      // matches the permission the route group already enforces.
-      { id: 'expense-categories', label: 'Expense Categories', icon: Tags, path: '/master-data/expense-categories', permission: 'expense-categories.view' },
+      // expense-categories.view kept on staff for dropdown; .manage gates nav.
+      { id: 'expense-categories', label: 'Expense Categories', icon: Tags, path: '/master-data/expense-categories', permission: 'expense-categories.manage' },
       { id: 'titles', label: 'Titles', icon: Briefcase, path: '/master-data/titles', permission: 'users.view' },
     ],
   },

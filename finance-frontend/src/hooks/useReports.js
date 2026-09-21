@@ -24,29 +24,56 @@ const EMPTY_DEFAULTS = {
  * today"), so those two are only ever fetched once and never refetched
  * on a period change, unlike the other three.
  */
+function buildQuery(config, filterParams) {
+  if (!config.usesPeriod) return ''
+  if (!filterParams) return ''
+  if (typeof filterParams === 'string') {
+    return `?period=${encodeURIComponent(filterParams)}`
+  }
+  const params = new URLSearchParams()
+  if (filterParams.startDate && filterParams.endDate) {
+    params.set('start_date', filterParams.startDate)
+    params.set('end_date', filterParams.endDate)
+  } else if (filterParams.period) {
+    params.set('period', filterParams.period)
+  }
+  if (filterParams.compare) {
+    params.set('compare', '1')
+    if (filterParams.compareMode) {
+      params.set('compare_mode', filterParams.compareMode)
+    }
+  }
+  const qs = params.toString()
+  return qs ? `?${qs}` : ''
+}
+
+function getCacheKey(config, filterParams) {
+  if (!config.usesPeriod) return '__static__'
+  if (!filterParams) return '__empty__'
+  if (typeof filterParams === 'string') return filterParams
+  return JSON.stringify(filterParams)
+}
+
 export function useReports() {
   const [data, setData] = useState({ ...EMPTY_DEFAULTS })
   const [loading, setLoading] = useState({})
   const [error, setError] = useState(null)
 
-  // Tracks which period each report's currently-cached data was fetched
-  // with, so switching period only refetches the reports that actually
-  // depend on it, and switching tabs never refetches data already in hand.
   const cachedPeriod = useRef({})
 
-  const fetchReport = useCallback(async (reportKey, period) => {
+  const fetchReport = useCallback(async (reportKey, filterParams) => {
     const config = ENDPOINTS[reportKey]
-    const cacheKey = config.usesPeriod ? period : '__static__'
+    const cacheKey = getCacheKey(config, filterParams)
 
     if (cachedPeriod.current[reportKey] === cacheKey) {
-      return // already have this exact (report, period) combination
+      return // already have this exact cached data
     }
 
     setLoading((prev) => ({ ...prev, [reportKey]: true }))
     setError(null)
     try {
-      const params = config.usesPeriod ? `?period=${encodeURIComponent(period)}` : ''
-      const res = await apiFetch(`${config.path}${params}`)
+      const qs = buildQuery(config, filterParams)
+      const res = await apiFetch(`${config.path}${qs}`)
       const json = await res.json()
       if (!res.ok || !json.success) throw new Error(json.message || `Failed to load ${reportKey}.`)
 
@@ -59,10 +86,9 @@ export function useReports() {
     }
   }, [])
 
-  // Ensures every report type is loaded for the given period  -  used by
-  // "Export All", which needs all five regardless of which tab is active.
-  const fetchAll = useCallback(async (period) => {
-    await Promise.all(Object.keys(ENDPOINTS).map((key) => fetchReport(key, period)))
+  // Ensures every report type is loaded for the given filter parameters
+  const fetchAll = useCallback(async (filterParams) => {
+    await Promise.all(Object.keys(ENDPOINTS).map((key) => fetchReport(key, filterParams)))
   }, [fetchReport])
 
   return { data, loading, error, fetchReport, fetchAll }

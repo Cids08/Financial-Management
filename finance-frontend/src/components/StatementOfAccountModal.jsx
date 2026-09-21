@@ -467,8 +467,8 @@ export default function StatementOfAccountModal({ open, onClose, fetchAgingSumma
         {/* Modal Header */}
         <div className="flex items-center justify-between border-b border-border px-6 py-4 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-500/15">
-              <Users size={18} className="text-indigo-600 dark:text-indigo-300" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15">
+              <Users size={18} className="text-primary-dark dark:text-primary" />
             </div>
             <div>
               <h2 className="text-base font-bold text-ink">Customer Aging & Statement of Account</h2>
@@ -497,7 +497,7 @@ export default function StatementOfAccountModal({ open, onClose, fetchAgingSumma
                     type="button"
                     onClick={handleBatchPrint}
                     disabled={loadingBatch || agingRows.length === 0}
-                    className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                    className="flex items-center gap-1.5 rounded-lg bg-primary hover:bg-primary-dark px-3 py-1.5 text-xs font-medium text-black transition-colors disabled:opacity-50"
                     title="Print SOA for all customers"
                   >
                     {loadingBatch ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}

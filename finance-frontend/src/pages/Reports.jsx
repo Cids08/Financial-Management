@@ -1,6 +1,7 @@
 import { Fragment, useMemo, useState, useEffect } from 'react'
 import {
   FileBarChart, TrendingUp, Wallet, Users, Truck, PiggyBank, Download, ChevronRight, Loader2,
+  Search, CalendarRange, ArrowUpRight, ArrowDownRight, GitCompare, RotateCcw, Check,
 } from 'lucide-react'
 import {
   ResponsiveContainer, BarChart, Bar, ComposedChart, Line, PieChart, Pie, Cell,
@@ -20,6 +21,7 @@ const INPUT = `h-9 px-3 rounded-lg border border-border bg-bg text-sm text-ink
   focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-150`
 
 const PERIODS = ['This Month', 'Last Month', 'This Quarter', 'This Year']
+const YEARS = ['2027', '2026', '2025', '2024', '2023', '2022', '2021', '2020']
 
 const REPORT_CARDS = [
   { key: 'income-statement', title: 'Income Statement', description: 'Revenue vs. expenses for the selected period.', icon: TrendingUp, iconColor: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-50 dark:bg-emerald-500/10' },
@@ -95,40 +97,82 @@ function ReportLoading() {
 
 const PRINT_STYLES = `
   * { box-sizing: border-box; }
-  body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #1a1a1a; padding: 48px; }
-  .letterhead { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; margin-bottom: 28px; }
-  .letterhead img { height: 56px; width: 56px; object-fit: contain; border-radius: 6px; }
-  .letterhead .company-name { font-size: 18px; font-weight: 700; margin: 0; }
-  .letterhead .company-meta { font-size: 11px; color: #666; margin: 2px 0 0; }
-  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1a1a1a; padding-bottom: 20px; margin-bottom: 24px; }
-  .header h1 { margin: 0 0 4px; font-size: 22px; }
-  .header p { margin: 0; color: #666; font-size: 14px; }
-  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-  th, td { padding: 10px 8px; border-bottom: 1px solid #eee; font-size: 13px; text-align: left; }
-  th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; color: #666; border-bottom: 2px solid #1a1a1a; }
-  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-  tr.section-heading td { background: #f7f7f7; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; }
-  tfoot td { border-top: 2px solid #1a1a1a; font-weight: 700; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; color: #1e293b; padding: 36px 44px; margin: 0; }
+  .letterhead { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; margin-bottom: 24px; }
+  .letterhead img { height: 52px; width: 52px; object-fit: contain; border-radius: 6px; }
+  .letterhead .company-name { font-size: 18px; font-weight: 700; margin: 0; color: #0f172a; }
+  .letterhead .company-meta { font-size: 11px; color: #64748b; margin: 2px 0 0; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0f172a; padding-bottom: 16px; margin-bottom: 20px; }
+  .header h1 { margin: 0 0 4px; font-size: 20px; color: #0f172a; }
+  .header p { margin: 0; color: #64748b; font-size: 13px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; table-layout: auto; }
+  th, td { padding: 9px 12px; border-bottom: 1px solid #e2e8f0; font-size: 12px; text-align: left; }
+  th { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #475569; border-bottom: 2px solid #0f172a; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  tr.section-heading td { background: #f8fafc; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: #334155; }
+  tfoot td { border-top: 2px solid #0f172a; font-weight: 700; }
   .positive { color: #059669; }
   .negative { color: #dc2626; }
-  .footer { margin-top: 32px; font-size: 12px; color: #999; text-align: center; }
+  .chart-card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 18px; margin: 16px 0 24px; background: #f8fafc; }
+  .chart-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #475569; margin-bottom: 12px; }
+  .badge-pill { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 600; font-family: monospace; white-space: nowrap; }
+  .badge-pos { background: #dcfce7; color: #15803d; }
+  .badge-neg { background: #fee2e2; color: #b91c1c; }
+  .footer { margin-top: 32px; font-size: 11px; color: #94a3b8; text-align: center; }
   .report-block { margin-top: 0; }
-  .report-block + .report-block { margin-top: 40px; }
-  .report-block h2 { font-size: 16px; margin: 0 0 4px; }
-  .report-block .block-sub { margin: 0 0 12px; font-size: 12px; color: #666; }
+  .report-block + .report-block { margin-top: 36px; }
+  .report-block h2 { font-size: 15px; margin: 0 0 4px; }
+  .report-block .block-sub { margin: 0 0 10px; font-size: 12px; color: #64748b; }
   @media print {
-    body { padding: 24px; }
-    /* Adjacent-sibling combinator, not :not(:first-child)  -  the previous
-       rule compared each .report-block against being the first child of
-       <body>, but .letterhead/.header always precede it there, so it
-       never matched and EVERY report (including the first) got forced
-       onto its own page, leaving page 1 almost entirely blank. This
-       version only matches a .report-block that directly follows
-       another .report-block  -  correctly "every report after the first",
-       regardless of what non-report elements come earlier in the body. */
+    body { padding: 20px; }
     .report-block + .report-block { page-break-before: always; }
   }
 `
+
+function generateComparativeBarSvg({ title, currentLabel, priorLabel, items }) {
+  if (!items || items.length === 0) return ''
+  const maxVal = Math.max(...items.flatMap((i) => [Math.abs(i.current || 0), Math.abs(i.prior || 0)]), 100)
+  const rowH = 50
+  const topPad = 48
+  const h = topPad + (items.length * rowH) + 12
+  const barMaxW = 200
+  const startX = 175
+
+  const rows = items.map((item, idx) => {
+    const y = topPad + (idx * rowH)
+    const currW = Math.max(3, Math.round((Math.abs(item.current || 0) / maxVal) * barMaxW))
+    const priorW = Math.max(3, Math.round((Math.abs(item.prior || 0) / maxVal) * barMaxW))
+    const currFill = item.current >= 0 ? '#10b981' : '#ef4444'
+
+    return `
+      <text x="165" y="${y + 16}" text-anchor="end" font-size="11" font-weight="600" fill="#334155">${item.label}</text>
+      <!-- Current bar -->
+      <rect x="${startX}" y="${y}" width="${currW}" height="12" rx="2" fill="${currFill}" />
+      <text x="${startX + currW + 8}" y="${y + 10}" font-size="10" font-weight="700" fill="#1e293b">${formatCurrencyRaw(item.current)}</text>
+      <!-- Prior bar -->
+      <rect x="${startX}" y="${y + 16}" width="${priorW}" height="12" rx="2" fill="#94a3b8" />
+      <text x="${startX + priorW + 8}" y="${y + 26}" font-size="10" fill="#64748b">${formatCurrencyRaw(item.prior)}</text>
+    `
+  }).join('')
+
+  return `
+    <div class="chart-card">
+      <div class="chart-title">${title}</div>
+      <svg width="100%" height="${h}" viewBox="0 0 680 ${h}" xmlns="http://www.w3.org/2000/svg" style="display:block;">
+        <!-- Two-row non-colliding legend -->
+        <g transform="translate(${startX}, 8)">
+          <rect x="0" y="0" width="10" height="10" rx="2" fill="#10b981" />
+          <text x="16" y="9" font-size="10" font-weight="600" fill="#334155">Current: ${currentLabel}</text>
+        </g>
+        <g transform="translate(${startX}, 24)">
+          <rect x="0" y="0" width="10" height="10" rx="2" fill="#94a3b8" />
+          <text x="16" y="9" font-size="10" font-weight="600" fill="#64748b">Past: ${priorLabel}</text>
+        </g>
+        ${rows}
+      </svg>
+    </div>
+  `
+}
 
 // Resolves once the image has actually finished downloading (or after a
 // failure/timeout  -  never blocks the export indefinitely on a bad URL).
@@ -220,12 +264,27 @@ function agingRowHtml(label, r) {
 
 export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
   const [activeReport, setActiveReport] = useState('income-statement')
-  const [period, setPeriod] = useState('This Quarter')
   const [exporting, setExporting] = useState(false)
 
-  // Client-side paging for the report body tables  -  one shared page slice
-  // is active at a time (only the current report renders), so a single
-  // REPORT_PAGE_SIZE + one page state is enough. Reset when the tab changes.
+  // Filter modes: 'preset' | 'year' | 'custom'
+  const [filterMode, setFilterMode] = useState('preset')
+  const [selectedPeriod, setSelectedPeriod] = useState('This Quarter')
+  const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()))
+  const [customStartDate, setCustomStartDate] = useState('')
+  const [customEndDate, setCustomEndDate] = useState('')
+  const [compareEnabled, setCompareEnabled] = useState(false)
+  const [compareMode, setCompareMode] = useState('prior_period') // 'prior_period' | 'prior_year'
+
+  // The active applied filters that determine what data is fetched from the API
+  const [appliedFilters, setAppliedFilters] = useState({
+    period: 'This Quarter',
+    startDate: '',
+    endDate: '',
+    compare: false,
+    compareMode: 'prior_period',
+  })
+
+  // Client-side paging for the report body tables
   const REPORT_PAGE_SIZE = 10
   const [reportPage, setReportPage] = useState(1)
   const reportStart = (reportPage - 1) * REPORT_PAGE_SIZE
@@ -237,31 +296,37 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
 
   const { data, loading, error, fetchReport, fetchAll } = useReports()
 
-  // Powers the letterhead (logo + company name) on printed/exported
-  // reports. ASSUMPTION: SettingsController returns { companyName,
-  // companyLogoUrl, companyAddress } as absolute-URL camelCase, same
-  // convention as ProfileResource's avatarUrl. Adjust the three keys
-  // below if your actual SettingsResource differs.
-  // Same source Settings.jsx itself uses to display/edit this data  -  no
-  // separate fetch or key-name guessing needed. CompanyProvider is
-  // mounted at the layout level (same pattern as ProfileProvider), so
-  // this is normally already loaded well before anyone reaches this page.
   const { name: companyName, logoUrl: companyLogoUrl, address: companyAddress, loading: companyLoading } = useCompany()
 
-  // Re-render when the privacy flag flips so formatCurrency re-reads the module flag.
   usePrivacy()
 
   const company = useMemo(() => (
     companyName ? { name: companyName, logoUrl: companyLogoUrl, address: companyAddress } : null
   ), [companyName, companyLogoUrl, companyAddress])
 
-  // Fetch whenever the active tab or period changes  -  the hook itself
-  // skips the network call if that exact (report, period) combination
-  // is already cached, so flipping between tabs you've already visited
-  // this period is instant.
+  // Fetch when active tab or applied filters change
   useEffect(() => {
-    fetchReport(activeReport, period)
-  }, [activeReport, period, fetchReport])
+    fetchReport(activeReport, appliedFilters)
+  }, [activeReport, appliedFilters, fetchReport])
+
+  const handleApplyFilter = () => {
+    let newFilter = {
+      period: '',
+      startDate: '',
+      endDate: '',
+      compare: compareEnabled,
+      compareMode,
+    }
+    if (filterMode === 'preset') {
+      newFilter.period = selectedPeriod
+    } else if (filterMode === 'year') {
+      newFilter.period = selectedYear
+    } else if (filterMode === 'custom') {
+      newFilter.startDate = customStartDate
+      newFilter.endDate = customEndDate
+    }
+    setAppliedFilters(newFilter)
+  }
 
   const activeCard = REPORT_CARDS.find((c) => c.key === activeReport)
   const isActiveLoading = !!loading[activeReport]
@@ -272,36 +337,101 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
   const apAging = data['ap-aging']
   const budgetVsActual = data['budget-vs-actual']
 
+  const comparisonInfo = incomeStatement?.comparison
+  const isComparing = !!appliedFilters.compare
+
+  const activePeriodLabel = useMemo(() => {
+    if (appliedFilters.startDate && appliedFilters.endDate) {
+      return `${appliedFilters.startDate} – ${appliedFilters.endDate}`
+    }
+    return appliedFilters.period || selectedPeriod
+  }, [appliedFilters, selectedPeriod])
+
   const incomeTotals = useMemo(() => {
-    const totalRevenue = incomeStatement.revenue.reduce((s, r) => s + r.amount, 0)
-    const totalExpenses = incomeStatement.expenses.reduce((s, r) => s + r.amount, 0)
-    return { totalRevenue, totalExpenses, netIncome: totalRevenue - totalExpenses }
+    const totalRevenue = (incomeStatement.revenue || []).reduce((s, r) => s + (Number(r.amount) || 0), 0)
+    const totalExpenses = (incomeStatement.expenses || []).reduce((s, r) => s + (Number(r.amount) || 0), 0)
+    const priorRevenue = (incomeStatement.revenue || []).reduce((s, r) => s + (Number(r.prior_amount) || 0), 0)
+    const priorExpenses = (incomeStatement.expenses || []).reduce((s, r) => s + (Number(r.prior_amount) || 0), 0)
+    const netIncome = totalRevenue - totalExpenses
+    const priorNetIncome = priorRevenue - priorExpenses
+    const netVariance = netIncome - priorNetIncome
+    const netPct = priorNetIncome !== 0 ? ((netVariance / Math.abs(priorNetIncome)) * 100).toFixed(1) : null
+
+    return {
+      totalRevenue,
+      totalExpenses,
+      netIncome,
+      priorRevenue,
+      priorExpenses,
+      priorNetIncome,
+      netVariance,
+      netPct,
+    }
   }, [incomeStatement])
 
-  // Income statement is rendered as ONE table with a Revenue section and an
-  // Expenses section, so its rows are paginated as a single combined list to
-  // keep the section header + row slice in sync with the shared Pagination.
   const incomeRows = useMemo(() => [
-    ...incomeStatement.revenue.map((r) => ({ section: 'Revenue', account: r.account, amount: r.amount })),
-    ...incomeStatement.expenses.map((r) => ({ section: 'Expenses', account: r.account, amount: r.amount })),
+    ...(incomeStatement.revenue || []).map((r) => ({
+      section: 'Revenue',
+      account: r.account,
+      amount: r.amount,
+      prior_amount: r.prior_amount,
+      variance: r.variance,
+      pct_change: r.pct_change,
+    })),
+    ...(incomeStatement.expenses || []).map((r) => ({
+      section: 'Expenses',
+      account: r.account,
+      amount: r.amount,
+      prior_amount: r.prior_amount,
+      variance: r.variance,
+      pct_change: r.pct_change,
+    })),
   ], [incomeStatement])
 
   const cashFlowTotals = useMemo(() => {
-    const inflow = cashFlow.reduce((s, r) => s + r.inflow, 0)
-    const outflow = cashFlow.reduce((s, r) => s + r.outflow, 0)
-    return { inflow, outflow, net: inflow - outflow }
+    const list = Array.isArray(cashFlow) ? cashFlow : []
+    const inflow = list.reduce((s, r) => s + (Number(r.inflow) || 0), 0)
+    const outflow = list.reduce((s, r) => s + (Number(r.outflow) || 0), 0)
+    const priorInflow = list.reduce((s, r) => s + (Number(r.prior_inflow) || 0), 0)
+    const priorOutflow = list.reduce((s, r) => s + (Number(r.prior_outflow) || 0), 0)
+    const net = inflow - outflow
+    const priorNet = priorInflow - priorOutflow
+    const netVariance = net - priorNet
+    const netPct = priorNet !== 0 ? ((netVariance / Math.abs(priorNet)) * 100).toFixed(1) : null
+
+    return {
+      inflow,
+      outflow,
+      net,
+      priorInflow,
+      priorOutflow,
+      priorNet,
+      netVariance,
+      netPct,
+    }
   }, [cashFlow])
 
-  const arTotal = useMemo(() => arAging.reduce((s, r) => s + r.current + r.d1_30 + r.d31_60 + r.d61_90 + r.over90, 0), [arAging])
-  const apTotal = useMemo(() => apAging.reduce((s, r) => s + r.current + r.d1_30 + r.d31_60 + r.d61_90 + r.over90, 0), [apAging])
+  const arTotal = useMemo(() => (Array.isArray(arAging) ? arAging : []).reduce((s, r) => s + r.current + r.d1_30 + r.d31_60 + r.d61_90 + r.over90, 0), [arAging])
+  const apTotal = useMemo(() => (Array.isArray(apAging) ? apAging : []).reduce((s, r) => s + r.current + r.d1_30 + r.d31_60 + r.d61_90 + r.over90, 0), [apAging])
 
   const budgetTotals = useMemo(() => {
-    const allocated = budgetVsActual.reduce((s, r) => s + r.allocated, 0)
-    const actual = budgetVsActual.reduce((s, r) => s + r.actual, 0)
-    return { allocated, actual, variance: allocated - actual }
+    const list = Array.isArray(budgetVsActual) ? budgetVsActual : []
+    const allocated = list.reduce((s, r) => s + (Number(r.allocated) || 0), 0)
+    const actual = list.reduce((s, r) => s + (Number(r.actual) || 0), 0)
+    const priorActual = list.reduce((s, r) => s + (Number(r.prior_actual) || 0), 0)
+    const variance = allocated - actual
+    const actualDiff = actual - priorActual
+
+    return {
+      allocated,
+      actual,
+      variance,
+      priorActual,
+      actualDiff,
+    }
   }, [budgetVsActual])
 
-  // -- Chart data, derived from the same source data as the tables above --
+  // -- Chart data --
 
   const incomeChartData = useMemo(() => ([
     { name: 'Revenue', value: incomeTotals.totalRevenue, fill: CHART_COLORS.revenue },
@@ -309,74 +439,232 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
     { name: 'Net Income', value: incomeTotals.netIncome, fill: CHART_COLORS.net },
   ]), [incomeTotals])
 
-  const expensePieData = useMemo(() => incomeStatement.expenses.map((e) => ({
+  const incomeCompareChartData = useMemo(() => ([
+    { name: 'Revenue', Current: incomeTotals.totalRevenue, Past: incomeTotals.priorRevenue },
+    { name: 'Expenses', Current: incomeTotals.totalExpenses, Past: incomeTotals.priorExpenses },
+    { name: 'Net Income', Current: incomeTotals.netIncome, Past: incomeTotals.priorNetIncome },
+  ]), [incomeTotals])
+
+  const expensePieData = useMemo(() => (incomeStatement.expenses || []).map((e) => ({
     name: e.account.replace(/^\S+\s*—\s*/, ''),
     value: e.amount,
   })), [incomeStatement])
 
-  const cashFlowChartData = useMemo(() => cashFlow.map((r) => ({
+  const cashFlowChartData = useMemo(() => (Array.isArray(cashFlow) ? cashFlow : []).map((r) => ({
     name: r.account.split('—')[1]?.trim() ?? r.account,
     inflow: r.inflow,
     outflow: r.outflow,
     net: r.inflow - r.outflow,
+    priorNet: r.prior_net ?? 0,
   })), [cashFlow])
 
   const arBucketTotals = useMemo(() => AGING_BUCKETS.map((b) => ({
     name: b.name,
-    value: arAging.reduce((s, r) => s + r[b.key], 0),
+    value: (Array.isArray(arAging) ? arAging : []).reduce((s, r) => s + r[b.key], 0),
     color: b.color,
   })), [arAging])
 
   const apBucketTotals = useMemo(() => AGING_BUCKETS.map((b) => ({
     name: b.name,
-    value: apAging.reduce((s, r) => s + r[b.key], 0),
+    value: (Array.isArray(apAging) ? apAging : []).reduce((s, r) => s + r[b.key], 0),
     color: b.color,
   })), [apAging])
 
-  const budgetPieData = useMemo(() => budgetVsActual.map((r) => ({
+  const budgetPieData = useMemo(() => (Array.isArray(budgetVsActual) ? budgetVsActual : []).map((r) => ({
     name: r.department,
     value: r.allocated,
   })), [budgetVsActual])
 
-  // -- Report body builders: one per report type, reused by both the single-report export and the "export all" package --
+  // -- Report body builders --
 
-  const buildIncomeStatementTable = () => `
-    <table>
-      <tbody>
-        <tr class="section-heading"><td colspan="2">Revenue</td></tr>
-        ${incomeStatement.revenue.map((r) => `<tr><td>${r.account}</td><td class="num">${formatCurrencyRaw(r.amount)}</td></tr>`).join('')}
-        <tr class="section-heading"><td colspan="2">Expenses</td></tr>
-        ${incomeStatement.expenses.map((r) => `<tr><td>${r.account}</td><td class="num">${formatCurrencyRaw(r.amount)}</td></tr>`).join('')}
-      </tbody>
-      <tfoot>
-        <tr><td>Total Revenue</td><td class="num">${formatCurrencyRaw(incomeTotals.totalRevenue)}</td></tr>
-        <tr><td>Total Expenses</td><td class="num">${formatCurrencyRaw(incomeTotals.totalExpenses)}</td></tr>
-        <tr><td>Net Income</td><td class="num ${incomeTotals.netIncome >= 0 ? 'positive' : 'negative'}">${formatCurrencyRaw(incomeTotals.netIncome)}</td></tr>
-      </tfoot>
-    </table>
-  `
+  const buildIncomeStatementTable = () => {
+    const isComp = !!appliedFilters.compare
+    const currLbl = comparisonInfo?.current_label || activePeriodLabel
+    const priorLbl = comparisonInfo?.prior_label || (appliedFilters.compareMode === 'prior_year' ? 'Prior Year' : 'Prior Period')
 
-  const buildCashFlowTable = () => `
-    <table>
-      <thead>
-        <tr><th>Cash Account</th><th class="num">Inflow</th><th class="num">Outflow</th><th class="num">Net Change</th></tr>
-      </thead>
-      <tbody>
-        ${cashFlow.map((r) => {
-          const net = r.inflow - r.outflow
-          return `<tr><td>${r.account}</td><td class="num">${formatCurrencyRaw(r.inflow)}</td><td class="num">${formatCurrencyRaw(r.outflow)}</td><td class="num ${net >= 0 ? 'positive' : 'negative'}">${formatCurrencyRaw(net)}</td></tr>`
-        }).join('')}
-      </tbody>
-      <tfoot>
-        <tr>
-          <td>Totals</td>
-          <td class="num">${formatCurrencyRaw(cashFlowTotals.inflow)}</td>
-          <td class="num">${formatCurrencyRaw(cashFlowTotals.outflow)}</td>
-          <td class="num ${cashFlowTotals.net >= 0 ? 'positive' : 'negative'}">${formatCurrencyRaw(cashFlowTotals.net)}</td>
-        </tr>
-      </tfoot>
-    </table>
-  `
+    const svgChart = isComp
+      ? generateComparativeBarSvg({
+          title: 'Comparative Trends (Current vs. Past)',
+          currentLabel: currLbl,
+          priorLabel: priorLbl,
+          items: [
+            { label: 'Total Revenue', current: incomeTotals.totalRevenue, prior: incomeTotals.priorRevenue },
+            { label: 'Total Expenses', current: incomeTotals.totalExpenses, prior: incomeTotals.priorExpenses },
+            { label: 'Net Income', current: incomeTotals.netIncome, prior: incomeTotals.priorNetIncome },
+          ],
+        })
+      : ''
+
+    if (!isComp) {
+      return `
+        <table>
+          <tbody>
+            <tr class="section-heading"><td colspan="2">Revenue</td></tr>
+            ${(incomeStatement.revenue || []).map((r) => `<tr><td>${r.account}</td><td class="num">${formatCurrencyRaw(r.amount)}</td></tr>`).join('')}
+            <tr class="section-heading"><td colspan="2">Expenses</td></tr>
+            ${(incomeStatement.expenses || []).map((r) => `<tr><td>${r.account}</td><td class="num">${formatCurrencyRaw(r.amount)}</td></tr>`).join('')}
+          </tbody>
+          <tfoot>
+            <tr><td>Total Revenue</td><td class="num">${formatCurrencyRaw(incomeTotals.totalRevenue)}</td></tr>
+            <tr><td>Total Expenses</td><td class="num">${formatCurrencyRaw(incomeTotals.totalExpenses)}</td></tr>
+            <tr><td>Net Income</td><td class="num ${incomeTotals.netIncome >= 0 ? 'positive' : 'negative'}">${formatCurrencyRaw(incomeTotals.netIncome)}</td></tr>
+          </tfoot>
+        </table>
+      `
+    }
+
+    return `
+      ${svgChart}
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 32%;">Account</th>
+            <th class="num" style="width: 20%;">Current Period</th>
+            <th class="num" style="width: 20%;">Past Period</th>
+            <th class="num" style="width: 15%;">Variance</th>
+            <th class="num" style="width: 13%;">% Change</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="section-heading"><td colspan="5">Revenue</td></tr>
+          ${(incomeStatement.revenue || []).map((r) => {
+            const varCls = r.variance >= 0 ? 'positive' : 'negative'
+            const pctText = r.pct_change != null ? `${r.pct_change >= 0 ? '+' : ''}${r.pct_change}%` : '—'
+            return `<tr>
+              <td>${r.account}</td>
+              <td class="num">${formatCurrencyRaw(r.amount)}</td>
+              <td class="num">${formatCurrencyRaw(r.prior_amount)}</td>
+              <td class="num ${varCls}">${r.variance >= 0 ? '+' : ''}${formatCurrencyRaw(r.variance)}</td>
+              <td class="num ${varCls}">${pctText}</td>
+            </tr>`
+          }).join('')}
+          <tr class="section-heading"><td colspan="5">Expenses</td></tr>
+          ${(incomeStatement.expenses || []).map((r) => {
+            const varCls = r.variance <= 0 ? 'positive' : 'negative'
+            const pctText = r.pct_change != null ? `${r.pct_change >= 0 ? '+' : ''}${r.pct_change}%` : '—'
+            return `<tr>
+              <td>${r.account}</td>
+              <td class="num">${formatCurrencyRaw(r.amount)}</td>
+              <td class="num">${formatCurrencyRaw(r.prior_amount)}</td>
+              <td class="num ${varCls}">${r.variance >= 0 ? '+' : ''}${formatCurrencyRaw(r.variance)}</td>
+              <td class="num ${varCls}">${pctText}</td>
+            </tr>`
+          }).join('')}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td>Total Revenue</td>
+            <td class="num">${formatCurrencyRaw(incomeTotals.totalRevenue)}</td>
+            <td class="num">${formatCurrencyRaw(incomeTotals.priorRevenue)}</td>
+            <td class="num ${incomeTotals.totalRevenue - incomeTotals.priorRevenue >= 0 ? 'positive' : 'negative'}">${incomeTotals.totalRevenue - incomeTotals.priorRevenue >= 0 ? '+' : ''}${formatCurrencyRaw(incomeTotals.totalRevenue - incomeTotals.priorRevenue)}</td>
+            <td class="num">${incomeTotals.priorRevenue ? `${(((incomeTotals.totalRevenue - incomeTotals.priorRevenue) / incomeTotals.priorRevenue) * 100).toFixed(1)}%` : '—'}</td>
+          </tr>
+          <tr>
+            <td>Total Expenses</td>
+            <td class="num">${formatCurrencyRaw(incomeTotals.totalExpenses)}</td>
+            <td class="num">${formatCurrencyRaw(incomeTotals.priorExpenses)}</td>
+            <td class="num ${incomeTotals.totalExpenses - incomeTotals.priorExpenses <= 0 ? 'positive' : 'negative'}">${incomeTotals.totalExpenses - incomeTotals.priorExpenses >= 0 ? '+' : ''}${formatCurrencyRaw(incomeTotals.totalExpenses - incomeTotals.priorExpenses)}</td>
+            <td class="num">${incomeTotals.priorExpenses ? `${(((incomeTotals.totalExpenses - incomeTotals.priorExpenses) / incomeTotals.priorExpenses) * 100).toFixed(1)}%` : '—'}</td>
+          </tr>
+          <tr>
+            <td>Net Income</td>
+            <td class="num ${incomeTotals.netIncome >= 0 ? 'positive' : 'negative'}">${formatCurrencyRaw(incomeTotals.netIncome)}</td>
+            <td class="num">${formatCurrencyRaw(incomeTotals.priorNetIncome)}</td>
+            <td class="num ${incomeTotals.netVariance >= 0 ? 'positive' : 'negative'}">${incomeTotals.netVariance >= 0 ? '+' : ''}${formatCurrencyRaw(incomeTotals.netVariance)}</td>
+            <td class="num ${incomeTotals.netVariance >= 0 ? 'positive' : 'negative'}">${incomeTotals.netPct != null ? `${incomeTotals.netPct}%` : '—'}</td>
+          </tr>
+        </tfoot>
+      </table>
+    `
+  }
+
+  const buildCashFlowTable = () => {
+    const isComp = !!appliedFilters.compare
+    const currLbl = activePeriodLabel
+    const priorLbl = appliedFilters.compareMode === 'prior_year' ? 'Prior Year' : 'Prior Period'
+
+    const svgChart = isComp
+      ? generateComparativeBarSvg({
+          title: 'Cash Flow Comparison (Collections vs. Disbursements)',
+          currentLabel: currLbl,
+          priorLabel: priorLbl,
+          items: [
+            { label: 'Total Inflow', current: cashFlowTotals.inflow, prior: cashFlowTotals.priorInflow },
+            { label: 'Total Outflow', current: cashFlowTotals.outflow, prior: cashFlowTotals.priorOutflow },
+            { label: 'Net Cash Change', current: cashFlowTotals.net, prior: cashFlowTotals.priorNet },
+          ],
+        })
+      : ''
+
+    if (!isComp) {
+      return `
+        <table>
+          <thead>
+            <tr><th>Cash Account</th><th class="num">Inflow</th><th class="num">Outflow</th><th class="num">Net Change</th></tr>
+          </thead>
+          <tbody>
+            ${(Array.isArray(cashFlow) ? cashFlow : []).map((r) => {
+              const net = r.inflow - r.outflow
+              return `<tr><td>${r.account}</td><td class="num">${formatCurrencyRaw(r.inflow)}</td><td class="num">${formatCurrencyRaw(r.outflow)}</td><td class="num ${net >= 0 ? 'positive' : 'negative'}">${formatCurrencyRaw(net)}</td></tr>`
+            }).join('')}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td>Totals</td>
+              <td class="num">${formatCurrencyRaw(cashFlowTotals.inflow)}</td>
+              <td class="num">${formatCurrencyRaw(cashFlowTotals.outflow)}</td>
+              <td class="num ${cashFlowTotals.net >= 0 ? 'positive' : 'negative'}">${formatCurrencyRaw(cashFlowTotals.net)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      `
+    }
+
+    return `
+      ${svgChart}
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 28%;">Cash Account</th>
+            <th class="num" style="width: 14%;">Current Inflow</th>
+            <th class="num" style="width: 14%;">Current Outflow</th>
+            <th class="num" style="width: 14%;">Current Net</th>
+            <th class="num" style="width: 14%;">Past Net</th>
+            <th class="num" style="width: 16%;">Variance</th>
+            <th class="num" style="width: 10%;">% Change</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${(Array.isArray(cashFlow) ? cashFlow : []).map((r) => {
+            const net = r.net != null ? r.net : (r.inflow - r.outflow)
+            const priorNet = r.prior_net != null ? r.prior_net : 0
+            const varNet = r.variance_net != null ? r.variance_net : (net - priorNet)
+            const pct = r.pct_change != null ? `${r.pct_change >= 0 ? '+' : ''}${r.pct_change}%` : '—'
+            return `<tr>
+              <td>${r.account}</td>
+              <td class="num">${formatCurrencyRaw(r.inflow)}</td>
+              <td class="num">${formatCurrencyRaw(r.outflow)}</td>
+              <td class="num ${net >= 0 ? 'positive' : 'negative'}">${formatCurrencyRaw(net)}</td>
+              <td class="num">${formatCurrencyRaw(priorNet)}</td>
+              <td class="num ${varNet >= 0 ? 'positive' : 'negative'}">${varNet >= 0 ? '+' : ''}${formatCurrencyRaw(varNet)}</td>
+              <td class="num">${pct}</td>
+            </tr>`
+          }).join('')}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td>Totals</td>
+            <td class="num">${formatCurrencyRaw(cashFlowTotals.inflow)}</td>
+            <td class="num">${formatCurrencyRaw(cashFlowTotals.outflow)}</td>
+            <td class="num ${cashFlowTotals.net >= 0 ? 'positive' : 'negative'}">${formatCurrencyRaw(cashFlowTotals.net)}</td>
+            <td class="num">${formatCurrencyRaw(cashFlowTotals.priorNet)}</td>
+            <td class="num ${cashFlowTotals.netVariance >= 0 ? 'positive' : 'negative'}">${cashFlowTotals.netVariance >= 0 ? '+' : ''}${formatCurrencyRaw(cashFlowTotals.netVariance)}</td>
+            <td class="num">${cashFlowTotals.netPct != null ? `${cashFlowTotals.netPct}%` : '—'}</td>
+          </tr>
+        </tfoot>
+      </table>
+    `
+  }
 
   const buildARAgingTable = () => `
     <table>
@@ -384,7 +672,7 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
         <tr><th>Customer</th><th class="num">Current</th><th class="num">1-30 Days</th><th class="num">31-60 Days</th><th class="num">61-90 Days</th><th class="num">90+ Days</th></tr>
       </thead>
       <tbody>
-        ${arAging.map((r) => agingRowHtml(r.customer, r)).join('')}
+        ${(Array.isArray(arAging) ? arAging : []).map((r) => agingRowHtml(r.customer, r)).join('')}
       </tbody>
       <tfoot>
         <tr><td colspan="5">Total Outstanding</td><td class="num">${formatCurrencyRaw(arTotal)}</td></tr>
@@ -398,7 +686,7 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
         <tr><th>Supplier</th><th class="num">Current</th><th class="num">1-30 Days</th><th class="num">31-60 Days</th><th class="num">61-90 Days</th><th class="num">90+ Days</th></tr>
       </thead>
       <tbody>
-        ${apAging.map((r) => agingRowHtml(r.supplier, r)).join('')}
+        ${(Array.isArray(apAging) ? apAging : []).map((r) => agingRowHtml(r.supplier, r)).join('')}
       </tbody>
       <tfoot>
         <tr><td colspan="5">Total Outstanding</td><td class="num">${formatCurrencyRaw(apTotal)}</td></tr>
@@ -406,28 +694,88 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
     </table>
   `
 
-  const buildBudgetTable = () => `
-    <table>
-      <thead>
-        <tr><th>Department</th><th class="num">Allocated Budget</th><th class="num">Actual Spend</th><th class="num">Variance</th></tr>
-      </thead>
-      <tbody>
-        ${budgetVsActual.map((r) => {
-          const variance = r.allocated - r.actual
-          const label = variance >= 0 ? `${formatCurrencyRaw(variance)} under` : `${formatCurrencyRaw(Math.abs(variance))} over`
-          return `<tr><td>${r.department}</td><td class="num">${formatCurrencyRaw(r.allocated)}</td><td class="num">${formatCurrencyRaw(r.actual)}</td><td class="num ${variance >= 0 ? 'positive' : 'negative'}">${label}</td></tr>`
-        }).join('')}
-      </tbody>
-      <tfoot>
-        <tr>
-          <td>Totals</td>
-          <td class="num">${formatCurrencyRaw(budgetTotals.allocated)}</td>
-          <td class="num">${formatCurrencyRaw(budgetTotals.actual)}</td>
-          <td class="num ${budgetTotals.variance >= 0 ? 'positive' : 'negative'}">${budgetTotals.variance >= 0 ? formatCurrencyRaw(budgetTotals.variance) + ' under' : formatCurrencyRaw(Math.abs(budgetTotals.variance)) + ' over'}</td>
-        </tr>
-      </tfoot>
-    </table>
-  `
+  const buildBudgetTable = () => {
+    const isComp = !!appliedFilters.compare
+    const list = Array.isArray(budgetVsActual) ? budgetVsActual : []
+
+    const svgChart = isComp
+      ? generateComparativeBarSvg({
+          title: 'Department Spend Trends (Current vs. Past Year)',
+          currentLabel: 'Current Spend',
+          priorLabel: 'Past Spend',
+          items: list.map((r) => ({
+            label: r.department,
+            current: r.actual,
+            prior: r.prior_actual || 0,
+          })).slice(0, 6),
+        })
+      : ''
+
+    if (!isComp) {
+      return `
+        <table>
+          <thead>
+            <tr><th>Department</th><th class="num">Allocated Budget</th><th class="num">Actual Spend</th><th class="num">Variance</th></tr>
+          </thead>
+          <tbody>
+            ${list.map((r) => {
+              const variance = r.allocated - r.actual
+              const label = variance >= 0 ? `${formatCurrencyRaw(variance)} under` : `${formatCurrencyRaw(Math.abs(variance))} over`
+              return `<tr><td>${r.department}</td><td class="num">${formatCurrencyRaw(r.allocated)}</td><td class="num">${formatCurrencyRaw(r.actual)}</td><td class="num ${variance >= 0 ? 'positive' : 'negative'}">${label}</td></tr>`
+            }).join('')}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td>Totals</td>
+              <td class="num">${formatCurrencyRaw(budgetTotals.allocated)}</td>
+              <td class="num">${formatCurrencyRaw(budgetTotals.actual)}</td>
+              <td class="num ${budgetTotals.variance >= 0 ? 'positive' : 'negative'}">${budgetTotals.variance >= 0 ? formatCurrencyRaw(budgetTotals.variance) + ' under' : formatCurrencyRaw(Math.abs(budgetTotals.variance)) + ' over'}</td>
+            </tr>
+          </tfoot>
+        </table>
+      `
+    }
+
+    return `
+      ${svgChart}
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 28%;">Department</th>
+            <th class="num" style="width: 18%;">Allocated Budget</th>
+            <th class="num" style="width: 18%;">Current Spend</th>
+            <th class="num" style="width: 18%;">Past Spend</th>
+            <th class="num" style="width: 18%;">Spend Difference</th>
+            <th class="num" style="width: 10%;">% Change</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${list.map((r) => {
+            const actualDiff = r.actual_diff != null ? r.actual_diff : (r.actual - (r.prior_actual || 0))
+            const pct = r.pct_change != null ? `${r.pct_change >= 0 ? '+' : ''}${r.pct_change}%` : '—'
+            return `<tr>
+              <td>${r.department}</td>
+              <td class="num">${formatCurrencyRaw(r.allocated)}</td>
+              <td class="num">${formatCurrencyRaw(r.actual)}</td>
+              <td class="num">${formatCurrencyRaw(r.prior_actual)}</td>
+              <td class="num ${actualDiff <= 0 ? 'positive' : 'negative'}">${actualDiff <= 0 ? '' : '+'}${formatCurrencyRaw(actualDiff)}</td>
+              <td class="num">${pct}</td>
+            </tr>`
+          }).join('')}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td>Totals</td>
+            <td class="num">${formatCurrencyRaw(budgetTotals.allocated)}</td>
+            <td class="num">${formatCurrencyRaw(budgetTotals.actual)}</td>
+            <td class="num">${formatCurrencyRaw(budgetTotals.priorActual)}</td>
+            <td class="num ${budgetTotals.actualDiff <= 0 ? 'positive' : 'negative'}">${budgetTotals.actualDiff <= 0 ? '' : '+'}${formatCurrencyRaw(budgetTotals.actualDiff)}</td>
+            <td class="num">${budgetTotals.priorActual ? `${(((budgetTotals.actual - budgetTotals.priorActual) / budgetTotals.priorActual) * 100).toFixed(1)}%` : '—'}</td>
+          </tr>
+        </tfoot>
+      </table>
+    `
+  }
 
   const REPORT_BUILDERS = {
     'income-statement': { title: 'Income Statement', table: buildIncomeStatementTable },
@@ -437,22 +785,19 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
     'budget-vs-actual': { title: 'Budget vs. Actual', table: buildBudgetTable },
   }
 
-  // Exports just the report currently selected on screen  -  its data is
-  // already loaded since it's the active tab.
   const handleExportActive = async () => {
     const { title: reportTitle, table } = REPORT_BUILDERS[activeReport]
     await preloadImage(company?.logoUrl)
-    printReport(reportTitle, `Period: ${period}`, table(), company)
+    const sub = isComparing
+      ? `Period: ${activePeriodLabel} (Compared to ${appliedFilters.compareMode === 'prior_year' ? 'Prior Year' : 'Prior Period'})`
+      : `Period: ${activePeriodLabel}`
+    printReport(reportTitle, sub, table(), company)
   }
 
-  // Exports all 5 reports as one document  -  has to ensure every report's
-  // data is actually loaded first (not just whichever tab is active),
-  // since the person may never have clicked some of these tabs this
-  // session.
   const handleExportAll = async () => {
     setExporting(true)
     try {
-      await Promise.all([fetchAll(period), preloadImage(company?.logoUrl)])
+      await Promise.all([fetchAll(appliedFilters), preloadImage(company?.logoUrl)])
       const body = REPORT_CARDS.map((card) => `
         <div class="report-block">
           <h2>${card.title}</h2>
@@ -460,7 +805,10 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
           ${REPORT_BUILDERS[card.key].table()}
         </div>
       `).join('')
-      printReport('Financial Reports Package', `Period: ${period}  -  All Reports`, body, company)
+      const sub = isComparing
+        ? `Period: ${activePeriodLabel} (Compared to ${appliedFilters.compareMode === 'prior_year' ? 'Prior Year' : 'Prior Period'}) — All Reports`
+        : `Period: ${activePeriodLabel} — All Reports`
+      printReport('Financial Reports Package', sub, body, company)
     } finally {
       setExporting(false)
     }
@@ -472,20 +820,152 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
     <div className="space-y-5 animate-fadeIn">
       <Breadcrumb items={crumbs} />
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight text-ink">{title}</h1>
-          <p className="mt-1 text-xs text-muted">
-            Financial statements assembled from posted Collections, Disbursements, Budgets, and Expenses across the General Ledger.
-          </p>
+      <div>
+        <h1 className="text-xl font-bold tracking-tight text-ink">{title}</h1>
+        <p className="mt-1 text-xs text-muted">
+          Financial statements assembled from posted Collections, Disbursements, Budgets, and Expenses across the General Ledger.
+        </p>
+      </div>
+
+      {/* Search & Period Filter Toolbar */}
+      <div className={`${PANEL} p-3.5 flex flex-col gap-3`}>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted">Filter Mode:</span>
+            <div className="flex items-center rounded-lg border border-border bg-bg p-0.5 text-xs font-medium">
+              <button
+                type="button"
+                onClick={() => setFilterMode('preset')}
+                className={`px-3 py-1 rounded-md transition-all ${filterMode === 'preset' ? 'bg-surface text-ink shadow-xs font-semibold' : 'text-muted hover:text-ink'}`}
+              >
+                Preset Period
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterMode('year')}
+                className={`px-3 py-1 rounded-md transition-all ${filterMode === 'year' ? 'bg-surface text-ink shadow-xs font-semibold' : 'text-muted hover:text-ink'}`}
+              >
+                Specific Year
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterMode('custom')}
+                className={`px-3 py-1 rounded-md transition-all ${filterMode === 'custom' ? 'bg-surface text-ink shadow-xs font-semibold' : 'text-muted hover:text-ink'}`}
+              >
+                Custom Range
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-ink select-none">
+              <input
+                type="checkbox"
+                checked={compareEnabled}
+                onChange={(e) => {
+                  const val = e.target.checked
+                  setCompareEnabled(val)
+                  setAppliedFilters((prev) => ({
+                    ...prev,
+                    compare: val,
+                  }))
+                }}
+                className="rounded border-border text-primary focus:ring-primary/50 cursor-pointer"
+              />
+              <span className="flex items-center gap-1 font-semibold">
+                <GitCompare size={14} className={compareEnabled ? 'text-primary' : 'text-muted'} />
+                Compare with Past
+              </span>
+            </label>
+
+            {compareEnabled && (
+              <select
+                value={compareMode}
+                onChange={(e) => {
+                  const m = e.target.value
+                  setCompareMode(m)
+                  setAppliedFilters((prev) => ({
+                    ...prev,
+                    compareMode: m,
+                  }))
+                }}
+                className={`${INPUT} text-xs h-8 py-0`}
+              >
+                <option value="prior_period">vs. Prior Period</option>
+                <option value="prior_year">vs. Prior Year</option>
+              </select>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <select value={period} onChange={(e) => setPeriod(e.target.value)} className={INPUT}>
-            {PERIODS.map((p) => <option key={p} value={p}>{p}</option>)}
-          </select>
-          <Button variant="secondary" size="sm" icon={Download} onClick={handleExportAll} disabled={exporting}>
-            {exporting ? 'Preparing…' : 'Export All'}
-          </Button>
+
+        {/* Search controls row */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
+            {filterMode === 'preset' && (
+              <select
+                value={selectedPeriod}
+                onChange={(e) => setSelectedPeriod(e.target.value)}
+                className={`${INPUT} min-w-36`}
+              >
+                {PERIODS.map((p) => <option key={p} value={p}>{p}</option>)}
+              </select>
+            )}
+
+            {filterMode === 'year' && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted">Select Year:</span>
+                <select
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(e.target.value)}
+                  className={`${INPUT} min-w-32`}
+                >
+                  {YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
+            )}
+
+            {filterMode === 'custom' && (
+              <div className="flex items-center gap-2">
+                <CalendarRange size={16} className="text-muted shrink-0" />
+                <input
+                  type="date"
+                  value={customStartDate}
+                  onChange={(e) => setCustomStartDate(e.target.value)}
+                  className={`${INPUT} text-xs`}
+                  placeholder="From"
+                />
+                <span className="text-xs text-muted">to</span>
+                <input
+                  type="date"
+                  value={customEndDate}
+                  onChange={(e) => setCustomEndDate(e.target.value)}
+                  className={`${INPUT} text-xs`}
+                  placeholder="To"
+                />
+              </div>
+            )}
+
+            <Button
+              variant="primary"
+              size="sm"
+              icon={Search}
+              onClick={handleApplyFilter}
+            >
+              Search
+            </Button>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={Download}
+              onClick={handleExportAll}
+              disabled={exporting}
+            >
+              {exporting ? 'Preparing…' : 'Export All'}
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -518,10 +998,15 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
       </div>
 
       <div className={PANEL}>
-        <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+        <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
           <FileBarChart size={16} className="text-primary-dark" />
           <p className="text-sm font-semibold text-ink">{activeCard.title}</p>
-          <span className="text-xs text-muted">{period}</span>
+          <span className="text-xs text-muted font-medium">({activePeriodLabel})</span>
+          {isComparing && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-primary/15 text-primary-dark border border-primary/20">
+              <GitCompare size={12} /> Comparing vs. {appliedFilters.compareMode === 'prior_year' ? 'Prior Year' : 'Prior Period'}
+            </span>
+          )}
           <button
             type="button"
             onClick={handleExportActive}
@@ -538,17 +1023,53 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
           <>
             {activeReport === 'income-statement' && (
               <>
+                {isComparing && (
+                  <div className="flex flex-wrap items-center justify-between gap-3 bg-bg/50 px-4 py-3 border-b border-border text-xs">
+                    <div className="flex flex-wrap items-center gap-4">
+                      <div>
+                        <span className="text-muted block text-[11px]">Net Income ({comparisonInfo?.current_label || 'Current'})</span>
+                        <span className="font-bold text-ink text-sm">{formatCurrency(incomeTotals.netIncome)}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted block text-[11px]">Net Income ({comparisonInfo?.prior_label || 'Past'})</span>
+                        <span className="font-medium text-muted text-sm">{formatCurrency(incomeTotals.priorNetIncome)}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted block text-[11px]">Net Income Variance</span>
+                        <span className={`inline-flex items-center gap-0.5 font-bold text-sm ${incomeTotals.netVariance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                          {incomeTotals.netVariance >= 0 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
+                          {incomeTotals.netVariance >= 0 ? `+${formatCurrency(incomeTotals.netVariance)}` : formatCurrency(incomeTotals.netVariance)}
+                          {incomeTotals.netPct != null && ` (${incomeTotals.netPct}%)`}
+                        </span>
+                      </div>
+                    </div>
+                    <span className="text-[11px] text-muted italic">Comparison baseline: {appliedFilters.compareMode === 'prior_year' ? 'Same period last year' : 'Preceding period span'}</span>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 gap-4 border-b border-border p-4 lg:grid-cols-2">
-                  <ChartPanel title="Revenue vs. Expenses vs. Net Income">
-                    <BarChart data={incomeChartData} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
-                      <XAxis dataKey="name" tick={AXIS_TICK} axisLine={{ stroke: '#E5E7EB' }} tickLine={false} />
-                      <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} tickFormatter={CURRENCY_TICK} width={56} />
-                      <Tooltip {...TOOLTIP_STYLE} formatter={(value) => formatCurrency(value)} />
-                      <Bar dataKey="value" radius={[6, 6, 0, 0]} maxBarSize={64}>
-                        {incomeChartData.map((entry) => <Cell key={entry.name} fill={entry.fill} />)}
-                      </Bar>
-                    </BarChart>
+                  <ChartPanel title={isComparing ? `Performance Comparison: Current (${comparisonInfo?.current_label || 'Current'}) vs. Past (${comparisonInfo?.prior_label || 'Past'})` : 'Revenue vs. Expenses vs. Net Income'}>
+                    {isComparing ? (
+                      <BarChart data={incomeCompareChartData} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
+                        <XAxis dataKey="name" tick={AXIS_TICK} axisLine={{ stroke: '#E5E7EB' }} tickLine={false} />
+                        <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} tickFormatter={CURRENCY_TICK} width={56} />
+                        <Tooltip {...TOOLTIP_STYLE} formatter={(value) => formatCurrency(value)} />
+                        <Legend wrapperStyle={{ fontSize: 11, color: '#6B7280' }} />
+                        <Bar dataKey="Current" name={comparisonInfo?.current_label || 'Current Period'} fill="#F4B400" radius={[4, 4, 0, 0]} maxBarSize={44} />
+                        <Bar dataKey="Past" name={comparisonInfo?.prior_label || 'Past Period'} fill="#94A3B8" radius={[4, 4, 0, 0]} maxBarSize={44} />
+                      </BarChart>
+                    ) : (
+                      <BarChart data={incomeChartData} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
+                        <XAxis dataKey="name" tick={AXIS_TICK} axisLine={{ stroke: '#E5E7EB' }} tickLine={false} />
+                        <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} tickFormatter={CURRENCY_TICK} width={56} />
+                        <Tooltip {...TOOLTIP_STYLE} formatter={(value) => formatCurrency(value)} />
+                        <Bar dataKey="value" radius={[6, 6, 0, 0]} maxBarSize={64}>
+                          {incomeChartData.map((entry) => <Cell key={entry.name} fill={entry.fill} />)}
+                        </Bar>
+                      </BarChart>
+                    )}
                   </ChartPanel>
                   <ChartPanel title="Expense Breakdown">
                     <PieChart>
@@ -564,6 +1085,17 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                 </div>
               <div className="overflow-hidden rounded-t-xl">
                 <table className="w-full text-sm">
+                  {isComparing && (
+                    <thead>
+                      <tr className="border-b border-border bg-bg/40 text-xs font-semibold uppercase tracking-wide text-muted">
+                        <th className="px-4 py-3 text-left">Account</th>
+                        <th className="px-4 py-3 text-right whitespace-nowrap">Current Period</th>
+                        <th className="px-4 py-3 text-right whitespace-nowrap">Past Period</th>
+                        <th className="px-4 py-3 text-right whitespace-nowrap">Variance</th>
+                        <th className="px-4 py-3 text-right whitespace-nowrap">% Change</th>
+                      </tr>
+                    </thead>
+                  )}
                   <tbody>
                     {incomeRows.slice(reportStart, reportEnd).map((r, idx) => {
                       const isFirst = idx === 0 || incomeRows[reportStart + idx - 1]?.section !== r.section
@@ -571,34 +1103,83 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                         <Fragment key={`${r.section}-${r.account}`}>
                           {isFirst && (
                             <tr className="border-b border-border bg-bg/60">
-                              <td className="px-4 py-2.5 font-semibold text-ink text-xs uppercase tracking-wide" colSpan={2}>{r.section}</td>
+                              <td className="px-4 py-2.5 font-semibold text-ink text-xs uppercase tracking-wide" colSpan={isComparing ? 5 : 2}>{r.section}</td>
                             </tr>
                           )}
-                          <tr className="border-b border-border last:border-0">
-                            <td className="px-4 py-3 text-ink">{r.account}</td>
+                          <tr className="border-b border-border last:border-0 hover:bg-bg/40 transition-colors">
+                            <td className="px-4 py-3 text-ink font-medium">{r.account}</td>
                             <td className="px-4 py-3 text-right tabular-nums text-ink">{formatCurrency(r.amount)}</td>
+                            {isComparing && (
+                              <>
+                                <td className="px-4 py-3 text-right tabular-nums text-muted">{formatCurrency(r.prior_amount)}</td>
+                                <td className={`px-4 py-3 text-right tabular-nums font-semibold ${r.variance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                                  {r.variance >= 0 ? `+${formatCurrency(r.variance)}` : formatCurrency(r.variance)}
+                                </td>
+                                <td className="px-4 py-3 text-right tabular-nums text-xs">
+                                  {r.pct_change != null ? (
+                                    <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded font-semibold ${r.pct_change >= 0 ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400' : 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400'}`}>
+                                      {r.pct_change >= 0 ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
+                                      {Math.abs(r.pct_change)}%
+                                    </span>
+                                  ) : '—'}
+                                </td>
+                              </>
+                            )}
                           </tr>
                         </Fragment>
                       )
                     })}
                     {incomeRows.length === 0 && (
-                      <tr><td colSpan={2} className="px-4 py-3 text-center text-xs text-muted">No revenue or expenses posted for this period.</td></tr>
+                      <tr><td colSpan={isComparing ? 5 : 2} className="px-4 py-3 text-center text-xs text-muted">No revenue or expenses posted for this period.</td></tr>
                     )}
                   </tbody>
                   <tfoot>
-                    <tr className="border-t-2 border-border">
+                    <tr className="border-t-2 border-border font-semibold">
                       <td className="px-4 py-3 text-right text-xs uppercase tracking-wide text-muted">Total Revenue</td>
-                      <td className="px-4 py-3 text-right tabular-nums font-semibold text-ink">{formatCurrency(incomeTotals.totalRevenue)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-ink">{formatCurrency(incomeTotals.totalRevenue)}</td>
+                      {isComparing && (
+                        <>
+                          <td className="px-4 py-3 text-right tabular-nums text-muted">{formatCurrency(incomeTotals.priorRevenue)}</td>
+                          <td className={`px-4 py-3 text-right tabular-nums ${incomeTotals.totalRevenue - incomeTotals.priorRevenue >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                            {formatCurrency(incomeTotals.totalRevenue - incomeTotals.priorRevenue)}
+                          </td>
+                          <td className="px-4 py-3 text-right tabular-nums text-xs text-muted">
+                            {incomeTotals.priorRevenue ? `${(((incomeTotals.totalRevenue - incomeTotals.priorRevenue) / incomeTotals.priorRevenue) * 100).toFixed(1)}%` : '—'}
+                          </td>
+                        </>
+                      )}
                     </tr>
-                    <tr>
+                    <tr className="font-semibold">
                       <td className="px-4 py-3 text-right text-xs uppercase tracking-wide text-muted">Total Expenses</td>
-                      <td className="px-4 py-3 text-right tabular-nums font-semibold text-ink">{formatCurrency(incomeTotals.totalExpenses)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-ink">{formatCurrency(incomeTotals.totalExpenses)}</td>
+                      {isComparing && (
+                        <>
+                          <td className="px-4 py-3 text-right tabular-nums text-muted">{formatCurrency(incomeTotals.priorExpenses)}</td>
+                          <td className={`px-4 py-3 text-right tabular-nums ${incomeTotals.totalExpenses - incomeTotals.priorExpenses <= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                            {formatCurrency(incomeTotals.totalExpenses - incomeTotals.priorExpenses)}
+                          </td>
+                          <td className="px-4 py-3 text-right tabular-nums text-xs text-muted">
+                            {incomeTotals.priorExpenses ? `${(((incomeTotals.totalExpenses - incomeTotals.priorExpenses) / incomeTotals.priorExpenses) * 100).toFixed(1)}%` : '—'}
+                          </td>
+                        </>
+                      )}
                     </tr>
-                    <tr className="border-t border-border">
-                      <td className="px-4 py-3 text-right text-xs uppercase tracking-wide text-muted font-semibold">Net Income</td>
-                      <td className={`px-4 py-3 text-right tabular-nums font-bold ${incomeTotals.netIncome >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                    <tr className="border-t border-border font-bold">
+                      <td className="px-4 py-3 text-right text-xs uppercase tracking-wide text-muted">Net Income</td>
+                      <td className={`px-4 py-3 text-right tabular-nums ${incomeTotals.netIncome >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                         {formatCurrency(incomeTotals.netIncome)}
                       </td>
+                      {isComparing && (
+                        <>
+                          <td className="px-4 py-3 text-right tabular-nums text-muted">{formatCurrency(incomeTotals.priorNetIncome)}</td>
+                          <td className={`px-4 py-3 text-right tabular-nums ${incomeTotals.netVariance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                            {formatCurrency(incomeTotals.netVariance)}
+                          </td>
+                          <td className={`px-4 py-3 text-right tabular-nums text-xs ${incomeTotals.netVariance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                            {incomeTotals.netPct != null ? `${incomeTotals.netPct}%` : '—'}
+                          </td>
+                        </>
+                      )}
                     </tr>
                   </tfoot>
                 </table>
@@ -612,43 +1193,82 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
             {activeReport === 'cash-flow' && (
               <>
                 <div className="border-b border-border p-4">
-                  <ChartPanel title="Inflow vs. Outflow by Cash Account" height={280}>
-                    <ComposedChart data={cashFlowChartData} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
-                      <XAxis dataKey="name" tick={AXIS_TICK} axisLine={{ stroke: '#E5E7EB' }} tickLine={false} />
-                      <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} tickFormatter={CURRENCY_TICK} width={56} />
-                      <Tooltip {...TOOLTIP_STYLE} formatter={(value) => formatCurrency(value)} />
-                      <Legend wrapperStyle={{ fontSize: 11, color: '#6B7280' }} />
-                      <Bar dataKey="inflow" name="Inflow" fill={CHART_COLORS.inflow} radius={[6, 6, 0, 0]} maxBarSize={40} />
-                      <Bar dataKey="outflow" name="Outflow" fill={CHART_COLORS.outflow} radius={[6, 6, 0, 0]} maxBarSize={40} />
-                      <Line type="monotone" dataKey="net" name="Net Change" stroke="#111827" strokeWidth={2} dot={{ r: 3 }} />
-                    </ComposedChart>
-                  </ChartPanel>
+                  {isComparing ? (
+                    <ChartPanel title="Cash Flow Comparison: Current vs. Past Net Change by Cash Account" height={280}>
+                      <BarChart data={cashFlowChartData} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
+                        <XAxis dataKey="name" tick={AXIS_TICK} axisLine={{ stroke: '#E5E7EB' }} tickLine={false} />
+                        <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} tickFormatter={CURRENCY_TICK} width={56} />
+                        <Tooltip {...TOOLTIP_STYLE} formatter={(value) => formatCurrency(value)} />
+                        <Legend wrapperStyle={{ fontSize: 11, color: '#6B7280' }} />
+                        <Bar dataKey="net" name="Current Net Change" fill="#F4B400" radius={[4, 4, 0, 0]} maxBarSize={36} />
+                        <Bar dataKey="priorNet" name="Past Net Change" fill="#94A3B8" radius={[4, 4, 0, 0]} maxBarSize={36} />
+                      </BarChart>
+                    </ChartPanel>
+                  ) : (
+                    <ChartPanel title="Inflow vs. Outflow by Cash Account" height={280}>
+                      <ComposedChart data={cashFlowChartData} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
+                        <XAxis dataKey="name" tick={AXIS_TICK} axisLine={{ stroke: '#E5E7EB' }} tickLine={false} />
+                        <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} tickFormatter={CURRENCY_TICK} width={56} />
+                        <Tooltip {...TOOLTIP_STYLE} formatter={(value) => formatCurrency(value)} />
+                        <Legend wrapperStyle={{ fontSize: 11, color: '#6B7280' }} />
+                        <Bar dataKey="inflow" name="Inflow" fill={CHART_COLORS.inflow} radius={[6, 6, 0, 0]} maxBarSize={40} />
+                        <Bar dataKey="outflow" name="Outflow" fill={CHART_COLORS.outflow} radius={[6, 6, 0, 0]} maxBarSize={40} />
+                        <Line type="monotone" dataKey="net" name="Net Change" stroke="#111827" strokeWidth={2} dot={{ r: 3 }} />
+                      </ComposedChart>
+                    </ChartPanel>
+                  )}
                 </div>
               <div className="overflow-hidden rounded-t-xl">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-border">
-                      <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3">Cash Account</th>
-                      <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3">Inflow (Collections)</th>
-                      <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3">Outflow (Disbursements)</th>
-                      <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3">Net Change</th>
+                    <tr className="border-b border-border bg-bg/40 text-xs font-semibold uppercase tracking-wide text-muted">
+                      <th className="px-4 py-3 text-left">Cash Account</th>
+                      <th className="px-4 py-3 text-right whitespace-nowrap">Inflow</th>
+                      <th className="px-4 py-3 text-right whitespace-nowrap">Outflow</th>
+                      <th className="px-4 py-3 text-right whitespace-nowrap">Current Net</th>
+                      {isComparing && (
+                        <>
+                          <th className="px-4 py-3 text-right whitespace-nowrap">Past Net</th>
+                          <th className="px-4 py-3 text-right whitespace-nowrap">Variance</th>
+                          <th className="px-4 py-3 text-right whitespace-nowrap">% Change</th>
+                        </>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
-                    {cashFlow.slice(reportStart, reportEnd).map((r) => {
-                      const net = r.inflow - r.outflow
+                    {(Array.isArray(cashFlow) ? cashFlow : []).slice(reportStart, reportEnd).map((r) => {
+                      const net = r.net != null ? r.net : (r.inflow - r.outflow)
+                      const priorNet = r.prior_net ?? 0
+                      const varNet = r.variance_net != null ? r.variance_net : (net - priorNet)
                       return (
-                        <tr key={r.account} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
-                          <td className="px-4 py-3.5 text-ink">{r.account}</td>
+                        <tr key={r.account} className="border-b border-border last:border-0 hover:bg-bg/40 transition-colors">
+                          <td className="px-4 py-3.5 text-ink font-medium">{r.account}</td>
                           <td className="px-4 py-3.5 text-right tabular-nums text-ink">{formatCurrency(r.inflow)}</td>
                           <td className="px-4 py-3.5 text-right tabular-nums text-ink">{formatCurrency(r.outflow)}</td>
-                          <td className={`px-4 py-3.5 text-right tabular-nums font-medium ${net >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{formatCurrency(net)}</td>
+                          <td className={`px-4 py-3.5 text-right tabular-nums font-semibold ${net >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{formatCurrency(net)}</td>
+                          {isComparing && (
+                            <>
+                              <td className="px-4 py-3.5 text-right tabular-nums text-muted">{formatCurrency(priorNet)}</td>
+                              <td className={`px-4 py-3.5 text-right tabular-nums font-semibold ${varNet >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                                {varNet >= 0 ? `+${formatCurrency(varNet)}` : formatCurrency(varNet)}
+                              </td>
+                              <td className="px-4 py-3.5 text-right tabular-nums text-xs">
+                                {r.pct_change != null ? (
+                                  <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded font-semibold ${r.pct_change >= 0 ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400' : 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400'}`}>
+                                    {r.pct_change >= 0 ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
+                                    {Math.abs(r.pct_change)}%
+                                  </span>
+                                ) : '—'}
+                              </td>
+                            </>
+                          )}
                         </tr>
                       )
                     })}
                     {cashFlow.length === 0 && (
-                      <tr><td colSpan={4} className="px-4 py-10 text-center text-sm text-muted">No collections or disbursements posted for this period.</td></tr>
+                      <tr><td colSpan={isComparing ? 7 : 4} className="px-4 py-10 text-center text-sm text-muted">No collections or disbursements posted for this period.</td></tr>
                     )}
                   </tbody>
                   <tfoot>
@@ -656,7 +1276,16 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                       <td className="px-4 py-3 text-right text-xs uppercase tracking-wide text-muted">Totals</td>
                       <td className="px-4 py-3 text-right tabular-nums text-ink">{formatCurrency(cashFlowTotals.inflow)}</td>
                       <td className="px-4 py-3 text-right tabular-nums text-ink">{formatCurrency(cashFlowTotals.outflow)}</td>
-                      <td className={`px-4 py-3 text-right tabular-nums ${cashFlowTotals.net >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{formatCurrency(cashFlowTotals.net)}</td>
+                      <td className={`px-4 py-3 text-right tabular-nums font-bold ${cashFlowTotals.net >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{formatCurrency(cashFlowTotals.net)}</td>
+                      {isComparing && (
+                        <>
+                          <td className="px-4 py-3 text-right tabular-nums text-muted">{formatCurrency(cashFlowTotals.priorNet)}</td>
+                          <td className={`px-4 py-3 text-right tabular-nums font-bold ${cashFlowTotals.netVariance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{formatCurrency(cashFlowTotals.netVariance)}</td>
+                          <td className="px-4 py-3 text-right tabular-nums text-xs font-bold text-muted">
+                            {cashFlowTotals.netPct != null ? `${cashFlowTotals.netPct}%` : '—'}
+                          </td>
+                        </>
+                      )}
                     </tr>
                   </tfoot>
                 </table>
@@ -818,20 +1447,32 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
             {activeReport === 'budget-vs-actual' && (
               <>
                 <div className="grid grid-cols-1 gap-4 border-b border-border p-4 lg:grid-cols-2">
-                  <ChartPanel title="Allocated vs. Actual by Department">
-                    <BarChart data={budgetVsActual} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
-                      <XAxis dataKey="department" tick={{ fontSize: 10, fill: '#6B7280' }} axisLine={{ stroke: '#E5E7EB' }} tickLine={false} interval={0} angle={-12} textAnchor="end" height={50} />
-                      <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} tickFormatter={CURRENCY_TICK} width={56} />
-                      <Tooltip {...TOOLTIP_STYLE} formatter={(value) => formatCurrency(value)} />
-                      <Legend wrapperStyle={{ fontSize: 11, color: '#6B7280' }} />
-                      <Bar dataKey="allocated" name="Allocated" fill={CHART_COLORS.allocated} radius={[6, 6, 0, 0]} maxBarSize={36} />
-                      <Bar dataKey="actual" name="Actual" radius={[6, 6, 0, 0]} maxBarSize={36}>
-                        {budgetVsActual.map((r) => (
-                          <Cell key={r.department} fill={r.actual > r.allocated ? CHART_COLORS.overBudget : CHART_COLORS.actual} />
-                        ))}
-                      </Bar>
-                    </BarChart>
+                  <ChartPanel title={isComparing ? 'Department Actual Spend: Current vs. Past' : 'Allocated vs. Actual by Department'}>
+                    {isComparing ? (
+                      <BarChart data={budgetVsActual} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
+                        <XAxis dataKey="department" tick={{ fontSize: 10, fill: '#6B7280' }} axisLine={{ stroke: '#E5E7EB' }} tickLine={false} interval={0} angle={-12} textAnchor="end" height={50} />
+                        <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} tickFormatter={CURRENCY_TICK} width={56} />
+                        <Tooltip {...TOOLTIP_STYLE} formatter={(value) => formatCurrency(value)} />
+                        <Legend wrapperStyle={{ fontSize: 11, color: '#6B7280' }} />
+                        <Bar dataKey="actual" name="Current Spend" fill="#F4B400" radius={[4, 4, 0, 0]} maxBarSize={36} />
+                        <Bar dataKey="prior_actual" name="Past Spend" fill="#94A3B8" radius={[4, 4, 0, 0]} maxBarSize={36} />
+                      </BarChart>
+                    ) : (
+                      <BarChart data={budgetVsActual} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
+                        <XAxis dataKey="department" tick={{ fontSize: 10, fill: '#6B7280' }} axisLine={{ stroke: '#E5E7EB' }} tickLine={false} interval={0} angle={-12} textAnchor="end" height={50} />
+                        <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} tickFormatter={CURRENCY_TICK} width={56} />
+                        <Tooltip {...TOOLTIP_STYLE} formatter={(value) => formatCurrency(value)} />
+                        <Legend wrapperStyle={{ fontSize: 11, color: '#6B7280' }} />
+                        <Bar dataKey="allocated" name="Allocated" fill={CHART_COLORS.allocated} radius={[6, 6, 0, 0]} maxBarSize={36} />
+                        <Bar dataKey="actual" name="Actual" radius={[6, 6, 0, 0]} maxBarSize={36}>
+                          {budgetVsActual.map((r) => (
+                            <Cell key={r.department} fill={r.actual > r.allocated ? CHART_COLORS.overBudget : CHART_COLORS.actual} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    )}
                   </ChartPanel>
                   <ChartPanel title="Budget Allocation Share">
                     <PieChart>
@@ -848,29 +1489,55 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
               <div className="overflow-hidden rounded-t-xl">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-border">
-                      <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3">Department</th>
-                      <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3">Allocated Budget</th>
-                      <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3">Actual Spend</th>
-                      <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3">Variance</th>
+                    <tr className="border-b border-border bg-bg/40 text-xs font-semibold uppercase tracking-wide text-muted">
+                      <th className="px-4 py-3 text-left">Department</th>
+                      <th className="px-4 py-3 text-right whitespace-nowrap">Allocated Budget</th>
+                      <th className="px-4 py-3 text-right whitespace-nowrap">Current Spend</th>
+                      {isComparing ? (
+                        <>
+                          <th className="px-4 py-3 text-right whitespace-nowrap">Past Spend</th>
+                          <th className="px-4 py-3 text-right whitespace-nowrap">Spend Diff</th>
+                          <th className="px-4 py-3 text-right whitespace-nowrap">% Change</th>
+                        </>
+                      ) : (
+                        <th className="px-4 py-3 text-right whitespace-nowrap">Variance</th>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
-                    {budgetVsActual.slice(reportStart, reportEnd).map((r) => {
+                    {(Array.isArray(budgetVsActual) ? budgetVsActual : []).slice(reportStart, reportEnd).map((r) => {
                       const variance = r.allocated - r.actual
+                      const actualDiff = r.actual_diff != null ? r.actual_diff : (r.actual - (r.prior_actual || 0))
                       return (
-                        <tr key={r.department} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
-                          <td className="px-4 py-3.5 text-ink">{r.department}</td>
+                        <tr key={r.department} className="border-b border-border last:border-0 hover:bg-bg/40 transition-colors">
+                          <td className="px-4 py-3.5 text-ink font-medium">{r.department}</td>
                           <td className="px-4 py-3.5 text-right tabular-nums text-ink">{formatCurrency(r.allocated)}</td>
                           <td className="px-4 py-3.5 text-right tabular-nums text-ink">{formatCurrency(r.actual)}</td>
-                          <td className={`px-4 py-3.5 text-right tabular-nums font-medium ${variance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-                            {variance >= 0 ? formatCurrency(variance) + ' under' : formatCurrency(Math.abs(variance)) + ' over'}
-                          </td>
+                          {isComparing ? (
+                            <>
+                              <td className="px-4 py-3.5 text-right tabular-nums text-muted">{formatCurrency(r.prior_actual || 0)}</td>
+                              <td className={`px-4 py-3.5 text-right tabular-nums font-semibold ${actualDiff <= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                                {actualDiff <= 0 ? formatCurrency(actualDiff) : `+${formatCurrency(actualDiff)}`}
+                              </td>
+                              <td className="px-4 py-3.5 text-right tabular-nums text-xs">
+                                {r.pct_change != null ? (
+                                  <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded font-semibold ${r.pct_change <= 0 ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400' : 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400'}`}>
+                                    {r.pct_change >= 0 ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
+                                    {Math.abs(r.pct_change)}%
+                                  </span>
+                                ) : '—'}
+                              </td>
+                            </>
+                          ) : (
+                            <td className={`px-4 py-3.5 text-right tabular-nums font-medium ${variance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                              {variance >= 0 ? formatCurrency(variance) + ' under' : formatCurrency(Math.abs(variance)) + ' over'}
+                            </td>
+                          )}
                         </tr>
                       )
                     })}
                     {budgetVsActual.length === 0 && (
-                      <tr><td colSpan={4} className="px-4 py-10 text-center text-sm text-muted">No budgets found for this fiscal year.</td></tr>
+                      <tr><td colSpan={isComparing ? 6 : 4} className="px-4 py-10 text-center text-sm text-muted">No budgets found for this fiscal year.</td></tr>
                     )}
                   </tbody>
                   <tfoot>
@@ -878,9 +1545,21 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                       <td className="px-4 py-3 text-right text-xs uppercase tracking-wide text-muted">Totals</td>
                       <td className="px-4 py-3 text-right tabular-nums text-ink">{formatCurrency(budgetTotals.allocated)}</td>
                       <td className="px-4 py-3 text-right tabular-nums text-ink">{formatCurrency(budgetTotals.actual)}</td>
-                      <td className={`px-4 py-3 text-right tabular-nums ${budgetTotals.variance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-                        {budgetTotals.variance >= 0 ? formatCurrency(budgetTotals.variance) + ' under' : formatCurrency(Math.abs(budgetTotals.variance)) + ' over'}
-                      </td>
+                      {isComparing ? (
+                        <>
+                          <td className="px-4 py-3 text-right tabular-nums text-muted">{formatCurrency(budgetTotals.priorActual)}</td>
+                          <td className={`px-4 py-3 text-right tabular-nums font-bold ${budgetTotals.actualDiff <= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                            {budgetTotals.actualDiff <= 0 ? formatCurrency(budgetTotals.actualDiff) : `+${formatCurrency(budgetTotals.actualDiff)}`}
+                          </td>
+                          <td className="px-4 py-3 text-right tabular-nums text-xs text-muted">
+                            {budgetTotals.priorActual ? `${(((budgetTotals.actual - budgetTotals.priorActual) / budgetTotals.priorActual) * 100).toFixed(1)}%` : '—'}
+                          </td>
+                        </>
+                      ) : (
+                        <td className={`px-4 py-3 text-right tabular-nums ${budgetTotals.variance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                          {budgetTotals.variance >= 0 ? formatCurrency(budgetTotals.variance) + ' under' : formatCurrency(Math.abs(budgetTotals.variance)) + ' over'}
+                        </td>
+                      )}
                     </tr>
                   </tfoot>
                 </table>

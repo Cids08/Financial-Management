@@ -165,6 +165,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'dashboard.view',
             'customers.view', 'customers.manage',
             'suppliers.view', 'suppliers.manage',
+            'collectors.view', 'collectors.manage', // staff can manage collector accounts
             'ar.view', 'ar.manage',
             'ap.view', 'ap.manage', // NOT ap.approve
             'expenses.view', 'expenses.manage', // NOT expenses.approve
@@ -179,20 +180,12 @@ class RolesAndPermissionsSeeder extends Seeder
             // the .manage twins — keeping read-only on purpose.
             'departments.view',
             'cash-accounts.view',
-            // Read-only dropdown sources for the Add/Edit forms. Staff routinely
-            // records expenses, disbursements and budget requests, and those
-            // forms' department and cash-account selects are populated straight
-            // from /api/departments and /api/cash-accounts (both gated by the
-            // corresponding *-accounts/*-department VIEW permission). Without
-            // these the dropdowns come back EMPTY for staff, so grant the
-            // view-only permissions (never the manage twins).
-            'departments.view', // read-only dropdown source
-            'cash-accounts.view', // read-only dropdown source
         ],
         'collector' => [
             'settings.view', // sidebar logo/name — see class docblock
             'dashboard.view',
             'customers.view',
+            'collectors.view', // can see the Collectors list (read-only)
             'ar.view',
             'collections.view', 'collections.manage', // NOT collections.confirm
         ],
@@ -284,6 +277,33 @@ class RolesAndPermissionsSeeder extends Seeder
         if ($existingStaff && $existingStaff?->permissions()->whereIn('permission_name', ['departments.view', 'cash-accounts.view'])->count() !== 2) {
             $existingStaff->permissions()->syncWithoutDetaching($staffDropdownViewPerms);
             $this->command->warn("Topped up existing 'staff' role with read-only dropdown view permissions (departments.view, cash-accounts.view).");
+        }
+
+        // Additive reconciliation for existing staff roles — grant
+        // collectors.view + collectors.manage if missing so Staff can
+        // manage collector accounts from the sidebar.
+        // Repeat-boot safe (no-op when already attached).
+        $staffCollectorPerms = array_map(
+            fn ($name) => $permissionModels[$name]->id,
+            ['collectors.view', 'collectors.manage']
+        );
+        if ($existingStaff && $existingStaff?->permissions()->whereIn('permission_name', ['collectors.view', 'collectors.manage'])->count() !== 2) {
+            $existingStaff->permissions()->syncWithoutDetaching($staffCollectorPerms);
+            $this->command->warn("Topped up existing 'staff' role with collectors.view and collectors.manage.");
+        }
+
+        // Additive reconciliation for existing collector roles — grant
+        // collectors.view if missing so Collectors shows in the sidebar
+        // without requiring a full re-seed. Repeat-boot safe (no-op when
+        // already attached).
+        $collectorViewPerm = array_map(
+            fn ($name) => $permissionModels[$name]->id,
+            ['collectors.view']
+        );
+        $existingCollector = $roleModels['collector'] ?? null;
+        if ($existingCollector && $existingCollector?->permissions()->where('permission_name', 'collectors.view')->count() === 0) {
+            $existingCollector->permissions()->syncWithoutDetaching($collectorViewPerm);
+            $this->command->warn("Topped up existing 'collector' role with collectors.view.");
         }
 
         $this->command->info('Roles and permissions seeded (single source of truth).');
