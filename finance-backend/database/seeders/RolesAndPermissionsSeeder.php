@@ -152,6 +152,10 @@ class RolesAndPermissionsSeeder extends Seeder
             // the .manage twins — keeping read-only on purpose.
             'departments.view',
             'cash-accounts.view',
+            // Accounting / reporting — view-only access for staff.
+            'general-ledger.view',
+            'tax.view',
+            'reports.view',
         ],
         'collector' => [
             'settings.view', // sidebar logo/name — see class docblock
