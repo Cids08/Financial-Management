@@ -6,6 +6,7 @@ import Modal from '../components/Modal'
 import { useCompany } from '../context/CompanyContext'
 import { usePermissions } from '../context/PermissionsContext'
 import { currencySymbol } from '../utils/formatters'
+import AddressSelector from '../components/AddressSelector'
 
 const CURRENCIES = [
   { code: 'PHP', label: 'Peso (PHP)' },
@@ -253,18 +254,13 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
             </div>
 
             <div>
-              <label className={LABEL}>Company Address</label>
-              <div className="flex items-center gap-2 rounded-lg border border-border bg-bg px-3 py-2 focus-within:border-primary focus-within:bg-surface transition-colors duration-150">
-                <MapPin size={15} className="text-muted shrink-0" />
-                <input
-                  type="text"
-                  value={brandForm.address}
-                  onChange={handleBrandField('address')}
-                  placeholder="123 Construction Ave, Quezon City"
-                  className="w-full text-sm text-ink bg-transparent outline-none border-0"
-                  disabled={companyLoading}
-                />
-              </div>
+              <AddressSelector
+                label="Company Address"
+                value={brandForm.address}
+                onChange={(newAddr) => setBrandForm((f) => ({ ...f, address: newAddr }))}
+                placeholder="Select Philippine or International address..."
+                disabled={companyLoading}
+              />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

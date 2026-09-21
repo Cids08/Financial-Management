@@ -11,6 +11,7 @@ import { useHighlightRow } from '../hooks/useHighlightRow'
 import { usePrivacy } from '../context/PrivacyContext'
 import { formatCurrency } from '../utils/formatters'
 import { useProfile } from '../hooks/useProfile'
+import AddressSelector from '../components/AddressSelector'
 
 // Masks every character (keeps dashes/spaces as visual separators)
 function maskValue(value) {
@@ -439,8 +440,12 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
             </div>
           </div>
           <div>
-            <label className={LABEL}>Address</label>
-            <input type="text" value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} className={INPUT} placeholder="Pasig City, Metro Manila" />
+            <AddressSelector
+              label="Supplier Address"
+              value={form.address}
+              onChange={(newAddr) => setForm((f) => ({ ...f, address: newAddr }))}
+              placeholder="Select Philippine or International address..."
+            />
           </div>
           <div>
             <label className={LABEL}>Status</label>

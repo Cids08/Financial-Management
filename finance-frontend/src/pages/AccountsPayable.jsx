@@ -11,6 +11,7 @@ import { useAccountsPayable } from '../hooks/useAccountsPayable'
 import { apiFetch } from '../utils/api'
 import AccountsPayableDocumentModal from '../components/AccountsPayableDocumentModal'
 import PaymentWizardModal from '../components/PaymentWizardModal'
+import AddressSelector from '../components/AddressSelector'
 import { usePermissions } from '../context/PermissionsContext'
 import { useProfile } from '../hooks/useProfile'
 import { usePrivacy } from '../context/PrivacyContext'
@@ -1229,8 +1230,12 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
             </div>
           </div>
           <div>
-            <label className={LABEL}>Billing Address</label>
-            <input type="text" value={form.billing_address} onChange={(e) => setForm((f) => ({ ...f, billing_address: e.target.value }))} className={INPUT} placeholder="Pasig City, Metro Manila" />
+            <AddressSelector
+              label="Billing Address"
+              value={form.billing_address}
+              onChange={(newAddr) => setForm((f) => ({ ...f, billing_address: newAddr }))}
+              placeholder="Select Philippine or International billing address..."
+            />
           </div>
           <div>
             <label className={LABEL}>Description</label>

@@ -11,6 +11,7 @@ import { useHighlightRow } from '../hooks/useHighlightRow'
 import { usePrivacy } from '../context/PrivacyContext'
 import { formatCurrency } from '../utils/formatters'
 import { usePermissions } from '../context/PermissionsContext'
+import AddressSelector from '../components/AddressSelector'
 
 // Masks every character (keeps dashes/spaces as visual separators)
 function maskValue(value) {
@@ -428,8 +429,12 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
             {fieldErrors.customer_name && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.customer_name}</p>}
           </div>
           <div>
-            <label className={LABEL}>Company Address</label>
-            <input type="text" value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="Quezon City, Metro Manila" />
+            <AddressSelector
+              label="Company Address"
+              value={form.address}
+              onChange={(newAddr) => setForm((f) => ({ ...f, address: newAddr }))}
+              placeholder="Select Philippine or International address..."
+            />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
