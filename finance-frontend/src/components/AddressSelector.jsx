@@ -1,403 +1,392 @@
-import { useState, useEffect, useMemo } from 'react'
-import { MapPin, Globe, ChevronDown, Check, Edit3 } from 'lucide-react'
-import { PH_REGIONS, POPULAR_COUNTRIES } from '../data/philippineAddresses'
+import { useState, useEffect, useRef, useMemo } from 'react'
+import { Search, MapPin, X, Navigation, Globe } from 'lucide-react'
+import { GOOGLE_PLACES_INDEX, ALL_COUNTRIES_LIST } from '../data/googlePlacesIndex'
 
 /**
- * User-Friendly Address Selector Component
+ * 3-Step Perfected Google Places Address Form
  * 
- * Supports:
- * 1. Philippine standard address (Cascading dropdowns: Region -> Province -> City/Municipality + Street)
- * 2. International address (Country dropdown + City/State/ZIP + Street line)
- * 3. Freeform text mode (Direct single-line typing for custom/legacy formats)
+ * 1. Search Ordering:
+ *    - Main search bar is placed at the very top, labeled "Search for Address".
+ *    - The secondary manual field is strictly for "Apt, Suite, Unit, or Floor No. (Optional)".
  * 
- * Always outputs a single string formatted cleanly to `onChange(fullAddress)`
+ * 2. Separate "Street Address" from "Unit":
+ *    - The Google Places parser auto-injects the parsed street/route into a dedicated "Street Address" field!
+ *    - The user only has to type their specific unit/floor number if applicable.
+ * 
+ * 3. Open "Country" Dropdown Selection:
+ *    - Positioned with full flexibility so international or cross-border accounts can pick any country immediately.
+ * 
+ * 4. Keyboard Shortcuts:
+ *    - Down Arrow (↓) moves into suggestions.
+ *    - Enter (↵) selects and auto-shifts cursor focus straight to "Apt, Suite, Unit, or Floor No.".
  */
 export default function AddressSelector({
   value = '',
   onChange,
-  label = 'Address',
-  placeholder = 'Select address or type...',
   disabled = false,
   required = false,
   error = '',
 }) {
-  // Mode: 'ph' (Philippines Dropdowns) | 'intl' (International) | 'freeform' (Manual Text)
-  const [mode, setMode] = useState('ph')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [isOpen, setIsOpen] = useState(false)
+  const [highlightedIndex, setHighlightedIndex] = useState(0)
 
-  // Philippine selection state
-  const [selectedRegionId, setSelectedRegionId] = useState('')
-  const [selectedProvinceName, setSelectedProvinceName] = useState('')
-  const [selectedCityName, setSelectedCityName] = useState('')
-  const [barangayOrDistrict, setBarangayOrDistrict] = useState('')
-  const [streetLine, setStreetLine] = useState('')
-  const [zipCode, setZipCode] = useState('')
+  // Separated Address Components
+  const [unitFloor, setUnitFloor] = useState('')
+  const [streetAddress, setStreetAddress] = useState('')
+  const [locality, setLocality] = useState('')
+  const [adminArea, setAdminArea] = useState('')
+  const [postalCode, setPostalCode] = useState('')
+  const [country, setCountry] = useState('Philippines') // Open dropdown, defaults to Philippines
 
-  // International selection state
-  const [intlCountry, setIntlCountry] = useState('')
-  const [intlStateCity, setIntlStateCity] = useState('')
-  const [intlStreet, setIntlStreet] = useState('')
-  const [intlZip, setIntlZip] = useState('')
+  const searchInputRef = useRef(null)
+  const unitInputRef = useRef(null)
+  const containerRef = useRef(null)
 
-  // Freeform text state
-  const [freeformText, setFreeformText] = useState(value || '')
-
-  // Available provinces based on chosen region
-  const availableProvinces = useMemo(() => {
-    if (!selectedRegionId) return []
-    const reg = PH_REGIONS.find((r) => r.id === selectedRegionId)
-    return reg ? reg.provinces : []
-  }, [selectedRegionId])
-
-  // Available cities based on chosen province
-  const availableCities = useMemo(() => {
-    if (!selectedProvinceName || !availableProvinces.length) return []
-    const prov = availableProvinces.find((p) => p.name === selectedProvinceName)
-    return prov ? prov.cities : []
-  }, [selectedProvinceName, availableProvinces])
-
-  // Sync incoming value to freeform state if value changes externally
+  // Initialize from existing address if editing
   useEffect(() => {
-    if (value !== undefined) {
-      setFreeformText(value || '')
+    if (value && !streetAddress && !unitFloor && !locality) {
+      setStreetAddress(value)
     }
-  }, [value])
+  }, [value, streetAddress, unitFloor, locality])
 
-  // Emit formatted address when PH components change
-  const handlePhChange = (updates) => {
-    const next = {
-      regionId: selectedRegionId,
-      province: selectedProvinceName,
-      city: selectedCityName,
-      brgy: barangayOrDistrict,
-      street: streetLine,
-      zip: zipCode,
-      ...updates,
+  // Close on outside click
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setIsOpen(false)
+      }
     }
+    document.addEventListener('mousedown', handleOutsideClick)
+    return () => document.removeEventListener('mousedown', handleOutsideClick)
+  }, [])
 
-    // Build assembled address string
+  // Filter Google Places suggestions
+  const suggestions = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return []
+
+    const local = GOOGLE_PLACES_INDEX.filter(
+      (item) => item.isLocal && item.description.toLowerCase().includes(q)
+    )
+    const intl = GOOGLE_PLACES_INDEX.filter(
+      (item) => !item.isLocal && item.description.toLowerCase().includes(q)
+    )
+
+    return [...local, ...intl].slice(0, 5)
+  }, [searchQuery])
+
+  // Construct combined full address and emit
+  const emitFullAddress = (fields) => {
+    const { unit, street, city, state, zip, cntry } = fields
     const parts = []
-    if (next.street.trim()) parts.push(next.street.trim())
-    if (next.brgy.trim()) parts.push(next.brgy.trim().startsWith('Brgy') ? next.brgy.trim() : `Brgy. ${next.brgy.trim()}`)
-    if (next.city) parts.push(next.city)
-    if (next.province) parts.push(next.province)
-    if (next.zip.trim()) parts.push(next.zip.trim())
+    if (unit?.trim()) parts.push(unit.trim())
+    if (street?.trim()) parts.push(street.trim())
+    if (city?.trim()) parts.push(city.trim())
+    if (state?.trim() && state !== city) parts.push(state.trim())
+    if (zip?.trim()) parts.push(zip.trim())
+    if (cntry?.trim()) parts.push(cntry.trim())
 
-    const fullStr = parts.join(', ')
-    onChange(fullStr)
+    onChange(parts.join(', '))
   }
 
-  // Emit formatted address when International components change
-  const handleIntlChange = (updates) => {
-    const next = {
-      country: intlCountry,
-      stateCity: intlStateCity,
-      street: intlStreet,
-      zip: intlZip,
-      ...updates,
-    }
+  // Parse address_components and inject:
+  // - route -> Street Address
+  // - locality -> City
+  // - administrative_area_level_1 -> State / Province
+  // - postal_code -> Postal Code (auto-filled)
+  // - country -> Country dropdown
+  const applyAddressComponents = (place) => {
+    const comp = place.address_components || {}
+    const parsedStreet = comp.route || ''
+    const parsedCity = comp.locality || ''
+    const parsedState = comp.administrative_area_level_1 || ''
+    const parsedCountry = comp.country || 'Philippines'
+    const parsedZip = comp.postal_code || ''
 
-    const parts = []
-    if (next.street.trim()) parts.push(next.street.trim())
-    if (next.stateCity.trim()) parts.push(next.stateCity.trim())
-    if (next.zip.trim()) parts.push(next.zip.trim())
-    if (next.country) parts.push(next.country)
+    setStreetAddress(parsedStreet)
+    setLocality(parsedCity)
+    setAdminArea(parsedState)
+    setCountry(parsedCountry)
+    setPostalCode(parsedZip)
+    setSearchQuery(place.description)
+    setIsOpen(false)
 
-    const fullStr = parts.join(', ')
-    onChange(fullStr)
+    emitFullAddress({
+      unit: unitFloor,
+      street: parsedStreet,
+      city: parsedCity,
+      state: parsedState,
+      zip: parsedZip,
+      cntry: parsedCountry,
+    })
+
+    // Keyboard shortcut action: Automatically shifts cursor focus straight to Apt/Unit field!
+    setTimeout(() => {
+      unitInputRef.current?.focus()
+    }, 50)
   }
 
-  // Tailwind input styles matching project design system
-  const SELECT_STYLE = `w-full h-9 px-3 rounded-lg border border-border bg-bg text-sm text-ink
-    focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-150`
+  // Keyboard navigation
+  const handleKeyDown = (e) => {
+    if (!isOpen || suggestions.length === 0) {
+      if (e.key === 'ArrowDown') setIsOpen(true)
+      return
+    }
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setHighlightedIndex((prev) => (prev + 1) % suggestions.length)
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setHighlightedIndex((prev) => (prev - 1 + suggestions.length) % suggestions.length)
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      if (suggestions[highlightedIndex]) {
+        applyAddressComponents(suggestions[highlightedIndex])
+      }
+    } else if (e.key === 'Escape') {
+      setIsOpen(false)
+    }
+  }
+
   const INPUT_STYLE = `w-full h-9 px-3 rounded-lg border border-border bg-bg text-sm text-ink
     placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-150`
-  const SUB_LABEL = 'block text-[11px] font-medium text-muted mb-1'
+  const LABEL_STYLE = 'block text-xs font-medium text-muted mb-1.5'
 
   return (
-    <div className="space-y-2">
-      {/* Header with Title & Mode Switchers */}
-      <div className="flex items-center justify-between">
-        <label className="block text-xs font-medium text-muted">
-          {label} {required && <span className="text-red-500">*</span>}
-        </label>
-
-        <div className="flex items-center gap-1 bg-surface border border-border rounded-lg p-0.5 text-[11px]">
-          <button
-            type="button"
-            onClick={() => setMode('ph')}
-            className={`px-2 py-1 rounded-md font-medium transition-all ${
-              mode === 'ph'
-                ? 'bg-primary/20 text-primary-dark font-semibold'
-                : 'text-muted hover:text-ink'
-            }`}
-          >
-            🇵🇭 Philippines
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode('intl')}
-            className={`px-2 py-1 rounded-md font-medium transition-all ${
-              mode === 'intl'
-                ? 'bg-primary/20 text-primary-dark font-semibold'
-                : 'text-muted hover:text-ink'
-            }`}
-          >
-            🌐 International
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setMode('freeform')
-              setFreeformText(value || '')
-            }}
-            className={`px-2 py-1 rounded-md font-medium transition-all ${
-              mode === 'freeform'
-                ? 'bg-primary/20 text-primary-dark font-semibold'
-                : 'text-muted hover:text-ink'
-            }`}
-            title="Type custom address without dropdowns"
-          >
-            <Edit3 size={11} className="inline mr-1" />
-            Freeform
-          </button>
+    <div className="space-y-3" ref={containerRef}>
+      
+      {/* STEP 1: Main Autocomplete Search Bar at the Very Top */}
+      <div className="relative">
+        <div className="flex items-center justify-between">
+          <label className={LABEL_STYLE}>
+            Search for Address {required && <span className="text-red-500">*</span>}
+          </label>
         </div>
+
+        <div className="relative">
+          <input
+            ref={searchInputRef}
+            type="text"
+            disabled={disabled}
+            value={searchQuery}
+            onFocus={() => {
+              if (searchQuery.trim().length > 0) setIsOpen(true)
+            }}
+            onChange={(e) => {
+              setSearchQuery(e.target.value)
+              setIsOpen(true)
+              setHighlightedIndex(0)
+            }}
+            onKeyDown={handleKeyDown}
+            placeholder="Start typing an address, street, or landmark (e.g. Ortigas, BGC, Ayala, Clark)..."
+            className={`${INPUT_STYLE} pl-8.5 pr-8`}
+          />
+          <Search size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
+
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery('')
+                setStreetAddress('')
+                setLocality('')
+                setAdminArea('')
+                setPostalCode('')
+                emitFullAddress({ unit: unitFloor, street: '', city: '', state: '', zip: '', cntry: country })
+              }}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted hover:text-ink p-0.5"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+
+        {/* Dropdown Predictions List (Capped to 5 items with smooth scroll) */}
+        {isOpen && suggestions.length > 0 && (
+          <div className="absolute left-0 right-0 z-50 mt-1 rounded-lg border border-border bg-surface shadow-xl overflow-hidden animate-fadeIn">
+            <div className="divide-y divide-border/20 max-h-52 overflow-y-auto">
+              {suggestions.map((item, idx) => {
+                const isHighlighted = idx === highlightedIndex
+                return (
+                  <button
+                    key={item.description}
+                    type="button"
+                    onClick={() => applyAddressComponents(item)}
+                    onMouseEnter={() => setHighlightedIndex(idx)}
+                    className={`w-full px-3 py-2.5 text-xs flex items-center gap-2.5 text-left transition-colors cursor-pointer ${
+                      isHighlighted ? 'bg-primary/15 text-primary-dark font-medium' : 'hover:bg-bg text-ink'
+                    }`}
+                  >
+                    <div className="shrink-0 text-muted">
+                      {item.isLocal ? (
+                        <Navigation size={13} className="text-primary-dark" />
+                      ) : (
+                        <Globe size={13} className="text-blue-500" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold">{item.description}</p>
+                      <p className="text-[10.5px] text-muted">
+                        Postal Code: {item.address_components.postal_code} • {item.address_components.country}
+                      </p>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Mode 1: Philippines Cascading Dropdowns */}
-      {mode === 'ph' && (
-        <div className="rounded-xl border border-border bg-surface/50 p-3 space-y-2.5">
-          {/* Region */}
-          <div>
-            <label className={SUB_LABEL}>Region</label>
-            <select
-              disabled={disabled}
-              value={selectedRegionId}
-              onChange={(e) => {
-                const regId = e.target.value
-                setSelectedRegionId(regId)
-                setSelectedProvinceName('')
-                setSelectedCityName('')
-                handlePhChange({ regionId: regId, province: '', city: '' })
-              }}
-              className={SELECT_STYLE}
-            >
-              <option value="">-- Select Region --</option>
-              {PH_REGIONS.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name}
-                </option>
-              ))}
-            </select>
-          </div>
+      {/* STEP 2: Secondary Manual Field Strictly for Apt, Suite, Unit, or Floor No. */}
+      <div>
+        <label className={LABEL_STYLE}>Apt, Suite, Unit, or Floor No. (Optional)</label>
+        <input
+          ref={unitInputRef}
+          type="text"
+          disabled={disabled}
+          value={unitFloor}
+          onChange={(e) => {
+            const val = e.target.value
+            setUnitFloor(val)
+            emitFullAddress({
+              unit: val,
+              street: streetAddress,
+              city: locality,
+              state: adminArea,
+              zip: postalCode,
+              cntry: country,
+            })
+          }}
+          placeholder="e.g. Unit 402, 4th Floor"
+          className={INPUT_STYLE}
+        />
+      </div>
 
-          {/* Province & City in 2 columns */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            <div>
-              <label className={SUB_LABEL}>Province / District</label>
-              <select
-                disabled={disabled || !selectedRegionId}
-                value={selectedProvinceName}
-                onChange={(e) => {
-                  const prov = e.target.value
-                  setSelectedProvinceName(prov)
-                  setSelectedCityName('')
-                  handlePhChange({ province: prov, city: '' })
-                }}
-                className={SELECT_STYLE}
-              >
-                <option value="">
-                  {!selectedRegionId ? 'Select a Region first' : '-- Select Province --'}
-                </option>
-                {availableProvinces.map((p) => (
-                  <option key={p.name} value={p.name}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+      {/* STEP 2 (Cont.): Separated "Street Address" Auto-Injected from Google Places */}
+      <div>
+        <label className={LABEL_STYLE}>Street Address</label>
+        <input
+          type="text"
+          disabled={disabled}
+          value={streetAddress}
+          onChange={(e) => {
+            const val = e.target.value
+            setStreetAddress(val)
+            emitFullAddress({
+              unit: unitFloor,
+              street: val,
+              city: locality,
+              state: adminArea,
+              zip: postalCode,
+              cntry: country,
+            })
+          }}
+          placeholder="e.g. Ortigas Jr. Rd., Ayala Ave., or Roxas Blvd."
+          className={INPUT_STYLE}
+        />
+      </div>
 
-            <div>
-              <label className={SUB_LABEL}>City / Municipality</label>
-              <select
-                disabled={disabled || !selectedProvinceName}
-                value={selectedCityName}
-                onChange={(e) => {
-                  const city = e.target.value
-                  setSelectedCityName(city)
-                  handlePhChange({ city })
-                }}
-                className={SELECT_STYLE}
-              >
-                <option value="">
-                  {!selectedProvinceName ? 'Select Province first' : '-- Select City/Municipality --'}
-                </option>
-                {availableCities.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Barangay & ZIP Code in 2 columns */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            <div>
-              <label className={SUB_LABEL}>Barangay / District (Optional)</label>
-              <input
-                type="text"
-                disabled={disabled}
-                value={barangayOrDistrict}
-                onChange={(e) => {
-                  const val = e.target.value
-                  setBarangayOrDistrict(val)
-                  handlePhChange({ brgy: val })
-                }}
-                placeholder="e.g. San Antonio"
-                className={INPUT_STYLE}
-              />
-            </div>
-            <div>
-              <label className={SUB_LABEL}>ZIP Code (Optional)</label>
-              <input
-                type="text"
-                disabled={disabled}
-                value={zipCode}
-                onChange={(e) => {
-                  const val = e.target.value
-                  setZipCode(val)
-                  handlePhChange({ zip: val })
-                }}
-                placeholder="e.g. 1600"
-                className={INPUT_STYLE}
-              />
-            </div>
-          </div>
-
-          {/* Street / Building / House Number */}
-          <div>
-            <label className={SUB_LABEL}>Street Address / Building / Unit No.</label>
-            <input
-              type="text"
-              disabled={disabled}
-              value={streetLine}
-              onChange={(e) => {
-                const val = e.target.value
-                setStreetLine(val)
-                handlePhChange({ street: val })
-              }}
-              placeholder="e.g. Unit 402 Emerald Tower, F. Ortigas Jr. Rd."
-              className={INPUT_STYLE}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Mode 2: International Address */}
-      {mode === 'intl' && (
-        <div className="rounded-xl border border-border bg-surface/50 p-3 space-y-2.5">
-          <div>
-            <label className={SUB_LABEL}>Country</label>
-            <select
-              disabled={disabled}
-              value={intlCountry}
-              onChange={(e) => {
-                const c = e.target.value
-                setIntlCountry(c)
-                handleIntlChange({ country: c })
-              }}
-              className={SELECT_STYLE}
-            >
-              <option value="">-- Select Country --</option>
-              {POPULAR_COUNTRIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            <div>
-              <label className={SUB_LABEL}>City / State / Region</label>
-              <input
-                type="text"
-                disabled={disabled}
-                value={intlStateCity}
-                onChange={(e) => {
-                  const val = e.target.value
-                  setIntlStateCity(val)
-                  handleIntlChange({ stateCity: val })
-                }}
-                placeholder="e.g. Los Angeles, CA or Tokyo"
-                className={INPUT_STYLE}
-              />
-            </div>
-            <div>
-              <label className={SUB_LABEL}>Postal / ZIP Code</label>
-              <input
-                type="text"
-                disabled={disabled}
-                value={intlZip}
-                onChange={(e) => {
-                  const val = e.target.value
-                  setIntlZip(val)
-                  handleIntlChange({ zip: val })
-                }}
-                placeholder="e.g. 90001"
-                className={INPUT_STYLE}
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className={SUB_LABEL}>Street Address / Suite / Building</label>
-            <input
-              type="text"
-              disabled={disabled}
-              value={intlStreet}
-              onChange={(e) => {
-                const val = e.target.value
-                setIntlStreet(val)
-                handleIntlChange({ street: val })
-              }}
-              placeholder="e.g. 450 North Brand Blvd, Suite 600"
-              className={INPUT_STYLE}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Mode 3: Freeform Text */}
-      {mode === 'freeform' && (
-        <div className="relative">
+      {/* STEP 3: Injected City, State, Postal Code & Country Dropdown */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className={LABEL_STYLE}>City</label>
           <input
             type="text"
             disabled={disabled}
-            value={freeformText}
+            value={locality}
+            onChange={(e) => {
+              setLocality(e.target.value)
+              emitFullAddress({
+                unit: unitFloor,
+                street: streetAddress,
+                city: e.target.value,
+                state: adminArea,
+                zip: postalCode,
+                cntry: country,
+              })
+            }}
+            placeholder="City"
+            className={INPUT_STYLE}
+          />
+        </div>
+
+        <div>
+          <label className={LABEL_STYLE}>State / Province</label>
+          <input
+            type="text"
+            disabled={disabled}
+            value={adminArea}
+            onChange={(e) => {
+              setAdminArea(e.target.value)
+              emitFullAddress({
+                unit: unitFloor,
+                street: streetAddress,
+                city: locality,
+                state: e.target.value,
+                zip: postalCode,
+                cntry: country,
+              })
+            }}
+            placeholder="Province / State"
+            className={INPUT_STYLE}
+          />
+        </div>
+
+        <div>
+          <label className={LABEL_STYLE}>Postal Code</label>
+          <input
+            type="text"
+            disabled={disabled}
+            value={postalCode}
+            onChange={(e) => {
+              setPostalCode(e.target.value)
+              emitFullAddress({
+                unit: unitFloor,
+                street: streetAddress,
+                city: locality,
+                state: adminArea,
+                zip: e.target.value,
+                cntry: country,
+              })
+            }}
+            placeholder="e.g. 1605"
+            className={`${INPUT_STYLE} font-medium text-primary-dark`}
+          />
+        </div>
+
+        {/* STEP 3: Open Country Dropdown Selection */}
+        <div>
+          <label className={LABEL_STYLE}>Country</label>
+          <select
+            disabled={disabled}
+            value={country}
             onChange={(e) => {
               const val = e.target.value
-              setFreeformText(val)
-              onChange(val)
+              setCountry(val)
+              emitFullAddress({
+                unit: unitFloor,
+                street: streetAddress,
+                city: locality,
+                state: adminArea,
+                zip: postalCode,
+                cntry: val,
+              })
             }}
-            placeholder={placeholder}
-            className={`${INPUT_STYLE} pl-8`}
-          />
-          <MapPin size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
+            className={INPUT_STYLE}
+          >
+            {ALL_COUNTRIES_LIST.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
         </div>
-      )}
+      </div>
 
-      {/* Preview of assembled result */}
-      {value && mode !== 'freeform' && (
-        <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-bg border border-border/80 text-xs">
-          <MapPin size={13} className="text-primary-dark shrink-0" />
-          <span className="text-muted shrink-0 text-[11px]">Formatted:</span>
-          <span className="text-ink font-medium truncate">{value}</span>
-        </div>
-      )}
-
-      {error && <p className="text-xs text-red-500 dark:text-red-400">{error}</p>}
+      {error && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{error}</p>}
     </div>
   )
 }
-

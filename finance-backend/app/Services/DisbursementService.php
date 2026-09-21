@@ -357,9 +357,9 @@ class DisbursementService
                 'source_type' => 'Payroll requests cannot be edited here — only approved, rejected, or released.',
             ]);
         }
-
         return DB::transaction(function () use ($disbursement, $data, $userId) {
-            $original = $disbursement->only(['payee', 'amount_paid', 'cash_account_id']);
+            $original = $disbursement->only(['payee', 'amount_paid', 'cash_account_id', 'department_id', 'ap_id', 'payment_date', 'payment_method', 'reference_number', 'remarks']);
+            $newValues = array_intersect_key($data, $original);
 
             $disbursement->update($data);
 
@@ -370,7 +370,7 @@ class DisbursementService
                 'record_id' => $disbursement->id,
                 'activity_description' => "Updated disbursement {$disbursement->voucher_number}.",
                 'old_values' => $original,
-                'new_values' => $disbursement->only(['payee', 'amount_paid', 'cash_account_id']),
+                'new_values' => $disbursement->only(array_keys($newValues)),
                 'ip_address' => request()->ip(),
                 'user_agent' => request()->userAgent(),
             ]);

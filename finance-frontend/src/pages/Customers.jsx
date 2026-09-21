@@ -411,6 +411,7 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
       <Modal
         open={isModalOpen}
         onClose={closeModal}
+        maxWidth="max-w-lg"
         title={isEditing ? 'Edit Customer' : 'Add Customer'}
         footer={
           <>

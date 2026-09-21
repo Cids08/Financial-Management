@@ -17,6 +17,7 @@ import { useCountdown, formatCountdown } from '../hooks/useCountdown'
 const ACTIVITY_ICON = {
   Login: CheckCircle2,
   'Failed Login': AlertTriangle,
+  'Forced Logout': LogOut,
   'Password Change': KeyRound,
   '2FA Enabled': ShieldCheck,
   '2FA Disabled': ShieldCheck,
@@ -28,6 +29,7 @@ const ACTIVITY_ICON = {
 const ACTIVITY_COLOR = {
   success: 'text-emerald-600 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-500/10',
   failed: 'text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-500/10',
+  warning: 'text-amber-600 bg-amber-50 dark:text-amber-400 dark:bg-amber-500/10',
 }
 
 /* ---------------------------------------------------------------------- */

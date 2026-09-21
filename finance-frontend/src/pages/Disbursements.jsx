@@ -173,7 +173,11 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
 
   const canViewPayments = hasPermission(permissions, 'disbursements.view')
   const canManagePayments = hasPermission(permissions, 'disbursements.manage')
-  const canApprovePayments = hasPermission(permissions, 'disbursements.approve') || canManagePayments
+  // Strict separation of duties: only users explicitly granted
+  // disbursements.approve can approve/reject. Having disbursements.manage
+  // (i.e. being the creator) does NOT grant approval rights — a maker
+  // should never be their own checker.
+  const canApprovePayments = hasPermission(permissions, 'disbursements.approve')
   const canReleasePayments = hasPermission(permissions, 'disbursements.release') || canManagePayments || canApprovePayments
 
   const {
@@ -303,40 +307,6 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
     return d.has_active_budget === false
   }
 
-  const openAddDisbursement = () => {
-    // Default Payment Date to today  -  there's nothing bill-specific to
-    // derive it from (bills only carry invoice_date/due_date), and most
-    // disbursements are being recorded as happening now.
-    setDForm({
-      ...EMPTY_DISBURSEMENT_FORM,
-      payment_date: new Date().toISOString().slice(0, 10),
-      reference_number: getNextReferenceNo(disbursements),
-    })
-    setDFormError('')
-    setFieldErrors({})
-    setDateErrors({ payment_date: '' })
-    setDModalMode('add')
-    // Preview the next voucher number right away  -  see
-    // useDisbursements' fetchNextVoucherNumber comment for why this is a
-    // preview, not a reservation. Falls back to the "Auto-generated on
-    // save" placeholder if the fetch fails for any reason.
-    fetchNextVoucherNumber().then((voucherNumber) => {
-      if (voucherNumber) setDForm((f) => ({ ...f, voucher_number: voucherNumber }))
-    })
-  }
-
-  // Deep-link from the dashboard's "New Transaction" menu: /?new=1 opens
-  // the create form directly, then the param is stripped so a refresh
-  // doesn't re-open it.
-  const [searchParams, setSearchParams] = useSearchParams()
-  useEffect(() => {
-    if (searchParams.get('new') !== '1') return
-    openAddDisbursement()
-    const next = new URLSearchParams(searchParams)
-    next.delete('new')
-    setSearchParams(next, { replace: true })
-  }, [searchParams, setSearchParams])
-
   const openEditDisbursement = (d) => {
     if (!canManagePayments || d.status !== 'Pending' || getSourceType(d) === 'payroll') return
     setDForm({
@@ -451,7 +421,6 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
     e.preventDefault()
     const errors = {}
     if (!dForm.ap_id) errors.ap_id = 'Please select a related bill.'
-    if (!dForm.department_id) errors.department_id = 'Please select a department.'
     if (!dForm.payee.trim()) errors.payee = 'Payee is required.'
     if (!dForm.cash_account_id) errors.cash_account_id = 'Please select a cash account.'
     if (!dForm.payment_date) {
@@ -489,23 +458,24 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
     }
     setFieldErrors({})
     setDFormError('')
+    setDSubmitting(true)
     try {
       const payload = {
         ...dForm,
         source_type: 'ap',
         ap_id: Number(dForm.ap_id),
-        department_id: Number(dForm.department_id),
+        department_id: dForm.department_id ? Number(dForm.department_id) : null,
         cash_account_id: Number(dForm.cash_account_id),
         amount_paid: Number(dForm.amount_paid) || 0,
       }
-      if (dModalMode === 'add') {
-        await createDisbursement(payload)
-      } else if (dModalMode) {
+      if (dModalMode?.disbursement_id) {
         await updateDisbursement(dModalMode.disbursement_id, payload)
       }
       closeDisbursementModal()
     } catch (err) {
-      setDFormError(err?.response?.data?.message || 'Could not save the disbursement.')
+      // The hook throws plain Error objects — err.message is the text.
+      // err?.response?.data?.message is Axios syntax and was always undefined here.
+      setDFormError(err?.message || 'Could not save the disbursement.')
     } finally {
       setDSubmitting(false)
     }
@@ -611,9 +581,6 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
             Track outgoing payments released against supplier bills, plus payroll requests submitted by other departments for approval.
           </p>
         </div>
-        {canManagePayments && (
-          <Button variant="primary" size="sm" icon={Plus} onClick={openAddDisbursement}>Add Disbursement</Button>
-        )}
       </div>
 
       {dActionSuccess && (
@@ -764,12 +731,12 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                       {isPayroll ? (
                         <>
                           <p className="text-ink text-xs truncate max-w-27.5 xl:max-w-32.5">{d.payroll_batch_number || '—'}</p>
-                          <p className="text-xs text-muted truncate max-w-27.5 xl:max-w-32.5">{d.department_name}</p>
+                          <p className="text-xs text-muted truncate max-w-27.5 xl:max-w-32.5">{d.department_name || '—'}</p>
                         </>
                       ) : (
                         <>
-                          <p className="text-ink text-xs truncate max-w-27.5 xl:max-w-32.5">{d.invoice_number}</p>
-                          <p className="text-xs text-muted truncate max-w-27.5 xl:max-w-32.5">{d.department_name}</p>
+                          <p className="text-ink text-xs truncate max-w-27.5 xl:max-w-32.5">{d.invoice_number || '—'}</p>
+                          <p className="text-xs text-muted truncate max-w-27.5 xl:max-w-32.5">{d.department_name || 'General'}</p>
                         </>
                       )}
                     </td>
@@ -959,16 +926,16 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
         />
       </div>
 
-      {/* ---- Disbursement Add/Edit modal (Accounts Payable only) ---- */}
+      {/* ---- Disbursement Edit modal (Accounts Payable only) ---- */}
       <Modal
         open={isDisbursementModalOpen}
         onClose={closeDisbursementModal}
-        title={isEditingDisbursement ? 'Edit Disbursement' : 'Add Disbursement'}
+        title="Edit Disbursement"
         footer={
           <>
             <Button variant="secondary" size="md" onClick={closeDisbursementModal}>Cancel</Button>
             <Button variant="primary" size="md" onClick={handleDisbursementSubmit} disabled={dSubmitting}>
-              {dSubmitting ? 'Saving…' : isEditingDisbursement ? 'Save Changes' : 'Add Disbursement'}
+              {dSubmitting ? 'Saving…' : 'Save Changes'}
             </Button>
           </>
         }
@@ -978,7 +945,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{dFormError}</div>
           )}
           <div className="rounded-lg border border-border bg-bg px-3 py-2 text-xs text-muted">
-            Manual disbursements created here are always Accounts Payable payments. Payroll payments are submitted by other departments through the Payroll module and appear directly in the list below for approval.
+            Modify payment details, account assignment, or reference for this pending disbursement voucher before approval and release.
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -1001,7 +968,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
               {fieldErrors.ap_id && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.ap_id}</p>}
             </div>
             <div>
-              <label className={LABEL}>Department <span className="text-red-500 dark:text-red-400">*</span></label>
+              <label className={LABEL}>Department <span className="font-normal text-muted">(Optional)</span></label>
               <select
                 value={dForm.department_id}
                 onChange={(e) => { setDForm((f) => ({ ...f, department_id: e.target.value })); setFieldErrors((fe) => ({ ...fe, department_id: '' })) }}
@@ -1009,7 +976,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                 style={INPUT_TEXT_STYLE}
                 disabled={departmentsLoading}
               >
-                <option value="">{departmentsLoading ? 'Loading departments…' : 'Select a department…'}</option>
+                <option value="">{departmentsLoading ? 'Loading departments…' : 'None / General'}</option>
                 {departments.map((dept) => (
                   <option key={dept.department_id} value={dept.department_id}>{dept.department_name}</option>
                 ))}
@@ -1025,14 +992,8 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                 value={dForm.voucher_number}
                 className={INPUT}
                 style={INPUT_TEXT_STYLE}
-                placeholder={!isEditingDisbursement ? 'Fetching next number…' : 'Auto-generated on save'}
                 disabled
               />
-              {!isEditingDisbursement && (
-                <p className="mt-1 text-[11px] text-muted">
-                  Reserved automatically  -  the exact number is only final once saved.
-                </p>
-              )}
             </div>
             <div>
               <label className={LABEL}>Payee <span className="text-red-500 dark:text-red-400">*</span></label>
@@ -1481,7 +1442,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                   </div>
                 ) : (
                   <div className="px-3 py-2">
-                    <DetailRow label="Department" value={dDetailRecord.department_name} />
+                    <DetailRow label="Department" value={dDetailRecord.department_name || 'General'} />
                     <DetailRow label="Payment Date" value={formatDate(dDetailRecord.payment_date)} />
                     <DetailRow label="Amount Paid" value={formatCurrency(dDetailRecord.amount_paid)} />
                     <DetailRow label="Payment Method" value={dDetailRecord.payment_method} />

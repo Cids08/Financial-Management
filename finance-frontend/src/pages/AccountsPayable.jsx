@@ -294,8 +294,8 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
   const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
   const canApprove = hasPermission('ap.approve')
   const canManage = hasPermission('ap.manage')
-  // Payment Wizard execution requires elevated permission  -  staff with only ap.manage cannot access it
-  const canExecutePayments = hasPermission('ap.approve') || hasPermission('disbursements.approve')
+  // Payment initiation (single bill or wizard) is accessible to users who can manage AP or disbursements, as well as approvers
+  const canExecutePayments = canManage || hasPermission('ap.approve') || hasPermission('disbursements.manage') || hasPermission('disbursements.approve')
 
   usePrivacy()
 

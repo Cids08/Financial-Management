@@ -19,55 +19,27 @@ use Illuminate\Support\Facades\DB;
  * Role access:
  *   super-admin, admin — both get EVERY permission that exists, on EVERY
  *     run, no exceptions.
- *   staff, collector — get their default permission list (below) ONLY
- *     the run that actually creates the role (tracked via
- *     wasRecentlyCreated). After that, this seeder never touches their
- *     role_permissions again — an admin's changes via Roles.jsx's
- *     "Manage Permissions" modal are left alone on every later run,
- *     instead of being silently reset back to these defaults.
+ *   staff, collector — always synced to EXACTLY the permission list below
+ *     on every boot (sync(), not syncWithoutDetaching). The seeder is the
+ *     single source of truth: any extra permissions manually granted to
+ *     these roles via the Roles UI will be stripped on the next redeploy.
+ *     User accounts and role assignments are NOT affected — only the
+ *     permission list attached to the role itself is reset.
  *
- * settings.view IS granted to staff/collector as part of their default
- * list below (needed for CompanyContext.jsx/Sidebar.jsx to show the
- * company logo/name — that endpoint requires settings.view for everyone).
- * BUT because of the wasRecentlyCreated gate above: if staff/collector
- * already existed in your DB before this file's settings.view addition,
- * running this seeder will NOT retroactively grant it — the gate treats
- * "role already exists" as "don't touch it," full stop. If your
- * staff/collector accounts' sidebars are still missing the company logo
- * after seeding, that's why — grant settings.view to them manually once
- * via Roles.jsx's "Manage Permissions" modal, or truncate their
- * role_permissions rows for those two roles specifically before
- * re-seeding so wasRecentlyCreated-style defaults apply again (NOT a
- * full re-seed of super-admin/admin, which are unaffected by this gate
- * anyway).
+ * disbursements.* and budgets.* are SEPARATE permission groups (both
+ * under the "Budget Management" DB module — distinct permission_name
+ * values, independently assignable).
  *
- * Same caveat applies to budgets.view/budgets.manage below — added to
- * staff's default list, but only takes effect for a staff role created
- * AFTER this addition. An already-existing staff role needs the same
- * manual grant (or role_permissions truncation) described above.
- *
- * disbursements.* and budgets.* are now SEPARATE permission groups
- * (both under the "Budget Management" DB module, since the CHECK
- * constraint only allows that one module name for this area — but
- * distinct permission_name values, independently assignable). This was
- * previously one combined disbursements.* set covering both; split back
- * out per clarification so Budgets access doesn't imply Disbursements
- * access or vice versa. Routes for both don't exist yet in
- * routes/api.php — seeded ahead of time so it's ready once built.
- *
- * audit-logs.view is NOT part of staff/collector's default list below —
- * a system-wide trail across every module is Admin-tier by design, so it
- * only reaches super-admin/admin automatically (via the "every
- * permission" sync). Grant it to staff/collector manually via Roles.jsx
- * if that's ever needed.
+ * audit-logs.view is NOT part of staff/collector's default list —
+ * Admin-tier by design. Grant manually via Roles.jsx if needed.
  *
  * PRUNING: permission_name values not in the canonical list below are
- * deleted (pivot rows first) — this cleans up orphaned rows from prior
- * naming conventions this project went through.
+ * deleted (pivot rows first) — cleans up orphaned rows from prior
+ * naming conventions.
  *
  * Re-run safe: permissions and role records always sync. Role-to-
- * permission ASSIGNMENT is safe to re-run too, but by design does
- * nothing once a role already exists — see "Role access" above.
+ * permission assignment for staff/collector is also always reset to
+ * exactly the list below.
  */
 class RolesAndPermissionsSeeder extends Seeder
 {
@@ -201,14 +173,11 @@ class RolesAndPermissionsSeeder extends Seeder
         ];
 
         $roleModels = [];
-        $roleWasCreated = []; // name => bool, from wasRecentlyCreated
         foreach ($roles as $name => $attrs) {
-            $role = Role::updateOrCreate(
+            $roleModels[$name] = Role::updateOrCreate(
                 ['name' => $name],
                 array_merge($attrs, ['is_active' => true])
             );
-            $roleModels[$name] = $role;
-            $roleWasCreated[$name] = $role->wasRecentlyCreated;
         }
 
         $permissionModels = []; // permission_name => Permission
@@ -238,73 +207,19 @@ class RolesAndPermissionsSeeder extends Seeder
             $roleModels[$slug]->permissions()->sync($allPermissionIds);
         }
 
-        // staff, collector: explicit restricted lists — but ONLY on the
-        // run that actually creates the role. See class docblock for what
-        // to do if these roles already existed before settings.view/
-        // budgets.* were added to their default list.
+        // staff, collector: explicit restricted lists — ALWAYS sync on every
+        // boot. The seeder is the single source of truth for these roles;
+        // any manual changes via the Roles UI will be reset on redeploy.
+        // User accounts and role assignments are NOT affected.
         foreach (['staff', 'collector'] as $roleName) {
-            if (! $roleWasCreated[$roleName]) {
-                $this->command->info("Skipped default permissions for '{$roleName}' — role already exists, leaving its current permissions as-is.");
-                continue;
-            }
-
             $permissionIds = array_map(
                 fn ($name) => $permissionModels[$name]->id,
                 $this->roleAccess[$roleName]
             );
             $roleModels[$roleName]->permissions()->sync($permissionIds);
-            $this->command->info("Assigned default permissions to newly-created role '{$roleName}'.");
+            $this->command->info("Synced permissions for '{$roleName}' role.");
         }
 
-        // ─────────────────────────────────────────────────────────────
-        // Additive reconciliation for EXISTING staff roles (idempotent).
-        //
-        // The wasRecentlyCreated gate above leaves pre-existing roles
-        // completely untouched, so a redeploy (entrypoint re-runs this
-        // seeder every boot) would NEVER grant the read-only dropdown
-        // perms to a staff role that predates them — which is exactly the
-        // bug that made the Department / Cash Account selects come back
-        // EMPTY for staff (403 on the /api/departments + /api/cash-accounts
-        // dropdown sources). syncWithoutDetaching is additive-only: it
-        // never detaches an admin's customizations, it just tops the role
-        // up with the two view-only dropdown sources if they're missing.
-        // Repeat-boot safe (no-op when already attached).
-        $staffDropdownViewPerms = array_map(
-            fn ($name) => $permissionModels[$name]->id,
-            ['departments.view', 'cash-accounts.view']
-        );
-        $existingStaff = $roleModels['staff'] ?? null;
-        if ($existingStaff && $existingStaff?->permissions()->whereIn('permission_name', ['departments.view', 'cash-accounts.view'])->count() !== 2) {
-            $existingStaff->permissions()->syncWithoutDetaching($staffDropdownViewPerms);
-            $this->command->warn("Topped up existing 'staff' role with read-only dropdown view permissions (departments.view, cash-accounts.view).");
-        }
-
-        // Additive reconciliation for existing staff roles — grant
-        // collectors.view + collectors.manage if missing so Staff can
-        // manage collector accounts from the sidebar.
-        // Repeat-boot safe (no-op when already attached).
-        $staffCollectorPerms = array_map(
-            fn ($name) => $permissionModels[$name]->id,
-            ['collectors.view', 'collectors.manage']
-        );
-        if ($existingStaff && $existingStaff?->permissions()->whereIn('permission_name', ['collectors.view', 'collectors.manage'])->count() !== 2) {
-            $existingStaff->permissions()->syncWithoutDetaching($staffCollectorPerms);
-            $this->command->warn("Topped up existing 'staff' role with collectors.view and collectors.manage.");
-        }
-
-        // Additive reconciliation for existing collector roles — grant
-        // collectors.view if missing so Collectors shows in the sidebar
-        // without requiring a full re-seed. Repeat-boot safe (no-op when
-        // already attached).
-        $collectorViewPerm = array_map(
-            fn ($name) => $permissionModels[$name]->id,
-            ['collectors.view']
-        );
-        $existingCollector = $roleModels['collector'] ?? null;
-        if ($existingCollector && $existingCollector?->permissions()->where('permission_name', 'collectors.view')->count() === 0) {
-            $existingCollector->permissions()->syncWithoutDetaching($collectorViewPerm);
-            $this->command->warn("Topped up existing 'collector' role with collectors.view.");
-        }
 
         $this->command->info('Roles and permissions seeded (single source of truth).');
     }

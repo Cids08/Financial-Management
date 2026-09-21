@@ -387,6 +387,7 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
       <Modal
         open={isModalOpen}
         onClose={closeModal}
+        maxWidth="max-w-lg"
         title={isEditing ? 'Edit Supplier' : 'Add Supplier'}
         footer={
           <>

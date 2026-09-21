@@ -16,7 +16,7 @@ class StoreDisbursementRequest extends FormRequest
     {
         return [
             'ap_id' => ['required', 'integer', 'exists:accounts_payable,id'],
-            'department_id' => ['required', 'integer', 'exists:departments,id'],
+            'department_id' => ['nullable', 'integer', 'exists:departments,id'],
             'cash_account_id' => ['required', 'integer', 'exists:cash_accounts,id'],
             // voucher_number removed: DisbursementService::create() now
             // always generates it server-side via a real DB sequence, so

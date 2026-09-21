@@ -80,6 +80,26 @@ class AuthService
 
                 $this->registerFailedAttempt($user);
 
+                // Record failed login in AuditLog so Superadmin/Admin can inspect it
+                AuditLog::create([
+                    'user_id' => $user->id,
+                    'module' => 'Authentication',
+                    'action' => 'failed_login',
+                    'record_id' => $user->id,
+                    'activity_description' => sprintf(
+                        'Failed login attempt for user %s (%s) from IP %s. (Invalid password entered)',
+                        $user->name ?? $user->first_name . ' ' . $user->last_name,
+                        $email,
+                        request()->ip()
+                    ),
+                    'ip_address' => request()->ip(),
+                    'user_agent' => request()->userAgent(),
+                ]);
+
+                // Also record in activity_logs so the user sees it in their
+                // own Profile → Recent Security Activity timeline
+                ActivityLog::record($user->id, 'Failed Login', 'Authentication', request()->ip());
+
                 // The attempt that just ran may have been the one that
                 // tripped the lock (registerFailedAttempt sets locked_until
                 // on $user in-place). Report that immediately rather than
@@ -146,6 +166,25 @@ class AuthService
             'agent'   => request()->userAgent(),
         ]);
 
+        AuditLog::create([
+            'user_id' => $user->id,
+            'module' => 'Authentication',
+            'action' => 'login',
+            'record_id' => $user->id,
+            'activity_description' => sprintf(
+                'User %s successfully logged in from IP %s (%s).',
+                $user->name ?? $user->first_name . ' ' . $user->last_name,
+                request()->ip(),
+                $this->deviceLabel(request()->userAgent())
+            ),
+            'ip_address' => request()->ip(),
+            'user_agent' => request()->userAgent(),
+        ]);
+
+        // Also record in activity_logs so the user sees this login in their
+        // own Profile → Recent Security Activity timeline
+        ActivityLog::record($user->id, 'Login', 'Authentication', request()->ip());
+
         $user->forceFill(['last_login' => now()])->save();
 
         return [
@@ -205,6 +244,10 @@ class AuthService
         ]);
 
         $user->forceFill(['last_login' => now()])->save();
+
+        // Record in activity_logs so the user sees this 2FA login in their
+        // own Profile → Recent Security Activity timeline
+        ActivityLog::record($user->id, 'Login', 'Authentication', request()->ip());
 
         return [
             'user'  => $user->load(['role', 'department']),
@@ -330,6 +373,11 @@ class AuthService
         } catch (\Throwable $e) {
             logger()->warning('ForcedLogout broadcast failed', ['error' => $e->getMessage()]);
         }
+
+        // Record the forced-logout in activity_logs so the user sees
+        // "Signed Out — New Login Detected" in their own Profile security
+        // activity timeline (appears alongside their other login/failed events).
+        ActivityLog::record($user->id, 'Forced Logout', 'Authentication', $ip);
 
         // Secondary channel alongside the real-time WebSocket notice above
         // — this reaches the person even if their other device/tab isn't

@@ -223,9 +223,9 @@ Route::middleware(['auth:sanctum', 'require.password.change'])->group(function (
         Route::get('/stats', [AccountsPayableController::class, 'stats'])->middleware('permission:ap.view');
         Route::get('/', [AccountsPayableController::class, 'index'])->middleware('permission:ap.view');
         Route::post('/', [AccountsPayableController::class, 'store'])->middleware('permission:ap.manage');
-        // Payment Wizard — static routes must come before /{accountsPayable} wildcard
+        // Payment Wizard & Direct Bill Payment — static routes must come before /{accountsPayable} wildcard
         Route::get('/payment-proposals', [AccountsPayableController::class, 'getPaymentProposals'])->middleware('permission:ap.view');
-        Route::post('/execute-payment-run', [AccountsPayableController::class, 'executePaymentRun'])->middleware('permission:ap.approve');
+        Route::post('/execute-payment-run', [AccountsPayableController::class, 'executePaymentRun'])->middleware('permission:ap.manage|ap.approve|disbursements.manage');
         Route::put('/{accountsPayable}', [AccountsPayableController::class, 'update'])->middleware('permission:ap.manage');
 
         Route::patch('/{accountsPayable}/approve', [AccountsPayableController::class, 'approve'])->middleware('permission:ap.approve');

@@ -1,210 +1,242 @@
-// Official Philippine Regions, Provinces, and Cities/Municipalities
-// Structured for hierarchical cascading dropdown selection
+// Official Philippine Island Groups and simplified Regions
+// Grouped cleanly by Island Group (Luzon, Visayas, Mindanao) to keep dropdowns short and fast to navigate
 
-export const PH_REGIONS = [
+export const PH_ISLAND_GROUPS = [
   {
-    id: 'NCR',
-    name: 'NCR - National Capital Region',
-    provinces: [
+    group: 'Luzon',
+    regions: [
       {
-        name: 'Metro Manila (1st District - Manila)',
-        cities: ['Manila City']
+        id: 'NCR',
+        name: 'Metro Manila (NCR)',
+        provinces: [
+          {
+            name: 'Metro Manila',
+            cities: [
+              'Quezon City', 'Manila City', 'Makati City', 'Taguig City (BGC)', 'Pasig City (Ortigas)',
+              'Mandaluyong City', 'Parañaque City', 'Caloocan City', 'Pasay City',
+              'Las Piñas City', 'Muntinlupa City (Alabang)', 'Marikina City', 'Valenzuela City',
+              'Malabon City', 'Navotas City', 'San Juan City', 'Pateros'
+            ]
+          }
+        ]
       },
       {
-        name: 'Metro Manila (2nd District - East)',
-        cities: ['Mandaluyong City', 'Marikina City', 'Pasig City', 'Quezon City', 'San Juan City']
+        id: 'CAR',
+        name: 'Cordillera (CAR - Baguio/Benguet)',
+        provinces: [
+          { name: 'Benguet', cities: ['Baguio City', 'La Trinidad', 'Itogon', 'Tuba'] },
+          { name: 'Abra', cities: ['Bangued', 'Bucay', 'Dolores'] },
+          { name: 'Apayao', cities: ['Conner', 'Flora', 'Kabugao'] },
+          { name: 'Ifugao', cities: ['Lagawe', 'Banaue', 'Kiangan'] },
+          { name: 'Kalinga', cities: ['Tabuk City', 'Balbalan'] },
+          { name: 'Mountain Province', cities: ['Bontoc', 'Sagada'] }
+        ]
       },
       {
-        name: 'Metro Manila (3rd District - North / CAMANAVA)',
-        cities: ['Caloocan City', 'Malabon City', 'Navotas City', 'Valenzuela City']
+        id: 'R1',
+        name: 'Ilocos Region (Region I)',
+        provinces: [
+          { name: 'Pangasinan', cities: ['Dagupan City', 'San Carlos City', 'Urdaneta City', 'Alaminos City', 'Lingayen'] },
+          { name: 'La Union', cities: ['San Fernando City', 'Agoo', 'Bauang', 'San Juan'] },
+          { name: 'Ilocos Norte', cities: ['Laoag City', 'Batac City', 'San Nicolas'] },
+          { name: 'Ilocos Sur', cities: ['Vigan City', 'Candon City', 'Narvacan'] }
+        ]
       },
       {
-        name: 'Metro Manila (4th District - South)',
-        cities: ['Las Piñas City', 'Makati City', 'Muntinlupa City', 'Parañaque City', 'Pasay City', 'Pateros', 'Taguig City']
+        id: 'R2',
+        name: 'Cagayan Valley (Region II)',
+        provinces: [
+          { name: 'Cagayan', cities: ['Tuguegarao City', 'Aparri', 'Lal-lo'] },
+          { name: 'Isabela', cities: ['Ilagan City', 'Cauayan City', 'Santiago City'] },
+          { name: 'Nueva Vizcaya', cities: ['Bayombong', 'Solano', 'Bambang'] },
+          { name: 'Quirino', cities: ['Cabarroguis', 'Diffun'] },
+          { name: 'Batanes', cities: ['Basco', 'Sabtang'] }
+        ]
+      },
+      {
+        id: 'R3',
+        name: 'Central Luzon (Region III - Pampanga/Bulacan)',
+        provinces: [
+          { name: 'Pampanga', cities: ['San Fernando City', 'Angeles City', 'Mabalacat City', 'Clark Freeport', 'Guagua'] },
+          { name: 'Bulacan', cities: ['Malolos City', 'Meycauayan City', 'San Jose del Monte City', 'Marilao', 'Santa Maria'] },
+          { name: 'Bataan', cities: ['Balanga City', 'Mariveles', 'Dinalupihan', 'Subic Bay Freeport'] },
+          { name: 'Zambales', cities: ['Olongapo City', 'Subic', 'Iba'] },
+          { name: 'Tarlac', cities: ['Tarlac City', 'Capas', 'Concepcion'] },
+          { name: 'Nueva Ecija', cities: ['Cabanatuan City', 'Palayan City', 'Gapan City', 'San Jose City'] },
+          { name: 'Aurora', cities: ['Baler', 'Maria Aurora'] }
+        ]
+      },
+      {
+        id: 'R4A',
+        name: 'CALABARZON (Region IV-A - Cavite/Laguna/Batangas)',
+        provinces: [
+          { name: 'Cavite', cities: ['Bacoor City', 'Dasmariñas City', 'Imus City', 'General Trias City', 'Tagaytay City', 'Trece Martires City', 'Silang'] },
+          { name: 'Laguna', cities: ['Santa Rosa City', 'Calamba City', 'Biñan City', 'Cabuyao City', 'San Pedro City', 'San Pablo City', 'Los Baños'] },
+          { name: 'Batangas', cities: ['Batangas City', 'Lipa City', 'Tanauan City', 'Santo Tomas City', 'Nasugbu', 'Bauan'] },
+          { name: 'Rizal', cities: ['Antipolo City', 'Cainta', 'Taytay', 'Binangonan', 'San Mateo', 'Angono'] },
+          { name: 'Quezon', cities: ['Lucena City', 'Tayabas City', 'Candelaria', 'Sariaya'] }
+        ]
+      },
+      {
+        id: 'MIMAROPA',
+        name: 'MIMAROPA (Palawan/Mindoro)',
+        provinces: [
+          { name: 'Palawan', cities: ['Puerto Princesa City', 'Coron', 'El Nido'] },
+          { name: 'Oriental Mindoro', cities: ['Calapan City', 'Naujan', 'Puerto Galera'] },
+          { name: 'Occidental Mindoro', cities: ['San Jose', 'Mamburao'] },
+          { name: 'Marinduque', cities: ['Boac', 'Santa Cruz'] },
+          { name: 'Romblon', cities: ['Romblon', 'Odiongan'] }
+        ]
+      },
+      {
+        id: 'R5',
+        name: 'Bicol Region (Region V - Naga/Legazpi)',
+        provinces: [
+          { name: 'Albay', cities: ['Legazpi City', 'Ligao City', 'Tabaco City', 'Daraga'] },
+          { name: 'Camarines Sur', cities: ['Naga City', 'Iriga City', 'Pili'] },
+          { name: 'Camarines Norte', cities: ['Daet', 'Labo'] },
+          { name: 'Sorsogon', cities: ['Sorsogon City', 'Bulan'] },
+          { name: 'Catanduanes', cities: ['Virac', 'San Andres'] },
+          { name: 'Masbate', cities: ['Masbate City', 'Aroroy'] }
+        ]
       }
     ]
   },
   {
-    id: 'CAR',
-    name: 'CAR - Cordillera Administrative Region',
-    provinces: [
-      { name: 'Abra', cities: ['Bangued', 'Bucay', 'Dolores', 'La Paz', 'Tayum'] },
-      { name: 'Apayao', cities: ['Conner', 'Flora', 'Kabugao', 'Luna', 'Pudtol'] },
-      { name: 'Benguet', cities: ['Baguio City', 'La Trinidad', 'Itogon', 'Tuba', 'Tublay', 'Buguias'] },
-      { name: 'Ifugao', cities: ['Lagawe', 'Banaue', 'Kiangan', 'Alfonso Lista', 'Mayoyao'] },
-      { name: 'Kalinga', cities: ['Tabuk City', 'Balbalan', 'Lubuagan', 'Pasil', 'Pinukpuk'] },
-      { name: 'Mountain Province', cities: ['Bontoc', 'Sagada', 'Bauko', 'Besao', 'Tadian'] }
+    group: 'Visayas',
+    regions: [
+      {
+        id: 'R6',
+        name: 'Western Visayas (Region VI - Iloilo/Bacolod)',
+        provinces: [
+          { name: 'Iloilo', cities: ['Iloilo City', 'Passi City', 'Oton', 'Pavia'] },
+          { name: 'Negros Occidental', cities: ['Bacolod City', 'Talisay City', 'Silay City', 'Bago City', 'Kabankalan City'] },
+          { name: 'Aklan', cities: ['Kalibo', 'Malay (Boracay)'] },
+          { name: 'Capiz', cities: ['Roxas City'] },
+          { name: 'Antique', cities: ['San Jose de Buenavista'] },
+          { name: 'Guimaras', cities: ['Jordan', 'Buenavista'] }
+        ]
+      },
+      {
+        id: 'R7',
+        name: 'Central Visayas (Region VII - Cebu/Bohol)',
+        provinces: [
+          { name: 'Cebu', cities: ['Cebu City', 'Mandaue City', 'Lapu-Lapu City', 'Talisay City', 'Toledo City', 'Consolacion', 'Liloan'] },
+          { name: 'Bohol', cities: ['Tagbilaran City', 'Panglao', 'Tubigon'] },
+          { name: 'Negros Oriental', cities: ['Dumaguete City', 'Bais City'] },
+          { name: 'Siquijor', cities: ['Siquijor', 'Larena'] }
+        ]
+      },
+      {
+        id: 'R8',
+        name: 'Eastern Visayas (Region VIII - Tacloban/Ormoc)',
+        provinces: [
+          { name: 'Leyte', cities: ['Tacloban City', 'Ormoc City', 'Baybay City', 'Palo'] },
+          { name: 'Samar', cities: ['Catbalogan City', 'Calbayog City'] },
+          { name: 'Eastern Samar', cities: ['Borongan City', 'Guiuan'] },
+          { name: 'Northern Samar', cities: ['Catarman'] },
+          { name: 'Southern Leyte', cities: ['Maasin City'] },
+          { name: 'Biliran', cities: ['Naval'] }
+        ]
+      }
     ]
   },
   {
-    id: 'Region I',
-    name: 'Region I - Ilocos Region',
-    provinces: [
-      { name: 'Ilocos Norte', cities: ['Laoag City', 'Batac City', 'San Nicolas', 'Dingras', 'Currimao'] },
-      { name: 'Ilocos Sur', cities: ['Vigan City', 'Candon City', 'Narvacan', 'Tagudin', 'Cabugao'] },
-      { name: 'La Union', cities: ['San Fernando City', 'Agoo', 'Bauang', 'Nagilian', 'San Juan'] },
-      { name: 'Pangasinan', cities: ['Dagupan City', 'San Carlos City', 'Urdaneta City', 'Alaminos City', 'Lingayen', 'Rosales', 'Malasiqui'] }
-    ]
-  },
-  {
-    id: 'Region II',
-    name: 'Region II - Cagayan Valley',
-    provinces: [
-      { name: 'Batanes', cities: ['Basco', 'Itbayat', 'Mahatao', 'Sabtang'] },
-      { name: 'Cagayan', cities: ['Tuguegarao City', 'Aparri', 'Ballesteros', 'Gattaran', 'Lal-lo', 'Solana'] },
-      { name: 'Isabela', cities: ['Ilagan City', 'Cauayan City', 'Santiago City', 'Roxas', 'Tumauini', 'San Mateo'] },
-      { name: 'Nueva Vizcaya', cities: ['Bayombong', 'Solano', 'Aritao', 'Bambang', 'Bagabag'] },
-      { name: 'Quirino', cities: ['Cabarroguis', 'Diffun', 'Maddela', 'Saguday', 'Aglipay'] }
-    ]
-  },
-  {
-    id: 'Region III',
-    name: 'Region III - Central Luzon',
-    provinces: [
-      { name: 'Aurora', cities: ['Baler', 'Casiguran', 'Dilasag', 'Maria Aurora', 'San Luis'] },
-      { name: 'Bataan', cities: ['Balanga City', 'Dinalupihan', 'Mariveles', 'Hermosa', 'Limay', 'Orion'] },
-      { name: 'Bulacan', cities: ['Malolos City', 'Meycauayan City', 'San Jose del Monte City', 'Baliuag', 'Marilao', 'Santa Maria', 'Bocaue', 'Guiguinto'] },
-      { name: 'Nueva Ecija', cities: ['Palayan City', 'Cabanatuan City', 'Gapan City', 'San Jose City', 'Science City of Muñoz', 'Talavera', 'Guimba'] },
-      { name: 'Pampanga', cities: ['San Fernando City', 'Angeles City', 'Mabalacat City', 'Guagua', 'Lubao', 'Mexico', 'Arayat', 'Floridablanca'] },
-      { name: 'Tarlac', cities: ['Tarlac City', 'Capas', 'Concepcion', 'Paniqui', 'Gerona', 'Camiling'] },
-      { name: 'Zambales', cities: ['Olongapo City', 'Iba', 'Subic', 'Castillejos', 'San Marcelino', 'Botolan'] }
-    ]
-  },
-  {
-    id: 'Region IV-A',
-    name: 'Region IV-A - CALABARZON',
-    provinces: [
-      { name: 'Batangas', cities: ['Batangas City', 'Lipa City', 'Tanauan City', 'Santo Tomas City', 'Nasugbu', 'Bauan', 'Balayan', 'Lemery'] },
-      { name: 'Cavite', cities: ['Trece Martires City', 'Bacoor City', 'Cavite City', 'Dasmariñas City', 'General Trias City', 'Imus City', 'Tagaytay City', 'Silang', 'Kawit'] },
-      { name: 'Laguna', cities: ['Santa Cruz', 'Biñan City', 'Cabuyao City', 'Calamba City', 'San Pablo City', 'San Pedro City', 'Santa Rosa City', 'Los Baños'] },
-      { name: 'Quezon', cities: ['Lucena City', 'Tayabas City', 'Candelaria', 'Sariaya', 'Tiaong', 'Pagbilao', 'Gumaca', 'Lopez'] },
-      { name: 'Rizal', cities: ['Antipolo City', 'Cainta', 'Taytay', 'Binangonan', 'San Mateo', 'Rodriguez (Montalban)', 'Angono', 'Tanay'] }
-    ]
-  },
-  {
-    id: 'MIMAROPA',
-    name: 'MIMAROPA Region',
-    provinces: [
-      { name: 'Marinduque', cities: ['Boac', 'Gasan', 'Mogpog', 'Santa Cruz', 'Torrijos', 'Buenavista'] },
-      { name: 'Occidental Mindoro', cities: ['Mamburao', 'San Jose', 'Sablayan', 'Abra de Ilog', 'Lubang'] },
-      { name: 'Oriental Mindoro', cities: ['Calapan City', 'Naujan', 'Pinamalayan', 'Roxas', 'Victoria', 'Puerto Galera'] },
-      { name: 'Palawan', cities: ['Puerto Princesa City', 'Coron', 'El Nido', 'Brooke\'s Point', 'Roxas', 'San Vicente', 'Narra'] },
-      { name: 'Romblon', cities: ['Romblon', 'Odiongan', 'San Agustin', 'Cajidiocan', 'San Fernando'] }
-    ]
-  },
-  {
-    id: 'Region V',
-    name: 'Region V - Bicol Region',
-    provinces: [
-      { name: 'Albay', cities: ['Legazpi City', 'Ligao City', 'Tabaco City', 'Daraga', 'Guinobatan', 'Polangui'] },
-      { name: 'Camarines Norte', cities: ['Daet', 'Labo', 'Jose Panganiban', 'Basud', 'Capalonga'] },
-      { name: 'Camarines Sur', cities: ['Naga City', 'Iriga City', 'Pili', 'Calabanga', 'Libmanan', 'Sipocot'] },
-      { name: 'Catanduanes', cities: ['Virac', 'San Andres', 'Caramoran', 'Pandan', 'Bato'] },
-      { name: 'Masbate', cities: ['Masbate City', 'Aroroy', 'Cataingan', 'Milagros', 'Placer'] },
-      { name: 'Sorsogon', cities: ['Sorsogon City', 'Bulan', 'Gubat', 'Irosin', 'Casiguran'] }
-    ]
-  },
-  {
-    id: 'Region VI',
-    name: 'Region VI - Western Visayas',
-    provinces: [
-      { name: 'Aklan', cities: ['Kalibo', 'Malay (Boracay)', 'Ibajay', 'New Washington', 'Banga'] },
-      { name: 'Antique', cities: ['San Jose de Buenavista', 'Sibalom', 'Hamtic', 'Culasi', 'Tibiao'] },
-      { name: 'Capiz', cities: ['Roxas City', 'Panay', 'Pontevedra', 'Dumarao', 'Mambusao'] },
-      { name: 'Guimaras', cities: ['Jordan', 'Buenavista', 'Nueva Valencia', 'San Lorenzo', 'Sibunag'] },
-      { name: 'Iloilo', cities: ['Iloilo City', 'Passi City', 'Oton', 'Pavia', 'Santa Barbara', 'Pototan', 'Dumangas', 'Carles'] },
-      { name: 'Negros Occidental', cities: ['Bacolod City', 'Bago City', 'Cadiz City', 'Escalante City', 'Himamaylan City', 'Kabankalan City', 'La Carlota City', 'Sagay City', 'San Carlos City', 'Silay City', 'Sipalay City', 'Talisay City', 'Victorias City'] }
-    ]
-  },
-  {
-    id: 'Region VII',
-    name: 'Region VII - Central Visayas',
-    provinces: [
-      { name: 'Bohol', cities: ['Tagbilaran City', 'Panglao', 'Tubigon', 'Talibon', 'Carmen', 'Ubay', 'Loon'] },
-      { name: 'Cebu', cities: ['Cebu City', 'Mandaue City', 'Lapu-Lapu City', 'Talisay City', 'Toledo City', 'Danao City', 'Naga City', 'Carcar City', 'Bogo City', 'Consolacion', 'Liloan', 'Minglanilla'] },
-      { name: 'Negros Oriental', cities: ['Dumaguete City', 'Bais City', 'Bayawan City', 'Canlaon City', 'Guihulngan City', 'Tanjay City', 'Sibulan'] },
-      { name: 'Siquijor', cities: ['Siquijor', 'Larena', 'Lazi', 'San Juan', 'Enrique Villanueva', 'Maria'] }
-    ]
-  },
-  {
-    id: 'Region VIII',
-    name: 'Region VIII - Eastern Visayas',
-    provinces: [
-      { name: 'Biliran', cities: ['Naval', 'Biliran', 'Cabucgayan', 'Caibiran', 'Kawayan'] },
-      { name: 'Eastern Samar', cities: ['Borongan City', 'Guiuan', 'Dolores', 'Oras', 'Balangiga'] },
-      { name: 'Leyte', cities: ['Tacloban City', 'Ormoc City', 'Baybay City', 'Palo', 'Tanauan', 'Carigara', 'Hilongos'] },
-      { name: 'Northern Samar', cities: ['Catarman', 'Laoang', 'Allen', 'Palapag', 'Gamay'] },
-      { name: 'Samar', cities: ['Catbalogan City', 'Calbayog City', 'Basey', 'Gandara', 'Wright'] },
-      { name: 'Southern Leyte', cities: ['Maasin City', 'Sogod', 'Macrohon', 'Bontoc', 'Hinunangan'] }
-    ]
-  },
-  {
-    id: 'Region IX',
-    name: 'Region IX - Zamboanga Peninsula',
-    provinces: [
-      { name: 'Zamboanga del Norte', cities: ['Dipolog City', 'Dapitan City', 'Sindangan', 'Labason', 'Siocon'] },
-      { name: 'Zamboanga del Sur', cities: ['Pagadian City', 'Zamboanga City', 'Dumalinao', 'Molave', 'Aurora'] },
-      { name: 'Zamboanga Sibugay', cities: ['Ipil', 'Titay', 'Kabasalan', 'Siay', 'Buug'] }
-    ]
-  },
-  {
-    id: 'Region X',
-    name: 'Region X - Northern Mindanao',
-    provinces: [
-      { name: 'Bukidnon', cities: ['Malaybalay City', 'Valencia City', 'Maramag', 'Manolo Fortich', 'Quezon', 'Don Carlos'] },
-      { name: 'Camiguin', cities: ['Mambajao', 'Catarman', 'Guinsiliban', 'Mahinog', 'Sagay'] },
-      { name: 'Lanao del Norte', cities: ['Iligan City', 'Tubod', 'Kapatagan', 'Baroy', 'Lala'] },
-      { name: 'Misamis Occidental', cities: ['Oroquieta City', 'Ozamiz City', 'Tangub City', 'Plaridel', 'Clarin', 'Jimenez'] },
-      { name: 'Misamis Oriental', cities: ['Cagayan de Oro City', 'Gingoog City', 'El Salvador City', 'Opol', 'Tagoloan', 'Villanueva', 'Balingasag'] }
-    ]
-  },
-  {
-    id: 'Region XI',
-    name: 'Region XI - Davao Region',
-    provinces: [
-      { name: 'Davao de Oro', cities: ['Nabunturan', 'Monkayo', 'Compostela', 'Pantukan', 'Mawab'] },
-      { name: 'Davao del Norte', cities: ['Tagum City', 'Panabo City', 'Island Garden City of Samal', 'Carmen', 'Sto. Tomas'] },
-      { name: 'Davao del Sur', cities: ['Davao City', 'Digos City', 'Santa Cruz', 'Bansalan', 'Matanao'] },
-      { name: 'Davao Occidental', cities: ['Malita', 'Santa Maria', 'Don Marcelino', 'Jose Abad Santos', 'Sarangani'] },
-      { name: 'Davao Oriental', cities: ['Mati City', 'Lupon', 'Baganga', 'Governor Generoso', 'Cateel'] }
-    ]
-  },
-  {
-    id: 'Region XII',
-    name: 'Region XII - SOCCSKSARGEN',
-    provinces: [
-      { name: 'Cotabato', cities: ['Kidapawan City', 'Midsayap', 'Pikit', 'Kabacan', 'Carmen', 'Makilala'] },
-      { name: 'Sarangani', cities: ['Alabel', 'Glan', 'Kiamba', 'Maasim', 'Maitum', 'Malapatan', 'Malungon'] },
-      { name: 'South Cotabato', cities: ['Koronadal City', 'General Santos City', 'Polomolok', 'Surallah', 'Tupi', 'Banga'] },
-      { name: 'Sultan Kudarat', cities: ['Isulan', 'Tacurong City', 'Esperanza', 'Lebak', 'Kalamansig'] }
-    ]
-  },
-  {
-    id: 'Region XIII',
-    name: 'Region XIII - Caraga',
-    provinces: [
-      { name: 'Agusan del Norte', cities: ['Butuan City', 'Cabadbaran City', 'Buenavista', 'Nasipit', 'Carmen'] },
-      { name: 'Agusan del Sur', cities: ['Prosperidad', 'San Francisco', 'Bayugan City', 'Trento', 'Bunawan'] },
-      { name: 'Dinagat Islands', cities: ['San Jose', 'Basilisa', 'Cagdianao', 'Dinagat', 'Libjo'] },
-      { name: 'Surigao del Norte', cities: ['Surigao City', 'Dapa (Siargao)', 'General Luna', 'Claver', 'Placer'] },
-      { name: 'Surigao del Sur', cities: ['Tandag City', 'Bislig City', 'Cantilan', 'Hinatuan', 'Barobo'] }
-    ]
-  },
-  {
-    id: 'BARMM',
-    name: 'BARMM - Bangsamoro Autonomous Region',
-    provinces: [
-      { name: 'Basilan', cities: ['Isabela City', 'Lamitan City', 'Maluso', 'Tuburan'] },
-      { name: 'Lanao del Sur', cities: ['Marawi City', 'Wao', 'Malabang', 'Balabagan', 'Saguiaran'] },
-      { name: 'Maguindanao del Norte', cities: ['Cotabato City', 'Datu Odin Sinsuat', 'Parang', 'Sultan Kudarat', 'Upi'] },
-      { name: 'Maguindanao del Sur', cities: ['Buluan', 'Datu Paglas', 'Shariff Aguak', 'Ampatuan', 'Paglat'] },
-      { name: 'Sulu', cities: ['Jolo', 'Indanan', 'Parang', 'Maimbung', 'Patikul'] },
-      { name: 'Tawi-Tawi', cities: ['Bongao', 'Panglima Sugala', 'Simunul', 'Sitangkai', 'South Ubian'] }
+    group: 'Mindanao',
+    regions: [
+      {
+        id: 'R11',
+        name: 'Davao Region (Region XI - Davao City)',
+        provinces: [
+          { name: 'Davao del Sur', cities: ['Davao City', 'Digos City', 'Santa Cruz'] },
+          { name: 'Davao del Norte', cities: ['Tagum City', 'Panabo City', 'Samal City'] },
+          { name: 'Davao de Oro', cities: ['Nabunturan', 'Monkayo'] },
+          { name: 'Davao Oriental', cities: ['Mati City'] },
+          { name: 'Davao Occidental', cities: ['Malita'] }
+        ]
+      },
+      {
+        id: 'R10',
+        name: 'Northern Mindanao (Region X - Cagayan de Oro)',
+        provinces: [
+          { name: 'Misamis Oriental', cities: ['Cagayan de Oro City', 'Gingoog City'] },
+          { name: 'Bukidnon', cities: ['Malaybalay City', 'Valencia City'] },
+          { name: 'Lanao del Norte', cities: ['Iligan City', 'Tubod'] },
+          { name: 'Misamis Occidental', cities: ['Ozamiz City', 'Oroquieta City'] },
+          { name: 'Camiguin', cities: ['Mambajao'] }
+        ]
+      },
+      {
+        id: 'R12',
+        name: 'SOCCSKSARGEN (Region XII - GenSan)',
+        provinces: [
+          { name: 'South Cotabato', cities: ['General Santos City', 'Koronadal City', 'Polomolok'] },
+          { name: 'Cotabato', cities: ['Kidapawan City', 'Midsayap'] },
+          { name: 'Sultan Kudarat', cities: ['Tacurong City', 'Isulan'] },
+          { name: 'Sarangani', cities: ['Alabel', 'Glan'] }
+        ]
+      },
+      {
+        id: 'R9',
+        name: 'Zamboanga Peninsula (Region IX - Zamboanga City)',
+        provinces: [
+          { name: 'Zamboanga del Sur', cities: ['Zamboanga City', 'Pagadian City'] },
+          { name: 'Zamboanga del Norte', cities: ['Dipolog City', 'Dapitan City'] },
+          { name: 'Zamboanga Sibugay', cities: ['Ipil'] }
+        ]
+      },
+      {
+        id: 'R13',
+        name: 'Caraga (Region XIII - Butuan)',
+        provinces: [
+          { name: 'Agusan del Norte', cities: ['Butuan City', 'Cabadbaran City'] },
+          { name: 'Surigao del Norte', cities: ['Surigao City', 'General Luna (Siargao)'] },
+          { name: 'Surigao del Sur', cities: ['Tandag City', 'Bislig City'] },
+          { name: 'Agusan del Sur', cities: ['Bayugan City', 'San Francisco'] },
+          { name: 'Dinagat Islands', cities: ['San Jose'] }
+        ]
+      },
+      {
+        id: 'BARMM',
+        name: 'Bangsamoro (BARMM - Cotabato/Marawi)',
+        provinces: [
+          { name: 'Maguindanao del Norte', cities: ['Cotabato City', 'Datu Odin Sinsuat'] },
+          { name: 'Lanao del Sur', cities: ['Marawi City', 'Wao'] },
+          { name: 'Basilan', cities: ['Isabela City', 'Lamitan City'] },
+          { name: 'Sulu', cities: ['Jolo'] },
+          { name: 'Tawi-Tawi', cities: ['Bongao'] }
+        ]
+      }
     ]
   }
 ]
 
-// Common international countries for cross-border suppliers & contractors
+// Flattened list of regions
+export const ALL_REGIONS = PH_ISLAND_GROUPS.flatMap((g) => g.regions)
+
+// Flattened search index of all Philippine cities & provinces for instantaneous 1-click search autocomplete
+export const ALL_PH_SEARCH_LOCATIONS = []
+ALL_REGIONS.forEach((region) => {
+  region.provinces.forEach((province) => {
+    province.cities.forEach((city) => {
+      const isMetroManila = province.name === 'Metro Manila'
+      const formatted = isMetroManila
+        ? `${city}, Metro Manila`
+        : `${city}, ${province.name}`
+
+      ALL_PH_SEARCH_LOCATIONS.push({
+        city,
+        province: province.name,
+        regionId: region.id,
+        regionName: region.name,
+        display: formatted,
+        searchKey: `${city} ${province.name} ${region.name}`.toLowerCase(),
+      })
+    })
+  })
+})
+
+// Common international countries
 export const POPULAR_COUNTRIES = [
   'United States',
   'China',
@@ -227,8 +259,5 @@ export const POPULAR_COUNTRIES = [
   'Italy',
   'France',
   'Netherlands',
-  'Switzerland',
-  'Spain',
   'New Zealand'
 ]
-

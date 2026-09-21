@@ -10,6 +10,7 @@ class ActivityLogResource extends JsonResource
     protected const DESCRIPTIONS = [
         'Login' => 'Signed in successfully',
         'Failed Login' => 'Incorrect password entered',
+        'Forced Logout' => 'Signed out — new login detected on another device',
         'Password Change' => 'Password was changed',
         '2FA Enabled' => 'Two-factor authentication turned on',
         '2FA Disabled' => 'Two-factor authentication turned off',
@@ -20,13 +21,19 @@ class ActivityLogResource extends JsonResource
 
     public function toArray(Request $request): array
     {
+        $status = match (true) {
+            str_contains($this->activity, 'Failed') => 'failed',
+            str_contains($this->activity, 'Forced') => 'warning',
+            default => 'success',
+        };
+
         return [
             'id' => $this->id,
             'action' => $this->activity,
             'module' => $this->module,
             'description' => self::DESCRIPTIONS[$this->activity] ?? $this->activity,
             'ip' => $this->ip_address,
-            'status' => str_contains($this->activity, 'Failed') ? 'failed' : 'success',
+            'status' => $status,
             'createdAt' => $this->created_at->toIso8601String(),
         ];
     }

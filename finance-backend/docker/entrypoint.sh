@@ -8,6 +8,13 @@ until php -r "new PDO('pgsql:host=${DB_HOST};port=${DB_PORT:-5432};dbname=${DB_D
 done
 echo "==> PostgreSQL is ready."
 
+# Fail fast if APP_KEY is missing — without it Laravel can't decrypt
+# sessions/cookies and every request will throw a 500 with a cryptic error.
+if [ -z "${APP_KEY}" ]; then
+    echo "ERROR: APP_KEY environment variable is not set. Set it in HostForge env vars and redeploy."
+    exit 1
+fi
+
 # Echo the resolved DB target so a bad deploy is obvious instead of silent.
 # config/database.php maps "DB_HOST set but DB_CONNECTION unset" to pgsql;
 # if it ever shows sqlite while DB_HOST is set, the Postgres env vars are

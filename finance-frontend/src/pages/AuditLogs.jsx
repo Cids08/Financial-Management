@@ -23,6 +23,8 @@ const ACTION_BADGE = {
   update: 'text-blue-600 bg-blue-50 dark:text-blue-400 dark:bg-blue-500/10',
   archive: 'text-amber-600 bg-amber-50 dark:text-amber-400 dark:bg-amber-500/10',
   restore: 'text-purple-600 bg-purple-50 dark:text-purple-400 dark:bg-purple-500/10',
+  login: 'text-teal-600 bg-teal-50 dark:text-teal-400 dark:bg-teal-500/10',
+  failed_login: 'text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-500/10',
 }
 
 function formatDateTime(iso) {
@@ -228,6 +230,8 @@ export default function AuditLogs({ title = 'Audit Logs', crumbs = ['System', 'A
             <option value="update">Update</option>
             <option value="archive">Archive</option>
             <option value="restore">Restore</option>
+            <option value="login">Login</option>
+            <option value="failed_login">Failed Login</option>
           </select>
 
           <div className="flex items-center gap-1.5">

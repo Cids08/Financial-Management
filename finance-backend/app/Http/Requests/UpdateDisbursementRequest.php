@@ -19,6 +19,8 @@ class UpdateDisbursementRequest extends FormRequest
         $disbursement = $this->route('disbursement');
 
         return [
+            'ap_id' => ['sometimes', 'required', 'integer', 'exists:accounts_payable,id'],
+            'department_id' => ['nullable', 'integer', 'exists:departments,id'],
             'cash_account_id' => ['required', 'integer', 'exists:cash_accounts,id'],
             'payee' => ['required', 'string', 'max:255'],
             'payment_date' => ['required', 'date'],
