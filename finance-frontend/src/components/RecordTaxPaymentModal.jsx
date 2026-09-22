@@ -155,9 +155,6 @@ export default function RecordTaxPaymentModal({
     if (!form.reference_number || !form.reference_number.trim()) {
       errors.reference_number = 'Official reference or confirmation number is required.'
     }
-    if (!file) {
-      errors.document = 'Proof of payment (e.g. BIR confirmation or bank slip) is mandatory.'
-    }
 
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors)
@@ -174,7 +171,9 @@ export default function RecordTaxPaymentModal({
       if (form.remarks?.trim()) {
         formData.append('remarks', form.remarks.trim())
       }
-      formData.append('document', file)
+      if (file) {
+        formData.append('document', file)
+      }
 
       const result = await onPay(obligation.tax_id || obligation.id, formData)
       if (result?.success) {
@@ -208,7 +207,7 @@ export default function RecordTaxPaymentModal({
             size="md"
             icon={Receipt}
             onClick={handleSubmit}
-            disabled={submitting || !file || !form.cash_account_id}
+            disabled={submitting || !form.cash_account_id}
           >
             {submitting ? 'Recording Payment...' : 'Confirm & Record Payment'}
           </Button>
@@ -337,8 +336,13 @@ export default function RecordTaxPaymentModal({
         <div>
           <label className={LABEL_CLASS}>
             Proof of Payment (BIR Confirmation Slip / Bank Receipt){' '}
-            <span className="text-red-500">*</span>
+            <span className="text-muted font-normal">(Optional)</span>
           </label>
+
+          <p className="mb-1.5 text-[11px] text-muted">
+            You can attach the BIR receipt now or later — recording the payment from a cash
+            account is enough to mark this obligation Paid.
+          </p>
 
           {!file ? (
             <div

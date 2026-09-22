@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, Receipt, CheckCircle2, Clock3, AlertTriangle, Info, Printer, Sparkles, Eye, EyeOff, Loader2, CalendarRange, X, Paperclip, History, FileText, Calculator, FileSpreadsheet } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, Receipt, CheckCircle2, Clock3, AlertTriangle, Info, Printer, Sparkles, Loader2, CalendarRange, X, Paperclip, History, FileText, Calculator, FileSpreadsheet } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Pagination from '../components/Pagination'
 import Button from '../components/Button'
@@ -125,15 +125,6 @@ function daysUntil(dueDate) {
   const today = new Date(); today.setHours(0, 0, 0, 0)
   const due = new Date(dueDate); due.setHours(0, 0, 0, 0)
   return Math.round((due - today) / 86400000)
-}
-
-// Masks a formatted currency string down to just the peso sign + dots,
-// e.g. "₱84,500.00" -> "₱••••••". Same masking philosophy as the
-// contact-number/account-number masking on Collectors/CashAccounts,
-// applied here to money instead of digits-you-could-dial.
-function maskCurrency(formatted) {
-  if (!formatted) return formatted
-  return formatted.replace(/[0-9.,]/g, '•')
 }
 
 function DetailRow({ label, value }) {
@@ -297,18 +288,6 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
   // backend alongside search/status, so it applies across every page.
   const hasDateFilter = Boolean(dateFrom || dateTo)
   const clearDateFilter = () => { setDateFrom(''); setDateTo('') }
-
-  // Per-row "reveal amount" toggle  -  masked by default everywhere a
-  // money figure shows (table + detail modal), same pattern as the
-  // phone/account-number masking on Collectors/CashAccounts.
-  const [revealedIds, setRevealedIds] = useState(new Set())
-  const toggleReveal = (id) => {
-    setRevealedIds((prev) => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
-    })
-  }
 
   // Page-scoped  -  meta.total (Total Obligations card) is the one
   // accurate global number; see Collectors.jsx for the same caveat.
@@ -814,7 +793,6 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
               )}
               {!loading && obligations.map((o) => {
                 const remaining = daysUntil(o.due_date)
-                const revealed = revealedIds.has(o.tax_id)
                 const formattedAmount = formatCurrency(o.amount)
                 return (
                   <tr
@@ -862,15 +840,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                     </td>
                     <td className="px-3 py-2.5 whitespace-nowrap text-right font-medium tabular-nums text-ink text-xs sm:text-sm">
                       <span className="inline-flex items-center justify-end gap-1.5">
-                        {revealed ? formattedAmount : maskCurrency(formattedAmount)}
-                        <button
-                          type="button"
-                          onClick={() => toggleReveal(o.tax_id)}
-                          aria-label={revealed ? 'Hide amount' : 'Show amount'}
-                          className="shrink-0 text-muted hover:text-ink transition-colors duration-150"
-                        >
-                          {revealed ? <EyeOff size={13} /> : <Eye size={13} />}
-                        </button>
+                        {formattedAmount}
                       </span>
                     </td>
                     <td className="px-3 py-2.5 whitespace-nowrap text-center">
@@ -1403,17 +1373,9 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
             <div className="rounded-lg border border-border divide-y divide-border">
               <div className="px-3 py-2">
                 <DetailRow label="Due Date" value={formatDate(detailRecord.due_date)} />
-                <DetailRow label="Taxable Amount" value={revealedIds.has(detailRecord.tax_id) ? formatCurrency(detailRecord.taxable_amount) : maskCurrency(formatCurrency(detailRecord.taxable_amount))} />
+                <DetailRow label="Taxable Amount" value={formatCurrency(detailRecord.taxable_amount)} />
                 <DetailRow label="Tax Rate" value={`${detailRecord.tax_rate}%`} />
-                <DetailRow
-                  label="Amount"
-                  value={
-                    <button type="button" onClick={() => toggleReveal(detailRecord.tax_id)} className="inline-flex items-center gap-1.5 hover:text-primary-dark transition-colors duration-150">
-                      {revealedIds.has(detailRecord.tax_id) ? formatCurrency(detailRecord.amount) : maskCurrency(formatCurrency(detailRecord.amount))}
-                      {revealedIds.has(detailRecord.tax_id) ? <EyeOff size={12} /> : <Eye size={12} />}
-                    </button>
-                  }
-                />
+                <DetailRow label="Amount" value={formatCurrency(detailRecord.amount)} />
               </div>
               <div className="px-3 py-2">
                 <DetailRow label="Payment Date" value={formatDate(detailRecord.payment_date)} />

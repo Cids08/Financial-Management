@@ -5,7 +5,7 @@ import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Pagination from '../components/Pagination'
 import Tooltip from '../components/Tooltip'
-import { formatCurrency, maskedAmount } from '../utils/formatters'
+import { formatCurrency } from '../utils/formatters'
 import { useCashAccounts } from '../hooks/useCashAccounts'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 import { usePrivacy } from '../context/PrivacyContext'
@@ -85,9 +85,6 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
     })
   }
 
-  // Global balance visibility toggle  -  balances are hidden by default for privacy
-  const [revealBalances, setRevealBalances] = useState(false)
-
   // "This page" totals only  -  see Collectors.jsx for the same caveat.
   // meta.total (used in the Total Accounts card) IS global/accurate.
   const totalBalanceThisPage = accounts.filter((a) => a.status === 'Active').reduce((sum, a) => sum + a.current_balance, 0)
@@ -138,7 +135,7 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
 
   const statCards = [
     { key: 'total', label: 'Total Accounts', value: meta.total, icon: Wallet, iconBg: 'bg-primary/15', iconColor: 'text-primary-dark', isActive: typeFilter === 'all' && !showArchived, onClick: () => { setTypeFilter('all'); setShowArchived(false) } },
-    { key: 'balance', label: 'Balance (this page)', value: revealBalances ? formatCurrency(totalBalanceThisPage) : maskedAmount(), icon: PiggyBank, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: false, onClick: () => { setTypeFilter('all'); setShowArchived(false) } },
+    { key: 'balance', label: 'Balance (this page)', value: formatCurrency(totalBalanceThisPage), icon: PiggyBank, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: false, onClick: () => { setTypeFilter('all'); setShowArchived(false) } },
     { key: 'inactive', label: 'Inactive (this page)', value: inactiveThisPage, icon: Landmark, iconBg: 'bg-red-50 dark:bg-red-500/10', iconColor: 'text-red-600 dark:text-red-400', isActive: false, onClick: () => setShowArchived(false) },
     { key: 'archived', label: 'Archived', value: showArchived ? meta.total : '—', icon: Archive, iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-500 dark:text-slate-400', isActive: showArchived, onClick: () => setShowArchived(true) },
   ]
@@ -156,15 +153,6 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
           <p className="mt-1 text-xs text-muted">Manage bank and cash accounts used for collections and disbursements.</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setRevealBalances(r => !r)}
-            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs text-muted hover:text-ink transition-colors duration-150"
-            title={revealBalances ? 'Hide balances' : 'Show balances'}
-          >
-            {revealBalances ? <EyeOff size={13} /> : <Eye size={13} />}
-            {revealBalances ? 'Hide Balances' : 'Show Balances'}
-          </button>
           <Button variant="primary" size="sm" icon={Plus} onClick={openAdd}>Add Cash Account</Button>
         </div>
       </div>
@@ -267,7 +255,7 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap text-ink">{a.account_type}</td>
                     <td className="px-4 py-3.5 whitespace-nowrap font-medium tabular-nums text-ink">
-                      {revealBalances ? formatCurrency(a.current_balance) : maskedAmount()}
+                      {formatCurrency(a.current_balance)}
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[a.status]}`}>{a.status}</span>

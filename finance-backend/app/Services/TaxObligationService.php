@@ -274,7 +274,7 @@ class TaxObligationService
      * Validates account balance, stores the uploaded proof document, updates
      * status to Paid, and auto-posts the double-entry expense and GL transaction.
      */
-    public function recordPayment(User $user, TaxObligation $obligation, array $data, UploadedFile $document): TaxObligation
+    public function recordPayment(User $user, TaxObligation $obligation, array $data, ?UploadedFile $document = null): TaxObligation
     {
         if ($obligation->status === 'Paid') {
             throw ValidationException::withMessages([
@@ -297,8 +297,10 @@ class TaxObligationService
                 ]);
             }
 
-            // 1. Attach official payment proof to the tax obligation
-            $proofDoc = $this->attachDocument($obligation, $document, $user);
+            // 1. Attach official payment proof if one was provided  -  it is
+            // optional: paying straight from a cash/bank account is a valid
+            // settled payment even before the BIR receipt is scanned in.
+            $proofDoc = $document ? $this->attachDocument($obligation, $document, $user) : null;
 
             // 2. Update obligation attributes
             $obligation->update([
@@ -318,7 +320,7 @@ class TaxObligationService
                 'cash_account'    => $cashAccount->account_name,
                 'reference'       => $obligation->reference_number,
                 'payment_date'    => $obligation->payment_date,
-                'document'        => $proofDoc->original_name,
+                'document'        => $proofDoc?->original_name,
             ]);
 
             return $obligation->fresh(['createdBy', 'deletedBy', 'expense', 'cashAccount']);
