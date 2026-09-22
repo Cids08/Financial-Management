@@ -23,6 +23,10 @@ class AccountsPayableResource extends JsonResource
             'amount' => (float) $this->original_amount,
             'paid_amount' => (float) $this->paid_amount,
             'remaining_balance' => (float) $this->remaining_balance,
+            // Mirrors AccountsReceivableResource — potential penalty, shows
+            // on the frontend only once the bill is marked Overdue.
+            'penalty_rate' => (float) $this->penalty_rate,
+            'penalty_amount' => (float) $this->penalty_amount,
             'currency' => $this->currency,
             'payment_method' => $this->payment_method,
             'billing_address' => $this->billing_address,

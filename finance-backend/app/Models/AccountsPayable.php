@@ -31,6 +31,8 @@ class AccountsPayable extends Model
         'approved_at',
         'has_attachment',
         'remarks',
+        'penalty_rate',
+        'penalty_amount',
         'created_by',
         'deleted_by',
     ];
@@ -41,6 +43,8 @@ class AccountsPayable extends Model
         'original_amount' => 'decimal:2',
         'paid_amount' => 'decimal:2',
         'remaining_balance' => 'decimal:2',
+        'penalty_rate' => 'decimal:2',
+        'penalty_amount' => 'decimal:2',
         'approved_at' => 'datetime',
         'has_attachment' => 'boolean',
     ];

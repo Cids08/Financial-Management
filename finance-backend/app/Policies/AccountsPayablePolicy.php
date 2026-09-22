@@ -41,7 +41,9 @@ class AccountsPayablePolicy
         // Once a bill is approved, editing it should go through a
         // corrective/void flow rather than a silent edit — block plain
         // updates on approved bills even for users who otherwise have
-        // ap.manage.
+        // ap.manage. (A bill can carry approved_by while its status still
+        // says 'Pending' — approve() doesn't change status — so the status
+        // label alone is not a reliable "can I edit this" signal.)
         if ($bill->approved_by !== null) {
             return false;
         }

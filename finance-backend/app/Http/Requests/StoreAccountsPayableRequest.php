@@ -58,6 +58,10 @@ class StoreAccountsPayableRequest extends FormRequest
                 Rule::unique('accounts_payable', 'reference_number')->whereNull('deleted_at'),
             ],
             'purchase_order_no' => ['nullable', 'string', 'max:255'],
+            // Optional rate (%) the bill is charged once it goes past its
+            // due date — mirrors AR's penalty_rate. When omitted, the
+            // company-wide default_penalty_rate is used (see service).
+            'penalty_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'has_attachment' => ['nullable', 'boolean'],
             // UNCONFIRMED: accounts_payable may have its own CHECK
             // constraint on `status` (the DB default is 'Pending', which

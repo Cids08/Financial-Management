@@ -10,6 +10,7 @@ use App\Models\Disbursement;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
 use App\Models\Notification;
+use App\Models\Setting;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Collection;
@@ -76,6 +77,15 @@ class AccountsPayableService
             $originalAmount = $data['amount'];
             $paidAmount = 0;
 
+            // Mirrors AccountsReceivableService: the rate falls back to the
+            // company-wide default from Settings, and penalty_amount is the
+            // potential penalty (original_amount * rate%) that becomes
+            // payable once the bill goes past its due date.
+            $penaltyRate = $data['penalty_rate'] ?? Setting::current()->default_penalty_rate;
+            $penaltyAmount = $penaltyRate > 0
+                ? round(($originalAmount * $penaltyRate) / 100, 2)
+                : 0;
+
             $bill = AccountsPayable::create([
                 'supplier_id' => $data['supplier_id'],
                 'account_id' => $data['account_id'],
@@ -92,6 +102,8 @@ class AccountsPayableService
                 'reference_number' => !empty($data['reference_number']) ? $data['reference_number'] : self::generateReferenceNumber(),
                 'status' => $data['status'] ?? 'Pending',
                 'remarks' => $data['description'] ?? null,
+                'penalty_rate' => $penaltyRate,
+                'penalty_amount' => $penaltyAmount,
                 'created_by' => $actor->id,
             ]);
 
@@ -134,6 +146,15 @@ class AccountsPayableService
                 );
             }
 
+            // Same penalty handling as create(): recompute the potential
+            // penalty against the (possibly changed) original amount. When
+            // the form omits the rate, keep the bill's existing rate rather
+            // than silently adopting a new company default.
+            $penaltyRate = $data['penalty_rate'] ?? (float) $bill->penalty_rate;
+            $penaltyAmount = $penaltyRate > 0
+                ? round(($newOriginalAmount * $penaltyRate) / 100, 2)
+                : 0;
+
             $bill->fill([
                 'supplier_id' => $data['supplier_id'],
                 'account_id' => $data['account_id'],
@@ -149,6 +170,8 @@ class AccountsPayableService
                 'reference_number' => $data['reference_number'] ?? null,
                 'status' => $data['status'] ?? $bill->status,
                 'remarks' => $data['description'] ?? null,
+                'penalty_rate' => $penaltyRate,
+                'penalty_amount' => $penaltyAmount,
             ]);
             $bill->save();
 

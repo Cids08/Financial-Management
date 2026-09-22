@@ -14,7 +14,14 @@ class UpdateAccountsPayableRequest extends FormRequest
         // AccountsPayable instance here — pass it straight to the policy
         // so per-record rules (e.g. "can't edit an approved bill") apply,
         // not just a blanket "is logged in" check.
-        $bill = $this->route('accounts_payable');
+        //
+        // The wildcard is named {accountsPayable} in routes/api.php, so
+        // Laravel keys the bound model under 'accountsPayable' (camelCase).
+        // Looking up snake_case 'accounts_payable' returns null, which made
+        // authorize() return false for EVERY edit — 403 "This action is
+        // unauthorized." even for admins. Check both spellings defensively;
+        // the raw route string is always available regardless of binding.
+        $bill = $this->route('accountsPayable') ?? $this->route('accounts_payable');
 
         return $this->user() !== null
             && $bill !== null
@@ -27,7 +34,9 @@ class UpdateAccountsPayableRequest extends FormRequest
         // AccountsPayable instance by the time rules() runs (SubstituteBindings
         // middleware runs before FormRequest validation), so ?->id is the
         // real primary key of the record being edited — not the route string.
-        $apId = $this->route('accounts_payable')?->id;
+        // Same camelCase/snake_case note as authorize(): the key in the
+        // resolved parameter bag is 'accountsPayable'.
+        $apId = $this->route('accountsPayable')?->id ?? $this->route('accounts_payable')?->id;
 
         return [
             'supplier_id' => ['required', 'integer', Rule::exists('suppliers', 'id')],
@@ -62,7 +71,9 @@ class UpdateAccountsPayableRequest extends FormRequest
                     // so if a new original_amount would leave remaining_balance
                     // negative against what's already been paid, reject it here
                     // rather than silently saving a negative balance.
-                    $bill = $this->route('accounts_payable');
+                    // Same camelCase/snake_case note as authorize(): the bound
+                    // model is keyed under 'accountsPayable'.
+                    $bill = $this->route('accountsPayable') ?? $this->route('accounts_payable');
                     if ($bill && $value < (float) $bill->paid_amount) {
                         $fail('The amount cannot be less than the amount already paid (' . $bill->paid_amount . ').');
                     }
@@ -81,6 +92,9 @@ class UpdateAccountsPayableRequest extends FormRequest
             ],
             'purchase_order_no' => ['nullable', 'string', 'max:255'],
             'has_attachment' => ['nullable', 'boolean'],
+            // Mirrors StoreAccountsPayableRequest — when editing, an omitted
+            // rate keeps the bill's existing one (see service).
+            'penalty_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
             // See StoreAccountsPayableRequest — status constraint unconfirmed.
             'status' => ['nullable', 'string', 'max:255'],
         ];

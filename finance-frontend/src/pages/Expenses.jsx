@@ -13,6 +13,7 @@ import BatchApproveExpensesModal from '../components/BatchApproveExpensesModal'
 import { formatCurrency } from '../utils/formatters'
 import { MIN_COLLECTION_AMOUNT, minHint } from '../utils/business'
 import { apiFetch } from '../utils/api'
+import { isImageFile, compressImageToUploadable, HOSTED_PDF_MAX_BYTES } from '../utils/fileUpload'
 import { useExpenses } from '../hooks/useExpenses'
 import { useSearchParams } from 'react-router-dom'
 
@@ -61,6 +62,14 @@ function ExpenseScanUpload({ onScanned, onFileSelected, onClear }) {
   const [status, setStatus] = useState('idle')
   const inputRef = useRef(null)
 
+  const failScan = (message) => {
+    setError(message)
+    setStatus('idle')
+    setPreview(null)
+    if (inputRef.current) inputRef.current.value = ''
+    onClear?.()
+  }
+
   const processFile = (file) => {
     if (!file) return
     if (!ACCEPTED_DOCUMENT_TYPES.includes(file.type)) {
@@ -73,6 +82,10 @@ function ExpenseScanUpload({ onScanned, onFileSelected, onClear }) {
     }
     setError('')
     if (file.type === 'application/pdf') {
+      if (file.size > HOSTED_PDF_MAX_BYTES) {
+        failScan(`PDFs over ${Math.round(HOSTED_PDF_MAX_BYTES / 1024)}KB are blocked by the server's 1MB upload limit. Please compress the PDF or upload a smaller file.`)
+        return
+      }
       setPreview('pdf')
       runScan(file)
       return
@@ -90,21 +103,24 @@ function ExpenseScanUpload({ onScanned, onFileSelected, onClear }) {
     setStatus('scanning')
     setError('')
     try {
+      const uploadFile = isImageFile(file) ? await compressImageToUploadable(file) : file
       const formData = new FormData()
-      formData.append('image', file)
+      formData.append('image', uploadFile)
       const res = await apiFetch('/api/invoices/scan', { method: 'POST', body: formData })
-      const json = await res.json()
 
-      if (!res.ok || !json.success) {
-        setError(json.message || "Couldn't read this document. Please upload a valid invoice or receipt.")
-        setStatus('idle')
-        setPreview(null)
-        if (inputRef.current) inputRef.current.value = ''
-        onClear?.()
+      if (res.status === 413) {
+        failScan("The document is larger than the server's upload limit (about 1MB). Please upload a smaller or more compressed file.")
         return
       }
 
-      onFileSelected?.(file)
+      const json = await res.json()
+
+      if (!res.ok || !json.success) {
+        failScan(json.message || "Couldn't read this document. Please upload a valid invoice or receipt.")
+        return
+      }
+
+      onFileSelected?.(uploadFile)
       onScanned({
         expense_date: json.data.invoice_date || '',
         expense_amount: json.data.amount || '',
@@ -112,11 +128,11 @@ function ExpenseScanUpload({ onScanned, onFileSelected, onClear }) {
       })
       setStatus('done')
     } catch (err) {
-      setError('Failed to reach the scan service. Please try again.')
-      setStatus('idle')
-      setPreview(null)
-      if (inputRef.current) inputRef.current.value = ''
-      onClear?.()
+      const message =
+        err?.message === 'Failed to fetch'
+          ? 'Could not reach the scan service. Check your internet connection and try again.'
+          : err?.message || 'Failed to reach the scan service. Please try again.'
+      failScan(message)
     }
   }
 

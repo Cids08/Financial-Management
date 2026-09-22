@@ -9,10 +9,12 @@ import { formatCurrency, currencySymbol, getActiveBaseCurrency } from '../utils/
 import { MIN_INVOICE_AMOUNT, MIN_COLLECTION_AMOUNT, minHint } from '../utils/business'
 import { useAccountsPayable } from '../hooks/useAccountsPayable'
 import { apiFetch } from '../utils/api'
+import { isImageFile, compressImageToUploadable, HOSTED_PDF_MAX_BYTES } from '../utils/fileUpload'
 import AccountsPayableDocumentModal from '../components/AccountsPayableDocumentModal'
 import PaymentWizardModal from '../components/PaymentWizardModal'
 import AddressSelector from '../components/AddressSelector'
 import { usePermissions } from '../context/PermissionsContext'
+import { useCompany } from '../context/CompanyContext'
 import { useProfile } from '../hooks/useProfile'
 import { usePrivacy } from '../context/PrivacyContext'
 import { useSearchParams } from 'react-router-dom'
@@ -40,7 +42,7 @@ const MAX_BILL_DATE = `${new Date().getFullYear() + 5}-12-31`
 const EMPTY_FORM = {
   supplier_id: '', account_id: '', invoice_number: '', invoice_date: '', due_date: '', amount: '',
   payment_method: 'Bank Transfer', billing_address: '', description: '', reference_number: '',
-  status: 'Pending', purchase_order_no: '',
+  status: 'Pending', purchase_order_no: '', penalty_rate: '',
 }
 
 const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
@@ -57,6 +59,12 @@ const STATUS_STYLES = {
   Paid: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
   Overdue: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
   Cancelled: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
+}
+
+// Mirrors AccountsReceivable.jsx: a bill only counts as overdue (and thus
+// shows its penalty amount) when its status is explicitly 'Overdue'.
+function isOverdueBill(record) {
+  return record.status === 'Overdue'
 }
 
 function getNextReferenceNo(records = []) {
@@ -127,6 +135,14 @@ function BillScanUpload({ onScanned, onFileSelected, onClear }) {
   const [status, setStatus] = useState('idle') // 'idle' | 'scanning' | 'done'
   const inputRef = useRef(null)
 
+  const failScan = (message) => {
+    setError(message)
+    setStatus('idle')
+    setPreview(null)
+    if (inputRef.current) inputRef.current.value = ''
+    onClear?.()
+  }
+
   const processFile = (file) => {
     if (!file) return
     if (!ACCEPTED_DOCUMENT_TYPES.includes(file.type)) {
@@ -139,6 +155,10 @@ function BillScanUpload({ onScanned, onFileSelected, onClear }) {
     }
     setError('')
     if (file.type === 'application/pdf') {
+      if (file.size > HOSTED_PDF_MAX_BYTES) {
+        failScan(`PDFs over ${Math.round(HOSTED_PDF_MAX_BYTES / 1024)}KB are blocked by the server's 1MB upload limit. Please compress the PDF or upload a smaller file.`)
+        return
+      }
       setPreview('pdf')
       runScan(file)
       return
@@ -156,21 +176,24 @@ function BillScanUpload({ onScanned, onFileSelected, onClear }) {
     setStatus('scanning')
     setError('')
     try {
+      const uploadFile = isImageFile(file) ? await compressImageToUploadable(file) : file
       const formData = new FormData()
-      formData.append('image', file)
+      formData.append('image', uploadFile)
       const res = await apiFetch('/api/invoices/scan', { method: 'POST', body: formData })
-      const json = await res.json()
 
-      if (!res.ok || !json.success) {
-        setError(json.message || "Couldn't read this document. Please upload a valid invoice or receipt.")
-        setStatus('idle')
-        setPreview(null)
-        if (inputRef.current) inputRef.current.value = ''
-        onClear?.()
+      if (res.status === 413) {
+        failScan("The document is larger than the server's upload limit (about 1MB). Please upload a smaller or more compressed file.")
         return
       }
 
-      onFileSelected?.(file)
+      const json = await res.json()
+
+      if (!res.ok || !json.success) {
+        failScan(json.message || "Couldn't read this document. Please upload a valid invoice or receipt.")
+        return
+      }
+
+      onFileSelected?.(uploadFile)
       onScanned({
         invoice_number: json.data.invoice_number || '',
         invoice_date: json.data.invoice_date || '',
@@ -180,11 +203,11 @@ function BillScanUpload({ onScanned, onFileSelected, onClear }) {
       })
       setStatus('done')
     } catch (err) {
-      setError('Failed to reach the scan service. Please try again.')
-      setStatus('idle')
-      setPreview(null)
-      if (inputRef.current) inputRef.current.value = ''
-      onClear?.()
+      const message =
+        err?.message === 'Failed to fetch'
+          ? 'Could not reach the scan service. Check your internet connection and try again.'
+          : err?.message || 'Failed to reach the scan service. Please try again.'
+      failScan(message)
     }
   }
 
@@ -290,6 +313,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
   } = useAccountsPayable()
 
   const { hasPermission } = usePermissions()
+  const { defaultPenaltyRate } = useCompany()
   const { profile } = useProfile()
   const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
   const canApprove = hasPermission('ap.approve')
@@ -449,8 +473,11 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
   }
   // Mirrors AccountsPayablePolicy::update()  -  a bill that's been approved,
   // or whose status is Paid/Cancelled, can't be edited (goes through a
-  // corrective/void flow instead). Keeping this in sync with the backend
-  // means the Edit button doesn't show for a bill the save would 403 on.
+  // corrective/void flow instead). Note a bill can show status 'Pending'
+  // yet already be approved (approve() doesn't change status), so the
+  // approved_by check here is what hides Edit on those. Keeping this in
+  // sync with the backend means the Edit button doesn't show for a bill
+  // the save would 403 on.
   const canEditBill = (r) => canManage && !r.approved_by && !['Paid', 'Cancelled'].includes(r.status)
   // Mirrors AccountsPayablePolicy::archive()  -  only completed/settled bills
   // (Paid or Cancelled) can be archived. In-flight bills (Pending, Partially Paid, Overdue)
@@ -490,6 +517,8 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
       supplier_id: suppliers[0]?.supplier_id ?? '',
       account_id: accounts[0]?.id ?? '',
       reference_number: getNextReferenceNo(allBills),
+      // Pre-fill the company-wide penalty rate from Settings; still editable.
+      penalty_rate: Number(defaultPenaltyRate) > 0 ? String(defaultPenaltyRate) : '',
     })
     setFormValidationError('')
     setFieldErrors({})
@@ -534,6 +563,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
       reference_number: r.reference_number || '',
       status: r.status,
       purchase_order_no: r.purchase_order_no || '',
+      penalty_rate: r.penalty_rate != null && Number(r.penalty_rate) > 0 ? String(r.penalty_rate) : '',
     })
     setFormValidationError('')
     setFieldErrors({})
@@ -597,6 +627,11 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
       ['Original Amount', escapeHtml(formatCurrency(r.amount))],
       ['Paid Amount', escapeHtml(formatCurrency(r.paid_amount))],
       ['Remaining Balance', escapeHtml(formatCurrency(r.remaining_balance))],
+      ...(r.penalty_rate
+        ? isOverdueBill(r)
+          ? [['Penalty', `${r.penalty_rate}% (${formatCurrency(r.penalty_amount)})`]]
+          : [['Penalty Rate', `${r.penalty_rate}% (applies when overdue)`]]
+        : []),
       ['Payment Method', escapeHtml(r.payment_method || '—')],
       ['Billing Address', escapeHtml(r.billing_address || '—')],
       ['Description', escapeHtml(r.description || '—')],
@@ -668,6 +703,12 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
       errors.amount = `Amount cannot be less than paid amount (${formatCurrency(modalMode.paid_amount)}).`
     }
 
+    if (form.penalty_rate !== '' && (isNaN(Number(form.penalty_rate)) || Number(form.penalty_rate) < 0)) {
+      errors.penalty_rate = 'Penalty rate cannot be negative.'
+    } else if (form.penalty_rate !== '' && Number(form.penalty_rate) > 100) {
+      errors.penalty_rate = 'Penalty rate cannot exceed 100%.'
+    }
+
     if (form.reference_number && form.reference_number.trim()) {
       const trimmedRef = form.reference_number.trim().toLowerCase()
       const dup = allBills.find((r) => {
@@ -703,6 +744,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
       reference_number: form.reference_number.trim(),
       status: form.status,
       purchase_order_no: form.purchase_order_no.trim(),
+      penalty_rate: form.penalty_rate === '' ? undefined : Number(form.penalty_rate),
     }
 
     let result
@@ -857,17 +899,18 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
           <table className="w-full text-sm table-fixed">
             <thead className="bg-surface">
               <tr className="border-b border-border">
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2.5 py-3 w-[18%] whitespace-nowrap">Bill</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[16%] whitespace-nowrap">Supplier</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[12%] whitespace-nowrap">Due Date</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[14%] whitespace-nowrap">Amount Due</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2.5 py-3 w-[16%] whitespace-nowrap">Bill</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[14%] whitespace-nowrap">Supplier</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[10%] whitespace-nowrap">Due Date</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[12%] whitespace-nowrap">Amount Due</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[12%] whitespace-nowrap">Penalty</th>
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[12%] whitespace-nowrap">Status</th>
-                <th className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wider px-2.5 py-3 w-[28%] whitespace-nowrap">Actions</th>
+                <th className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wider px-2.5 py-3 w-[24%] whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody>
               {billsLoading && (
-                <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">Loading bills…</td></tr>
+                <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-muted">Loading bills…</td></tr>
               )}
 
               {!billsLoading && filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE).map((r) => (
@@ -903,6 +946,21 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                     {r.paid_amount > 0 && (
                       <span className="block text-[10px] text-muted line-through">{formatCurrency(r.amount)}</span>
                     )}
+                  </td>
+                  <td className="px-2 py-2 whitespace-nowrap text-left">
+                    {r.penalty_rate > 0 ? (
+                      isOverdueBill(r) ? (
+                        <>
+                          <p className="text-red-600 dark:text-red-400 tabular-nums whitespace-nowrap">{r.penalty_rate}%</p>
+                          <p className="text-muted tabular-nums whitespace-nowrap">{formatCurrency(r.penalty_amount)}</p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-muted tabular-nums whitespace-nowrap">{r.penalty_rate}%</p>
+                          <p className="text-[10px] text-muted whitespace-nowrap">On overdue</p>
+                        </>
+                      )
+                    ) : <span className="text-muted">—</span>}
                   </td>
                   <td className="px-2 py-2 whitespace-nowrap text-left">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[r.status] || 'bg-gray-100 text-muted'}`}>{r.status}</span>
@@ -1241,11 +1299,44 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
             <label className={LABEL}>Description</label>
             <input type="text" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} className={INPUT} placeholder="What this bill covers" />
           </div>
-          <div>
-            <label className={LABEL}>Status</label>
-            <select value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))} className={INPUT}>
-              {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={LABEL}>Penalty Rate (%)</label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.1"
+                value={form.penalty_rate}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setForm((f) => ({ ...f, penalty_rate: val }))
+                  if (val === '' || /^0$/.test(val)) {
+                    setFieldErrors((fe) => ({ ...fe, penalty_rate: '' }))
+                  } else if (Number(val) < 0) {
+                    setFieldErrors((fe) => ({ ...fe, penalty_rate: 'Penalty rate cannot be negative.' }))
+                  } else {
+                    setFieldErrors((fe) => ({ ...fe, penalty_rate: '' }))
+                  }
+                }}
+                onKeyDown={(e) => { if (['-', '+', 'e', 'E'].includes(e.key)) e.preventDefault() }}
+                onBlur={(e) => {
+                  const v = e.target.value.trim()
+                  if (v !== '' && Number(v) > 100) {
+                    setFieldErrors((fe) => ({ ...fe, penalty_rate: 'Penalty rate cannot exceed 100%.' }))
+                  }
+                }}
+                className={`${INPUT} ${fieldErrors.penalty_rate ? 'border-red-400 dark:border-red-500' : ''}`}
+                placeholder="e.g. 2"
+              />
+              {fieldErrors.penalty_rate && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.penalty_rate}</p>}
+            </div>
+            <div>
+              <label className={LABEL}>Status</label>
+              <select value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))} className={INPUT}>
+                {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
           </div>
           {isEditing && (
             <p className="text-xs text-muted">
@@ -1364,6 +1455,12 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                 <DetailRow label="Original Amount" value={formatCurrency(detailRecord.amount)} />
                 <DetailRow label="Paid Amount" value={formatCurrency(detailRecord.paid_amount)} />
                 <DetailRow label="Remaining Balance" value={formatCurrency(detailRecord.remaining_balance)} />
+                <DetailRow label="Penalty Rate" value={detailRecord.penalty_rate ? `${detailRecord.penalty_rate}%` : '—'} />
+                {isOverdueBill(detailRecord) ? (
+                  <DetailRow label="Penalty Amount" value={formatCurrency(detailRecord.penalty_amount)} />
+                ) : detailRecord.penalty_rate ? (
+                  <DetailRow label="Penalty Amount" value={<span className="text-muted text-xs italic">Applies when overdue</span>} />
+                ) : null}
                 <DetailRow label="Payment Method" value={detailRecord.payment_method || '—'} />
                 <DetailRow label="Billing Address" value={detailRecord.billing_address || '—'} />
                 <DetailRow label="Reference No." value={detailRecord.reference_number || '—'} />
