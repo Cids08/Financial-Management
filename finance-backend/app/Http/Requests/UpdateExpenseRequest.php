@@ -2,6 +2,8 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Budget;
+use App\Models\CashAccount;
 use App\Models\Expense;
 use App\Models\ExpenseCategory;
 use Illuminate\Contracts\Validation\Validator;
@@ -32,6 +34,38 @@ class UpdateExpenseRequest extends FormRequest
             ])],
             'description' => ['sometimes', 'required', 'string'],
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('supplier_id')) {
+            $val = $this->input('supplier_id');
+            if ($val === '' || $val === 'null' || $val === 'NaN' || strtolower(trim((string) $val)) === 'n/a' || $val === '0' || $val === 0) {
+                $this->merge(['supplier_id' => null]);
+            }
+        }
+
+        if ($this->has('expense_source') || $this->has('cash_account_id')) {
+            $source = $this->input('expense_source');
+            $validSources = [Expense::SOURCE_CASH, Expense::SOURCE_BANK, Expense::SOURCE_PETTY_CASH];
+            if (! in_array($source, $validSources, true)) {
+                $cashAccountId = $this->input('cash_account_id');
+                $cashAcc = $cashAccountId ? \App\Models\CashAccount::find($cashAccountId) : null;
+                if ($cashAcc) {
+                    $type = strtolower($cashAcc->account_type ?? '');
+                    if (str_contains($type, 'petty')) {
+                        $source = Expense::SOURCE_PETTY_CASH;
+                    } elseif ($type === 'cash' || (empty($cashAcc->bank_name) && ! str_contains($type, 'bank'))) {
+                        $source = Expense::SOURCE_CASH;
+                    } else {
+                        $source = Expense::SOURCE_BANK;
+                    }
+                } else {
+                    $source = Expense::SOURCE_CASH;
+                }
+                $this->merge(['expense_source' => $source]);
+            }
+        }
     }
 
     /**
@@ -97,7 +131,7 @@ class UpdateExpenseRequest extends FormRequest
             $amount = $this->has('expense_amount') ? (float) $this->input('expense_amount') : (float) ($expense?->expense_amount ?? 0);
 
             if ($cashAccountId && $amount > 0) {
-                $cashAccount = \App\Models\CashAccount::find($cashAccountId);
+                $cashAccount = CashAccount::find($cashAccountId);
 
                 if ($cashAccount && $amount > (float) $cashAccount->current_balance) {
                     $validator->errors()->add(

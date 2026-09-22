@@ -13,6 +13,7 @@ use App\Models\Notification;
 use App\Models\SupportingDocument;
 use App\Models\User;
 use App\Support\Money;
+use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -84,10 +85,20 @@ class ExpenseService
     public function create(array $data, User $creator): Expense
     {
         return DB::transaction(function () use ($data, $creator) {
-            if (empty($data['expense_source']) && ! empty($data['cash_account_id'])) {
-                $cashAcc = CashAccount::find($data['cash_account_id']);
+            $validSources = [Expense::SOURCE_CASH, Expense::SOURCE_BANK, Expense::SOURCE_PETTY_CASH];
+            if (empty($data['expense_source']) || ! in_array($data['expense_source'], $validSources, true)) {
+                $cashAcc = ! empty($data['cash_account_id']) ? CashAccount::find($data['cash_account_id']) : null;
                 if ($cashAcc) {
-                    $data['expense_source'] = $cashAcc->account_name;
+                    $type = strtolower($cashAcc->account_type ?? '');
+                    if (str_contains($type, 'petty')) {
+                        $data['expense_source'] = Expense::SOURCE_PETTY_CASH;
+                    } elseif ($type === 'cash' || (empty($cashAcc->bank_name) && ! str_contains($type, 'bank'))) {
+                        $data['expense_source'] = Expense::SOURCE_CASH;
+                    } else {
+                        $data['expense_source'] = Expense::SOURCE_BANK;
+                    }
+                } else {
+                    $data['expense_source'] = Expense::SOURCE_CASH;
                 }
             }
 
@@ -128,6 +139,24 @@ class ExpenseService
         $original = $expense->only(['budget_id', 'expense_category_id', 'expense_amount', 'status']);
 
         DB::transaction(function () use ($expense, $data, $actor, $original) {
+            $validSources = [Expense::SOURCE_CASH, Expense::SOURCE_BANK, Expense::SOURCE_PETTY_CASH];
+            if (isset($data['expense_source']) && ! in_array($data['expense_source'], $validSources, true)) {
+                $cashAccountId = $data['cash_account_id'] ?? $expense->cash_account_id;
+                $cashAcc = $cashAccountId ? CashAccount::find($cashAccountId) : null;
+                if ($cashAcc) {
+                    $type = strtolower($cashAcc->account_type ?? '');
+                    if (str_contains($type, 'petty')) {
+                        $data['expense_source'] = Expense::SOURCE_PETTY_CASH;
+                    } elseif ($type === 'cash' || (empty($cashAcc->bank_name) && ! str_contains($type, 'bank'))) {
+                        $data['expense_source'] = Expense::SOURCE_CASH;
+                    } else {
+                        $data['expense_source'] = Expense::SOURCE_BANK;
+                    }
+                } else {
+                    $data['expense_source'] = Expense::SOURCE_CASH;
+                }
+            }
+
             $expense->update($data);
 
             AuditLog::create([
@@ -239,7 +268,7 @@ class ExpenseService
                 ]);
             }
 
-            if (! $skipDepartmentCheck && $expense->creator && $expense->creator->department_id !== $budget->department_id) {
+            if (! $skipDepartmentCheck && $expense->creator && ! empty($expense->creator->department_id) && ! empty($budget->department_id) && $expense->creator->department_id !== $budget->department_id) {
                 $filerDeptName = Department::find($expense->creator->department_id)?->department_name;
                 $budgetDeptName = Department::find($budget->department_id)?->department_name ?? 'no department';
                 $filerPhrase = $filerDeptName
@@ -380,7 +409,7 @@ class ExpenseService
                 'id'                      => $e->id,
                 'description'             => $e->description,
                 'expense_amount'          => (float) $e->expense_amount,
-                'expense_date'            => $e->expense_date?->toDateString(),
+                'expense_date'            => $e->expense_date ? Carbon::parse($e->expense_date)->toDateString() : null,
                 'receipt_number'          => $e->receipt_number,
                 'expense_source'          => $e->expense_source,
                 'budget_id'               => $e->budget_id,
@@ -462,7 +491,7 @@ class ExpenseService
                                 'expense_ids' => sprintf(
                                     'Approving this batch would overdraw cash account "%s" (Available: ₱%s, Required for batch: ₱%s).',
                                     $cashAccount->account_name,
-                                    number_format($cashAccount->current_balance, 2),
+                                    number_format((float) $cashAccount->current_balance, 2),
                                     number_format($totalGroupAmount, 2)
                                 ),
                             ]);

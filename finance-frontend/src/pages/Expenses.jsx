@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { usePermissions } from '../context/PermissionsContext'
 import { useProfileContext } from '../context/ProfileContext'
 import { usePrivacy } from '../context/PrivacyContext'
+import { hasPermission } from '../utils/permissions'
 import { Search, Plus, Pencil, Archive, RotateCcw, Receipt, Wallet, Tag, Info, Printer, CheckCircle2, XCircle, CalendarRange, X, Paperclip, FileText, History, AlertTriangle, Upload, ScanLine, Sparkles } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
@@ -294,10 +296,14 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
   // Batch Approval Wizard state
   const [showBatchApproveModal, setShowBatchApproveModal] = useState(false)
 
+  const { permissions } = usePermissions()
   const { profile } = useProfileContext()
   // Archiving/restoring financial records is a destructive action restricted
   // to Admin and Super Admin. Staff/Collector roles must not see these buttons.
-  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
+  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin' || profile?.role_slug === 'admin' || profile?.role_slug === 'super-admin'
+  // Approval authority is restricted to Admin/Super Admin or users granted expenses.approve.
+  // Staff/makers have day-to-day data entry permissions but must not approve/reject expenses.
+  const canApprove = isAdmin || hasPermission(permissions, 'expenses.approve')
 
   const { options: budgets } = useLookup('/api/budgets')
   const { options: categories } = useLookup('/api/expense-categories')
@@ -483,12 +489,25 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
     setFieldErrors({})
     setFormError('')
 
+    const parsedSupplierId = Number(form.supplier_id)
+    const validSupplierId = (Number.isInteger(parsedSupplierId) && parsedSupplierId > 0) ? parsedSupplierId : null
+
+    const selectedAcc = cashAccounts.find((a) => Number(a.id) === Number(form.cash_account_id))
+    const validSource = ['Cash', 'Bank', 'Petty Cash'].includes(form.expense_source)
+      ? form.expense_source
+      : (selectedAcc
+          ? (selectedAcc.account_type?.toLowerCase().includes('petty')
+              ? 'Petty Cash'
+              : (selectedAcc.bank_name || selectedAcc.account_type?.toLowerCase().includes('bank') ? 'Bank' : 'Cash'))
+          : 'Cash')
+
     const payload = {
       ...form,
       budget_id: Number(form.budget_id),
       expense_category_id: Number(form.expense_category_id),
-      supplier_id: form.supplier_id ? Number(form.supplier_id) : null,
+      supplier_id: validSupplierId,
       cash_account_id: form.cash_account_id ? Number(form.cash_account_id) : null,
+      expense_source: validSource,
       expense_amount: Number(form.expense_amount) || 0,
       receipt_status: !isEditing && receiptFile ? 'Uploaded' : form.receipt_status,
     }
@@ -632,14 +651,16 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
           <p className="mt-1 text-xs text-muted">Log expenses charged against department budgets.</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            icon={Sparkles}
-            onClick={() => setShowBatchApproveModal(true)}
-          >
-            Approval Wizard
-          </Button>
+          {canApprove && (
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={Sparkles}
+              onClick={() => setShowBatchApproveModal(true)}
+            >
+              Approval Wizard
+            </Button>
+          )}
           <Button variant="primary" size="sm" icon={Plus} onClick={openAdd}>Add Expense</Button>
         </div>
       </div>
@@ -789,7 +810,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                   </td>
                   <td className="px-3.5 py-3 whitespace-nowrap text-right">
                     <div className="flex items-center justify-end gap-0.5">
-                      {x.status === 'Pending' && !filters.trashed && x.has_receipt && (() => {
+                      {canApprove && x.status === 'Pending' && !filters.trashed && x.has_receipt && (() => {
                         const hasBudget = Boolean(x.budget_id && (x.budget_name || budgets.some((b) => Number(b.budget_id) === Number(x.budget_id))))
                         const isCostExceeded = x.budget_remaining_amount !== null && x.budget_remaining_amount !== undefined
                           ? Number(x.expense_amount) > Number(x.budget_remaining_amount)
@@ -973,7 +994,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                       disabled={state.isDepleted && Number(form.budget_id) !== Number(b.budget_id)}
                       className={state.isDepleted ? 'text-muted' : ''}
                     >
-                      {b.budget_name} ({b.budget_code}){state.isDepleted ? '  -  Depleted (Unavailable)' : state.isLow ? '  -  Low Balance' : ''}
+                      {b.budget_name}{b.department_name ? ` — ${b.department_name}` : ''} ({b.budget_code}){state.isDepleted ? '  -  Depleted (Unavailable)' : state.isLow ? '  -  Low Balance' : ''}
                     </option>
                   )
                 })}
@@ -1126,10 +1147,15 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                 value={form.cash_account_id}
                 onChange={(e) => {
                   const selectedAcc = cashAccounts.find((a) => String(a.id) === e.target.value)
+                  const derivedSource = selectedAcc
+                    ? (selectedAcc.account_type?.toLowerCase().includes('petty')
+                        ? 'Petty Cash'
+                        : (selectedAcc.bank_name || selectedAcc.account_type?.toLowerCase().includes('bank') ? 'Bank' : 'Cash'))
+                    : ''
                   setForm((f) => ({
                     ...f,
                     cash_account_id: e.target.value,
-                    expense_source: selectedAcc ? selectedAcc.account_name : f.expense_source,
+                    expense_source: derivedSource || f.expense_source,
                   }))
                   setFieldErrors((fe) => ({ ...fe, cash_account_id: '' }))
                   if (selectedAcc && Number(form.expense_amount) > Number(selectedAcc.current_balance)) {
@@ -1202,7 +1228,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
             <div>
               <label className={LABEL}>Supplier (optional)</label>
               <select value={form.supplier_id} onChange={(e) => setForm((f) => ({ ...f, supplier_id: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE}>
-                <option value="">N/A</option>
+                <option value="">N/A (No Supplier)</option>
                 {suppliers.map((s) => <option key={s.id} value={s.id}>{s.supplier_name}</option>)}
               </select>
             </div>

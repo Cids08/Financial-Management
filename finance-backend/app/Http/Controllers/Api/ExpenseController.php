@@ -153,7 +153,7 @@ class ExpenseController extends Controller
         // reasoning: "who happens to be approving/posting this" has no
         // bearing on whether the filer's department genuinely doesn't
         // match the budget's, in either case.
-        $isAdminOverride = $request->user()->hasAnyRole(['super-admin', 'admin']);
+        $isAdminOverride = $request->user()->hasAnyRole(['super-admin', 'admin', 'Super Admin', 'Admin']);
 
         try {
             $expense = $this->expenses->approve($expense, $request->user(), skipDepartmentCheck: $isAdminOverride);

@@ -55,16 +55,14 @@ class InvoiceOcrService
      * Technical diagrams, database schemas, ERDs, code screenshots, etc.
      */
     protected const DIAGRAM_EXCLUSION_KEYWORDS = [
-        'varchar', 'primary key', 'foreign key', 'database', 'schema',
-        'diagram', 'erd', 'entity relationship', 'table ', 'tables',
-        'auto_increment', 'decimal(', 'int(', 'bigint', 'tinyint', 'references ',
-        'boolean', 'nullable', 'char(', 'timestamp', 'datatype', 'data type',
-        'one-to-many', 'many-to-many', 'one to many', 'many to many', 'crow\'s foot',
-        'class diagram', 'flowchart', 'foreign_key', 'primary_key', 'create table',
-        'drop table', 'alter table', 'foreign keys', 'primary keys', 'erd diagram',
-        'drawsql', 'dbdiagram', 'lucidchart', 'dbeaver', 'phpmyadmin', 'navicat',
-        'workbench', 'cardinality', 'attributes', 'identifying relationship',
-        'mysql', 'postgresql', 'sqlite', 'sql server', 'mariadb', 'migration',
+        'varchar', 'primary key', 'foreign key', 'schema diagram',
+        'entity relationship', 'auto_increment', 'decimal(', 'int(', 'bigint',
+        'tinyint', 'datatype', 'data type', 'one-to-many', 'many-to-many',
+        'one to many', 'many to many', 'crow\'s foot', 'class diagram', 'flowchart',
+        'foreign_key', 'primary_key', 'create table', 'drop table', 'alter table',
+        'foreign keys', 'primary keys', 'erd diagram', 'drawsql', 'dbdiagram',
+        'lucidchart', 'dbeaver', 'phpmyadmin', 'navicat', 'cardinality',
+        'identifying relationship',
     ];
 
     /**
@@ -143,11 +141,10 @@ class InvoiceOcrService
     {
         $normalized = strtolower($text);
 
-        $looksLikeDiagram = false;
+        $diagramMatches = 0;
         foreach (self::DIAGRAM_EXCLUSION_KEYWORDS as $keyword) {
             if (str_contains($normalized, strtolower($keyword))) {
-                $looksLikeDiagram = true;
-                break;
+                $diagramMatches++;
             }
         }
 
@@ -192,14 +189,19 @@ class InvoiceOcrService
             || str_contains($normalized, 'amount due')
             || str_contains($normalized, 'delivery receipt');
 
+        // A document that has core invoice keywords, multiple matches, and an extracted
+        // invoice number or amount is clearly a financial document, not a database diagram.
+        $isDefiniteInvoice = $hasCoreKeyword && $matches >= 2 && ($invoiceNumber !== null || $amount !== null);
+        $looksLikeDiagram = $isDefiniteInvoice ? false : ($diagramMatches >= 2);
+
         $isReceipt = false;
         $message = null;
 
         if ($looksLikeDiagram) {
             $message = "This {$docType} appears to be a database schema or technical diagram, not a valid invoice or receipt.";
-        } elseif ($looksLikeTransfer) {
+        } elseif ($looksLikeTransfer && ! $isDefiniteInvoice) {
             $message = "This {$docType} appears to be an e-wallet or bank transfer confirmation, not an official vendor invoice.";
-        } elseif ($looksLikeAcademic) {
+        } elseif ($looksLikeAcademic && ! $isDefiniteInvoice) {
             $message = "This {$docType} appears to be an academic paper, resume, or unrelated document, not a valid invoice or receipt.";
         } elseif ($matches < self::MIN_KEYWORD_MATCHES || ! $hasCoreKeyword) {
             $message = "This {$docType} does not contain invoice or receipt information (no billing keywords found). Please attach a valid supporting document.";

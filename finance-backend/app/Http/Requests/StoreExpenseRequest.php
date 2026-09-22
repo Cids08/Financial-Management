@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\Budget;
+use App\Models\CashAccount;
 use App\Models\Department;
 use App\Models\Expense;
 use App\Models\ExpenseCategory;
@@ -53,6 +54,36 @@ class StoreExpenseRequest extends FormRequest
         ];
     }
 
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('supplier_id')) {
+            $val = $this->input('supplier_id');
+            if ($val === '' || $val === 'null' || $val === 'NaN' || strtolower(trim((string) $val)) === 'n/a' || $val === '0' || $val === 0) {
+                $this->merge(['supplier_id' => null]);
+            }
+        }
+
+        $source = $this->input('expense_source');
+        $validSources = [Expense::SOURCE_CASH, Expense::SOURCE_BANK, Expense::SOURCE_PETTY_CASH];
+        if (! in_array($source, $validSources, true)) {
+            $cashAccountId = $this->input('cash_account_id');
+            $cashAcc = $cashAccountId ? CashAccount::find($cashAccountId) : null;
+            if ($cashAcc) {
+                $type = strtolower($cashAcc->account_type ?? '');
+                if (str_contains($type, 'petty')) {
+                    $source = Expense::SOURCE_PETTY_CASH;
+                } elseif ($type === 'cash' || (empty($cashAcc->bank_name) && ! str_contains($type, 'bank'))) {
+                    $source = Expense::SOURCE_CASH;
+                } else {
+                    $source = Expense::SOURCE_BANK;
+                }
+            } else {
+                $source = Expense::SOURCE_CASH;
+            }
+            $this->merge(['expense_source' => $source]);
+        }
+    }
+
     /**
      * A budget belongs to a department. An expense should only ever be
      * filed against — and later draw down — the budget of the department
@@ -63,22 +94,16 @@ class StoreExpenseRequest extends FormRequest
      * expense never even makes it to Pending.
      *
      * Super Admin/Admin bypass this the same way they bypass it at
-     * approval time (see ExpenseController::approve()'s $isAdminOverride)
-     * — same rule, same reasoning, just enforced at the other end of the
-     * expense's lifecycle. A non-admin filer with no department assigned
-     * (or a real cross-department mismatch) still gets blocked here.
-     *
-     * A category being Inactive is checked the same way, for the same
-     * reason: the frontend dropdown already filters to active categories
-     * only, but that's a UI convenience, not enforcement — someone could
-     * still submit a since-retired category_id directly.
+     * approval time (see ExpenseController::approve()'s $isAdminOverride).
+     * Users without an assigned department (e.g. general accounting staff)
+     * are not blocked from recording expenses.
      */
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator) {
             $budgetId = $this->input('budget_id');
             $user = $this->user();
-            $isAdminOverride = $user?->hasAnyRole(['super-admin', 'admin']) ?? false;
+            $isAdminOverride = $user?->hasAnyRole(['super-admin', 'admin', 'Super Admin', 'Admin']) ?? false;
 
             if ($budgetId) {
                 $budget = Budget::find($budgetId);
@@ -94,9 +119,9 @@ class StoreExpenseRequest extends FormRequest
                     );
                 }
 
-                if ($budget && $user && ! $isAdminOverride && $budget->department_id !== $user->department_id) {
-                    $budgetDept = Department::find($budget->department_id)?->department_name ?? 'an unassigned department';
-                    $userDept = Department::find($user->department_id)?->department_name ?? 'no department';
+                if ($budget && $user && ! $isAdminOverride && ! empty($user->department_id) && ! empty($budget->department_id) && $budget->department_id !== $user->department_id) {
+                    $budgetDept = Department::find($budget->department_id)?->department_name ?? 'another department';
+                    $userDept = Department::find($user->department_id)?->department_name ?? 'your department';
 
                     $validator->errors()->add(
                         'budget_id',
@@ -127,7 +152,7 @@ class StoreExpenseRequest extends FormRequest
             $amount = (float) $this->input('expense_amount', 0);
 
             if ($cashAccountId && $amount > 0) {
-                $cashAccount = \App\Models\CashAccount::find($cashAccountId);
+                $cashAccount = CashAccount::find($cashAccountId);
 
                 if ($cashAccount && $amount > (float) $cashAccount->current_balance) {
                     $validator->errors()->add(

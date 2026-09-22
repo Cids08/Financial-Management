@@ -743,7 +743,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3 whitespace-nowrap">Original / Balance</th>
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3 whitespace-nowrap">Penalty</th>
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3 whitespace-nowrap">Status</th>
-                <th className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3 whitespace-nowrap min-w-[140px]">Actions</th>
+                <th className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3 whitespace-nowrap min-w-35">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -799,7 +799,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                   <td className="px-3 xl:px-4 py-3.5 whitespace-nowrap min-w-0">
                     <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[r.status]}`}>{r.status}</span>
                   </td>
-                  <td className="px-3 xl:px-4 py-3.5 whitespace-nowrap text-right min-w-[140px]">
+                  <td className="px-3 xl:px-4 py-3.5 whitespace-nowrap text-right min-w-35">
                     <div className="flex items-center justify-end gap-1">
                       <Tooltip label="View full record" align="start">
                         <button type="button" onClick={() => openDetail(r)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
