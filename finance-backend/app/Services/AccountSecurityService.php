@@ -16,7 +16,7 @@ use Illuminate\Validation\ValidationException;
 
 class AccountSecurityService
 {
-    protected const SETUP_CODE_TTL_MINUTES = 10;
+    protected const SETUP_CODE_TTL_MINUTES = 5;
 
     public function __construct(protected TotpService $totp)
     {

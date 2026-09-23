@@ -110,7 +110,7 @@ export function useAuth() {
         setTwoFactorPending({
           pendingToken: json.data.pendingToken,
           maskedEmail: json.data.maskedEmail,
-          codeExpiresAt: Date.now() + (json.data.codeExpiresInSeconds ?? 180) * 1000,
+          codeExpiresAt: Date.now() + (json.data.codeExpiresInSeconds ?? 300) * 1000,
         })
         return { success: true, requiresTwoFactor: true }
       }
@@ -217,7 +217,7 @@ export function useAuth() {
       setTwoFactorPending((p) => ({
         ...p,
         maskedEmail: json.data.maskedEmail,
-        codeExpiresAt: Date.now() + (json.data.codeExpiresInSeconds ?? 180) * 1000,
+        codeExpiresAt: Date.now() + (json.data.codeExpiresInSeconds ?? 300) * 1000,
       }))
       return { success: true }
     } catch (err) {

@@ -262,7 +262,7 @@ export default function Profile() {
   // backend returns the remaining seconds alongside maskedEmail.
   const withCodeExpiry = (result) => ({
     ...result,
-    codeExpiresAt: Date.now() + (result.codeExpiresInSeconds ?? 600) * 1000,
+    codeExpiresAt: Date.now() + (result.codeExpiresInSeconds ?? 300) * 1000,
   })
 
   const handleToggle2FA = async () => {

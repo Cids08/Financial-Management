@@ -32,7 +32,7 @@ class AuthService
     // How long an emailed login code is valid. Kept short (the email states
     // this number) while the ticket above outlives it. Public so
     // TwoFactorCodeMail can read it without duplicating the number.
-    public const LOGIN_CODE_TTL_MINUTES = 3;
+    public const LOGIN_CODE_TTL_MINUTES = 5;
 
     // Account-level lockout, separate from the per-IP throttle:5,1 on the
     // route. The IP throttle stops rapid-fire attempts from one address;
