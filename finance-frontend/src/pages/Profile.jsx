@@ -279,8 +279,8 @@ export default function Profile() {
     }
   }
 
-  const confirmEnable2FA = async () => {
-    const result = await security.confirmTwoFactor(verifyCode)
+  const confirmEnable2FA = async (completedCode) => {
+    const result = await security.confirmTwoFactor(completedCode || verifyCode)
     if (result.success) {
       setRecoveryCodes(result.recoveryCodes || [])
     }
@@ -737,7 +737,7 @@ export default function Profile() {
                 length={6}
                 value={verifyCode}
                 onChange={setVerifyCode}
-                onComplete={confirmEnable2FA}
+                onComplete={(completedCode) => confirmEnable2FA(completedCode)}
                 disabled={security.twoFABusy || setupExpired}
                 hasError={Boolean(security.twoFAError)}
                 autoFocus
