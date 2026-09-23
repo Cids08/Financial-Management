@@ -62,7 +62,8 @@ services:
       SESSION_ENCRYPT: "false"
       SESSION_PATH: /
       SESSION_DOMAIN: ${SESSION_DOMAIN}
-            FILESYSTEM_DISK: r2
+
+      FILESYSTEM_DISK: ${FILESYSTEM_DISK:-local}
 
       R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
       R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
