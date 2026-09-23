@@ -82,7 +82,15 @@ const Button = forwardRef(function Button(
     >
       {loading ? (
         loadingVariant === 'dot' ? (
-          <span aria-hidden="true" className="inline-block h-2 w-2 rounded-full bg-current animate-waveY" />
+          <span aria-hidden="true" className="flex items-center gap-1">
+            {[0, 1, 2].map((i) => (
+              <span
+                key={i}
+                className="inline-block h-1.5 w-1.5 rounded-full bg-current animate-waveY"
+                style={{ animationDelay: `${i * 150}ms` }}
+              />
+            ))}
+          </span>
         ) : (
           <Loader2 size={iconSize} strokeWidth={2} className="animate-spin" />
         )
