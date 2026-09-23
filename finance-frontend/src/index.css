@@ -29,6 +29,7 @@
 
   --animate-fadeIn: fadeIn 0.15s ease-out;
   --animate-slideIn: slideIn 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  --animate-waveY: waveY 0.8s ease-in-out infinite;
 }
 
 /* Dark mode overrides — same variable names, new values.
@@ -60,6 +61,11 @@
 @keyframes slideIn {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(0); }
+}
+
+@keyframes waveY {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
 }
 
 html {

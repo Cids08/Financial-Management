@@ -2,15 +2,10 @@
 
 namespace App\Mail;
 
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
-use Illuminate\Queue\SerializesModels;
 
-class TwoFactorCodeMail extends Mailable implements ShouldQueue
+class TwoFactorCodeMail extends Mailable
 {
-    use Queueable, SerializesModels;
-
     /**
      * @param string $code Six-digit code to display.
      * @param int $expiresInMinutes How long this specific code is valid —

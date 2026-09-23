@@ -51,6 +51,7 @@ const Button = forwardRef(function Button(
     iconPosition = 'left',
     iconOnly = false,
     loading = false,
+    loadingVariant = 'spinner',
     fullWidth = false,
     disabled = false,
     type = 'button',
@@ -80,7 +81,11 @@ const Button = forwardRef(function Button(
       {...props}
     >
       {loading ? (
-        <Loader2 size={iconSize} strokeWidth={2} className="animate-spin" />
+        loadingVariant === 'dot' ? (
+          <span aria-hidden="true" className="inline-block h-2 w-2 rounded-full bg-current animate-waveY" />
+        ) : (
+          <Loader2 size={iconSize} strokeWidth={2} className="animate-spin" />
+        )
       ) : (
         <>
           {Icon && iconPosition === 'left' && (
