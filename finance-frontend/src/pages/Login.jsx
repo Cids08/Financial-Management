@@ -269,6 +269,7 @@ export default function Login() {
                 size="md"
                 icon={LogIn}
                 className="w-full"
+                loading={loading}
                 disabled={loading || retryAfter > 0 || accountLockedFor > 0}
               >
                 {accountLockedFor > 0
@@ -324,6 +325,7 @@ export default function Login() {
                 variant="primary"
                 size="md"
                 className="w-full"
+                loading={loading}
                 disabled={loading || code.length !== 6 || retryAfter > 0 || codeExpired}
               >
                 {retryAfter > 0

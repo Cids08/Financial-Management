@@ -334,7 +334,20 @@ class AuthService
             now()->addMinutes(self::LOGIN_CODE_TTL_MINUTES)
         );
 
-        Mail::to($user->email)->send(new TwoFactorCodeMail($code, self::LOGIN_CODE_TTL_MINUTES));
+        // Sent post-response via app()->terminating so a slow mail relay can
+        // never hold up the login request (the pending token is already
+        // created by the time this runs; the code is delivered a moment later
+        // without making the user stare at a loading spinner).
+        app()->terminating(function () use ($user, $code) {
+            try {
+                Mail::to($user->email)->send(new TwoFactorCodeMail($code, self::LOGIN_CODE_TTL_MINUTES));
+            } catch (\Throwable $e) {
+                Log::channel('security')->error('2FA login code email failed', [
+                    'user_id' => $user->id,
+                    'error'   => $e->getMessage(),
+                ]);
+            }
+        });
     }
 
     // Captures a friendly device label + IP/location on the token row
@@ -383,20 +396,23 @@ class AuthService
         // — this reaches the person even if their other device/tab isn't
         // currently open in a browser to receive the broadcast. Guarded so a
         // mail transport failure can never take down the login response: the
-        // token is already valid, email delivery is best-effort.
-        try {
-            Mail::to($user->email)->send(new LoginNotificationMail(
-                $deviceLabel,
-                $ip,
-                $location,
-                now()->format('F j, Y \a\t g:i A')
-            ));
-        } catch (\Throwable $e) {
-            Log::channel('security')->error('Login notification email failed', [
-                'user_id' => $user->id,
-                'error'   => $e->getMessage(),
-            ]);
-        }
+        // token is already valid, email delivery is best-effort. Sent
+        // post-response so a slow relay can't hold up the login either.
+        app()->terminating(function () use ($user, $deviceLabel, $ip, $location) {
+            try {
+                Mail::to($user->email)->send(new LoginNotificationMail(
+                    $deviceLabel,
+                    $ip,
+                    $location,
+                    now()->format('F j, Y \a\t g:i A')
+                ));
+            } catch (\Throwable $e) {
+                Log::channel('security')->error('Login notification email failed', [
+                    'user_id' => $user->id,
+                    'error'   => $e->getMessage(),
+                ]);
+            }
+        });
 
         return $newToken->plainTextToken;
     }
