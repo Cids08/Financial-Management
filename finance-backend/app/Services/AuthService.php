@@ -381,13 +381,22 @@ class AuthService
 
         // Secondary channel alongside the real-time WebSocket notice above
         // — this reaches the person even if their other device/tab isn't
-        // currently open in a browser to receive the broadcast.
-        Mail::to($user->email)->send(new LoginNotificationMail(
-            $deviceLabel,
-            $ip,
-            $location,
-            now()->format('F j, Y \a\t g:i A')
-        ));
+        // currently open in a browser to receive the broadcast. Guarded so a
+        // mail transport failure can never take down the login response: the
+        // token is already valid, email delivery is best-effort.
+        try {
+            Mail::to($user->email)->send(new LoginNotificationMail(
+                $deviceLabel,
+                $ip,
+                $location,
+                now()->format('F j, Y \a\t g:i A')
+            ));
+        } catch (\Throwable $e) {
+            Log::channel('security')->error('Login notification email failed', [
+                'user_id' => $user->id,
+                'error'   => $e->getMessage(),
+            ]);
+        }
 
         return $newToken->plainTextToken;
     }
