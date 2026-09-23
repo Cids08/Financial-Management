@@ -1,5 +1,33 @@
 import { forwardRef } from 'react'
-import { Loader2 } from 'lucide-react'
+
+function ModernSpinner({ size, className = '' }) {
+  return (
+    <svg
+      className={`animate-spin shrink-0 text-current ${className}`}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="9.5"
+        stroke="currentColor"
+        strokeWidth="2.75"
+        className="opacity-25"
+      />
+      <path
+        d="M12 2.5C6.75329 2.5 2.5 6.75329 2.5 12"
+        stroke="currentColor"
+        strokeWidth="2.75"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
 
 const variantStyles = {
   primary: `bg-primary text-[#111827] shadow-sm
@@ -20,19 +48,19 @@ const variantStyles = {
 }
 
 const sizeStyles = {
-  xs: 'text-xs px-2.5 py-1 gap-1',
-  sm: 'text-xs px-3 py-1.5 gap-1.5',
-  md: 'text-sm px-4 py-2 gap-2',
-  lg: 'text-sm px-5 py-2.5 gap-2',
+  xs: 'text-xs px-2.5 py-1 gap-1 min-h-[28px]',
+  sm: 'text-xs px-3 py-1.5 gap-1.5 min-h-[32px]',
+  md: 'text-sm px-4 py-2 gap-2 min-h-[40px]',
+  lg: 'text-sm px-5 py-2.5 gap-2 min-h-[44px]',
 }
 
 // Square, label-less buttons (e.g. a lone icon in a table row)  -  pairs well
 // with the Tooltip component to communicate what the icon does.
 const iconOnlySizeStyles = {
-  xs: 'p-1',
-  sm: 'p-1.5',
-  md: 'p-2',
-  lg: 'p-2.5',
+  xs: 'p-1 min-h-[28px] min-w-[28px]',
+  sm: 'p-1.5 min-h-[32px] min-w-[32px]',
+  md: 'p-2 min-h-[40px] min-w-[40px]',
+  lg: 'p-2.5 min-h-[44px] min-w-[44px]',
 }
 
 const iconPixelSize = {
@@ -81,19 +109,22 @@ const Button = forwardRef(function Button(
       {...props}
     >
       {loading ? (
-        loadingVariant === 'dot' ? (
-          <span aria-hidden="true" className="flex items-center gap-1">
-            {[0, 1, 2].map((i) => (
-              <span
-                key={i}
-                className="inline-block h-1.5 w-1.5 rounded-full bg-current animate-waveY"
-                style={{ animationDelay: `${i * 150}ms` }}
-              />
-            ))}
-          </span>
-        ) : (
-          <Loader2 size={iconSize} strokeWidth={2} className="animate-spin" />
-        )
+        <>
+          {loadingVariant === 'dot' ? (
+            <span aria-hidden="true" className="flex items-center gap-1 shrink-0">
+              {[0, 1, 2].map((i) => (
+                <span
+                  key={i}
+                  className="inline-block h-1.5 w-1.5 rounded-full bg-current animate-waveY"
+                  style={{ animationDelay: `${i * 150}ms` }}
+                />
+              ))}
+            </span>
+          ) : (
+            <ModernSpinner size={iconSize} />
+          )}
+          {!iconOnly && children && <span className="truncate">{children}</span>}
+        </>
       ) : (
         <>
           {Icon && iconPosition === 'left' && (

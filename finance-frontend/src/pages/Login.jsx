@@ -268,9 +268,9 @@ export default function Login() {
                 variant="primary"
                 size="md"
                 icon={LogIn}
-                className="w-full"
+                className="w-full h-11 text-sm font-semibold"
                 loading={loading}
-                loadingVariant="dot"
+                loadingVariant="spinner"
                 disabled={loading || retryAfter > 0 || accountLockedFor > 0}
               >
                 {accountLockedFor > 0
@@ -325,9 +325,9 @@ export default function Login() {
                 type="submit"
                 variant="primary"
                 size="md"
-                className="w-full"
+                className="w-full h-11 text-sm font-semibold"
                 loading={loading}
-                loadingVariant="dot"
+                loadingVariant="spinner"
                 disabled={loading || code.length !== 6 || retryAfter > 0 || codeExpired}
               >
                 {retryAfter > 0
