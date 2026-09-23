@@ -9,7 +9,7 @@
 #   - finance-forecasting: fastapi>=0.110,<1  uvicorn>=0.28,<1  pydantic>=2.6,<3
 #                          numpy>=1.26,<2  pandas>=2.2,<3  scipy>=1.12,<2  statsmodels>=0.14,<1
 #   - finance-aiservice:   fastapi==0.115.0  uvicorn[standard]==0.30.6  pydantic==2.9.2
-#                          httpx==0.27.2  python-dotenv==1.0.1
+#                          httpx==0.27.2  python-dotenv==1.2.3
 # =============================================================================
 FROM python:3.11-slim
 
