@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Support\FileStorage;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Str;
@@ -45,9 +46,7 @@ class ProfileResource extends JsonResource
             // works at runtime. asset() sidesteps the ambiguity entirely
             // and produces the same absolute URL, assuming the standard
             // `php artisan storage:link` symlink is in place.
-            'avatar_url'  => $this->profile_photo
-                ? asset('storage/' . ltrim($this->profile_photo, '/'))
-                : null,
+            'avatar_url'  => FileStorage::signedUrl($this->profile_photo, FileStorage::IMAGE_TTL_SECONDS),
         ];
     }
 }

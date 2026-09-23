@@ -13,11 +13,10 @@ use App\Http\Resources\TaxObligationResource;
 use App\Models\SupportingDocument;
 use App\Models\TaxObligation;
 use App\Services\TaxObligationService;
+use App\Support\FileStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class TaxObligationController extends Controller
 {
@@ -233,7 +232,7 @@ class TaxObligationController extends Controller
      * this is what stops someone guessing a document ID that belongs to a
      * different module or a different tax obligation entirely.
      */
-    public function viewDocument(TaxObligation $taxObligation, SupportingDocument $document): BinaryFileResponse
+    public function viewDocument(TaxObligation $taxObligation, SupportingDocument $document): JsonResponse
     {
         if ($document->reference_type !== 'tax_obligation' || (int) $document->reference_id !== $taxObligation->id) {
             abort(404, 'This document does not belong to this tax obligation.');
@@ -243,10 +242,18 @@ class TaxObligationController extends Controller
             abort(404, 'No file stored for this document.');
         }
 
-        $fullPath = Storage::disk('local')->path($document->storage_path);
+        $url = FileStorage::signedUrl($document->storage_path);
 
-        return response()->file($fullPath, [
-            'Content-Type' => $document->mime_type ?? 'application/octet-stream',
+        return response()->json([
+            'success' => true,
+            'message' => '',
+            'data'    => [
+                'id'          => $document->id,
+                'url'         => $url,
+                'originalName'=> $document->original_name,
+                'mimeType'    => $document->mime_type,
+                'expires_in'  => FileStorage::DOCUMENT_TTL_SECONDS,
+            ],
         ]);
     }
 

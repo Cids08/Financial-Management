@@ -6,6 +6,7 @@ use App\Models\Budget;
 use App\Models\Department;
 use App\Models\Notification;
 use App\Models\SupportingDocument;
+use App\Support\FileStorage;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -177,7 +178,7 @@ class BudgetService
 
     public function attachPlan(Budget $budget, UploadedFile $file, int $userId): SupportingDocument
     {
-        $path = $file->store("budget-plans/{$budget->id}", 'local');
+        $path = $file->store("budget-plans/{$budget->id}", FileStorage::DISK);
 
         return SupportingDocument::create([
             'reference_type' => 'budget',

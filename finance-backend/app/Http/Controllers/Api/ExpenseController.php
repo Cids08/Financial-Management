@@ -12,11 +12,10 @@ use App\Http\Resources\ExpenseResource;
 use App\Models\Expense;
 use App\Models\SupportingDocument;
 use App\Services\ExpenseService;
+use App\Support\FileStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class ExpenseController extends Controller
 {
@@ -308,7 +307,7 @@ class ExpenseController extends Controller
      * singular counterpart to receiptHistory()'s plural list, mirroring
      * Budget's /plan vs /plans/{document} split exactly.
      */
-    public function viewReceipt(Expense $expense): BinaryFileResponse
+    public function viewReceipt(Expense $expense): JsonResponse
     {
         $this->authorize('view', $expense);
 
@@ -318,10 +317,18 @@ class ExpenseController extends Controller
             abort(404, 'No receipt has been attached to this expense yet.');
         }
 
-        $fullPath = Storage::disk('local')->path($document->storage_path);
+        $url = FileStorage::signedUrl($document->storage_path);
 
-        return response()->file($fullPath, [
-            'Content-Type' => $document->mime_type ?? 'application/octet-stream',
+        return response()->json([
+            'success' => true,
+            'message' => '',
+            'data'    => [
+                'id'          => $document->id,
+                'url'         => $url,
+                'originalName'=> $document->original_name,
+                'mimeType'    => $document->mime_type,
+                'expires_in'  => FileStorage::DOCUMENT_TTL_SECONDS,
+            ],
         ]);
     }
 
@@ -335,7 +342,7 @@ class ExpenseController extends Controller
      * stops someone guessing a document ID that belongs to a different
      * module or a different expense entirely.
      */
-    public function viewReceiptVersion(Expense $expense, SupportingDocument $document): BinaryFileResponse
+    public function viewReceiptVersion(Expense $expense, SupportingDocument $document): JsonResponse
     {
         $this->authorize('view', $expense);
 
@@ -347,10 +354,18 @@ class ExpenseController extends Controller
             abort(404, 'No file stored for this receipt version.');
         }
 
-        $fullPath = Storage::disk('local')->path($document->storage_path);
+        $url = FileStorage::signedUrl($document->storage_path);
 
-        return response()->file($fullPath, [
-            'Content-Type' => $document->mime_type ?? 'application/octet-stream',
+        return response()->json([
+            'success' => true,
+            'message' => '',
+            'data'    => [
+                'id'          => $document->id,
+                'url'         => $url,
+                'originalName'=> $document->original_name,
+                'mimeType'    => $document->mime_type,
+                'expires_in'  => FileStorage::DOCUMENT_TTL_SECONDS,
+            ],
         ]);
     }
 }

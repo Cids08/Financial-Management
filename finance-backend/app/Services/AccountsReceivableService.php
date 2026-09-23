@@ -8,6 +8,7 @@ use App\Models\Customer;
 use App\Models\Setting;
 use App\Models\SupportingDocument;
 use App\Models\User;
+use App\Support\FileStorage;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
@@ -219,7 +220,7 @@ class AccountsReceivableService
 
     public function attachDocument(AccountsReceivable $ar, UploadedFile $file, User $actor): SupportingDocument
     {
-        $path = $file->store("accounts-receivable-documents/{$ar->id}", 'local');
+        $path = $file->store("accounts-receivable-documents/{$ar->id}", FileStorage::DISK);
 
         $document = SupportingDocument::create([
             'reference_type' => 'accounts_receivable',

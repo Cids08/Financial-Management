@@ -2,9 +2,9 @@
 
 namespace App\Http\Resources;
 
+use App\Support\FileStorage;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
-use Illuminate\Support\Facades\Storage;
 
 /**
  * Field names here intentionally mirror what Users.jsx already reads
@@ -32,9 +32,7 @@ class UserResource extends JsonResource
             // as Users.jsx's `u.avatar_url` check expects. null when no
             // photo has been uploaded, so the frontend correctly falls
             // back to initials instead of rendering a broken <img>.
-            'avatar_url' => $this->profile_photo
-                ? Storage::url($this->profile_photo)
-                : null,
+            'avatar_url' => FileStorage::signedUrl($this->profile_photo, FileStorage::IMAGE_TTL_SECONDS),
             // deleted_at is the real "archived" signal — there's no
             // separate is_archived column in the DB.
             'is_archived' => $this->deleted_at !== null,

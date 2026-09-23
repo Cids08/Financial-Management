@@ -12,6 +12,7 @@ use App\Models\ExpenseCategory;
 use App\Models\SupportingDocument;
 use App\Models\TaxObligation;
 use App\Models\User;
+use App\Support\FileStorage;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
@@ -377,7 +378,7 @@ class TaxObligationService
             // Store the single proof document in storage
             $timestamp = now()->format('YmdHis');
             $originalName = $document->getClientOriginalName();
-            $path = $document->store("tax-obligation-documents/batch/{$timestamp}", 'local');
+            $path = $document->store("tax-obligation-documents/batch/{$timestamp}", FileStorage::DISK);
 
             $paidObligations = [];
 
@@ -518,7 +519,7 @@ class TaxObligationService
             ]);
         }
 
-        $path = $file->store("tax-obligation-documents/{$obligation->id}", 'local');
+        $path = $file->store("tax-obligation-documents/{$obligation->id}", FileStorage::DISK);
 
         $document = SupportingDocument::create([
             'reference_type' => 'tax_obligation',

@@ -13,6 +13,7 @@ use App\Models\Collector;
 use App\Models\SupportingDocument;
 use App\Models\User;
 use App\Services\CollectionService;
+use App\Support\FileStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -213,7 +214,7 @@ class CollectionController extends Controller
      * BudgetController::viewPlanVersion() — prevents ID enumeration
      * across modules since supporting_documents is a shared table.
      */
-    public function viewProof(Collection $collection, SupportingDocument $document): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    public function viewProof(Collection $collection, SupportingDocument $document): JsonResponse
     {
         $this->authorize('view', $collection);
 
@@ -225,10 +226,18 @@ class CollectionController extends Controller
             abort(404, 'No file stored for this proof version.');
         }
 
-        $fullPath = \Illuminate\Support\Facades\Storage::disk('local')->path($document->storage_path);
+        $url = FileStorage::signedUrl($document->storage_path);
 
-        return response()->file($fullPath, [
-            'Content-Type' => $document->mime_type ?? 'application/octet-stream',
+        return response()->json([
+            'success' => true,
+            'message' => '',
+            'data'    => [
+                'id'          => $document->id,
+                'url'         => $url,
+                'originalName'=> $document->original_name,
+                'mimeType'    => $document->mime_type,
+                'expires_in'  => FileStorage::DOCUMENT_TTL_SECONDS,
+            ],
         ]);
     }
 

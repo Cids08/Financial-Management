@@ -130,7 +130,8 @@ Route::middleware(['auth:sanctum', 'require.password.change'])->group(function (
         Route::get('/', [DepartmentController::class, 'index'])->middleware('permission:departments.view');
         Route::post('/', [DepartmentController::class, 'store'])->middleware('permission:departments.manage');
         Route::put('/{department}', [DepartmentController::class, 'update'])->middleware('permission:departments.manage');
-        Route::delete('/{department}', [DepartmentController::class, 'destroy'])->middleware('permission:departments.manage');
+        Route::delete('/{department}', [DepartmentController::class, 'archive'])->middleware('permission:departments.manage');
+        Route::patch('/{department}/restore', [DepartmentController::class, 'restore'])->middleware('permission:departments.manage')->withTrashed();
     });
 
     // Titles / Positions (job titles assigned to users; also drive the

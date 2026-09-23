@@ -224,29 +224,24 @@ export function useBudgets() {
     }
   }, [])
 
-  // Forces a browser download via a blob + temporary <a download>, same
-  // as before  -  kept for whenever an explicit "save to disk" action is
-  // wanted, as distinct from viewPlan() below.
+  // Forces a browser download via a temporary <a download> pointing at the
+  // signed URL returned by the plan download endpoint.
   const downloadPlan = useCallback(async (id, fallbackFilename = 'budget-plan') => {
     try {
       const res = await apiFetch(`/api/budgets/${id}/plan`)
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}))
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || !json.success || !json?.data?.url) {
         throw new Error(json.message || 'Failed to download the budget plan.')
       }
-      const blob = await res.blob()
-      const disposition = res.headers.get('Content-Disposition') || ''
-      const match = disposition.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)["']?/i)
-      const filename = match ? decodeURIComponent(match[1]) : fallbackFilename
+      const url = json.data.url
 
-      const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = filename
+      link.download = fallbackFilename
+      link.target = '_blank'
       document.body.appendChild(link)
       link.click()
       link.remove()
-      window.URL.revokeObjectURL(url)
       return { success: true }
     } catch (err) {
       return { success: false, message: err.message }
@@ -256,87 +251,35 @@ export function useBudgets() {
   // Opens the plan in a new tab instead of downloading it. apiFetch is
   // still required here (not a plain window.open(url)) because the
   // Authorization header has to go with the request  -  a bare <a> tag or
-  // window.open() to the raw API URL wouldn't carry it. So: fetch the
-  // blob via apiFetch (hits the /plan/view endpoint, which sets
-  // Content-Disposition: inline server-side), turn it into an object URL,
-  // then point a tab at THAT. Only actually renders inline for file types
-  // the browser has a native viewer for  -  practically just PDFs;
-  // .doc/.docx/.xls/.xlsx will still trigger a download in most browsers
-  // regardless, since there's no browser-native renderer for those.
+  // window.open() to the raw API URL wouldn't carry it. The /plan/view
+  // endpoint now returns a short-lived signed URL ({ success, data: { url } })
+  // instead of a blob, so we point the tab directly at that and let the
+  // browser decide inline vs download based on the signed URL's headers.
   //
   // `targetWindow` (optional): a tab already opened SYNCHRONOUSLY by the
   // caller, before this async function's fetch even starts. This fixes a
   // real bug  -  window.open() only reliably bypasses the popup blocker
   // when it happens as the direct, synchronous result of a click event.
-  // The previous version called window.open() only after `await
-  // res.blob()` resolved, by which point the browser no longer considered
-  // it a direct response to the click and could silently block it  - 
-  // which looks exactly like "View" doing nothing, or falling back to a
-  // forced download in browsers/settings that block popups aggressively.
-  // If no targetWindow is passed, this falls back to the old
+  // Calling window.open() only after `await` resolves risks the browser no
+  // longer considering it a direct response to the click and silently
+  // blocking it  -  which looks exactly like "View" doing nothing, or
+  // falling back to a forced download in browsers/settings that block
+  // popups aggressively. If no targetWindow is passed, this falls back to
   // window.open(url) behavior so existing callers don't break.
-  // Types a browser can actually render inline. Everything else (docx,
-  // xlsx, etc.) has no native viewer in ANY browser  -  that's a platform
-  // limitation, not something a header can fix. Trying to navigate a tab
-  // to one of those anyway doesn't error, it just silently triggers a
-  // background download while the tab sits at about:blank forever  -  which
-  // is worse than not opening a tab at all, since now there's a dead tab
-  // left behind with no indication anything happened.
-  const INLINE_VIEWABLE_TYPES = ['application/pdf']
-  const isInlineViewable = (mimeType) =>
-    INLINE_VIEWABLE_TYPES.includes(mimeType) || mimeType?.startsWith('image/')
-
-  // Triggers a normal save-to-disk download from a blob already in hand  - 
-  // same <a download> approach as downloadPlan()/downloadPlanVersion(),
-  // just without a second network request since the blob's already here.
-  const triggerDownloadFromBlob = (blob, disposition, fallbackFilename) => {
-    const match = (disposition || '').match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)["']?/i)
-    const filename = match ? decodeURIComponent(match[1]) : fallbackFilename
-    const url = window.URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = filename
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    window.URL.revokeObjectURL(url)
-  }
-
-  // `targetWindow` (optional): a tab already opened SYNCHRONOUSLY by the
-  // caller, before this async function's fetch even starts  -  see the
-  // comment further up this file for why that ordering matters for the
-  // popup blocker. Return value now includes `viewedInline` so callers can
-  // tell the difference between "opened in a tab" and "downloaded instead
-  // because this file type has no in-browser viewer" and message the user
-  // accordingly, rather than leaving them guessing why a tab is blank.
   const viewPlan = useCallback(async (id, targetWindow) => {
     try {
       const res = await apiFetch(`/api/budgets/${id}/plan/view`)
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}))
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || !json.success || !json?.data?.url) {
         throw new Error(json.message || 'Failed to open the budget plan.')
       }
-      const blob = await res.blob()
-
-      if (isInlineViewable(blob.type)) {
-        const url = window.URL.createObjectURL(blob)
-        if (targetWindow && !targetWindow.closed) {
-          targetWindow.location.href = url
-        } else {
-          window.open(url, '_blank', 'noopener,noreferrer')
-        }
-        // Deliberately not revoking the object URL immediately  -  the tab
-        // needs it to stay valid while it renders the file. The browser
-        // releases it when that tab is closed or navigated away.
-        return { success: true, viewedInline: true }
+      const url = json.data.url
+      if (targetWindow && !targetWindow.closed) {
+        targetWindow.location.href = url
+      } else {
+        window.open(url, '_blank', 'noopener,noreferrer')
       }
-
-      // Not inline-viewable: close the blank tab rather than leaving it
-      // stuck at about:blank, and download the file instead  -  using the
-      // blob already fetched, no extra request needed.
-      targetWindow?.close()
-      triggerDownloadFromBlob(blob, res.headers.get('Content-Disposition'), 'budget-plan')
-      return { success: true, viewedInline: false }
+      return { success: true, viewedInline: true }
     } catch (err) {
       targetWindow?.close()
       return { success: false, message: err.message }
@@ -356,60 +299,45 @@ export function useBudgets() {
     }
   }, [])
 
-  // Same blob-download approach as downloadPlan, but for one specific
+  // Same signed-URL download approach as downloadPlan, but for one specific
   // historical version by its supporting_documents id, not just the latest.
   const downloadPlanVersion = useCallback(async (budgetId, documentId, fallbackFilename = 'budget-plan') => {
     try {
       const res = await apiFetch(`/api/budgets/${budgetId}/plans/${documentId}`)
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}))
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || !json.success || !json?.data?.url) {
         throw new Error(json.message || 'Failed to download this plan version.')
       }
-      const blob = await res.blob()
-      const disposition = res.headers.get('Content-Disposition') || ''
-      const match = disposition.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)["']?/i)
-      const filename = match ? decodeURIComponent(match[1]) : fallbackFilename
-
-      const url = window.URL.createObjectURL(blob)
+      const url = json.data.url
       const link = document.createElement('a')
       link.href = url
-      link.download = filename
+      link.download = fallbackFilename
+      link.target = '_blank'
       document.body.appendChild(link)
       link.click()
       link.remove()
-      window.URL.revokeObjectURL(url)
       return { success: true }
     } catch (err) {
       return { success: false, message: err.message }
     }
   }, [])
 
-  // Inline-view equivalent of viewPlan() above  -  same
-  // synchronous-tab-then-redirect approach, same inline-viewable-type
-  // check, same fallback to a background download for file types with no
-  // browser-native viewer, same optional targetWindow parameter.
+  // Inline-view equivalent of viewPlan() above  -  same signed-URL
+  // open-in-tab approach and same optional targetWindow parameter.
   const viewPlanVersion = useCallback(async (budgetId, documentId, targetWindow) => {
     try {
       const res = await apiFetch(`/api/budgets/${budgetId}/plans/${documentId}/view`)
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}))
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || !json.success || !json?.data?.url) {
         throw new Error(json.message || 'Failed to open this plan version.')
       }
-      const blob = await res.blob()
-
-      if (isInlineViewable(blob.type)) {
-        const url = window.URL.createObjectURL(blob)
-        if (targetWindow && !targetWindow.closed) {
-          targetWindow.location.href = url
-        } else {
-          window.open(url, '_blank', 'noopener,noreferrer')
-        }
-        return { success: true, viewedInline: true }
+      const url = json.data.url
+      if (targetWindow && !targetWindow.closed) {
+        targetWindow.location.href = url
+      } else {
+        window.open(url, '_blank', 'noopener,noreferrer')
       }
-
-      targetWindow?.close()
-      triggerDownloadFromBlob(blob, res.headers.get('Content-Disposition'), 'budget-plan')
-      return { success: true, viewedInline: false }
+      return { success: true, viewedInline: true }
     } catch (err) {
       targetWindow?.close()
       return { success: false, message: err.message }

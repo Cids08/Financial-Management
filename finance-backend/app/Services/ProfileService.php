@@ -3,13 +3,14 @@
 namespace App\Services;
 
 use App\Models\User;
+use App\Support\FileStorage;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 class ProfileService
 {
-    protected const AVATAR_DISK = 'public';
+    protected const AVATAR_DISK = FileStorage::DISK;
     protected const AVATAR_DIR = 'avatars';
 
     /**

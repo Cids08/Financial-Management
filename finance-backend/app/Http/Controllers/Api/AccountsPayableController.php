@@ -11,6 +11,7 @@ use App\Http\Resources\AccountsPayableResource;
 use App\Models\AccountsPayable;
 use App\Models\SupportingDocument;
 use App\Services\AccountsPayableService;
+use App\Support\FileStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -202,7 +203,7 @@ class AccountsPayableController extends Controller
      * prevents ID enumeration across modules since supporting_documents
      * is a shared table.
      */
-    public function viewDocument(AccountsPayable $accountsPayable, SupportingDocument $document): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    public function viewDocument(AccountsPayable $accountsPayable, SupportingDocument $document): JsonResponse
     {
         $this->authorize('view', $accountsPayable);
 
@@ -214,10 +215,18 @@ class AccountsPayableController extends Controller
             abort(404, 'No file stored for this document version.');
         }
 
-        $fullPath = \Illuminate\Support\Facades\Storage::disk('local')->path($document->storage_path);
+        $url = FileStorage::signedUrl($document->storage_path);
 
-        return response()->file($fullPath, [
-            'Content-Type' => $document->mime_type ?? 'application/octet-stream',
+        return response()->json([
+            'success' => true,
+            'message' => '',
+            'data'    => [
+                'id'          => $document->id,
+                'url'         => $url,
+                'originalName'=> $document->original_name,
+                'mimeType'    => $document->mime_type,
+                'expires_in'  => FileStorage::DOCUMENT_TTL_SECONDS,
+            ],
         ]);
     }
 

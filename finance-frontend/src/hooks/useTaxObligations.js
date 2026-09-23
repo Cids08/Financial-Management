@@ -1,29 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { apiFetch } from '../utils/api'
 
-// Types a browser can actually render inline  -  same limitation as
-// useBudgets.js's viewPlan()/useExpenses.js's viewReceipt(): everything
-// else has no native viewer in ANY browser, so trying to navigate a tab
-// to one of those just silently triggers a background download while the
-// tab sits at about:blank.
-const INLINE_VIEWABLE_TYPES = ['application/pdf']
-const isInlineViewable = (mimeType) =>
-  INLINE_VIEWABLE_TYPES.includes(mimeType) || mimeType?.startsWith('image/')
-
-// Triggers a normal save-to-disk download from a blob already in hand.
-function triggerDownloadFromBlob(blob, disposition, fallbackFilename) {
-  const match = (disposition || '').match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)["']?/i)
-  const filename = match ? decodeURIComponent(match[1]) : fallbackFilename
-  const url = window.URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-  window.URL.revokeObjectURL(url)
-}
-
 export function useTaxObligations() {
   const [obligations, setObligations] = useState([])
   const [meta, setMeta] = useState({ current_page: 1, last_page: 1, total: 0 })
@@ -200,31 +177,22 @@ export function useTaxObligations() {
   // forcing a download. `targetWindow` (optional): a tab already opened
   // SYNCHRONOUSLY by the caller before this async function's fetch even
   // starts  -  see useBudgets.js's viewPlan() for the full explanation of
-  // why that ordering matters for the popup blocker.
+  // why that ordering matters for the popup blocker. The view endpoint now
+  // returns a short-lived signed URL, which the tab loads directly.
   const viewDocument = useCallback(async (obligationId, documentId, targetWindow) => {
     try {
       const res = await apiFetch(`/api/tax-obligations/${obligationId}/document/${documentId}/view`)
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}))
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || !json.success || !json?.data?.url) {
         throw new Error(json.message || 'Failed to open this document.')
       }
-      const blob = await res.blob()
-
-      if (isInlineViewable(blob.type)) {
-        const url = window.URL.createObjectURL(blob)
-        if (targetWindow && !targetWindow.closed) {
-          targetWindow.location.href = url
-        } else {
-          window.open(url, '_blank', 'noopener,noreferrer')
-        }
-        // Deliberately not revoking the object URL immediately  -  the tab
-        // needs it to stay valid while it renders the file.
-        return { success: true, viewedInline: true }
+      const url = json.data.url
+      if (targetWindow && !targetWindow.closed) {
+        targetWindow.location.href = url
+      } else {
+        window.open(url, '_blank', 'noopener,noreferrer')
       }
-
-      targetWindow?.close()
-      triggerDownloadFromBlob(blob, res.headers.get('Content-Disposition'), 'tax-obligation-document')
-      return { success: true, viewedInline: false }
+      return { success: true, viewedInline: true }
     } catch (err) {
       targetWindow?.close()
       return { success: false, message: err.message }

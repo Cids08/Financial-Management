@@ -216,71 +216,37 @@ export function useExpenses() {
     }
   }, [])
 
-  // Types a browser can actually render inline  -  receipts are restricted
-  // to pdf/jpg/jpeg/png server-side, so in practice this will basically
-  // always be true, but the check stays for parity with useBudgets.js and
-  // as a safety net if that validation rule ever loosens.
-  const INLINE_VIEWABLE_TYPES = ['application/pdf']
-  const isInlineViewable = (mimeType) =>
-    INLINE_VIEWABLE_TYPES.includes(mimeType) || mimeType?.startsWith('image/')
-
-  // Triggers a normal save-to-disk download from a blob already in hand  - 
-  // same <a download> approach as useBudgets.js's triggerDownloadFromBlob.
-  const triggerDownloadFromBlob = (blob, disposition, fallbackFilename) => {
-    const match = (disposition || '').match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)["']?/i)
-    const filename = match ? decodeURIComponent(match[1]) : fallbackFilename
-    const url = window.URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = filename
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    window.URL.revokeObjectURL(url)
-  }
-
   // Opens the CURRENT (most recently uploaded) receipt in a new tab
-  // instead of downloading it. apiFetch is required (not a plain
+  // instead of downloading it. apiFetch is still required (not a plain
   // window.open(url)) because the Authorization header has to go with the
   // request  -  a bare <a> tag or window.open() to the raw API URL
-  // wouldn't carry it.
+  // wouldn't carry it. The view endpoint now returns a short-lived signed
+  // URL ({ success, data: { url } }) instead of a blob, so we point the
+  // tab at it directly and let the browser decide inline vs download.
   //
   // `targetWindow` (optional): a tab already opened SYNCHRONOUSLY by the
   // caller, before this async function's fetch even starts  -  mirrors
   // useBudgets.js's viewPlan() exactly. Browsers only reliably allow
   // window.open() to bypass the popup blocker when it happens as the
   // direct, synchronous result of a click event; calling window.open()
-  // only after `await res.blob()` resolves risks the browser no longer
-  // considering it a direct response to the click and silently blocking
-  // it. If no targetWindow is passed, this falls back to window.open(url)
-  // so existing callers don't break.
+  // only after `await` resolves risks the browser no longer considering
+  // it a direct response to the click and silently blocking it. If no
+  // targetWindow is passed, this falls back to window.open(url) so
+  // existing callers don't break.
   const viewReceipt = useCallback(async (id, targetWindow) => {
     try {
       const res = await apiFetch(`/api/expenses/${id}/receipt/view`)
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}))
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || !json.success || !json?.data?.url) {
         throw new Error(json.message || 'Failed to open the receipt.')
       }
-      const blob = await res.blob()
-
-      if (isInlineViewable(blob.type)) {
-        const url = window.URL.createObjectURL(blob)
-        if (targetWindow && !targetWindow.closed) {
-          targetWindow.location.href = url
-        } else {
-          window.open(url, '_blank', 'noopener,noreferrer')
-        }
-        // Deliberately not revoking the object URL immediately  -  the tab
-        // needs it to stay valid while it renders the file.
-        return { success: true, viewedInline: true }
+      const url = json.data.url
+      if (targetWindow && !targetWindow.closed) {
+        targetWindow.location.href = url
+      } else {
+        window.open(url, '_blank', 'noopener,noreferrer')
       }
-
-      // Not inline-viewable: close the blank tab rather than leaving it
-      // stuck at about:blank, and download the file instead  -  using the
-      // blob already fetched, no extra request needed.
-      targetWindow?.close()
-      triggerDownloadFromBlob(blob, res.headers.get('Content-Disposition'), 'receipt')
-      return { success: true, viewedInline: false }
+      return { success: true, viewedInline: true }
     } catch (err) {
       targetWindow?.close()
       return { success: false, message: err.message }
@@ -303,32 +269,22 @@ export function useExpenses() {
 
   // Inline-view equivalent of viewReceipt() above, but for one specific
   // historical version by its supporting_documents id  -  same
-  // synchronous-tab-then-redirect approach, same inline-viewable-type
-  // check, same fallback to a background download, same optional
-  // targetWindow parameter. Mirrors useBudgets.js's viewPlanVersion()
-  // exactly.
+  // synchronous-tab-then-redirect approach and same optional targetWindow
+  // parameter. Mirrors useBudgets.js's viewPlanVersion() exactly.
   const viewReceiptVersion = useCallback(async (expenseId, documentId, targetWindow) => {
     try {
       const res = await apiFetch(`/api/expenses/${expenseId}/receipts/${documentId}/view`)
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}))
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || !json.success || !json?.data?.url) {
         throw new Error(json.message || 'Failed to open this receipt version.')
       }
-      const blob = await res.blob()
-
-      if (isInlineViewable(blob.type)) {
-        const url = window.URL.createObjectURL(blob)
-        if (targetWindow && !targetWindow.closed) {
-          targetWindow.location.href = url
-        } else {
-          window.open(url, '_blank', 'noopener,noreferrer')
-        }
-        return { success: true, viewedInline: true }
+      const url = json.data.url
+      if (targetWindow && !targetWindow.closed) {
+        targetWindow.location.href = url
+      } else {
+        window.open(url, '_blank', 'noopener,noreferrer')
       }
-
-      targetWindow?.close()
-      triggerDownloadFromBlob(blob, res.headers.get('Content-Disposition'), 'receipt')
-      return { success: true, viewedInline: false }
+      return { success: true, viewedInline: true }
     } catch (err) {
       targetWindow?.close()
       return { success: false, message: err.message }

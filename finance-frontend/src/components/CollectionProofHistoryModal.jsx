@@ -72,20 +72,16 @@ export default function CollectionProofHistoryModal({ open, onClose, collection,
 
     try {
       const res  = await apiFetch(`/api/collections/${collection.id}/proof/${doc.id}/view`)
-      const blob = await res.blob()
-      const url  = URL.createObjectURL(blob)
-
-      if (doc.mime_type === 'application/pdf' || doc.mime_type?.startsWith('image/')) {
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || !json.success || !json?.data?.url) {
+        targetWindow?.close()
+        throw new Error(json.message || 'Failed to open file.')
+      }
+      const url = json.data.url
+      if (targetWindow && !targetWindow.closed) {
         targetWindow.location.href = url
       } else {
-        // Non-previewable type  -  download instead and close the blank tab
-        targetWindow.close()
-        const a = document.createElement('a')
-        a.href = url
-        a.download = doc.original_name
-        a.click()
-        URL.revokeObjectURL(url)
-        setError("This file type can't be previewed in-browser, so it's been downloaded instead.")
+        window.open(url, '_blank', 'noopener,noreferrer')
       }
     } catch (err) {
       targetWindow?.close()

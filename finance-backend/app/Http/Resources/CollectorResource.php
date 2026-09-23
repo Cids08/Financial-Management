@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Support\FileStorage;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -20,9 +21,7 @@ class CollectorResource extends JsonResource
             'last_name'       => $this->last_name,
             'contact_no'      => $this->phone_number,
             'email'           => $this->email,
-            'profile_photo'   => $this->profile_photo
-                ? asset('storage/' . ltrim($this->profile_photo, '/'))
-                : null,
+'profile_photo' => FileStorage::signedUrl($this->profile_photo, FileStorage::IMAGE_TTL_SECONDS),
             'assigned_area'   => $this->assigned_area,
             'service_area_id' => $this->service_area_id,
             'service_area_name' => $this->whenLoaded('serviceArea', fn () => $this->serviceArea?->name),

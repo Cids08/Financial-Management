@@ -12,6 +12,7 @@ use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
 use App\Models\Notification;
 use App\Models\SupportingDocument;
+use App\Support\FileStorage;
 use App\Support\Money;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -901,7 +902,7 @@ class DisbursementService
             ]);
         }
 
-        $path = $file->store("disbursement-proofs/{$disbursement->id}", 'local');
+        $path = $file->store("disbursement-proofs/{$disbursement->id}", FileStorage::DISK);
 
         $document = SupportingDocument::create([
             'reference_type' => 'disbursement',

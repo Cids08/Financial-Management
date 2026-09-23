@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Support\FileStorage;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -15,7 +16,7 @@ class SettingsResource extends JsonResource
             'address' => $this->company_address,
             'email' => $this->company_email,
             'phone' => $this->company_phone,
-            'logoUrl' => $this->company_logo ? asset('storage/' . ltrim($this->company_logo, '/')) : null,
+            'logoUrl' => FileStorage::signedUrl($this->company_logo, FileStorage::IMAGE_TTL_SECONDS),
             'currency' => $this->currency,
             'baseCurrency' => $this->base_currency,
             'exchangeRates' => $this->exchange_rates ?? (object) [],

@@ -12,6 +12,7 @@ use App\Models\JournalEntryLine;
 use App\Models\Notification;
 use App\Models\Setting;
 use App\Models\User;
+use App\Support\FileStorage;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
@@ -555,7 +556,7 @@ class AccountsPayableService
      */
     public function attachDocument(AccountsPayable $bill, \Illuminate\Http\UploadedFile $file, User $actor): \App\Models\SupportingDocument
     {
-        $path = $file->store("accounts-payable-documents/{$bill->id}", 'local');
+        $path = $file->store("accounts-payable-documents/{$bill->id}", FileStorage::DISK);
 
         $document = \App\Models\SupportingDocument::create([
             'reference_type' => 'accounts_payable',

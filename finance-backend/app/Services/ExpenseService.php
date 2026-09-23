@@ -12,6 +12,7 @@ use App\Models\JournalEntry;
 use App\Models\Notification;
 use App\Models\SupportingDocument;
 use App\Models\User;
+use App\Support\FileStorage;
 use App\Support\Money;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -767,7 +768,7 @@ class ExpenseService
      */
     public function attachReceipt(Expense $expense, UploadedFile $file, User $actor): SupportingDocument
     {
-        $path = $file->store("expense-receipts/{$expense->id}", 'local');
+        $path = $file->store("expense-receipts/{$expense->id}", FileStorage::DISK);
 
         $document = SupportingDocument::create([
             'reference_type' => 'expense',

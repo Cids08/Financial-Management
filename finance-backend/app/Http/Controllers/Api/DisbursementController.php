@@ -11,10 +11,9 @@ use App\Http\Resources\DisbursementResource;
 use App\Models\Disbursement;
 use App\Models\SupportingDocument;
 use App\Services\DisbursementService;
+use App\Support\FileStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class DisbursementController extends Controller
 {
@@ -202,7 +201,7 @@ class DisbursementController extends Controller
      * Serve a specific proof version inline so the browser can render
      * PDFs and images natively in a new tab.
      */
-    public function viewProof(Disbursement $disbursement, SupportingDocument $document): BinaryFileResponse
+    public function viewProof(Disbursement $disbursement, SupportingDocument $document): JsonResponse
     {
         if ($document->reference_type !== 'disbursement' || (int) $document->reference_id !== $disbursement->id) {
             abort(404, 'This document does not belong to this disbursement.');
@@ -212,10 +211,18 @@ class DisbursementController extends Controller
             abort(404, 'No file stored for this proof version.');
         }
 
-        $fullPath = Storage::disk('local')->path($document->storage_path);
+        $url = FileStorage::signedUrl($document->storage_path);
 
-        return response()->file($fullPath, [
-            'Content-Type' => $document->mime_type ?? 'application/octet-stream',
+        return response()->json([
+            'success' => true,
+            'message' => '',
+            'data'    => [
+                'id'          => $document->id,
+                'url'         => $url,
+                'originalName'=> $document->original_name,
+                'mimeType'    => $document->mime_type,
+                'expires_in'  => FileStorage::DOCUMENT_TTL_SECONDS,
+            ],
         ]);
     }
 

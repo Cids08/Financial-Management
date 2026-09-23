@@ -10,8 +10,8 @@ use App\Http\Resources\BudgetResource;
 use App\Models\Budget;
 use App\Models\SupportingDocument;
 use App\Services\BudgetService;
+use App\Support\FileStorage;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 
 class BudgetController extends Controller
 {
@@ -105,9 +105,19 @@ class BudgetController extends Controller
             abort(404, 'No plan file found for this budget.');
         }
 
-        $fullPath = Storage::disk('local')->path($document->storage_path);
+        $url = FileStorage::signedUrl($document->storage_path);
 
-        return response()->download($fullPath, $document->original_name);
+        return response()->json([
+            'success' => true,
+            'message' => '',
+            'data'    => [
+                'id'          => $document->id,
+                'url'         => $url,
+                'originalName'=> $document->original_name,
+                'mimeType'    => $document->mime_type,
+                'expires_in'  => FileStorage::DOCUMENT_TTL_SECONDS,
+            ],
+        ]);
     }
 
     // Inline viewing — response()->file() sets Content-Disposition: inline
@@ -127,10 +137,18 @@ class BudgetController extends Controller
             abort(404, 'No plan file found for this budget.');
         }
 
-        $fullPath = Storage::disk('local')->path($document->storage_path);
+        $url = FileStorage::signedUrl($document->storage_path);
 
-        return response()->file($fullPath, [
-            'Content-Type' => $document->mime_type ?? 'application/octet-stream',
+        return response()->json([
+            'success' => true,
+            'message' => '',
+            'data'    => [
+                'id'          => $document->id,
+                'url'         => $url,
+                'originalName'=> $document->original_name,
+                'mimeType'    => $document->mime_type,
+                'expires_in'  => FileStorage::DOCUMENT_TTL_SECONDS,
+            ],
         ]);
     }
 
@@ -177,9 +195,19 @@ class BudgetController extends Controller
             abort(404, 'No file stored for this plan version.');
         }
 
-        $fullPath = Storage::disk('local')->path($document->storage_path);
+        $url = FileStorage::signedUrl($document->storage_path);
 
-        return response()->download($fullPath, $document->original_name);
+        return response()->json([
+            'success' => true,
+            'message' => '',
+            'data'    => [
+                'id'          => $document->id,
+                'url'         => $url,
+                'originalName'=> $document->original_name,
+                'mimeType'    => $document->mime_type,
+                'expires_in'  => FileStorage::DOCUMENT_TTL_SECONDS,
+            ],
+        ]);
     }
 
     // Inline-view equivalent of downloadPlanVersion() — same ownership
@@ -195,10 +223,18 @@ class BudgetController extends Controller
             abort(404, 'No file stored for this plan version.');
         }
 
-        $fullPath = Storage::disk('local')->path($document->storage_path);
+        $url = FileStorage::signedUrl($document->storage_path);
 
-        return response()->file($fullPath, [
-            'Content-Type' => $document->mime_type ?? 'application/octet-stream',
+        return response()->json([
+            'success' => true,
+            'message' => '',
+            'data'    => [
+                'id'          => $document->id,
+                'url'         => $url,
+                'originalName'=> $document->original_name,
+                'mimeType'    => $document->mime_type,
+                'expires_in'  => FileStorage::DOCUMENT_TTL_SECONDS,
+            ],
         ]);
     }
 

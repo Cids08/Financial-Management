@@ -10,9 +10,9 @@ use App\Http\Resources\AccountsReceivableResource;
 use App\Models\AccountsReceivable;
 use App\Models\SupportingDocument;
 use App\Services\AccountsReceivableService;
+use App\Support\FileStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class AccountsReceivableController extends Controller
 {
@@ -151,7 +151,7 @@ class AccountsReceivableController extends Controller
         ], 201);
     }
 
-    public function viewDocument(AccountsReceivable $accountsReceivable, SupportingDocument $document): BinaryFileResponse
+    public function viewDocument(AccountsReceivable $accountsReceivable, SupportingDocument $document): JsonResponse
     {
         if ($document->reference_type !== 'accounts_receivable' || (int) $document->reference_id !== $accountsReceivable->id) {
             abort(404, 'This document does not belong to this invoice.');
@@ -161,10 +161,18 @@ class AccountsReceivableController extends Controller
             abort(404, 'No file stored for this document version.');
         }
 
-        $fullPath = \Illuminate\Support\Facades\Storage::disk('local')->path($document->storage_path);
+        $url = FileStorage::signedUrl($document->storage_path);
 
-        return response()->file($fullPath, [
-            'Content-Type' => $document->mime_type ?? 'application/octet-stream',
+        return response()->json([
+            'success' => true,
+            'message' => '',
+            'data'    => [
+                'id'          => $document->id,
+                'url'         => $url,
+                'originalName'=> $document->original_name,
+                'mimeType'    => $document->mime_type,
+                'expires_in'  => FileStorage::DOCUMENT_TTL_SECONDS,
+            ],
         ]);
     }
 

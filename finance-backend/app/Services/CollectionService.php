@@ -13,6 +13,7 @@ use App\Models\JournalEntry;
 use App\Models\Notification;
 use App\Models\SupportingDocument;
 use App\Models\User;
+use App\Support\FileStorage;
 use App\Support\Money;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
@@ -481,7 +482,7 @@ class CollectionService
             ]);
         }
 
-        $path = $file->store("collection-proofs/{$collection->id}", 'local');
+        $path = $file->store("collection-proofs/{$collection->id}", FileStorage::DISK);
 
         $document = SupportingDocument::create([
             'reference_type' => 'collection',

@@ -192,30 +192,18 @@ export function useDisbursements() {
   const viewProof = useCallback(async (disbursementId, documentId, targetWindow) => {
     try {
       const res = await apiFetch(`/api/disbursements/${disbursementId}/proof/${documentId}/view`)
-      if (!res.ok) {
-        let msg = 'Failed to load proof document.'
-        try {
-          const j = await res.json()
-          msg = j.message || msg
-        } catch {}
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || !json.success || !json?.data?.url) {
         targetWindow?.close()
-        return { success: false, message: msg }
+        return { success: false, message: json.message || 'Failed to load proof document.' }
       }
-      const blob = await res.blob()
-      const mime = res.headers.get('content-type') || blob.type || ''
-      const url = URL.createObjectURL(blob)
-
-      if (mime.includes('pdf') || mime.startsWith('image/')) {
-        if (targetWindow) targetWindow.location.href = url
-        return { success: true, viewedInline: true }
+      const url = json.data.url
+      if (targetWindow && !targetWindow.closed) {
+        targetWindow.location.href = url
+      } else {
+        window.open(url, '_blank', 'noopener,noreferrer')
       }
-      targetWindow?.close()
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `disbursement-proof-${disbursementId}`
-      a.click()
-      URL.revokeObjectURL(url)
-      return { success: true, viewedInline: false }
+      return { success: true, viewedInline: true }
     } catch (err) {
       targetWindow?.close()
       return { success: false, message: err.message || 'Failed to open document.' }

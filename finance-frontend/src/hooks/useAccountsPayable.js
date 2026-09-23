@@ -294,17 +294,18 @@ export function useAccountsPayable() {
   const viewDocument = useCallback(async (apId, documentId, targetWindow) => {
     try {
       const res = await apiFetch(`/api/accounts-payable/${apId}/document/${documentId}/view`)
-      if (!res.ok) {
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || !json.success || !json?.data?.url) {
         targetWindow?.close()
-        return { success: false, message: 'Failed to load document.' }
+        return { success: false, message: json.message || 'Failed to load document.' }
       }
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const previewable = ['application/pdf', 'image/jpeg', 'image/png'].includes(blob.type)
-      if (targetWindow) {
+      const url = json.data.url
+      if (targetWindow && !targetWindow.closed) {
         targetWindow.location = url
+      } else {
+        window.open(url, '_blank', 'noopener,noreferrer')
       }
-      return { success: true, viewedInline: previewable }
+      return { success: true, viewedInline: true }
     } catch (err) {
       targetWindow?.close()
       return { success: false, message: err.message || 'Network error.' }

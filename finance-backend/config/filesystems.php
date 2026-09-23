@@ -60,6 +60,32 @@ return [
             'report' => false,
         ],
 
+        /*
+        |--------------------------------------------------------------------------
+        | Cloudflare R2
+        |--------------------------------------------------------------------------
+        |
+        | R2 is S3-compatible, so it uses the `s3` driver pointed at R2's
+        | S3 API endpoint (https://<ACCOUNT_ID>.r2.cloudflarestorage.com).
+        | The bucket should be PRIVATE — all reads go through short-lived
+        | signed URLs (see App\Support\FileStorage::signedUrl()) so receipts,
+        | proofs and other financial documents are never publicly fetchable.
+        | Requires the `league/flysystem-aws-s3-v3` package.
+        |
+        */
+        'r2' => [
+            'driver' => 's3',
+            'key' => env('R2_ACCESS_KEY_ID'),
+            'secret' => env('R2_SECRET_ACCESS_KEY'),
+            'region' => env('R2_REGION', 'auto'),
+            'bucket' => env('R2_BUCKET'),
+            'url' => env('R2_URL'),
+            'endpoint' => env('R2_ENDPOINT'),
+            'use_path_style_endpoint' => true,
+            'throw' => false,
+            'report' => false,
+        ],
+
     ],
 
     /*

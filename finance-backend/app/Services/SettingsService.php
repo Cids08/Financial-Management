@@ -5,13 +5,14 @@ namespace App\Services;
 use App\Models\AuditLog;
 use App\Models\Setting;
 use App\Models\User;
+use App\Support\FileStorage;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 class SettingsService
 {
-    protected const LOGO_DISK = 'public';
+    protected const LOGO_DISK = FileStorage::DISK;
     protected const LOGO_DIR = 'branding';
 
     public function __construct(protected AccountsReceivableService $accountsReceivable)
