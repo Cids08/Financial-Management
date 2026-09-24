@@ -3,7 +3,7 @@
 namespace App\Services;
 
 use Illuminate\Http\UploadedFile;
-use thiagoalessio\TesseractOCR\TesseractOCR;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Free, self-hosted OCR — no external API key or per-call cost, per the
@@ -38,6 +38,13 @@ class InvoiceOcrService
     ];
 
     protected const MIN_KEYWORD_MATCHES = 2;
+
+    /**
+     * Hard wall-clock cap for a single Tesseract run. Must stay well below
+     * HostForge's ~60s edge/gateway timeout so a hung OCR returns a clear
+     * error instead of a 503 Gateway timeout with no explanation.
+     */
+    protected const OCR_TIMEOUT_SECONDS = 15;
 
     /**
      * Phrases strongly associated with bank/e-wallet transfer confirmation
@@ -92,21 +99,19 @@ class InvoiceOcrService
      */
     public function scan(UploadedFile $image): array
     {
-        $ocr = new TesseractOCR($image->getRealPath());
-
-        if ($executable = config('services.tesseract.executable')) {
-            $ocr->executable($executable);
-        }
-
-        $ocr->timeout(20);
-
         try {
-            $text = $ocr->lang('eng')->run();
-        } catch (\Exception $e) {
-            $text = '';
+            $ocrResult = $this->runTesseract($image->getRealPath(), self::OCR_TIMEOUT_SECONDS);
+        } catch (\Throwable $e) {
+            Log::error('[ocr] Unexpected error while scanning image: '.$e->getMessage());
+
+            return $this->ocrFailure('OCR failed unexpectedly on the server: '.$e->getMessage());
         }
 
-        return $this->evaluateExtractedText($text, 'image');
+        if ($ocrResult['error'] !== null) {
+            return $this->ocrFailure("OCR could not complete on the server: {$ocrResult['error']}");
+        }
+
+        return $this->evaluateExtractedText($ocrResult['text'], 'image');
     }
 
     /**
@@ -115,22 +120,138 @@ class InvoiceOcrService
      */
     public function scanPdf(UploadedFile $pdf): array
     {
-        $text = $this->extractTextFromPdf($pdf->getRealPath());
+        $extraction = $this->extractTextFromPdf($pdf->getRealPath());
+        $text = $extraction['text'];
 
         if (empty(trim($text))) {
-            return [
-                'is_receipt' => false,
-                'message' => 'The PDF appears to be empty, encrypted, or contains no readable text or invoice image.',
-                'raw_text' => '',
-                'invoice_number' => null,
-                'date' => null,
-                'due_date' => null,
-                'amount' => null,
-                'reference_no' => null,
-            ];
+            $message = $extraction['ocr_error'] !== null
+                ? "The PDF could not be read on the server: {$extraction['ocr_error']}"
+                : 'The PDF appears to be empty, encrypted, or contains no readable text or invoice image.';
+
+            return $this->ocrFailure($message);
         }
 
         return $this->evaluateExtractedText($text, 'PDF document');
+    }
+
+    /**
+     * Runs the Tesseract binary with a hard wall-clock timeout and returns
+     * both the extracted text and any failure detail.
+     *
+     * The upstream thiagoalessio/tesseract_ocr package cannot reliably time
+     * out: `timeout()` is appended as a `-c timeout=20` config (not a real
+     * Tesseract config) and `run()` defaults to blocking forever, so a hung
+     * Tesseract process spins until HostForge's ~60s gateway timeout. This
+     * builds the equivalent command by hand (avoids both that bug and the
+     * package's internal exec() call, which is disabled in some hosts) and
+     * spawns it directly with proc_open so the child can be terminated on
+     * timeout and the real failure surfaces instead of silently returning
+     * empty text.
+     */
+    protected function runTesseract(string $imagePath, int $timeoutSeconds): array
+    {
+        $executable = config('services.tesseract.executable', 'tesseract');
+
+        try {
+            $outFile = tempnam(sys_get_temp_dir(), 'ocr');
+            $txtPath = $outFile . '.txt';
+        } catch (\Throwable $e) {
+            Log::error('[ocr] Could not create OCR temp files: '.$e->getMessage());
+
+            return ['text' => '', 'error' => 'OCR could not run on the server: '.$e->getMessage(), 'timed_out' => false, 'exit_code' => null];
+        }
+
+        $command = escapeshellarg($executable)
+            . ' ' . escapeshellarg($imagePath)
+            . ' ' . escapeshellarg($outFile)
+            . ' -l eng';
+
+        $result = ['text' => '', 'error' => null, 'timed_out' => false, 'exit_code' => null];
+
+        $pipes = null;
+        $process = @proc_open($command, [
+            ['pipe', 'r'],
+            ['pipe', 'w'],
+            ['pipe', 'w'],
+        ], $pipes, null, null, ['bypass_shell' => true]);
+
+        if (! is_resource($process)) {
+            Log::error("[ocr] proc_open failed: {$command}");
+
+            return ['text' => '', 'error' => 'Tesseract OCR could not be launched on the server (proc_open unavailable).', 'timed_out' => false, 'exit_code' => null];
+        }
+
+        stream_set_blocking($pipes[1], false);
+        stream_set_blocking($pipes[2], false);
+        fclose($pipes[0]); // stdin not needed, input comes from the image path
+
+        $start = microtime(true);
+
+        try {
+            while (true) {
+                // Drain both pipes so a chatty child never blocks on a full buffer.
+                foreach ([1, 2] as $fd) {
+                    if (is_resource($pipes[$fd])) {
+                        stream_get_contents($pipes[$fd]);
+                    }
+                }
+
+                $status = proc_get_status($process);
+                if (! $status['running']) {
+                    $result['exit_code'] = $status['exitcode'];
+                    break;
+                }
+
+                if (microtime(true) - $start >= $timeoutSeconds) {
+                    $result['timed_out'] = true;
+                    proc_terminate($process, 9);
+                    break;
+                }
+
+                usleep(10000); // 10ms
+            }
+        } finally {
+            foreach ($pipes as $pipe) {
+                if (is_resource($pipe)) {
+                    fclose($pipe);
+                }
+            }
+            proc_close($process);
+        }
+
+        if (! $result['timed_out'] && is_file($txtPath) && filesize($txtPath) > 0) {
+            $result['text'] = (string) file_get_contents($txtPath);
+        }
+
+        @unlink($outFile);
+        @unlink($txtPath);
+
+        if ($result['timed_out']) {
+            $result['error'] = "Tesseract OCR timed out after {$timeoutSeconds} seconds.";
+            Log::error("[ocr] Tesseract timed out after {$timeoutSeconds}s: {$imagePath}");
+        } elseif (trim($result['text']) === '') {
+            $exitInfo = $result['exit_code'] !== null ? " (exit code {$result['exit_code']})" : '';
+            $result['error'] = "Tesseract OCR returned no text{$exitInfo}.";
+        }
+
+        return $result;
+    }
+
+    /**
+     * Standard failure result shape, consistent with evaluateExtractedText().
+     */
+    protected function ocrFailure(string $message): array
+    {
+        return [
+            'is_receipt' => false,
+            'message' => $message,
+            'raw_text' => '',
+            'invoice_number' => null,
+            'date' => null,
+            'due_date' => null,
+            'amount' => null,
+            'reference_no' => null,
+        ];
     }
 
     /**
@@ -223,16 +344,20 @@ class InvoiceOcrService
 
     /**
      * Extracts text from digital and scanned PDF files in pure PHP.
+     *
+     * Returns ['text' => string, 'ocr_error' => ?string]. When the PDF is a
+     * scanned image, the embedded JPEG is OCR'd here too; any Tesseract
+     * failure is reported via 'ocr_error' rather than silently swallowed.
      */
-    public function extractTextFromPdf(string $pdfPath): string
+    public function extractTextFromPdf(string $pdfPath): array
     {
         if (! file_exists($pdfPath) || filesize($pdfPath) === 0) {
-            return '';
+            return ['text' => '', 'ocr_error' => null];
         }
 
         $content = @file_get_contents($pdfPath);
         if ($content === false) {
-            return '';
+            return ['text' => '', 'ocr_error' => null];
         }
 
         $text = '';
@@ -277,27 +402,25 @@ class InvoiceOcrService
         }
 
         // 3. Fallback for scanned PDFs (embedded JPEG images)
-        if (trim($text) === '' && class_exists(TesseractOCR::class)) {
+        $ocrError = null;
+        if (trim($text) === '') {
             $extractedImage = $this->extractFirstJpegFromPdf($content);
             if ($extractedImage) {
                 $tempPath = tempnam(sys_get_temp_dir(), 'pdf_ocr_') . '.jpg';
                 file_put_contents($tempPath, $extractedImage);
                 try {
-                    $ocr = new TesseractOCR($tempPath);
-                    if ($executable = config('services.tesseract.executable')) {
-                        $ocr->executable($executable);
-                    }
-                    $ocr->timeout(20);
-                    $text = $ocr->lang('eng')->run();
+                    $ocrResult = $this->runTesseract($tempPath, self::OCR_TIMEOUT_SECONDS);
+                    $text = $ocrResult['text'];
+                    $ocrError = $ocrResult['error'];
                 } catch (\Throwable $e) {
-                    // Ignore OCR errors on fallback
+                    $ocrError = 'Tesseract OCR failed: '.$e->getMessage();
                 } finally {
                     @unlink($tempPath);
                 }
             }
         }
 
-        return trim($text);
+        return ['text' => trim($text), 'ocr_error' => $ocrError];
     }
 
     /**
