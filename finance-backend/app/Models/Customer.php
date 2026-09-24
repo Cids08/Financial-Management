@@ -18,6 +18,7 @@ class Customer extends Model
         'position',
         'contact_number',
         'email',
+        'tin',
         'address',
         'industry',
         'credit_limit',

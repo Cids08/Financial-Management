@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, Users as UsersIcon, UserCheck, UserX, Mail, Phone, Eye, EyeOff, Wallet, Briefcase } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, Users as UsersIcon, UserCheck, UserX, Mail, Phone, Eye, EyeOff, Wallet, Briefcase, Hash } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
@@ -29,13 +29,13 @@ function maskEmail(value) {
   return '•'.repeat(10)
 }
 
-// Trimmed to exactly the 7 fields this form should collect. Credit Limit
+// Trimmed to exactly the fields this form should collect. Credit Limit
 // and Status are no longer set here  -  they keep whatever the backend
 // defaults to on create (credit_limit: 0, status: 'Active', per the
 // customers migration) and are left untouched on edit (StoreCustomer/
 // UpdateCustomerRequest both still accept them as 'sometimes', so not
 // sending them just means the existing/default value stands).
-const EMPTY_FORM = { customer_name: '', address: '', contact_person: '', position: '', contact_number: '', email: '', industry: '', credit_limit: '0' }
+const EMPTY_FORM = { customer_name: '', address: '', contact_person: '', position: '', contact_number: '', tin: '', email: '', industry: '', credit_limit: '0' }
 
 const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
 const PANEL_PAD = 'p-4'
@@ -52,7 +52,7 @@ const STATUS_STYLES = {
 }
 
 export default function Customers({ title = 'Customers', crumbs = ['Master Data', 'Customers'] }) {
-  usePrivacy()
+  const { privacyOn } = usePrivacy()
   // Role-agnostic gate matching the backend: collector has customers.view
   // (for lookup) but not customers.manage, so Add/Edit/Archive must not
   // render for them — backend would 403 those endpoints anyway.
@@ -89,9 +89,8 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
   const [fieldErrors, setFieldErrors] = useState({})
   const [saving, setSaving] = useState(false)
 
-  // Controls visibility of contact number and email together per row
-  // (TIN used to be part of this too  -  column dropped, so it's gone
-  // from both the mask set and the table).
+  // Controls visibility of contact number, email, and TIN together per row.
+  // TIN is additionally withheld while Privacy Mode is on.
   const [revealedIds, setRevealedIds] = useState(new Set())
   const toggleReveal = (id) => {
     setRevealedIds((prev) => {
@@ -195,6 +194,7 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
       contact_person: c.contact_person,
       position: c.position || '',
       contact_number: c.contact_number || '',
+      tin: c.tin || '',
       email: c.email,
       industry: c.industry || '',
       credit_limit: String(c.credit_limit ?? 0),
@@ -348,6 +348,9 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
                             <div className="mt-0.5 flex flex-col gap-0.5 text-xs text-muted font-mono">
                               <span className="flex items-center gap-1"><Mail size={11} className="shrink-0" /> {revealed ? c.email : maskEmail(c.email)}</span>
                               <span className="flex items-center gap-1"><Phone size={11} className="shrink-0" /> {revealed ? c.contact_number : maskValue(c.contact_number)}</span>
+                              {c.tin && (
+                                <span className="flex items-center gap-1"><Hash size={11} className="shrink-0" /> TIN: {privacyOn || !revealed ? maskValue(c.tin) : c.tin}</span>
+                              )}
                             </div>
                           </div>
                           <button
@@ -462,6 +465,8 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
             <div>
               <label className={LABEL}>Contact Number</label>
               <input type="text" value={form.contact_number} onChange={(e) => setForm((f) => ({ ...f, contact_number: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="0917 234 5678" />
+              <label className={LABEL}>TIN (Tax Identification No.)</label>
+              <input type="text" value={form.tin} onChange={(e) => setForm((f) => ({ ...f, tin: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="000-000-000-000" />
             </div>
             <div>
               <label className={LABEL}>Email Address <span className="text-red-500">*</span></label>

@@ -492,7 +492,7 @@ export default function BatchApproveExpensesModal({
                             </td>
                             <td className="px-3 py-3 max-w-[180px]">
                               <p className="font-medium text-ink truncate">{x.description}</p>
-                              <p className="text-xs text-muted truncate">
+                              <p className="text-xs text-muted break-words">
                                 {x.receipt_number || x.cash_account_name || x.expense_source} {x.supplier_name ? `· ${x.supplier_name}` : ''}
                               </p>
                             </td>

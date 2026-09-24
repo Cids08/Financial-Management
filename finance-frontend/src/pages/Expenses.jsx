@@ -789,7 +789,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                 >
                   <td className="px-3.5 py-3 min-w-0">
                     <p className="font-medium text-ink truncate max-w-50 xl:max-w-xs">{x.description}</p>
-                    <p className="text-xs text-muted truncate max-w-47.5 xl:max-w-xs">{x.receipt_number || x.cash_account_name || x.expense_source} {x.supplier_id ? `\u00b7 ${x.supplier_name || supplierName(x.supplier_id)}` : ''}</p>
+                    <p className="text-xs text-muted break-words max-w-47.5 xl:max-w-xs">{x.receipt_number || x.cash_account_name || x.expense_source} {x.supplier_id ? `\u00b7 ${x.supplier_name || supplierName(x.supplier_id)}` : ''}</p>
                   </td>
                   <td className="px-2.5 py-3 text-ink text-xs">
                     <span className="truncate block max-w-32.5" title={x.budget_name || budgetLabel(x.budget_id)}>

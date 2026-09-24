@@ -19,6 +19,7 @@ class StoreCustomerRequest extends FormRequest
             'contact_person' => ['nullable', 'string', 'max:255'],
             'position' => ['nullable', 'string', 'max:255'],
             'contact_number' => ['nullable', 'string', 'max:20'],
+            'tin' => ['nullable', 'string', 'max:50'],
             'email' => ['nullable', 'email', 'max:255', Rule::unique('customers', 'email')->whereNull('deleted_at')],
             'address' => ['nullable', 'string'],
             'industry' => ['nullable', 'string', 'max:255'],

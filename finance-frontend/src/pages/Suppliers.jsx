@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, Truck, UserCheck, UserX, Mail, Phone, Eye, EyeOff, Globe, Briefcase } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, Truck, UserCheck, UserX, Mail, Phone, Eye, EyeOff, Globe, Briefcase, Hash } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
@@ -29,7 +29,7 @@ function maskEmail(value) {
   return '•'.repeat(10)
 }
 
-const EMPTY_FORM = { supplier_name: '', contact_person: '', position: '', contact_number: '', email: '', website: '', address: '', status: 'Active' }
+const EMPTY_FORM = { supplier_name: '', contact_person: '', position: '', contact_number: '', tin: '', email: '', website: '', address: '', status: 'Active' }
 
 const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
 const PANEL_PAD = 'p-4'
@@ -44,7 +44,7 @@ const STATUS_STYLES = {
 }
 
 export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data', 'Suppliers'] }) {
-  usePrivacy()
+  const { privacyOn } = usePrivacy()
   const { profile } = useProfile()
   const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
   const { currency } = useCompany()
@@ -79,9 +79,8 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
     setPage(1)
   }, [search, statusFilter, showArchived])
 
-  // Controls visibility of contact number and email together per row
-  // (TIN used to be part of this too  -  column dropped from the app
-  // layer, so it's gone from both the mask set and the table).
+  // Controls visibility of contact number, email, and TIN together per row.
+  // TIN is additionally withheld while Privacy Mode is on.
   const [revealedIds, setRevealedIds] = useState(new Set())
   const toggleReveal = (id) => {
     setRevealedIds((prev) => {
@@ -167,6 +166,7 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
       contact_person: s.contact_person,
       position: s.position || '',
       contact_number: s.contact_number || '',
+      tin: s.tin || '',
       email: s.email,
       website: s.website || '',
       address: s.address || '',
@@ -328,6 +328,9 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
                             <div className="mt-0.5 flex flex-col gap-0.5 text-xs text-muted font-mono">
                               <span className="flex items-center gap-1"><Mail size={11} className="shrink-0" /> {revealed ? s.email : maskEmail(s.email)}</span>
                               <span className="flex items-center gap-1"><Phone size={11} className="shrink-0" /> {revealed ? s.contact_number : maskValue(s.contact_number)}</span>
+                              {s.tin && (
+                                <span className="flex items-center gap-1"><Hash size={11} className="shrink-0" /> TIN: {privacyOn || !revealed ? maskValue(s.tin) : s.tin}</span>
+                              )}
                             </div>
                           </div>
                           <button
@@ -429,6 +432,8 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
             <div>
               <label className={LABEL}>Contact Number</label>
               <input type="text" value={form.contact_number} onChange={(e) => setForm((f) => ({ ...f, contact_number: e.target.value }))} className={INPUT} placeholder="0917 111 2233" />
+              <label className={LABEL}>TIN (Tax Identification No.)</label>
+              <input type="text" value={form.tin} onChange={(e) => setForm((f) => ({ ...f, tin: e.target.value }))} className={INPUT} placeholder="000-000-000-000" />
             </div>
             <div>
               <label className={LABEL}>Email <span className="text-red-500">*</span></label>
