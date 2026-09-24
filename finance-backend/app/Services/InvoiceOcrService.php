@@ -135,6 +135,28 @@ class InvoiceOcrService
     }
 
     /**
+     * Resolves the Tesseract binary path without relying on the PHP-FPM
+     * subprocess PATH, which frequently can't find a bare `tesseract` name
+     * (seen as exit code 127 on the hosted container). Prefers the explicit
+     * TESSERACT_PATH env/config, then common Linux install locations, and
+     * only falls back to the bare name so dev machines on PATH still work.
+     */
+    protected function locateTesseract(): string
+    {
+        if ($configured = config('services.tesseract.executable')) {
+            return $configured;
+        }
+
+        foreach (['/usr/bin/tesseract', '/usr/local/bin/tesseract'] as $candidate) {
+            if (is_file($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return 'tesseract';
+    }
+
+    /**
      * Runs the Tesseract binary with a hard wall-clock timeout and returns
      * both the extracted text and any failure detail.
      *
@@ -150,7 +172,7 @@ class InvoiceOcrService
      */
     protected function runTesseract(string $imagePath, int $timeoutSeconds): array
     {
-        $executable = config('services.tesseract.executable', 'tesseract');
+        $executable = $this->locateTesseract();
 
         try {
             $outFile = tempnam(sys_get_temp_dir(), 'ocr');
