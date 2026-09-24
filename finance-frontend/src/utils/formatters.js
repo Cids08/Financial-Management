@@ -110,3 +110,24 @@ export const formatDateTime = (isoDate) => {
     minute: '2-digit',
   })
 }
+
+// AI-generated text (recommendation summaries, advisor chat) is stored with
+// whatever currency symbol/code the LLM happened to write at generation
+// time, so it never updates when Settings switches the display currency
+// (e.g. go Peso -> Dollar -> Peso and the summary still reads "$1,234.56").
+// This relabels every known currency glyph/code to the ACTIVE display
+// symbol at render time. Only the label is normalized — numeric values are
+// left untouched (they're base-currency stores).
+const CURRENCY_CODES = Object.keys(CURRENCY_SYMBOLS)
+
+export const normalizeAiCurrencyText = (text, currency = activeCurrency) => {
+  if (!text) return ''
+  const sym = currencySymbol(currency)
+  return String(text)
+    .replace(/A\$/g, sym)
+    .replace(/S\$/g, sym)
+    .replace(new RegExp(`\\b(?:${CURRENCY_CODES.join('|')})\\b\\s*(?=[\\d₱$€¥£])`, 'g'), sym)
+    .replace(/[₱$€¥£]/g, sym)
+    .replace(/\s+/g, ' ')
+    .trim()
+}

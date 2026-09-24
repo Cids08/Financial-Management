@@ -34,7 +34,7 @@ import Breadcrumb from '../components/Breadcrumb'
 import DashboardCard from '../components/DashboardCard'
 import Table from '../components/Table'
 import Button from '../components/Button'
-import { formatCurrency, formatDate, maskedAmount } from '../utils/formatters'
+import { formatCurrency, formatDate, maskedAmount, normalizeAiCurrencyText } from '../utils/formatters'
 import { apiFetch } from '../utils/api'
 import { usePrivacy } from '../context/PrivacyContext'
 import { useProfile } from '../hooks/useProfile'
@@ -506,7 +506,7 @@ export default function Dashboard() {
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/15 text-primary-dark">
                     <Icon size={15} />
                   </div>
-                  <p className="text-xs leading-snug text-ink">{insight.text}</p>
+                  <p className="text-xs leading-snug text-ink">{normalizeAiCurrencyText(insight.text)}</p>
                 </button>
               )
             })}

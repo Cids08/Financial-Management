@@ -10,6 +10,7 @@ import Tooltip from '../components/Tooltip'
 import Pagination from '../components/Pagination'
 import AdvisorChatPanel from '../components/AdvisorChatPanel'
 import DeletePermanentButton from '../components/DeletePermanentButton'
+import { normalizeAiCurrencyText } from '../utils/formatters'
 import { useAiRecommendations } from '../hooks/useAiRecommendations'
 import { useProfile } from '../hooks/useProfile'
 
@@ -327,7 +328,7 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
                       )}
                     </div>
                   </div>
-                  <p className="text-sm text-ink leading-relaxed">{r.summary}</p>
+                  <p className="text-sm text-ink leading-relaxed">{normalizeAiCurrencyText(r.summary)}</p>
                   <div className="mt-auto flex items-center justify-between text-xs text-muted pt-2 border-t border-border">
                     <span>{forecastLabel(r)}</span>
                     <span>{formatDateTime(r.generated_at)}</span>
