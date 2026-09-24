@@ -12,6 +12,7 @@ import { formatCurrency } from '../utils/formatters'
 import { apiFetch } from '../utils/api'
 import { useCollectors } from '../hooks/useCollectors'
 import { useHighlightRow } from '../hooks/useHighlightRow'
+import DeletePermanentButton from '../components/DeletePermanentButton'
 import { usePrivacy } from '../context/PrivacyContext'
 import { useProfile } from '../hooks/useProfile'
 
@@ -282,6 +283,7 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
     page, setPage,
     createCollector, updateCollector, archiveCollector, restoreCollector,
     getEfficiency,
+    refetch,
   } = useCollectors()
 
   usePrivacy()
@@ -568,6 +570,14 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
                               {showArchived ? <RotateCcw size={15} /> : <Archive size={15} />}
                             </button>
                           </Tooltip2>
+                        )}
+                        {showArchived && (
+                          <DeletePermanentButton
+                            endpoint={`/api/collectors/${c.collector_id}/permanent`}
+                            label="collector"
+                            name={`${c.first_name} ${c.last_name}`}
+                            onDeleted={refetch}
+                          />
                         )}
                       </div>
                     </td>

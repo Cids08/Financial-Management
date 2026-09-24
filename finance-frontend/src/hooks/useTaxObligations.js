@@ -294,5 +294,6 @@ export function useTaxObligations() {
     createObligation, updateObligation, archiveObligation, restoreObligation,
     uploadDocument, fetchDocumentHistory, viewDocument,
     calculateTaxBase, recordTaxPayment, batchRecordTaxPayment, generateTaxSchedule,
+    refetch: fetchObligations,
   }
 }

@@ -7,6 +7,7 @@ import Pagination from '../components/Pagination'
 import Tooltip from '../components/Tooltip'
 import { useTitles } from '../hooks/useTitles'
 import { useHighlightRow } from '../hooks/useHighlightRow'
+import DeletePermanentButton from '../components/DeletePermanentButton'
 import { useProfile } from '../hooks/useProfile'
 
 const EMPTY_FORM = { name: '', is_active: true }
@@ -186,6 +187,7 @@ export default function Titles({ title = 'Titles', crumbs = ['Master Data', 'Tit
                 <div className="flex items-center gap-1">
                   {showArchived ? (
                     isAdmin && (
+                    <>
                     <Tooltip label="Restore position" align="end">
                       <button
                         type="button"
@@ -196,6 +198,15 @@ export default function Titles({ title = 'Titles', crumbs = ['Master Data', 'Tit
                         <RotateCcw size={15} />
                       </button>
                     </Tooltip>
+                      {showArchived && (
+                        <DeletePermanentButton
+                          endpoint={`/api/titles/${t.title_id}/permanent`}
+                          label="job title"
+                          name={t.name || ''}
+                          onDeleted={loadTitles}
+                        />
+                      )}
+                    </>
                     )) : (
                     <>
                       <Tooltip label="Edit position" align="start">

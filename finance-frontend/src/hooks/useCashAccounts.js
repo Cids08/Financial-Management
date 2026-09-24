@@ -132,5 +132,6 @@ export function useCashAccounts() {
     showArchived, setShowArchived,
     page, setPage,
     createAccount, updateAccount, archiveAccount, restoreAccount,
+    refetch: fetchAccounts,
   }
 }

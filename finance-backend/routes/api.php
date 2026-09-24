@@ -34,6 +34,7 @@ use App\Http\Controllers\Api\BudgetController;
 use App\Http\Controllers\Api\DisbursementController;
 use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\SearchController;
+use App\Http\Controllers\Api\PermanentDeleteController;
 use Illuminate\Support\Facades\Broadcast;
 
 
@@ -407,6 +408,16 @@ Route::middleware(['auth:sanctum', 'require.password.change'])->group(function (
         Route::get('/modules', [AuditLogController::class, 'modules']);
         Route::get('/export', [AuditLogController::class, 'export']);
     });
+
+    // Permanent deletion of ARCHIVED records — Admin/Super Admin only (also
+    // enforced inside PermanentDeleteController). One shared handler per
+    // entity slug; the permission middleware mirrors each entity's manage
+    // permission so permission-holders who are NOT admins still never reach
+    // the handler (they only see archive/restore, not permanent delete).
+    foreach (PermanentDeleteController::ENTITIES as $slug => $config) {
+        Route::delete("/{$slug}/{id}/permanent", [PermanentDeleteController::class, 'destroy'])
+            ->middleware('permission:' . $config['permission']);
+    }
 
     // Future modules go here.
 });

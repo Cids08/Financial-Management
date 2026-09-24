@@ -29,6 +29,7 @@ class Setting extends Model
         'default_tax_rate',
         'default_penalty_rate',
         'forecast_months',
+        'data_retention_days',
     ];
 
     protected $casts = [
@@ -37,6 +38,7 @@ class Setting extends Model
         'default_penalty_rate' => 'decimal:2',
         'forecast_months' => 'integer',
         'exchange_rates' => 'array',
+        'data_retention_days' => 'integer',
     ];
 
     /**
@@ -67,6 +69,10 @@ class Setting extends Model
             'default_tax_rate' => 12,
             'default_penalty_rate' => 0,
             'forecast_months' => 12,
+            // Data Privacy Act / BIR retention: books of accounts must be
+            // kept for 10 years, so archived records that are never restored
+            // are purged permanently only after this many days (3650).
+            'data_retention_days' => 3650,
         ]);
     }
 }

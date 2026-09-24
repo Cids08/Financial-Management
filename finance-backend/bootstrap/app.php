@@ -33,7 +33,15 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->api(append: [
             \App\Http\Middleware\SecurityHeaders::class,
+            \App\Http\Middleware\EnforceRetentionPolicy::class,
         ]);
+    })
+    ->withSchedule(function (\Illuminate\Console\Scheduling\Schedule $schedule): void {
+        // Data Privacy Act retention: nightly permanent purge of archived
+        // records older than settings.data_retention_days. Host must run
+        // `php artisan schedule:run` every minute; the EnforceRetentionPolicy
+        // middleware is the fallback for hosts without a working scheduler.
+        $schedule->command('records:purge-archived')->dailyAt('02:30');
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->render(function (ThrottleRequestsException $e, $request) {

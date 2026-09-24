@@ -24,6 +24,7 @@ import Modal from '../components/Modal'
 import Pagination from '../components/Pagination'
 import Tooltip from '../components/Tooltip'
 import { useUsers } from '../hooks/useUsers'
+import DeletePermanentButton from '../components/DeletePermanentButton'
 import { useProfile } from '../hooks/useProfile'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 import { apiFetch } from '../utils/api'
@@ -311,6 +312,7 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
     updateUser,
     archiveUser,
     restoreUser,
+    refetch,
   } = useUsers()
 
   const [search, setSearch] = useState('')
@@ -804,6 +806,14 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
                               {u.is_archived ? <RotateCcw size={15} /> : <Archive size={15} />}
                             </button>
                           </Tooltip>
+                        )}
+                        {u.is_archived && (
+                          <DeletePermanentButton
+                            endpoint={`/api/users/${u.user_id}/permanent`}
+                            label="user"
+                            name={`${u.first_name} ${u.last_name}`}
+                            onDeleted={refetch}
+                          />
                         )}
                       </div>
                     </td>

@@ -10,6 +10,7 @@ import { MIN_INVOICE_AMOUNT, minHint } from '../utils/business'
 import { useFixedAssets } from '../hooks/useFixedAssets'
 import { apiFetch } from '../utils/api'
 import { useHighlightRow } from '../hooks/useHighlightRow'
+import DeletePermanentButton from '../components/DeletePermanentButton'
 import { usePrivacy } from '../context/PrivacyContext'
 import { useProfile } from '../hooks/useProfile'
 import DepreciationRunModal from '../components/DepreciationRunModal'
@@ -57,6 +58,7 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
     page, setPage,
     createAsset, updateAsset, archiveAsset, restoreAsset,
     fetchDepreciationPreview, executeDepreciationRun,
+    refetch,
   } = useFixedAssets()
 
   usePrivacy()
@@ -368,6 +370,14 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
                               {showArchived ? <RotateCcw size={15} /> : <Archive size={15} />}
                             </button>
                           </Tooltip>
+                        )}
+                        {showArchived && (
+                          <DeletePermanentButton
+                            endpoint={`/api/fixed-assets/${a.id}/permanent`}
+                            label="fixed asset"
+                            name={a.asset_name || ''}
+                            onDeleted={refetch}
+                          />
                         )}
                       </div>
                     </td>

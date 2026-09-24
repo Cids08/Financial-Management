@@ -9,6 +9,7 @@ import CollectionEfficiencyPanel from '../components/CollectionEfficiencyPanel'
 import CollectionProofHistoryModal from '../components/CollectionProofHistoryModal'
 import { useCollectionUpdates } from '../hooks/useCollectionUpdates'
 import { useProfile } from '../hooks/useProfile'
+import DeletePermanentButton from '../components/DeletePermanentButton'
 import { formatCurrency } from '../utils/formatters'
 import { MIN_COLLECTION_AMOUNT, minHint, formatBaseAmount } from '../utils/business'
 import { apiFetch } from '../utils/api'
@@ -736,6 +737,14 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                               {c.deleted_at ? <RotateCcw size={15} /> : <Archive size={15} />}
                             </button>
                           </Tooltip>
+                        )}
+                        {c.deleted_at && (
+                          <DeletePermanentButton
+                            endpoint={`/api/collections/${c.id}/permanent`}
+                            label="collection"
+                            name={c.customer_name || ''}
+                            onDeleted={refetch}
+                          />
                         )}
                       </div>
                     </td>

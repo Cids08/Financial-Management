@@ -24,6 +24,7 @@ class SettingsResource extends JsonResource
             'defaultTaxRate' => $this->default_tax_rate,
             'defaultPenaltyRate' => $this->default_penalty_rate,
             'forecastMonths' => $this->forecast_months,
+            'dataRetentionDays' => $this->data_retention_days ?? 3650,
         ];
     }
 }

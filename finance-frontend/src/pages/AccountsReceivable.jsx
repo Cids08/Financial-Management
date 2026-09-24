@@ -9,6 +9,7 @@ import { formatCurrency } from '../utils/formatters'
 import { MIN_INVOICE_AMOUNT, minHint, formatBaseAmount } from '../utils/business'
 import { useAccountsReceivable } from '../hooks/useAccountsReceivable'
 import { apiFetch } from '../utils/api'
+import DeletePermanentButton from '../components/DeletePermanentButton'
 import { isImageFile, compressImageToUploadable, HOSTED_PDF_MAX_BYTES } from '../utils/fileUpload'
 import { usePermissions } from '../context/PermissionsContext'
 import { useProfileContext } from '../context/ProfileContext'
@@ -840,6 +841,14 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                             {r.is_archived ? <RotateCcw size={15} /> : <Archive size={15} />}
                           </button>
                         </Tooltip>
+                      )}
+                      {r.is_archived && (
+                        <DeletePermanentButton
+                          endpoint={`/api/accounts-receivable/${r.ar_id}/permanent`}
+                          label="invoice"
+                          name={r.invoice_number || r.ar_id}
+                          onDeleted={fetchRecords}
+                        />
                       )}
                     </div>
                   </td>

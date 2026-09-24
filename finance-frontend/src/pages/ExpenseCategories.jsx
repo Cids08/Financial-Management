@@ -7,6 +7,7 @@ import Pagination from '../components/Pagination'
 import Tooltip from '../components/Tooltip'
 import { usePermissions } from '../context/PermissionsContext'
 import { useExpenseCategories } from '../hooks/useExpenseCategories'
+import DeletePermanentButton from '../components/DeletePermanentButton'
 import { useProfile } from '../hooks/useProfile'
 
 const EMPTY_FORM = { category_code: '', category_name: '', description: '', is_active: true }
@@ -34,6 +35,7 @@ export default function ExpenseCategories({ title = 'Expense Categories', crumbs
     categories, listLoading, listError, filters, setFilter,
     mutating, mutateError,
     createCategory, updateCategory, archiveCategory, restoreCategory,
+    refetch,
   } = useExpenseCategories()
 
   const [search, setSearch] = useState('')
@@ -206,6 +208,14 @@ export default function ExpenseCategories({ title = 'Expense Categories', crumbs
                               {filters.trashed ? <RotateCcw size={15} /> : <Archive size={15} />}
                             </button>
                           </Tooltip>
+                        )}
+                        {filters.trashed && (
+                          <DeletePermanentButton
+                            endpoint={`/api/expense-categories/${c.id}/permanent`}
+                            label="expense category"
+                            name={c.category_name || ''}
+                            onDeleted={refetch}
+                          />
                         )}
                       </div>
                     </td>

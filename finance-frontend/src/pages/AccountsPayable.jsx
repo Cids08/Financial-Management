@@ -9,6 +9,7 @@ import { formatCurrency, currencySymbol, getActiveBaseCurrency } from '../utils/
 import { MIN_INVOICE_AMOUNT, MIN_COLLECTION_AMOUNT, minHint } from '../utils/business'
 import { useAccountsPayable } from '../hooks/useAccountsPayable'
 import { apiFetch } from '../utils/api'
+import DeletePermanentButton from '../components/DeletePermanentButton'
 import { isImageFile, compressImageToUploadable, HOSTED_PDF_MAX_BYTES } from '../utils/fileUpload'
 import AccountsPayableDocumentModal from '../components/AccountsPayableDocumentModal'
 import PaymentWizardModal from '../components/PaymentWizardModal'
@@ -1050,6 +1051,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
 
                       {/* Archive / Restore bill  -  only rendered when actionable */}
                       {isAdmin && (r.is_archived ? (
+                        <>
                         <Tooltip label="Restore bill" align="end">
                           <button
                             type="button"
@@ -1060,6 +1062,15 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                             <RotateCcw size={14} />
                           </button>
                         </Tooltip>
+                      {r.is_archived && (
+                        <DeletePermanentButton
+                          endpoint={`/api/accounts-payable/${r.ap_id}/permanent`}
+                          label="bill"
+                          name={r.vendor_name || r.invoice_number || ''}
+                          onDeleted={refetch}
+                        />
+                      )}
+                        </>
                       ) : canArchiveBill(r) ? (
                         <Tooltip label="Archive bill" align="end">
                           <button

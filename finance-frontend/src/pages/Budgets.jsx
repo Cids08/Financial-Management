@@ -16,6 +16,7 @@ import { formatCurrency, currencySymbol, convertAmount, getActiveCurrency } from
 import { MIN_INVOICE_AMOUNT, minHint } from '../utils/business'
 import { useBudgets } from '../hooks/useBudgets'
 import { useDepartments } from '../hooks/useDepartments'
+import DeletePermanentButton from '../components/DeletePermanentButton'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 import { usePermissions } from '../context/PermissionsContext'
 import { useProfile } from '../hooks/useProfile'
@@ -1353,6 +1354,14 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                                   {b.deleted_at ? <RotateCcw size={15} /> : <Archive size={15} />}
                                 </button>
                               </Tooltip>
+                            )}
+                            {b.deleted_at && (
+                              <DeletePermanentButton
+                                endpoint={`/api/budgets/${b.budget_id}/permanent`}
+                                label="budget"
+                                name={b.budget_name || ''}
+                                onDeleted={() => { fetchBudgets(); fetchStats() }}
+                              />
                             )}
                           </div>
                         </td>

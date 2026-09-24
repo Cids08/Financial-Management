@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { usePermissions } from '../context/PermissionsContext'
 import { useProfileContext } from '../context/ProfileContext'
+import DeletePermanentButton from '../components/DeletePermanentButton'
 import { usePrivacy } from '../context/PrivacyContext'
 import { hasPermission } from '../utils/permissions'
 import { Search, Plus, Pencil, Archive, RotateCcw, Receipt, Wallet, Tag, Info, Printer, CheckCircle2, XCircle, CalendarRange, X, Paperclip, FileText, History, AlertTriangle, Upload, ScanLine, Sparkles } from 'lucide-react'
@@ -903,6 +904,14 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                             {filters.trashed ? <RotateCcw size={14} /> : <Archive size={14} />}
                           </button>
                         </Tooltip>
+                      )}
+                      {filters.trashed && (
+                        <DeletePermanentButton
+                          endpoint={`/api/expenses/${x.id}/permanent`}
+                          label="expense"
+                          name={x.description || ''}
+                          onDeleted={refetch}
+                        />
                       )}
                     </div>
                   </td>

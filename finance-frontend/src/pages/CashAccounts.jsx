@@ -8,6 +8,7 @@ import Tooltip from '../components/Tooltip'
 import { formatCurrency } from '../utils/formatters'
 import { useCashAccounts } from '../hooks/useCashAccounts'
 import { useHighlightRow } from '../hooks/useHighlightRow'
+import DeletePermanentButton from '../components/DeletePermanentButton'
 import { usePrivacy } from '../context/PrivacyContext'
 import { useProfile } from '../hooks/useProfile'
 
@@ -51,6 +52,7 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
     showArchived, setShowArchived,
     page, setPage,
     createAccount, updateAccount, archiveAccount, restoreAccount,
+    refetch,
   } = useCashAccounts()
 
   usePrivacy()
@@ -277,6 +279,14 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
                               {showArchived ? <RotateCcw size={15} /> : <Archive size={15} />}
                             </button>
                           </Tooltip>
+                        )}
+                        {showArchived && (
+                          <DeletePermanentButton
+                            endpoint={`/api/cash-accounts/${a.cash_account_id}/permanent`}
+                            label="cash account"
+                            name={a.account_name || ''}
+                            onDeleted={refetch}
+                          />
                         )}
                       </div>
                     </td>

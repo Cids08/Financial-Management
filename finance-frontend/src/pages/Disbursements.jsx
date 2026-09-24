@@ -15,6 +15,7 @@ import { formatCurrency } from '../utils/formatters'
 import { MIN_COLLECTION_AMOUNT, minHint } from '../utils/business'
 import { usePermissions } from '../context/PermissionsContext'
 import { useProfileContext } from '../context/ProfileContext'
+import DeletePermanentButton from '../components/DeletePermanentButton'
 import { usePrivacy } from '../context/PrivacyContext'
 import { hasPermission } from '../utils/permissions'
 import { useDisbursements } from '../hooks/useDisbursements'
@@ -191,6 +192,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
     uploadProof, archiveDisbursement, restoreDisbursement,
     fetchNextVoucherNumber,
     fetchProofHistory, viewProof, viewLatestProof,
+    refresh,
   } = useDisbursements()
 
   // Lookup data for the Add/Edit form's dropdowns. These are only needed
@@ -884,6 +886,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                         )}
 
                         {isAdmin && (d.is_archived ? (
+                          <>
                           <Tooltip label="Restore disbursement" align="end">
                             <button
                               type="button"
@@ -893,6 +896,15 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                               <RotateCcw size={14} />
                             </button>
                           </Tooltip>
+                          {d.is_archived && (
+                            <DeletePermanentButton
+                              endpoint={`/api/disbursements/${d.disbursement_id}/permanent`}
+                              label="disbursement"
+                              name={d.voucher_number || ''}
+                              onDeleted={refresh}
+                            />
+                          )}
+                          </>
                         ) : ['Released', 'Rejected'].includes(d.status) ? (
                           <Tooltip label="Archive disbursement" align="end">
                             <button

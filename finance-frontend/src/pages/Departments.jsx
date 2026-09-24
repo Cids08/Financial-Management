@@ -8,6 +8,7 @@ import Tooltip from '../components/Tooltip'
 import { apiFetch } from '../utils/api'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 import { useProfile } from '../hooks/useProfile'
+import DeletePermanentButton from '../components/DeletePermanentButton'
 
 // Masks every character (keeps dashes/spaces as visual separators)
 function maskValue(value) {
@@ -275,6 +276,7 @@ export default function Departments({ title = 'Departments', crumbs = ['Master D
                 <div className="flex items-center gap-1">
                   {showArchived ? (
                     isAdmin && (
+                    <>
                     <Tooltip label="Restore department" align="end">
                       <button
                         type="button"
@@ -285,6 +287,15 @@ export default function Departments({ title = 'Departments', crumbs = ['Master D
                         <RotateCcw size={15} />
                       </button>
                     </Tooltip>
+                      {showArchived && (
+                        <DeletePermanentButton
+                          endpoint={`/api/departments/${d.department_id}/permanent`}
+                          label="department"
+                          name={d.department_name || ''}
+                          onDeleted={fetchDepartments}
+                        />
+                      )}
+                    </>
                     )) : (
                     <>
                       <Tooltip label="Edit department" align="start">

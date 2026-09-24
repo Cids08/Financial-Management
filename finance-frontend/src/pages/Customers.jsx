@@ -12,6 +12,7 @@ import { usePrivacy } from '../context/PrivacyContext'
 import { formatCurrency } from '../utils/formatters'
 import { usePermissions } from '../context/PermissionsContext'
 import AddressSelector from '../components/AddressSelector'
+import DeletePermanentButton from '../components/DeletePermanentButton'
 
 // Masks every character (keeps dashes/spaces as visual separators)
 function maskValue(value) {
@@ -386,6 +387,15 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
                                 {c.is_archived ? <RotateCcw size={15} /> : <Archive size={15} />}
                               </button>
                             </Tooltip>
+                          )}
+                          {c.is_archived && (
+                            <DeletePermanentButton
+                              endpoint={`/api/customers/${c.customer_id}/permanent`}
+                              label="customer"
+                              name={c.customer_name}
+                              onDeleted={() => { fetchCustomers(); fetchStats() }}
+                              onError={(m) => setLoadError(m)}
+                            />
                           )}
                         </div>
                       </td>

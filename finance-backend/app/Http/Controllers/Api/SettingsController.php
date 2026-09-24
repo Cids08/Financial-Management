@@ -44,6 +44,7 @@ class SettingsController extends Controller
             'defaultTaxRate' => 'default_tax_rate',
             'defaultPenaltyRate' => 'default_penalty_rate',
             'forecastMonths' => 'forecast_months',
+            'dataRetentionDays' => 'data_retention_days',
         ];
 
         $data = [];

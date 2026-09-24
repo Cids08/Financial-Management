@@ -9,6 +9,7 @@ import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
 import Pagination from '../components/Pagination'
 import AdvisorChatPanel from '../components/AdvisorChatPanel'
+import DeletePermanentButton from '../components/DeletePermanentButton'
 import { useAiRecommendations } from '../hooks/useAiRecommendations'
 import { useProfile } from '../hooks/useProfile'
 
@@ -315,6 +316,14 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
                             {r.is_archived ? <RotateCcw size={15} /> : <Archive size={15} />}
                           </button>
                         </Tooltip>
+                      )}
+                      {r.is_archived && (
+                        <DeletePermanentButton
+                          endpoint={`/api/ai-recommendations/${r.recommendation_id}/permanent`}
+                          label="AI recommendation"
+                          name={r.recommendation_type || ''}
+                          onDeleted={fetchRecommendations}
+                        />
                       )}
                     </div>
                   </div>

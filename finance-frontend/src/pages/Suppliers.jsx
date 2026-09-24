@@ -8,6 +8,7 @@ import Tooltip from '../components/Tooltip'
 import { apiFetch } from '../utils/api'
 import { useCompany } from '../context/CompanyContext'
 import { useHighlightRow } from '../hooks/useHighlightRow'
+import DeletePermanentButton from '../components/DeletePermanentButton'
 import { usePrivacy } from '../context/PrivacyContext'
 import { formatCurrency } from '../utils/formatters'
 import { useProfile } from '../hooks/useProfile'
@@ -360,6 +361,14 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
                                 {s.is_archived ? <RotateCcw size={15} /> : <Archive size={15} />}
                               </button>
                             </Tooltip>
+                          )}
+                          {s.is_archived && (
+                            <DeletePermanentButton
+                              endpoint={`/api/suppliers/${s.supplier_id}/permanent`}
+                              label="supplier"
+                              name={s.supplier_name || ''}
+                              onDeleted={() => { fetchSuppliers(); fetchStats() }}
+                            />
                           )}
                         </div>
                       </td>

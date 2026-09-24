@@ -15,6 +15,7 @@ import { formatCurrency } from '../utils/formatters'
 import { MIN_INVOICE_AMOUNT, minHint } from '../utils/business'
 import { useTaxObligations } from '../hooks/useTaxObligations'
 import { useHighlightRow } from '../hooks/useHighlightRow'
+import DeletePermanentButton from '../components/DeletePermanentButton'
 import { usePrivacy } from '../context/PrivacyContext'
 import { useProfile } from '../hooks/useProfile'
 import { useCompany } from '../context/CompanyContext'
@@ -148,6 +149,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
     createObligation, updateObligation, archiveObligation, restoreObligation,
     uploadDocument, fetchDocumentHistory, viewDocument,
     calculateTaxBase, recordTaxPayment, batchRecordTaxPayment, generateTaxSchedule,
+    refetch,
   } = useTaxObligations()
 
   usePrivacy()
@@ -906,6 +908,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                             - Only Paid obligations can be archived
                             - In archived view, Restore button is shown */}
                         {isAdmin && (showArchived ? (
+                          <>
                           <Tooltip label="Restore obligation" align="end">
                             <button
                               type="button"
@@ -915,6 +918,15 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                               <RotateCcw size={14} />
                             </button>
                           </Tooltip>
+                          {showArchived && (
+                            <DeletePermanentButton
+                              endpoint={`/api/tax-obligations/${o.tax_id}/permanent`}
+                              label="tax obligation"
+                              name={String(o.tax_id)}
+                              onDeleted={refetch}
+                            />
+                          )}
+                          </>
                         ) : o.status === 'Paid' ? (
                           <Tooltip label="Archive obligation" align="end">
                             <button

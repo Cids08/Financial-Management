@@ -42,6 +42,10 @@ class UpdateSettingsRequest extends FormRequest
             'defaultTaxRate' => ['sometimes', 'required', 'numeric', 'min:0', 'max:100'],
             'defaultPenaltyRate' => ['sometimes', 'required', 'numeric', 'min:0', 'max:100'],
             'forecastMonths' => ['sometimes', 'required', 'integer', 'min:6', 'max:60'],
+            // Data Privacy Act retention: days an archived record may sit
+            // before an automatic permanent purge. Floor of 1 day so it can
+            // be tuned; default 3650 (10 years per BIR books-of-accounts rules).
+            'dataRetentionDays' => ['sometimes', 'required', 'integer', 'min:1', 'max:36500'],
         ];
     }
 }

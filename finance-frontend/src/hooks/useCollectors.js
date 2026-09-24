@@ -157,5 +157,6 @@ export function useCollectors() {
     page, setPage,
     createCollector, updateCollector, archiveCollector, restoreCollector,
     getEfficiency,
+    refetch: fetchCollectors,
   }
 }

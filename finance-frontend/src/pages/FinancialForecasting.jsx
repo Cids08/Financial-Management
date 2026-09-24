@@ -14,6 +14,7 @@ import { formatCurrency } from '../utils/formatters'
 import { usePrivacy } from '../context/PrivacyContext'
 import { useForecasts } from '../hooks/useForecasts'
 import { useProfile } from '../hooks/useProfile'
+import DeletePermanentButton from '../components/DeletePermanentButton'
 import { useCompany } from '../context/CompanyContext'
 
 // Exactly 5 categories per spec: Expense, Accounts Receivable,
@@ -136,7 +137,7 @@ const StatCard = memo(function StatCard({ label, value, icon: Icon, iconBg, icon
   )
 })
 
-const ForecastRow = memo(function ForecastRow({ forecast: f, showArchived, isAdmin, onViewDetail, onArchive, onRestore }) {
+const ForecastRow = memo(function ForecastRow({ forecast: f, showArchived, isAdmin, onViewDetail, onArchive, onRestore, onPermanentDeleted }) {
   const unreliable = isMapeUnreliable(f.mape)
   return (
     <tr
@@ -174,6 +175,7 @@ const ForecastRow = memo(function ForecastRow({ forecast: f, showArchived, isAdm
             </button>
           </Tooltip>
           {isAdmin && (showArchived ? (
+            <>
             <Tooltip label="Restore forecast" align="end">
               <button
                 type="button"
@@ -184,6 +186,15 @@ const ForecastRow = memo(function ForecastRow({ forecast: f, showArchived, isAdm
                 <ArchiveRestore size={15} />
               </button>
             </Tooltip>
+            {showArchived && (
+              <DeletePermanentButton
+                endpoint={`/api/forecasts/${f.forecast_id}/permanent`}
+                label="forecast"
+                name={f.forecast_period || ''}
+                onDeleted={onPermanentDeleted}
+              />
+            )}
+            </>
           ) : (
             <Tooltip label="Archive forecast" align="end">
               <button
@@ -497,6 +508,7 @@ export default function FinancialForecasting({ title = 'Financial Forecasting', 
     archiving,
     archiveForecast,
     restoreForecast,
+    refetch,
   } = useForecasts()
 
   const { privacyOn } = usePrivacy()
@@ -709,6 +721,7 @@ export default function FinancialForecasting({ title = 'Financial Forecasting', 
                   onViewDetail={handleViewDetail}
                   onArchive={setArchiveTarget}
                   onRestore={handleRestore}
+                  onPermanentDeleted={refetch}
                 />
               ))}
               {!forecastsLoading && filtered.length === 0 && (
