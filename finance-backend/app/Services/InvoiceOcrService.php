@@ -44,7 +44,7 @@ class InvoiceOcrService
      * HostForge's ~60s edge/gateway timeout so a hung OCR returns a clear
      * error instead of a 503 Gateway timeout with no explanation.
      */
-    protected const OCR_TIMEOUT_SECONDS = 15;
+    protected const OCR_TIMEOUT_SECONDS = 25;
 
     /**
      * Phrases strongly associated with bank/e-wallet transfer confirmation
@@ -157,6 +157,21 @@ class InvoiceOcrService
     }
 
     /**
+     * Environment for the tesseract subprocess. Merge over the inherited FPM
+     * env so nothing is lost. The OMP_* overrides cap OpenMP to a single thread:
+     * tesseract 5.x otherwise spawns a thread per detected core and busy-waits,
+     * which collapses to a near-hang inside HostForge's small CPU quota even on
+     * a trivial image (observed as a >15s stall).
+     */
+    protected function ocrEnv(): array
+    {
+        return array_merge(getenv() ?: [], [
+            'OMP_THREAD_LIMIT' => '1',
+            'OMP_NUM_THREADS'  => '1',
+        ]);
+    }
+
+    /**
      * Runs the Tesseract binary with a hard wall-clock timeout and returns
      * both the extracted text and any failure detail.
      *
@@ -195,7 +210,7 @@ class InvoiceOcrService
             ['pipe', 'r'],
             ['pipe', 'w'],
             ['pipe', 'w'],
-        ], $pipes, null, null, ['bypass_shell' => true]);
+        ], $pipes, null, $this->ocrEnv(), ['bypass_shell' => true]);
 
         if (! is_resource($process)) {
             Log::error("[ocr] proc_open failed: {$command}");
