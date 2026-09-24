@@ -159,10 +159,13 @@ export function useAuth() {
         // is dead and even Resend will fail. Auto-cancel back to the credential
         // form and surface the expiry message there so the user knows to re-login.
         const msg = json.message || 'That code is incorrect or has expired.'
-        if (
-          msg.toLowerCase().includes('expired') ||
-          msg.toLowerCase().includes('sign in again')
-        ) {
+        // Only the pending login session ITSELF expiring sends the user back
+        // to the credentials step ("This login has expired. Please sign in
+        // again."). An incorrect/expired CODE also returns a message containing
+        // "expired" ("That code is incorrect or has expired.") but the session
+        // is still alive  -  that must keep the user on the code screen so they
+        // can retry or resend instead of being kicked back to step 1.
+        if (msg.toLowerCase().includes('sign in again')) {
           setTwoFactorPending(null)
           setError(msg)
           return { success: false, message: msg }
@@ -203,10 +206,13 @@ export function useAuth() {
       if (!res.ok || !json.success) {
         const msg = json.message || 'Could not resend the code.'
         // If the session already expired, auto-cancel back to the credential form.
-        if (
-          msg.toLowerCase().includes('expired') ||
-          msg.toLowerCase().includes('sign in again')
-        ) {
+        // Only the pending login session ITSELF expiring sends the user back
+        // to the credentials step ("This login has expired. Please sign in
+        // again."). An incorrect/expired CODE also returns a message containing
+        // "expired" ("That code is incorrect or has expired.") but the session
+        // is still alive  -  that must keep the user on the code screen so they
+        // can retry or resend instead of being kicked back to step 1.
+        if (msg.toLowerCase().includes('sign in again')) {
           setTwoFactorPending(null)
           setError(msg)
           return { success: false, message: msg }
