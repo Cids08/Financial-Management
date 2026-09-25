@@ -5,15 +5,13 @@ import {
   ChevronLeft,
   ChevronRight,
   CreditCard,
-  Eye,
-  EyeOff,
   Loader2,
   Paperclip,
   Sparkles,
   X,
 } from 'lucide-react'
 import { MIN_COLLECTION_AMOUNT, formatBaseAmount } from '../utils/business'
-import { formatCurrency, maskedAmount } from '../utils/formatters'
+import { formatCurrency } from '../utils/formatters'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -58,7 +56,6 @@ export default function PaymentWizardModal({
   const [cashAccountId, setCashAccountId] = useState('')
   const [paymentMethod, setPaymentMethod] = useState('Bank Transfer')
   const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().split('T')[0])
-  const [revealBalance, setRevealBalance] = useState(false)
 
   // Step 2 state
   const [proposals, setProposals] = useState([])
@@ -322,26 +319,13 @@ export default function PaymentWizardModal({
                     </option>
                   ))}
                 </select>
-                {/* Masked balance row  -  balance hidden by default, revealed via Eye toggle */}
-                {cashAccountId && (() => {
-                  const ca = cashAccounts.find(c => String(c.id) === String(cashAccountId))
-                  return ca ? (
-                    <div className="mt-1 flex items-center gap-2 text-xs text-muted">
-                      <span>Available Balance:</span>
-                      <span className="font-mono font-semibold text-ink">
-                        {revealBalance ? fmt(ca.current_balance) : maskedAmount()}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setRevealBalance(r => !r)}
-                        className="text-muted hover:text-ink transition-colors"
-                        title={revealBalance ? 'Hide balance' : 'Show balance'}
-                      >
-                        {revealBalance ? <EyeOff size={13} /> : <Eye size={13} />}
-                      </button>
-                    </div>
-                  ) : null
-                })()}
+                {/* Overdraft validation only  —  balance is never shown in this modal */}
+                {isOverdraft && selectedTotal > 0 && (
+                  <div className="mt-1 flex items-center gap-2 text-xs text-rose-700 dark:text-rose-400">
+                    <AlertTriangle size={13} className="shrink-0" />
+                    <span>Selected total exceeds available funds in this account. Reduce amounts or pick another account.</span>
+                  </div>
+                )}
               </div>
 
               {/* Payment Method */}
@@ -402,23 +386,6 @@ export default function PaymentWizardModal({
                     {selectedCount} of {proposals.length} selected
                   </div>
                 </div>
-                {cashAccount && (
-                  <div className={`flex-1 min-w-35 p-3 rounded-xl border ${isOverdraft ? 'bg-rose-500/10 border-rose-500/20' : 'bg-bg/40 border-border'}`}>
-                    <div className={`text-xs font-medium ${isOverdraft ? 'text-rose-600 dark:text-rose-400' : 'text-muted'}`}>Cash Balance</div>
-                    <div className={`text-lg font-bold ${isOverdraft ? 'text-rose-700 dark:text-rose-400' : 'text-ink'} flex items-center gap-1.5`}>
-                      {revealBalance ? fmt(cashAccount.current_balance) : maskedAmount()}
-                      <button
-                        type="button"
-                        onClick={() => setRevealBalance(r => !r)}
-                        className="text-muted hover:text-ink transition-colors"
-                        title={revealBalance ? 'Hide balance' : 'Show balance'}
-                      >
-                        {revealBalance ? <EyeOff size={13} /> : <Eye size={13} />}
-                      </button>
-                    </div>
-                    <div className={`text-xs text-muted truncate`}>{cashAccount.account_name ?? cashAccount.name}</div>
-                  </div>
-                )}
               </div>
 
               {isOverdraft && (

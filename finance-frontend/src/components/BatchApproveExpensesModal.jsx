@@ -633,9 +633,8 @@ export default function BatchApproveExpensesModal({
                       <thead className="bg-bg/60 border-b border-border">
                         <tr>
                           <th className="px-4 py-2.5 text-left font-semibold text-muted text-xs uppercase">Account</th>
-                          <th className="px-4 py-2.5 text-right font-semibold text-muted text-xs uppercase">Balance</th>
                           <th className="px-4 py-2.5 text-right font-semibold text-muted text-xs uppercase">Debit</th>
-                          <th className="px-4 py-2.5 text-right font-semibold text-muted text-xs uppercase">Remaining</th>
+                          <th className="px-4 py-2.5 text-right font-semibold text-muted text-xs uppercase">Status</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
@@ -645,11 +644,17 @@ export default function BatchApproveExpensesModal({
                               {c.account_name}
                               {c.bank_name && <span className="text-muted text-xs ml-1">· {c.bank_name}</span>}
                             </td>
-                            <td className="px-4 py-2.5 text-right font-mono text-muted">{formatCurrency(c.current_balance)}</td>
                             <td className="px-4 py-2.5 text-right font-mono font-semibold text-rose-600 dark:text-rose-400">{formatCurrency(c.total)}</td>
-                            <td className={`px-4 py-2.5 text-right font-mono font-bold ${c.isOverdrawn ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                              {formatCurrency(c.remaining)}
-                              {c.isOverdrawn && <span className="ml-1 text-[9px] bg-rose-500/20 text-rose-600 dark:text-rose-400 px-1 py-0.5 rounded font-semibold">OVERDRAFT</span>}
+                            <td className="px-4 py-2.5 text-right">
+                              {c.isOverdrawn ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] bg-rose-500/20 text-rose-600 dark:text-rose-400 px-2 py-0.5 rounded-full font-semibold">
+                                  <AlertTriangle size={11} /> OVERDRAFT
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center text-[10px] bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-full font-semibold">
+                                  SUFFICIENT FUNDS
+                                </span>
+                              )}
                             </td>
                           </tr>
                         ))}
