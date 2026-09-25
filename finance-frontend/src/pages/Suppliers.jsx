@@ -29,7 +29,7 @@ function maskEmail(value) {
   return '•'.repeat(10)
 }
 
-const EMPTY_FORM = { supplier_name: '', contact_person: '', position: '', contact_number: '', tin: '', email: '', website: '', address: '', status: 'Active' }
+const EMPTY_FORM = { supplier_name: '', contact_person: '', position: '', contact_number: '', tin: '', email: '', website: '', address: '', status: 'Active', default_withholding_type: '' }
 
 const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
 const PANEL_PAD = 'p-4'
@@ -171,6 +171,7 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
       website: s.website || '',
       address: s.address || '',
       status: s.status,
+      default_withholding_type: s.default_withholding_type || '',
     })
     setFormError('')
     setFieldErrors({})
@@ -468,6 +469,17 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
               <option value="Active">Active</option>
               <option value="Inactive">Inactive</option>
             </select>
+          </div>
+          <div>
+            <label className={LABEL}>Default Withholding Tax</label>
+            <select value={form.default_withholding_type} onChange={(e) => setForm((f) => ({ ...f, default_withholding_type: e.target.value }))} className={INPUT}>
+              <option value="">Auto (from payment details)</option>
+              <option value="Goods">Goods — 1% (BIR WC100)</option>
+              <option value="Services">Services — 2% (BIR WC157)</option>
+            </select>
+            <p className="mt-1 text-[11px] text-muted">
+              Applied when paying this supplier: the tax is withheld from the payout and remitted to the BIR (Form 2307).
+            </p>
           </div>
           {isEditing && (
             <p className="text-[11px] text-muted">

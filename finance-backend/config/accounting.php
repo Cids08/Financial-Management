@@ -21,6 +21,11 @@ return [
 
         // Accounts Receivable Asset Account (default code: 1100)
         'accounts_receivable_control' => env('ACCOUNTING_AR_CONTROL_ID'),
+
+        // Expanded Withholding Tax Payable Liability Account (default code: 2030)
+        // Credited when a supplier payment withholds EWT at source; the
+        // balance is the accrued tax still to be remitted to the BIR.
+        'ewt_payable_control' => env('ACCOUNTING_EWT_PAYABLE_CONTROL_ID'),
     ],
 
 ];

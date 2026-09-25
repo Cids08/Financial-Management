@@ -23,6 +23,7 @@ class Supplier extends Model
         'tin',
         'current_balance',
         'status',
+        'default_withholding_type',
         'updated_by',
     ];
 

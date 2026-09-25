@@ -21,6 +21,7 @@ class ChartOfAccountSeeder extends Seeder
 
             // Liabilities
             ['account_code' => '2000', 'account_name' => 'Accounts Payable', 'account_type' => 'Liability', 'account_category' => 'Current Liability'],
+            ['account_code' => '2030', 'account_name' => 'Expanded Withholding Tax Payable', 'account_type' => 'Liability', 'account_category' => 'Current Liability'],
             ['account_code' => '2100', 'account_name' => 'Taxes Payable', 'account_type' => 'Liability', 'account_category' => 'Current Liability'],
             ['account_code' => '2200', 'account_name' => 'Accrued Payroll', 'account_type' => 'Liability', 'account_category' => 'Current Liability'],
 

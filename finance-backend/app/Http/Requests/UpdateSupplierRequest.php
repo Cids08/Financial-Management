@@ -26,6 +26,7 @@ class UpdateSupplierRequest extends FormRequest
             'website' => ['nullable', 'string', 'max:255'],
             'address' => ['nullable', 'string'],
             'status' => ['sometimes', Rule::in(['Active', 'Inactive'])],
+            'default_withholding_type' => ['nullable', Rule::in(['Goods', 'Services', null])],
         ];
     }
 }

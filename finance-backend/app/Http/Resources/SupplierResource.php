@@ -22,6 +22,7 @@ class SupplierResource extends JsonResource
             'address' => $this->address,
             'current_balance' => (float) $this->current_balance,
             'status' => $this->status,
+            'default_withholding_type' => $this->default_withholding_type,
             'is_archived' => $this->deleted_at !== null,
         ];
     }

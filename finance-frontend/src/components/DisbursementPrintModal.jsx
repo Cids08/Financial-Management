@@ -503,6 +503,8 @@ export default function DisbursementPrintModal({
   const v = voucherData?.voucher || {}
   const cash = voucherData?.cash_account || {}
   const isCheck = v.payment_method === 'Check' || v.payment_method === "Manager's Check"
+  const hasEwt = v.ewt_amount != null && v.ewt_amount > 0
+  const netPaid = hasEwt && v.net_amount != null ? v.net_amount : v.amount_paid
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
@@ -632,7 +634,7 @@ export default function DisbursementPrintModal({
                       {v.payee}
                     </div>
                     <div className="col-span-3 text-right font-mono font-bold text-base bg-bg border border-border text-ink rounded px-2 py-1 shadow-inner">
-                      {fmt(v.amount_paid)}
+                      {fmt(netPaid)}
                     </div>
                   </div>
 
@@ -641,9 +643,15 @@ export default function DisbursementPrintModal({
                       Pesos (in words)
                     </div>
                     <div className="font-bold text-xs uppercase text-ink tracking-wide border-b border-border pb-1">
-                      {formatAmountInWords(v.amount_paid)}
+                      {formatAmountInWords(netPaid)}
                     </div>
                   </div>
+
+                  {hasEwt && (
+                    <div className="text-[10px] text-muted">
+                      Expanded Withholding Tax of {v.ewt_rate}% ({v.ewt_atc_code ?? 'BIR'}) withheld &middot; Gross {fmt(v.amount_paid)}
+                    </div>
+                  )}
 
                   <div className="flex justify-between items-end pt-3 text-xs text-muted">
                     <div className="font-mono text-[10px] tracking-widest text-muted">
@@ -656,7 +664,8 @@ export default function DisbursementPrintModal({
                 </div>
               ) : (
                 /* Standard Voucher Information */
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="p-3 bg-surface rounded-xl border border-border">
                     <div className="text-xs text-muted font-medium">Voucher Number</div>
                     <div className="text-base font-bold text-primary-dark dark:text-primary font-mono">{v.voucher_number || '-'}</div>
@@ -673,7 +682,20 @@ export default function DisbursementPrintModal({
                     <div className="text-xs text-primary-dark dark:text-primary font-medium">Amount Paid</div>
                     <div className="text-base font-bold text-primary-dark dark:text-primary font-mono">{fmt(v.amount_paid)}</div>
                   </div>
-                </div>
+</div>
+                  {hasEwt && (
+                    <div className="mt-2 p-2 bg-bg rounded-lg border border-border text-xs flex flex-wrap gap-x-6 gap-y-1">
+                      <span className="text-muted">
+                        Expanded Withholding Tax ({v.ewt_rate != null ? `${v.ewt_rate}%` : '—'} &middot; {v.ewt_atc_code ?? 'Auto'}) withheld:
+                        <span className="font-bold text-ink"> {fmt(v.ewt_amount)}</span>
+                      </span>
+                      <span className="text-muted">
+                        Net Cash Paid Out (actual amount received by payee):
+                        <span className="font-bold text-emerald-600 dark:text-emerald-400"> {fmt(netPaid)}</span>
+                      </span>
+                    </div>
+                  )}
+                </>
               )}
 
               {/* Accounting Entries */}

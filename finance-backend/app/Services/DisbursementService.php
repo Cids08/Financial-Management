@@ -544,7 +544,9 @@ class DisbursementService
             ]);
         }
 
-        return DB::transaction(function () use ($disbursement, $releasedById, $apAccountId) {
+        $ewtPayableAccountId = $this->resolveEwtPayableAccountId($apAccountId);
+
+        return DB::transaction(function () use ($disbursement, $releasedById, $apAccountId, $ewtPayableAccountId) {
             $ap = AccountsPayable::lockForUpdate()->findOrFail($disbursement->ap_id);
             $cashAccount = CashAccount::lockForUpdate()->findOrFail($disbursement->cash_account_id);
 
@@ -565,7 +567,17 @@ class DisbursementService
 
             $cashAccountChartId = $cashAccount->chart_of_account_id;
 
-            $newPaid = $ap->paid_amount + $disbursement->amount_paid;
+            // Expanded Withholding Tax at source: the full bill amount settles
+            // the AP liability, but the tax withheld (1% goods / 2% services)
+            // is retained from the payout, leaving net_amount to actually exit
+            // the cash account. The retained tax accrues as an EWT Payable
+            // liability in the journal until it is remitted to the BIR.
+            $grossAmount = (float) $disbursement->amount_paid;
+            $ewt = $this->resolveEwt($disbursement, $grossAmount);
+            $ewtAmount = $ewt['amount'];
+            $netAmount = $ewt['net'];
+
+            $newPaid = $ap->paid_amount + $grossAmount;
             $newRemaining = $ap->original_amount - $newPaid;
 
             if ($newRemaining < 0) {
@@ -574,7 +586,9 @@ class DisbursementService
                 ]);
             }
 
-            if ($disbursement->amount_paid > $cashAccount->current_balance) {
+            // Only the NET amount leaves the cash account — the withheld tax
+            // stays in the bank until remitted to the BIR.
+            if ($netAmount > $cashAccount->current_balance) {
                 throw ValidationException::withMessages([
                     'amount_paid' => 'Releasing this payment would overdraw the selected cash account.',
                 ]);
@@ -589,7 +603,7 @@ class DisbursementService
             $cashBalanceBefore = $cashAccount->current_balance;
 
             $cashAccount->update([
-                'current_balance' => $cashAccount->current_balance - $disbursement->amount_paid,
+                'current_balance' => $cashAccount->current_balance - $netAmount,
             ]);
 
             $transactionNo = 'DV-'.$disbursement->voucher_number;
@@ -608,12 +622,14 @@ class DisbursementService
             ]);
 
             // Debit reduces the AP liability, credit reduces the cash asset —
-            // standard payment-of-a-payable double entry.
-            JournalEntryLine::insert([
+            // standard payment-of-a-payable double entry. When EWT is
+            // withheld at source, the journal splits the credit side:
+            // net cash out + creditable tax withheld (EWT Payable liability).
+            $lines = [
                 [
                     'journal_entry_id' => $journalEntry->id,
                     'account_id' => $apAccountId,
-                    'debit' => $disbursement->amount_paid,
+                    'debit' => $grossAmount,
                     'credit' => 0,
                     'reference_type' => 'Disbursement',
                     'reference_id' => $disbursement->id,
@@ -625,19 +641,39 @@ class DisbursementService
                     'journal_entry_id' => $journalEntry->id,
                     'account_id' => $cashAccountChartId,
                     'debit' => 0,
-                    'credit' => $disbursement->amount_paid,
+                    'credit' => $netAmount,
                     'reference_type' => 'Disbursement',
                     'reference_id' => $disbursement->id,
-                    'remarks' => 'Cash paid out',
+                    'remarks' => 'Cash paid out (net of EWT)',
                     'created_at' => now(),
                     'updated_at' => now(),
                 ],
-            ]);
+            ];
+
+            if ($ewtAmount > 0) {
+                $lines[] = [
+                    'journal_entry_id' => $journalEntry->id,
+                    'account_id' => $ewtPayableAccountId,
+                    'debit' => 0,
+                    'credit' => $ewtAmount,
+                    'reference_type' => 'Disbursement',
+                    'reference_id' => $disbursement->id,
+                    'remarks' => 'Expanded Withholding Tax withheld ('.$ewt['atc'].' @ '.rtrim(rtrim(number_format($ewt['rate'], 2, '.', ''), '0'), '.').'%)',
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ];
+            }
+
+            JournalEntryLine::insert($lines);
 
             $disbursement->update([
                 'status' => 'Released',
                 'released_date' => now()->toDateString(),
                 'released_by' => $releasedById,
+                'ewt_rate' => $ewt['rate'],
+                'ewt_atc_code' => $ewt['atc'],
+                'ewt_amount' => $ewtAmount,
+                'net_amount' => $netAmount,
             ]);
 
             // The single most consequential log entry in this service —
@@ -651,18 +687,24 @@ class DisbursementService
                 'action' => 'release',
                 'record_id' => $disbursement->id,
                 'activity_description' => sprintf(
-                    'Released disbursement %s: %.2f paid to %s from "%s". AP #%d now %.2f remaining%s. Journal entry %s posted.',
+                    'Released disbursement %s: %.2f paid to %s from "%s" (%.2f gross minus %.2f EWT withheld). AP #%d now %.2f remaining%s. Journal entry %s posted.',
                     $disbursement->voucher_number,
-                    (float) $disbursement->amount_paid,
+                    $netAmount,
                     $disbursement->payee,
                     $cashAccount->account_name,
+                    $grossAmount,
+                    $ewtAmount,
                     $ap->id,
                     $newRemaining,
                     $newRemaining <= 0 ? ' — PAID IN FULL' : '',
                     $journalEntry->transaction_no
                 ),
                 'new_values' => [
-                    'amount_paid' => (float) $disbursement->amount_paid,
+                    'amount_paid' => (float) $grossAmount,
+                    'ewt_rate' => (float) $ewt['rate'],
+                    'ewt_atc_code' => $ewt['atc'],
+                    'ewt_amount' => (float) $ewtAmount,
+                    'net_amount' => (float) $netAmount,
                     'ap_id' => $ap->id,
                     'ap_remaining_balance' => $newRemaining,
                     'cash_account_id' => $cashAccount->id,
@@ -1130,6 +1172,10 @@ class DisbursementService
                 'payment_date'         => $fmtDate($disbursement->payment_date),
                 'released_date'        => $fmtDate($disbursement->released_date),
                 'amount_paid'          => (float) $disbursement->amount_paid,
+                'ewt_rate'             => $disbursement->ewt_rate !== null ? (float) $disbursement->ewt_rate : null,
+                'ewt_atc_code'         => $disbursement->ewt_atc_code ?? null,
+                'ewt_amount'           => $disbursement->ewt_amount !== null ? (float) $disbursement->ewt_amount : null,
+                'net_amount'           => $disbursement->net_amount !== null ? (float) $disbursement->net_amount : null,
                 'currency'             => $disbursement->currency ?? 'PHP',
                 'reference_number'     => $disbursement->reference_number,
                 'remarks'              => $disbursement->remarks,
@@ -1188,12 +1234,122 @@ class DisbursementService
     }
 
     /**
+     * Determine the Expanded Withholding Tax (EWT) to retain at source when
+     * an AP supplier disbursement is released.
+     *
+     * Rate source, in priority order:
+     *   1. The supplier's master-data default_withholding_type — Goods = 1%
+     *      (ATC WC100), Services = 2% (ATC WC157). This is the accurate,
+     *      configured source (Suppliers page).
+     *   2. While that is null, the existing remarks/payee heuristic
+     *      (goods -> 1%, otherwise services 2%), keeping behavior identical
+     *      to the BIR 2307 certificate's previous guessed ATC.
+     *
+     * Payroll disbursements are exempt from EWT — employee compensation
+     * withholding belongs to the HR/payroll subsystem, not expanded
+     * withholding on purchases.
+     *
+     * @return array{rate: float, atc: ?string, amount: float, net: float}
+     */
+    public function resolveEwt(Disbursement $disbursement, float $grossAmount): array
+    {
+        if ($disbursement->isPayroll() || $grossAmount <= 0) {
+            return ['rate' => 0.0, 'atc' => null, 'amount' => 0.0, 'net' => $grossAmount];
+        }
+
+        $disbursement->loadMissing('accountsPayable.supplier');
+        $supplierType = strtolower((string) ($disbursement->accountsPayable?->supplier?->default_withholding_type ?? ''));
+
+        if ($supplierType === 'goods') {
+            $rate = 1.0;
+            $atc = 'WC100';
+        } elseif ($supplierType === 'services') {
+            $rate = 2.0;
+            $atc = 'WC157';
+        } else {
+            $text = strtolower(($disbursement->remarks ?? '').' '.($disbursement->payee ?? ''));
+            if (str_contains($text, 'goods') || str_contains($text, 'supply') || str_contains($text, 'item')) {
+                $rate = 1.0;
+                $atc = 'WC100';
+            } else {
+                $rate = 2.0;
+                $atc = 'WC157';
+            }
+        }
+
+        $amount = round($grossAmount * ($rate / 100), 2);
+        $net = round($grossAmount - $amount, 2);
+
+        return ['rate' => $rate, 'atc' => $atc, 'amount' => $amount, 'net' => $net];
+    }
+
+    /**
+     * Resolve the chart-of-accounts entry for the Expanded Withholding Tax
+     * Payable liability — credited when EWT is withheld at source and
+     * debited when the tax is remitted to the BIR. Resolution order mirrors
+     * the other control accounts:
+     *   1. config('accounting.accounts.ewt_payable_control')
+     *   2. a Liability account whose name hints withholding/EWT (or code 2030)
+     *   3. the first Liability account other than the AP control itself
+     *   4. a clear configuration error.
+     */
+    private function resolveEwtPayableAccountId(int $apAccountId): int
+    {
+        $configured = config('accounting.accounts.ewt_payable_control');
+
+        if ($configured && ChartOfAccount::where('id', $configured)->exists()) {
+            return (int) $configured;
+        }
+
+        $account = ChartOfAccount::where('account_name', 'like', '%Withholding%')
+            ->orWhere('account_name', 'like', '%EWT%')
+            ->orWhere('account_code', '2030')
+            ->first();
+
+        if (! $account) {
+            $account = ChartOfAccount::where('account_type', 'Liability')
+                ->where('id', '!=', $apAccountId)
+                ->first();
+        }
+
+        if (! $account) {
+            throw ValidationException::withMessages([
+                'config' => 'Chart-of-accounts mapping is not configured for EWT. '
+                    .'Please create an "Expanded Withholding Tax Payable" Liability account in chart_of_accounts (or set ACCOUNTING_EWT_PAYABLE_CONTROL_ID).',
+            ]);
+        }
+
+        return (int) $account->id;
+    }
+
+    /**
      * Compile official BIR Form 2307 (Certificate of Creditable Tax Withheld at Source) data.
      */
     public function getBir2307Data(Disbursement $disbursement): array
     {
         $disbursement->loadMissing(['accountsPayable.supplier']);
         $supplier = $disbursement->accountsPayable?->supplier;
+
+        // Released disbursements carry the exact numbers retained at release
+        // time (ewt_rate/ewt_atc_code/ewt_amount/net_amount). Pre-release or
+        // legacy rows fall back to the same resolver used at release, so the
+        // certificate always agrees with the cash actually paid out.
+        if ($disbursement->ewt_amount !== null && $disbursement->net_amount !== null) {
+            $grossAmount = (float) $disbursement->amount_paid;
+            $ewt = [
+                'rate' => (float) $disbursement->ewt_rate,
+                'atc' => $disbursement->ewt_atc_code,
+                'amount' => (float) $disbursement->ewt_amount,
+                'net' => (float) $disbursement->net_amount,
+            ];
+        } else {
+            $grossAmount = (float) $disbursement->amount_paid;
+            $ewt = $this->resolveEwt($disbursement, $grossAmount);
+        }
+
+        $taxWithheld = $ewt['amount'];
+        $netAmount = $ewt['net'];
+        $defaultAtcCode = $ewt['atc'] ?? 'WC157';
 
         $paymentDate = $disbursement->payment_date ? \Carbon\Carbon::parse($disbursement->payment_date) : now();
         $quarter = (int) ceil($paymentDate->month / 3);
@@ -1239,17 +1395,6 @@ class DisbursementService
             ],
         ];
 
-        // Pick default ATC: if remarks or payee hints goods, WC100; else default WC157 (2%)
-        $text = strtolower(($disbursement->remarks ?? '').' '.($disbursement->payee ?? ''));
-        $defaultAtc = (str_contains($text, 'goods') || str_contains($text, 'supply') || str_contains($text, 'item'))
-            ? $atcCodes[1]
-            : $atcCodes[0];
-
-        $grossAmount = (float) $disbursement->amount_paid;
-        $taxRate = $defaultAtc['rate'];
-        $taxWithheld = round($grossAmount * ($taxRate / 100), 2);
-        $netAmount = $grossAmount - $taxWithheld;
-
         return [
             'certificate_no' => '2307-'.($disbursement->voucher_number ?: ('DV-'.$disbursement->id)),
             'period' => [
@@ -1272,10 +1417,10 @@ class DisbursementService
                 'zip_code' => '1000',
             ],
             'atc_codes' => $atcCodes,
-            'default_atc' => $defaultAtc['code'],
+            'default_atc' => $defaultAtcCode,
             'computation' => [
                 'gross_amount' => $grossAmount,
-                'tax_rate' => $taxRate,
+                'tax_rate' => (float) $ewt['rate'],
                 'tax_withheld' => $taxWithheld,
                 'net_amount' => $netAmount,
             ],

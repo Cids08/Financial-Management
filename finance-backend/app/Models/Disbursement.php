@@ -34,6 +34,14 @@ class Disbursement extends Model
         'created_by',
         'updated_by',
         'deleted_by',
+        // EWT withholding fields — written at release time by
+        // DisbursementService::releaseAp() (gross amount_paid settles the
+        // AP liability; ewt_amount is accrued as EWT Payable; net_amount is
+        // what actually leaves the cash account).
+        'ewt_rate',
+        'ewt_atc_code',
+        'ewt_amount',
+        'net_amount',
         // Payroll-only fields — null for source_type = 'ap'.
         'payroll_batch_number',
         'pay_period_start',
@@ -45,6 +53,9 @@ class Disbursement extends Model
         'payment_date' => 'date',
         'released_date' => 'date',
         'amount_paid' => 'decimal:2',
+        'ewt_rate' => 'decimal:2',
+        'ewt_amount' => 'decimal:2',
+        'net_amount' => 'decimal:2',
         'approved_at' => 'datetime',
         'has_attachment' => 'boolean',
         'pay_period_start' => 'date',
