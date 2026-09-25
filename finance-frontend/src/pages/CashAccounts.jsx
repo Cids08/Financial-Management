@@ -5,7 +5,7 @@ import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Pagination from '../components/Pagination'
 import Tooltip from '../components/Tooltip'
-import { formatCurrency } from '../utils/formatters'
+import { formatCurrency, maskedAmount } from '../utils/formatters'
 import { useCashAccounts } from '../hooks/useCashAccounts'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 import DeletePermanentButton from '../components/DeletePermanentButton'
@@ -55,7 +55,7 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
     refetch,
   } = useCashAccounts()
 
-  usePrivacy()
+  const { privacyOn } = usePrivacy()
 
   const { profile } = useProfile()
   const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
@@ -137,7 +137,7 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
 
   const statCards = [
     { key: 'total', label: 'Total Accounts', value: meta.total, icon: Wallet, iconBg: 'bg-primary/15', iconColor: 'text-primary-dark', isActive: typeFilter === 'all' && !showArchived, onClick: () => { setTypeFilter('all'); setShowArchived(false) } },
-    { key: 'balance', label: 'Balance (this page)', value: formatCurrency(totalBalanceThisPage), icon: PiggyBank, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: false, onClick: () => { setTypeFilter('all'); setShowArchived(false) } },
+    { key: 'balance', label: 'Balance (this page)', value: privacyOn ? maskedAmount() : formatCurrency(totalBalanceThisPage), icon: PiggyBank, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: false, onClick: () => { setTypeFilter('all'); setShowArchived(false) } },
     { key: 'inactive', label: 'Inactive (this page)', value: inactiveThisPage, icon: Landmark, iconBg: 'bg-red-50 dark:bg-red-500/10', iconColor: 'text-red-600 dark:text-red-400', isActive: false, onClick: () => setShowArchived(false) },
     { key: 'archived', label: 'Archived', value: showArchived ? meta.total : '—', icon: Archive, iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-500 dark:text-slate-400', isActive: showArchived, onClick: () => setShowArchived(true) },
   ]
@@ -257,7 +257,7 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap text-ink">{a.account_type}</td>
                     <td className="px-4 py-3.5 whitespace-nowrap font-medium tabular-nums text-ink">
-                      {formatCurrency(a.current_balance)}
+                      {privacyOn ? maskedAmount() : formatCurrency(a.current_balance)}
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[a.status]}`}>{a.status}</span>
