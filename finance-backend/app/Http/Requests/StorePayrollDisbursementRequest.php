@@ -37,7 +37,7 @@ class StorePayrollDisbursementRequest extends FormRequest
             'department_id.exists' => 'The specified department does not exist in the database.',
             'payroll_batch_number.required' => 'The payroll batch number is required.',
             'payroll_batch_number.unique' => 'A disbursement voucher with this payroll batch number already exists.',
-            'payee.required' => 'The payee description is required.',
+            'payee.required' => 'The recipient description is required.',
             'pay_period_start.required' => 'The pay period start date is required.',
             'pay_period_end.required' => 'The pay period end date is required.',
             'pay_period_end.after_or_equal' => 'The pay period end date must be on or after the pay period start date.',

@@ -42,6 +42,33 @@ class PermissionController extends Controller
     {
         $user = $request->user();
 
+        // Mirror User::hasPermission()'s admin/super-admin bypass: backend
+        // middleware allows these roles unconditionally, so the frontend's
+        // permission list must also never lock them out — otherwise a role
+        // whose permission rows are pending a fresh seeder run (e.g. a new
+        // module on a still-deploying server) gets an "Access Denied" page
+        // even though the API would have let them through.
+        if (
+            $user->hasAnyRole([
+                'super-admin',
+                'Super Admin',
+                'admin',
+                'Admin',
+            ])
+        ) {
+            $permissionNames = Permission::query()
+                ->where('is_active', true)
+                ->orderBy('module')
+                ->orderBy('display_name')
+                ->pluck('permission_name');
+
+            return response()->json([
+                'success' => true,
+                'message' => '',
+                'data' => $permissionNames->values(),
+            ]);
+        }
+
         $permissionNames = $user->role
             ? $user->role->permissions()->where('permissions.is_active', true)->pluck('permission_name')
             : collect();

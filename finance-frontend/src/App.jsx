@@ -21,6 +21,7 @@ import Departments from './pages/Departments'
 import CashAccounts from './pages/CashAccounts'
 import FixedAssets from './pages/FixedAssets'
 import ExpenseCategories from './pages/ExpenseCategories'
+import ChartOfAccounts from './pages/ChartOfAccounts'
 import Titles from './pages/Titles'
 import AccountsReceivable from './pages/AccountsReceivable'
 import Collections from './pages/Collections'
@@ -132,6 +133,11 @@ export default function App() {
           <Route path="/master-data/expense-categories" element={
             <RequirePermission permission="expense-categories.view">
               <ExpenseCategories crumbs={['Master Data', 'Expense Categories']} />
+            </RequirePermission>
+          } />
+          <Route path="/master-data/chart-of-accounts" element={
+            <RequirePermission permission="chart-of-accounts.view">
+              <ChartOfAccounts crumbs={['Master Data', 'Chart of Accounts']} />
             </RequirePermission>
           } />
           <Route path="/master-data/titles" element={

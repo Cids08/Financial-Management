@@ -12,6 +12,7 @@ import Button from '../components/Button'
 import Pagination from '../components/Pagination'
 import { formatCurrency, formatCurrencyRaw, currencySymbol, convertAmount } from '../utils/formatters'
 import { useReports } from '../hooks/useReports'
+import { useProfile } from '../hooks/useProfile'
 import { useCompany } from '../context/CompanyContext'
 import { usePrivacy } from '../context/PrivacyContext'
 
@@ -96,36 +97,319 @@ function ReportLoading() {
 // -- Report generation (opens a formatted, printable document  -  "Save as PDF" from the browser print dialog works with no extra libraries) --
 
 const PRINT_STYLES = `
-  * { box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; color: #1e293b; padding: 36px 44px; margin: 0; }
-  .letterhead { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; margin-bottom: 24px; }
-  .letterhead img { height: 52px; width: 52px; object-fit: contain; border-radius: 6px; }
-  .letterhead .company-name { font-size: 18px; font-weight: 700; margin: 0; color: #0f172a; }
-  .letterhead .company-meta { font-size: 11px; color: #64748b; margin: 2px 0 0; }
-  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0f172a; padding-bottom: 16px; margin-bottom: 20px; }
-  .header h1 { margin: 0 0 4px; font-size: 20px; color: #0f172a; }
-  .header p { margin: 0; color: #64748b; font-size: 13px; }
-  table { width: 100%; border-collapse: collapse; margin-top: 12px; table-layout: auto; }
-  th, td { padding: 9px 12px; border-bottom: 1px solid #e2e8f0; font-size: 12px; text-align: left; }
-  th { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #475569; border-bottom: 2px solid #0f172a; }
-  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  tr.section-heading td { background: #f8fafc; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: #334155; }
-  tfoot td { border-top: 2px solid #0f172a; font-weight: 700; }
-  .positive { color: #059669; }
-  .negative { color: #dc2626; }
-  .chart-card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 18px; margin: 16px 0 24px; background: #f8fafc; }
-  .chart-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #475569; margin-bottom: 12px; }
-  .badge-pill { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 600; font-family: monospace; white-space: nowrap; }
-  .badge-pos { background: #dcfce7; color: #15803d; }
-  .badge-neg { background: #fee2e2; color: #b91c1c; }
-  .footer { margin-top: 32px; font-size: 11px; color: #94a3b8; text-align: center; }
-  .report-block { margin-top: 0; }
-  .report-block + .report-block { margin-top: 36px; }
-  .report-block h2 { font-size: 15px; margin: 0 0 4px; }
-  .report-block .block-sub { margin: 0 0 10px; font-size: 12px; color: #64748b; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  @page {
+    size: auto;
+    margin: 0.75in;
+  }
+
+  body {
+    font-family: Arial, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: #1e293b;
+    font-size: 11px;
+    line-height: 1.45;
+    background: #f1f5f9;
+    padding: 24px 0;
+    margin: 0;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* ── 1 Paper Per Report / Part (Standard Office / ERP Margins) ── */
+  .report-page {
+    width: 100%;
+    max-width: 8.5in;
+    min-height: 11in;
+    margin: 0 auto 30px auto;
+    padding: 0.75in;
+    background: #ffffff;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.06);
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .report-page:last-child {
+    margin-bottom: 0;
+  }
+
+  .report-page-top {
+    flex: 1;
+  }
+  .report-page-bottom {
+    margin-top: 20px;
+    page-break-inside: avoid;
+  }
+
+  /* ── Corporate Letterhead (SAP B1 Header) ── */
+  .doc-header {
+    width: 100%;
+    border-bottom: 2.5px solid #0f2744;
+    padding-bottom: 10px;
+    margin-bottom: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+  .doc-header-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .doc-header-logo {
+    max-height: 48px;
+    max-width: 150px;
+    height: auto;
+    width: auto;
+    object-fit: contain;
+    display: block;
+    flex-shrink: 0;
+  }
+  .doc-header-logo-init {
+    height: 44px;
+    width: 44px;
+    background: #0f2744;
+    color: #ffffff;
+    font-weight: 800;
+    font-size: 20px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .doc-header-company {
+    flex: 1;
+  }
+  .doc-header-company-name {
+    font-size: 15px;
+    font-weight: 800;
+    color: #0f2744;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    line-height: 1.2;
+  }
+  .doc-header-meta {
+    font-size: 9.5px;
+    color: #475569;
+    margin-top: 3px;
+    line-height: 1.35;
+  }
+  .doc-header-meta-box {
+    text-align: right;
+    min-width: 230px;
+  }
+  .doc-header-meta-box .doc-title {
+    font-size: 13px;
+    font-weight: 800;
+    color: #0f2744;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+  .doc-meta-row {
+    font-size: 9px;
+    color: #334155;
+    line-height: 1.4;
+  }
+  .doc-meta-label {
+    color: #64748b;
+    font-weight: 600;
+  }
+  .doc-meta-val {
+    font-weight: 700;
+    color: #0f2744;
+  }
+
+  /* ── Report Table ── */
+  .report-table-wrapper {
+    margin-top: 8px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 4px;
+    margin-bottom: 8px;
+    border: 1px solid #cbd5e1;
+    font-size: 11px;
+  }
+  thead tr th {
+    background: #1e293b;
+    color: #ffffff;
+    font-size: 9.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 7px 10px;
+    border: 1px solid #1e293b;
+    white-space: nowrap;
+  }
+  tbody tr td {
+    padding: 7px 10px;
+    font-size: 11px;
+    border: 1px solid #e2e8f0;
+    color: #1e293b;
+  }
+  tbody tr:nth-child(even) td {
+    background: #f8fafc;
+  }
+  td.num, th.num {
+    text-align: right;
+    font-family: "Consolas", "Courier New", monospace;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  /* Section heading rows (REVENUE, EXPENSES) */
+  tr.section-heading td {
+    background: #f1f5f9;
+    color: #0f2744;
+    font-size: 9.5px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    padding: 5px 10px;
+    border: 1px solid #cbd5e1;
+  }
+
+  /* Accounting Totals Row: Classic double bottom border */
+  tfoot tr td {
+    background: #f8fafc;
+    color: #0f2744;
+    font-weight: 800;
+    font-size: 11.5px;
+    padding: 7px 10px;
+    border-top: 1.5px solid #0f2744;
+    border-bottom: 3px double #0f2744;
+    border-left: 1px solid #cbd5e1;
+    border-right: 1px solid #cbd5e1;
+  }
+  .positive { color: #15803d; font-weight: 700; }
+  .negative { color: #b91c1c; font-weight: 700; }
+
+  /* ── Comparative Chart Card ── */
+  .chart-card {
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    padding: 10px 14px;
+    margin: 10px 0;
+    background: #f8fafc;
+  }
+  .chart-title {
+    font-size: 9.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #475569;
+    margin-bottom: 8px;
+  }
+
+  /* ── Signature Section (SAP B1 Executive Sign-off) ── */
+  .signature-section {
+    margin-top: 20px;
+    padding-top: 12px;
+    border-top: 1.5px solid #cbd5e1;
+    page-break-inside: avoid;
+  }
+  .signature-section-title {
+    font-size: 8.5px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #64748b;
+    margin-bottom: 10px;
+  }
+  .signature-row {
+    display: flex;
+    gap: 20px;
+  }
+  .signature-box {
+    flex: 1;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-top: 2.5px solid #0f2744;
+    padding: 8px 10px;
+    border-radius: 2px;
+  }
+  .signature-box .sig-label {
+    font-size: 8.5px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #0f2744;
+  }
+  .signature-box .sig-line {
+    border-bottom: 1px solid #94a3b8;
+    height: 30px;
+    margin: 4px 0 6px;
+  }
+  .signature-box .sig-name {
+    font-size: 9.5px;
+    font-weight: 700;
+    color: #0f2744;
+  }
+  .signature-box .sig-role {
+    font-size: 8.5px;
+    color: #64748b;
+    margin-top: 1px;
+  }
+  .signature-box .sig-date {
+    font-size: 8.5px;
+    color: #94a3b8;
+    margin-top: 4px;
+  }
+
+  /* ── Document Footer ── */
+  .doc-footer {
+    width: 100%;
+    border-top: 1px solid #cbd5e1;
+    padding-top: 6px;
+    margin-top: 10px;
+    margin-bottom: 2px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 8px;
+    color: #94a3b8;
+  }
+  .doc-footer .footer-brand {
+    color: #0f2744;
+    font-weight: 700;
+  }
+  .doc-footer .footer-conf {
+    font-style: italic;
+    color: #64748b;
+  }
+
+  /* ── Print Media Rules ── */
   @media print {
-    body { padding: 20px; }
-    .report-block + .report-block { page-break-before: always; }
+    @page {
+      size: auto;
+      margin: 0.75in;
+    }
+    html, body {
+      margin: 0 !important;
+      padding: 0 !important;
+      background: #ffffff !important;
+    }
+    .report-page {
+      width: 100% !important;
+      max-width: 100% !important;
+      min-height: calc(100vh - 1.5in) !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      box-shadow: none !important;
+      page-break-after: always !important;
+      page-break-inside: avoid !important;
+      break-after: page !important;
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: space-between !important;
+    }
+    .report-page:last-child {
+      page-break-after: auto !important;
+      break-after: auto !important;
+    }
   }
 `
 
@@ -174,12 +458,6 @@ function generateComparativeBarSvg({ title, currentLabel, priorLabel, items }) {
   `
 }
 
-// Resolves once the image has actually finished downloading (or after a
-// failure/timeout  -  never blocks the export indefinitely on a bad URL).
-// Without this, window.print() can fire before a freshly-opened popup's
-// <img> has loaded, especially on longer documents with more HTML to
-// parse first  -  the logo silently never appears in that case, even
-// though its src was correct all along.
 function preloadImage(url, timeoutMs = 3000) {
   return new Promise((resolve) => {
     if (!url) { resolve(); return }
@@ -192,62 +470,104 @@ function preloadImage(url, timeoutMs = 3000) {
   })
 }
 
-function printReport(title, subtitle, bodyHtml, company) {
-  const win = window.open('', '_blank', 'width=850,height=1000')
-  if (!win) return
-  const generatedAt = new Date().toLocaleString('en-PH', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+// Builds the SAP B1 enterprise letterhead header
+function buildDocHeader(company, title, subtitle, generatedAt, generatedBy, userRole) {
+  const logoEl = company?.logoUrl
+    ? `<img class="doc-header-logo" src="${company.logoUrl}" alt="${company.name || 'Company'} logo" style="max-height: 48px; max-width: 150px; height: auto; width: auto; object-fit: contain; display: block;" />`
+    : `<div class="doc-header-logo-init">${(company?.name || 'FMS').charAt(0).toUpperCase()}</div>`
 
-  // Letterhead renders once, above everything else  -  since it sits
-  // outside the per-report .report-block loop (which is what gets the
-  // page-break-before rule), it only ever appears on the first printed
-  // page, never repeated on pages 2+ of a multi-report export.
-  const letterheadHtml = company?.name ? `
-    <div class="letterhead">
-      ${company.logoUrl ? `<img src="${company.logoUrl}" alt="${company.name} logo" />` : ''}
-      <div>
-        <p class="company-name">${company.name}</p>
-        ${company.address ? `<p class="company-meta">${company.address}</p>` : ''}
+  const metaParts = [company?.address, company?.phone, company?.email].filter(Boolean)
+  const metaHtml = metaParts.length
+    ? `<div class="doc-header-meta">${metaParts.join(' &nbsp;·&nbsp; ')}</div>`
+    : ''
+
+  const userMeta = generatedBy
+    ? `<div class="doc-meta-row"><span class="doc-meta-label">Generated By:</span> <span class="doc-meta-val">${generatedBy}${userRole ? ` (${userRole})` : ''}</span></div>`
+    : ''
+
+  return `
+    <div class="doc-header">
+      <div class="doc-header-brand">
+        ${logoEl}
+        <div class="doc-header-company">
+          <div class="doc-header-company-name">${company?.name || 'Financial Management System'}</div>
+          ${metaHtml}
+        </div>
+      </div>
+      <div class="doc-header-meta-box">
+        <div class="doc-title">${title}</div>
+        <div class="doc-meta-row"><span class="doc-meta-label">Period:</span> <span class="doc-meta-val">${subtitle || 'All Records'}</span></div>
+        <div class="doc-meta-row"><span class="doc-meta-label">Run Date:</span> <span class="doc-meta-val">${generatedAt}</span></div>
+        ${userMeta}
+        <div class="doc-meta-row"><span class="doc-meta-label">Currency:</span> <span class="doc-meta-val">PHP (₱)</span></div>
       </div>
     </div>
-  ` : ''
+  `
+}
 
-  win.document.write(`
-    <html>
-      <head>
-        <title>${title}</title>
-        <style>${PRINT_STYLES}</style>
-      </head>
-      <body>
-        ${letterheadHtml}
-        <div class="header">
-          <div>
-            <h1>${title}</h1>
-            <p>${subtitle}</p>
-          </div>
-        </div>
-        ${bodyHtml}
-        <div class="footer">Generated on ${generatedAt}</div>
-      </body>
-    </html>
-  `)
+// Signature / certification block — SAP B1 style 3-column executive sign-off
+function buildSignatureBlock(userName, userRole, dateStr) {
+  const preparedName = userName || 'Accounting Staff / Bookkeeper'
+  const preparedRole = userRole || 'Finance Officer'
+  const dateDisplay = dateStr ? `Date: ${dateStr}` : 'Date: ________________________'
+
+  return `
+  <div class="signature-section">
+    <div class="signature-section-title">Audit, Certification &amp; Management Approval</div>
+    <div class="signature-row">
+      <div class="signature-box">
+        <div class="sig-label">Prepared By:</div>
+        <div class="sig-line"></div>
+        <div class="sig-name">${preparedName}</div>
+        <div class="sig-role">${preparedRole}</div>
+        <div class="sig-date">${dateDisplay}</div>
+      </div>
+      <div class="signature-box">
+        <div class="sig-label">Verified &amp; Reviewed By:</div>
+        <div class="sig-line"></div>
+        <div class="sig-name">Internal Auditor / Controller</div>
+        <div class="sig-role">Internal Audit Department</div>
+        <div class="sig-date">Date: ________________________</div>
+      </div>
+      <div class="signature-box">
+        <div class="sig-label">Approved By:</div>
+        <div class="sig-line"></div>
+        <div class="sig-name">Chief Financial Officer / Managing Director</div>
+        <div class="sig-role">Executive Management</div>
+        <div class="sig-date">Date: ________________________</div>
+      </div>
+    </div>
+  </div>
+`
+}
+
+function printReport(title, subtitle, pagesHtml, company) {
+  const win = window.open('', '_blank', 'width=950,height=1100')
+  if (!win) return
+
+  win.document.write(`<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>${title} — ${company?.name ?? 'FMS'}</title>
+    <style>${PRINT_STYLES}</style>
+  </head>
+  <body>
+    ${pagesHtml}
+  </body>
+</html>`)
   win.document.close()
   win.focus()
 
-  // Print only after the popup's OWN <img> element has actually finished
-  // decoding  -  not just after preloadImage() has warmed the browser
-  // cache in the parent window. Those are two different moments: the
-  // bytes being cached doesn't mean this specific document's <img> has
-  // painted yet, and Chrome's print snapshot can still be taken in
-  // between those two things without this explicit wait.
-  const logoImg = win.document.querySelector('.letterhead img')
+  const logoImg = win.document.querySelector('.doc-header img')
   if (logoImg && !logoImg.complete) {
     let printed = false
     const doPrint = () => { if (!printed) { printed = true; win.print() } }
     logoImg.addEventListener('load', doPrint)
     logoImg.addEventListener('error', doPrint)
-    setTimeout(doPrint, 2000) // fallback if the image never settles
+    setTimeout(doPrint, 2500)
   } else {
-    win.print()
+    setTimeout(() => win.print(), 250)
   }
 }
 
@@ -297,6 +617,10 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
   const { data, loading, error, fetchReport, fetchAll } = useReports()
 
   const { name: companyName, logoUrl: companyLogoUrl, address: companyAddress, loading: companyLoading } = useCompany()
+
+  const { profile } = useProfile()
+  const currentUserName = profile?.name || 'Authorized Staff'
+  const currentUserRole = profile?.title || profile?.role || profile?.department || 'Finance Officer'
 
   usePrivacy()
 
@@ -498,6 +822,12 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
     if (!isComp) {
       return `
         <table>
+          <thead>
+            <tr>
+              <th style="width: 70%;">Particulars / Account</th>
+              <th class="num" style="width: 30%;">Amount (${currencySymbol()})</th>
+            </tr>
+          </thead>
           <tbody>
             <tr class="section-heading"><td colspan="2">Revenue</td></tr>
             ${(incomeStatement.revenue || []).map((r) => `<tr><td>${r.account}</td><td class="num">${formatCurrencyRaw(r.amount)}</td></tr>`).join('')}
@@ -600,7 +930,12 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
       return `
         <table>
           <thead>
-            <tr><th>Cash Account</th><th class="num">Inflow</th><th class="num">Outflow</th><th class="num">Net Change</th></tr>
+            <tr>
+              <th style="width: 46%;">Cash Account</th>
+              <th class="num" style="width: 18%;">Inflow (${currencySymbol()})</th>
+              <th class="num" style="width: 18%;">Outflow (${currencySymbol()})</th>
+              <th class="num" style="width: 18%;">Net Change (${currencySymbol()})</th>
+            </tr>
           </thead>
           <tbody>
             ${(Array.isArray(cashFlow) ? cashFlow : []).map((r) => {
@@ -669,7 +1004,14 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
   const buildARAgingTable = () => `
     <table>
       <thead>
-        <tr><th>Customer</th><th class="num">Current</th><th class="num">1-30 Days</th><th class="num">31-60 Days</th><th class="num">61-90 Days</th><th class="num">90+ Days</th></tr>
+        <tr>
+          <th style="width: 30%;">Customer Name</th>
+          <th class="num" style="width: 14%;">Current</th>
+          <th class="num" style="width: 14%;">1-30 Days</th>
+          <th class="num" style="width: 14%;">31-60 Days</th>
+          <th class="num" style="width: 14%;">61-90 Days</th>
+          <th class="num" style="width: 14%;">90+ Days</th>
+        </tr>
       </thead>
       <tbody>
         ${(Array.isArray(arAging) ? arAging : []).map((r) => agingRowHtml(r.customer, r)).join('')}
@@ -683,7 +1025,14 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
   const buildAPAgingTable = () => `
     <table>
       <thead>
-        <tr><th>Supplier</th><th class="num">Current</th><th class="num">1-30 Days</th><th class="num">31-60 Days</th><th class="num">61-90 Days</th><th class="num">90+ Days</th></tr>
+        <tr>
+          <th style="width: 30%;">Supplier Name</th>
+          <th class="num" style="width: 14%;">Current</th>
+          <th class="num" style="width: 14%;">1-30 Days</th>
+          <th class="num" style="width: 14%;">31-60 Days</th>
+          <th class="num" style="width: 14%;">61-90 Days</th>
+          <th class="num" style="width: 14%;">90+ Days</th>
+        </tr>
       </thead>
       <tbody>
         ${(Array.isArray(apAging) ? apAging : []).map((r) => agingRowHtml(r.supplier, r)).join('')}
@@ -715,7 +1064,12 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
       return `
         <table>
           <thead>
-            <tr><th>Department</th><th class="num">Allocated Budget</th><th class="num">Actual Spend</th><th class="num">Variance</th></tr>
+            <tr>
+              <th style="width: 40%;">Department / Cost Center</th>
+              <th class="num" style="width: 20%;">Allocated Budget</th>
+              <th class="num" style="width: 20%;">Actual Spend</th>
+              <th class="num" style="width: 20%;">Variance</th>
+            </tr>
           </thead>
           <tbody>
             ${list.map((r) => {
@@ -788,27 +1142,75 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
   const handleExportActive = async () => {
     const { title: reportTitle, table } = REPORT_BUILDERS[activeReport]
     await preloadImage(company?.logoUrl)
+    const generatedAt = new Date().toLocaleString('en-PH', {
+      year: 'numeric', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    })
+    const generatedDate = new Date().toLocaleDateString('en-PH', {
+      year: 'numeric', month: 'short', day: 'numeric',
+    })
     const sub = isComparing
       ? `Period: ${activePeriodLabel} (Compared to ${appliedFilters.compareMode === 'prior_year' ? 'Prior Year' : 'Prior Period'})`
       : `Period: ${activePeriodLabel}`
-    printReport(reportTitle, sub, table(), company)
+
+    const pageHtml = `
+      <div class="report-page">
+        <div class="report-page-top">
+          ${buildDocHeader(company, reportTitle, sub, generatedAt, currentUserName, currentUserRole)}
+          <div class="report-table-wrapper">
+            ${table()}
+          </div>
+        </div>
+        <div class="report-page-bottom">
+          ${buildSignatureBlock(currentUserName, currentUserRole, generatedDate)}
+          <div class="doc-footer">
+            <span class="footer-brand">${company?.name ?? 'Financial Management System'} · Transaction Core</span>
+            <span class="footer-conf">CONFIDENTIAL · Official Statement</span>
+            <span>Generated: ${generatedAt}</span>
+          </div>
+        </div>
+      </div>
+    `
+    printReport(reportTitle, sub, pageHtml, company)
   }
 
   const handleExportAll = async () => {
     setExporting(true)
     try {
       await Promise.all([fetchAll(appliedFilters), preloadImage(company?.logoUrl)])
-      const body = REPORT_CARDS.map((card) => `
-        <div class="report-block">
-          <h2>${card.title}</h2>
-          <p class="block-sub">${card.description}</p>
-          ${REPORT_BUILDERS[card.key].table()}
+      const generatedAt = new Date().toLocaleString('en-PH', {
+        year: 'numeric', month: 'short', day: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      })
+      const generatedDate = new Date().toLocaleDateString('en-PH', {
+        year: 'numeric', month: 'short', day: 'numeric',
+      })
+      const sub = isComparing
+        ? `Period: ${activePeriodLabel} (Compared to ${appliedFilters.compareMode === 'prior_year' ? 'Prior Year' : 'Prior Period'})`
+        : `Period: ${activePeriodLabel}`
+
+      // Each report gets its own individual paper/page with its own letterhead,
+      // full table, and executive sign-off block at the bottom.
+      const pagesHtml = REPORT_CARDS.map((card, idx) => `
+        <div class="report-page">
+          <div class="report-page-top">
+            ${buildDocHeader(company, `${idx + 1}.0 ${card.title.toUpperCase()}`, sub, generatedAt, currentUserName, currentUserRole)}
+            <div class="report-table-wrapper">
+              ${REPORT_BUILDERS[card.key].table()}
+            </div>
+          </div>
+          <div class="report-page-bottom">
+            ${buildSignatureBlock(currentUserName, currentUserRole, generatedDate)}
+            <div class="doc-footer">
+              <span class="footer-brand">${company?.name ?? 'Financial Management System'} · Transaction Core</span>
+              <span class="footer-conf">CONFIDENTIAL · Part ${idx + 1} of ${REPORT_CARDS.length}</span>
+              <span>Generated: ${generatedAt}</span>
+            </div>
+          </div>
         </div>
       `).join('')
-      const sub = isComparing
-        ? `Period: ${activePeriodLabel} (Compared to ${appliedFilters.compareMode === 'prior_year' ? 'Prior Year' : 'Prior Period'}) — All Reports`
-        : `Period: ${activePeriodLabel} — All Reports`
-      printReport('Financial Reports Package', sub, body, company)
+
+      printReport('Financial Reports Package', sub, pagesHtml, company)
     } finally {
       setExporting(false)
     }

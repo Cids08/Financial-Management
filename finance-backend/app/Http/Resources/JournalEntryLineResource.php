@@ -23,7 +23,32 @@ class JournalEntryLineResource extends JsonResource
             'reference_type' => $this->reference_type,
             'reference_id' => $this->reference_id,
             'remarks' => $this->remarks,
+            'source' => $this->buildSource(),
             'created_at' => $this->created_at?->toIso8601String(),
         ];
+    }
+
+    /**
+     * "Where did this line come from" — counterparty (customer/client/supplier/
+     * payee) + the source document number. Falls back to the module label when
+     * the source record is gone or unlinked.
+     */
+    private function buildSource(): array
+    {
+        $info = $this->source_info;
+
+        return [
+            'label' => $info['label'] ?? $this->prettyReference(),
+            'name' => $info['name'] ?? '',
+            'reference' => $info['reference'] ?? '',
+            'reference_type' => $this->reference_type,
+            'reference_id' => $this->reference_id,
+        ];
+    }
+
+    private function prettyReference(): string
+    {
+        $text = trim((string) preg_replace('/[_-]+/', ' ', (string) $this->reference_type));
+        return $text === '' ? '—' : ucfirst(strtolower($text));
     }
 }

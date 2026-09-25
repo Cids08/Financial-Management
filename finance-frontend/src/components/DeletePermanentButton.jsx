@@ -66,11 +66,11 @@ export default function DeletePermanentButton({ endpoint, label = 'record', name
           </>
         }
       >
-        <p className="text-sm text-ink">
+        <p className="break-words text-sm text-ink">
           This will permanently delete the archived {label}
-          {name ? <span className="font-semibold">: {name}</span> : null}.
+          {name ? <span className="break-words font-semibold">: {name}</span> : null}.
         </p>
-        <p className="mt-2 text-xs text-muted">
+        <p className="mt-2 break-words text-xs text-muted">
           This action cannot be undone. If you might need the record again, choose Restore instead.
         </p>
         {error && (

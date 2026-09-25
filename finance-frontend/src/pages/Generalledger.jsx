@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Search, BookOpen, Scale, TrendingUp, TrendingDown, Info, ListTree, Rows3, Loader2, AlertTriangle } from 'lucide-react'
+import { Search, BookOpen, Scale, TrendingUp, TrendingDown, Info, ListTree, Layers, Rows3, Loader2, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
@@ -122,7 +122,7 @@ function resolveDatePreset(key) {
 }
 
 export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Financial Transactions', 'General Ledger'] }) {
-  const [view, setView] = useState('journal') // 'journal' | 'trial-balance'
+  const [view, setView] = useState('journal') // 'journal' | 'ledger' | 'trial-balance'
   const [search, setSearch] = useState(EMPTY_FILTERS.search)
   const [debouncedSearch, setDebouncedSearch] = useState(EMPTY_FILTERS.search)
   const [referenceFilter, setReferenceFilter] = useState(EMPTY_FILTERS.referenceFilter)
@@ -140,6 +140,8 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
   const [lines, setLines] = useState([])
   const [meta, setMeta] = useState({ current_page: 1, last_page: 1, total: 0, grand_totals: { debit: 0, credit: 0, balanced: true, difference: 0 } })
   const [trialBalance, setTrialBalance] = useState([])
+  const [ledgerData, setLedgerData] = useState({ accounts: [], totals: { debit: 0, credit: 0, balance: 0 } })
+  const [collapsedAccounts, setCollapsedAccounts] = useState(() => new Set())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -208,6 +210,26 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
       .finally(() => setLoading(false))
   }, [view, filterParams])
 
+  // Account ledger (SAP B1 style)  -  depends on filters only (no pagination).
+  useEffect(() => {
+    if (view !== 'ledger') return
+    setLoading(true)
+    setError(null)
+    apiFetch(`/api/general-ledger/ledger?${filterParams.toString()}`)
+      .then((res) => res.json())
+      .then((json) => {
+        const data = json.data || { accounts: [], totals: { debit: 0, credit: 0, balance: 0 } }
+        setLedgerData(data)
+        const collapsed = new Set()
+        data.accounts.forEach((acc) => {
+          if (acc.lines && acc.lines.length > 4) collapsed.add(acc.account_id)
+        })
+        setCollapsedAccounts(collapsed)
+      })
+      .catch(() => setError('Could not load the account ledger. Please try again.'))
+      .finally(() => setLoading(false))
+  }, [view, filterParams])
+
   const trialTotals = useMemo(() => ({
     debit: trialBalance.reduce((sum, r) => sum + Number(r.total_debit || 0), 0),
     credit: trialBalance.reduce((sum, r) => sum + Number(r.total_credit || 0), 0),
@@ -231,6 +253,19 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
     setDateTo(EMPTY_FILTERS.dateTo)
     setDatePreset('all')
     setLineFilter(EMPTY_FILTERS.lineFilter)
+  }
+
+  const toggleAccount = (accountId) => {
+    setCollapsedAccounts((prev) => {
+      const next = new Set(prev)
+      if (next.has(accountId)) next.delete(accountId)
+      else next.add(accountId)
+      return next
+    })
+  }
+
+  const setAllAccounts = (collapsed) => {
+    setCollapsedAccounts(new Set(collapsed ? ledgerData.accounts.map((acc) => acc.account_id) : []))
   }
 
   const statCards = [
@@ -408,6 +443,13 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
             </button>
             <button
               type="button"
+              onClick={() => setView('ledger')}
+              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors duration-150 ${view === 'ledger' ? 'bg-surface text-ink shadow-sm' : 'text-muted hover:text-ink'}`}
+            >
+              <Layers size={13} /> Ledger
+            </button>
+            <button
+              type="button"
               onClick={() => setView('trial-balance')}
               className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors duration-150 ${view === 'trial-balance' ? 'bg-surface text-ink shadow-sm' : 'text-muted hover:text-ink'}`}
             >
@@ -431,9 +473,9 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
             <thead className="bg-surface">
                 <tr className="border-b border-border">
                   <th className="w-28 text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Date</th>
-                  <th className="w-48 text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Account</th>
+                  <th className="w-44 text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Account</th>
                   <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3">Description</th>
-                  <th className="w-32 text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Source</th>
+                  <th className="w-56 text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Source</th>
                   <th className="w-28 text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Debit</th>
                   <th className="w-28 text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Credit</th>
                   <th className="w-12 text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3"></th>
@@ -454,10 +496,20 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
                       <span className="block truncate" title={e.description}>{e.description}</span>
                     </td>
                     <td className="px-4 py-3.5 min-w-0">
-                      {e.reference_type && (
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium break-words max-w-full ${getSourceStyle(e.reference_type)}`}>
-                          {formatSource(e.reference_type)}
+                      {e.source?.label && (
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium break-words max-w-full ${getSourceStyle(e.source.label)}`}>
+                          {e.source.label}
                         </span>
+                      )}
+                      {e.source?.name && (
+                        <div className="mt-1 text-xs font-medium text-ink leading-snug truncate" title={e.source.name}>
+                          {e.source.name}
+                        </div>
+                      )}
+                      {e.source?.reference && (
+                        <div className="text-[10.5px] text-muted leading-snug truncate" title={e.source.reference}>
+                          Ref: {e.source.reference}
+                        </div>
                       )}
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap text-right tabular-nums text-ink text-xs">{e.debit ? formatCurrency(e.debit) : '—'}</td>
@@ -493,6 +545,163 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
         </div>
       )}
 
+      {!loading && view === 'ledger' && (
+        <div className={PANEL}>
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+              Accounts ({ledgerData.accounts.length})  ·  Opening → running balance per account
+            </p>
+            <div className="flex items-center gap-3">
+              <button type="button" onClick={() => setAllAccounts(true)} className="text-xs font-medium text-primary-dark hover:underline">Collapse all</button>
+              <button type="button" onClick={() => setAllAccounts(false)} className="text-xs font-medium text-primary-dark hover:underline">Expand all</button>
+            </div>
+          </div>
+
+          <div className="divide-y divide-border">
+            {ledgerData.accounts.map((acc) => {
+              const isCollapsed = collapsedAccounts.has(acc.account_id)
+              const balance = Number(acc.balance || 0)
+              return (
+                <div key={acc.account_id} className="px-4 py-1.5">
+                  <button
+                    type="button"
+                    onClick={() => toggleAccount(acc.account_id)}
+                    className="flex w-full items-center gap-2 py-2 text-left"
+                  >
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center text-muted" aria-hidden="true">
+                      {isCollapsed ? <ChevronRight size={15} /> : <ChevronDown size={15} />}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-xs font-semibold text-ink" title={`${acc.account_code}  -  ${acc.account_name}`}>
+                      {acc.account_code}  -  {acc.account_name}
+                    </span>
+                    {acc.lines.length > 0 && (
+                      <span className="text-[10.5px] text-muted whitespace-nowrap">{acc.lines.length} post{acc.lines.length === 1 ? '' : 'ings'}</span>
+                    )}
+                    {acc.sub_accounts?.length > 0 && (
+                      <span className="whitespace-nowrap rounded-full bg-bg border border-border px-2 py-0.5 text-[10px] font-medium text-muted" title={acc.sub_accounts.map((s) => `${s.code} — ${s.name}`).join('\n')}>
+                        {acc.sub_accounts.length} sub-account{acc.sub_accounts.length === 1 ? '' : 's'}
+                      </span>
+                    )}
+                    <span className="w-28 whitespace-nowrap text-right text-[10.5px] text-muted tabular-nums">
+                      Open {formatCurrency(Math.abs(acc.opening_balance))}{acc.opening_balance > 0 ? ' Dr' : acc.opening_balance < 0 ? ' Cr' : ''}
+                    </span>
+                    <span className="w-28 whitespace-nowrap text-right text-[10.5px] text-muted tabular-nums">Dr {formatCurrency(acc.total_debit)}</span>
+                    <span className="w-28 whitespace-nowrap text-right text-[10.5px] text-muted tabular-nums">Cr {formatCurrency(acc.total_credit)}</span>
+                    <span className={`w-32 whitespace-nowrap text-right text-xs font-semibold tabular-nums ${balance > 0 ? 'text-emerald-600 dark:text-emerald-400' : balance < 0 ? 'text-purple-600 dark:text-purple-400' : 'text-muted'}`}>
+                      {balance === 0 ? '—' : formatCurrency(Math.abs(balance)) + (balance > 0 ? ' Dr' : ' Cr')}
+                    </span>
+                  </button>
+
+                  {!isCollapsed && acc.lines.length > 0 && (
+                    <div className="mt-1.5 overflow-hidden rounded-lg border border-border">
+                      <table className="w-full text-sm table-fixed">
+                        <thead className="bg-bg">
+                          <tr className="border-b border-border">
+                            <th className="w-24 text-left font-semibold text-muted text-[10.5px] uppercase tracking-wide px-3 py-2 whitespace-nowrap">Date</th>
+                            <th className="w-36 text-left font-semibold text-muted text-[10.5px] uppercase tracking-wide px-3 py-2 whitespace-nowrap">Trans No.</th>
+                            {acc.sub_accounts?.length > 0 && (
+                              <th className="w-36 text-left font-semibold text-muted text-[10.5px] uppercase tracking-wide px-3 py-2 whitespace-nowrap">Account</th>
+                            )}
+                            <th className="text-left font-semibold text-muted text-[10.5px] uppercase tracking-wide px-3 py-2">Description</th>
+                            <th className="w-52 text-left font-semibold text-muted text-[10.5px] uppercase tracking-wide px-3 py-2 whitespace-nowrap">Source</th>
+                            <th className="w-28 text-right font-semibold text-muted text-[10.5px] uppercase tracking-wide px-3 py-2 whitespace-nowrap">Debit</th>
+                            <th className="w-28 text-right font-semibold text-muted text-[10.5px] uppercase tracking-wide px-3 py-2 whitespace-nowrap">Credit</th>
+                            <th className="w-32 text-right font-semibold text-muted text-[10.5px] uppercase tracking-wide px-3 py-2 whitespace-nowrap">Balance</th>
+                            <th className="w-10 text-right font-semibold text-muted text-[10.5px] uppercase tracking-wide px-3 py-2"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {acc.lines.map((line) => (
+                            <tr
+                              key={line.id}
+                              onClick={() => openGroupDetail(line)}
+                              className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150 cursor-pointer"
+                            >
+                              <td className="px-3 py-2.5 whitespace-nowrap text-ink text-xs">{formatDate(line.transaction_date)}</td>
+                              <td className="px-3 py-2.5 text-ink text-xs">
+                                <span className="block truncate" title={line.transaction_no}>{line.transaction_no}</span>
+                              </td>
+                              {acc.sub_accounts?.length > 0 && line.account && (
+                                <td className="px-3 py-2.5 min-w-0">
+                                  <span className="block font-mono text-[11px] font-semibold text-ink">{line.account.code}</span>
+                                  <span className="block text-[10px] text-muted truncate" title={line.account.name}>{line.account.name}</span>
+                                </td>
+                              )}
+                              <td className="px-3 py-2.5 text-ink text-xs">
+                                <span className="block truncate" title={line.description}>{line.description}</span>
+                              </td>
+                              <td className="px-3 py-2.5 min-w-0">
+                                {line.source?.label && (
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10.5px] font-medium break-words max-w-full ${getSourceStyle(line.source.label)}`}>
+                                    {line.source.label}
+                                  </span>
+                                )}
+                                {line.source?.name && (
+                                  <div className="mt-0.5 text-[11px] font-medium text-ink leading-snug truncate" title={line.source.name}>{line.source.name}</div>
+                                )}
+                                {line.source?.reference && (
+                                  <div className="text-[10px] text-muted leading-snug truncate" title={line.source.reference}>Ref: {line.source.reference}</div>
+                                )}
+                              </td>
+                              <td className="px-3 py-2.5 whitespace-nowrap text-right tabular-nums text-ink text-xs">{line.debit ? formatCurrency(line.debit) : '—'}</td>
+                              <td className="px-3 py-2.5 whitespace-nowrap text-right tabular-nums text-ink text-xs">{line.credit ? formatCurrency(line.credit) : '—'}</td>
+                              <td className="px-3 py-2.5 whitespace-nowrap text-right tabular-nums text-xs font-medium">
+                                <span className={line.running_balance > 0 ? 'text-emerald-600 dark:text-emerald-400' : line.running_balance < 0 ? 'text-purple-600 dark:text-purple-400' : 'text-muted'}>
+                                  {formatCurrency(Math.abs(line.running_balance))}{line.running_balance > 0 ? ' Dr' : line.running_balance < 0 ? ' Cr' : ''}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2.5 whitespace-nowrap text-right">
+                                <button
+                                  type="button"
+                                  onClick={(ev) => { ev.stopPropagation(); openGroupDetail(line) }}
+                                  className="flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-surface hover:text-ink transition-colors duration-150 ml-auto"
+                                >
+                                  <Info size={13} />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="border-t border-border bg-bg font-semibold">
+                            <td colSpan={acc.sub_accounts?.length > 0 ? 5 : 4} className="px-3 py-2 text-right text-[10.5px] uppercase tracking-wide text-muted">
+                              {acc.sub_accounts?.length > 0 ? `${acc.sub_accounts.length + 1} accounts` : 'Account total'}
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums text-ink text-xs">{formatCurrency(acc.total_debit)}</td>
+                            <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums text-ink text-xs">{formatCurrency(acc.total_credit)}</td>
+                            <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums text-ink text-xs">{formatCurrency(acc.total_debit - acc.total_credit)}</td>
+                            <td className="px-3 py-2"></td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  )}
+
+                  {!isCollapsed && acc.lines.length === 0 && (
+                    <p className="py-2 text-xs text-muted">No postings in this period.</p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          {ledgerData.accounts.length === 0 && (
+            <p className="px-4 py-10 text-center text-sm text-muted">No accounts match your filters.</p>
+          )}
+
+          {ledgerData.accounts.length > 0 && (
+            <div className="flex items-center justify-end gap-6 border-t border-border bg-bg px-4 py-3">
+              <span className="text-[10.5px] uppercase tracking-wide text-muted">Totals</span>
+              <span className="w-28 whitespace-nowrap text-right text-xs tabular-nums text-ink">Dr {formatCurrency(ledgerData.totals.debit)}</span>
+              <span className="w-28 whitespace-nowrap text-right text-xs tabular-nums text-ink">Cr {formatCurrency(ledgerData.totals.credit)}</span>
+              <span className={`w-32 whitespace-nowrap text-right text-xs font-semibold tabular-nums ${Math.abs(ledgerData.totals.balance) < 0.005 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                {Math.abs(ledgerData.totals.balance) < 0.005 ? 'Balanced' : formatCurrency(Math.abs(ledgerData.totals.balance)) + ' off'}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
       {!loading && view === 'trial-balance' && (
         <div className={PANEL}>
         <div className="overflow-hidden rounded-t-xl">
@@ -511,7 +720,7 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
                   return (
                     <tr
                       key={row.account_id}
-                      onClick={() => { setAccountFilter(String(row.account_id)); setView('journal') }}
+                      onClick={() => { setAccountFilter(String(row.account_id)); setView('ledger') }}
                       className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150 cursor-pointer"
                     >
                       <td className="px-4 py-3.5 text-ink text-xs">{row.account_code}  -  {row.account_name}</td>
@@ -559,9 +768,17 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
               </span>
             </div>
             <div className="rounded-lg border border-border divide-y divide-border">
+              <div className="px-3 py-2">
+                <DetailRow label="Transaction No." value={detailGroup.transaction_no} />
+                <DetailRow label="Transaction Date" value={formatDate(detailGroup.transaction_date)} />
+                <DetailRow label="Status" value={detailGroup.status} />
+              </div>
               {detailGroup.lines.map((line) => (
                 <div key={line.id} className="px-3 py-2">
                   <DetailRow label="Account" value={`${line.account_code}  -  ${line.account_name}`} />
+                  <DetailRow label="Source" value={line.source?.label ?? '—'} />
+                  <DetailRow label="From / Client" value={line.source?.name ?? '—'} />
+                  <DetailRow label="Reference" value={line.source?.reference || line.remarks || '—'} />
                   <DetailRow label="Debit" value={line.debit ? formatCurrency(line.debit) : '—'} />
                   <DetailRow label="Credit" value={line.credit ? formatCurrency(line.credit) : '—'} />
                   <DetailRow label="Posted" value={formatDateTime(line.created_at)} />

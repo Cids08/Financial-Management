@@ -132,7 +132,7 @@ export default function DisbursementProofModal({ open, onClose, disbursement, fe
       <div className="space-y-5 text-ink">
         {disbursement?.payee && (
           <div className="flex items-center justify-between text-xs text-muted border-b border-border pb-3">
-            <span>Payee: <strong className="text-ink">{disbursement.payee}</strong></span>
+            <span>Received By: <strong className="text-ink">{disbursement.payee}</strong></span>
             <span className="font-mono text-muted">{disbursement.voucher_number}</span>
           </div>
         )}

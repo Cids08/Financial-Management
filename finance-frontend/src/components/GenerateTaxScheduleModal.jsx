@@ -201,7 +201,7 @@ export default function GenerateTaxScheduleModal({ open, onClose, onGenerate }) 
               value={year}
               onChange={(e) => setYear(Number(e.target.value))}
               disabled={generating}
-              className="w-full h-9 px-3 rounded-lg border border-border bg-surface !text-ink focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm"
+              className="w-full h-9 px-3 rounded-lg border border-border bg-surface text-ink! focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm"
             >
               {[currentYear - 1, currentYear, currentYear + 1, currentYear + 2].map((y) => (
                 <option key={y} value={y}>
@@ -219,7 +219,7 @@ export default function GenerateTaxScheduleModal({ open, onClose, onGenerate }) 
               value={periodScope}
               onChange={(e) => setPeriodScope(e.target.value)}
               disabled={generating}
-              className="w-full h-9 px-3 rounded-lg border border-border bg-surface !text-ink focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm"
+              className="w-full h-9 px-3 rounded-lg border border-border bg-surface text-ink! focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm"
             >
               {SCOPE_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>

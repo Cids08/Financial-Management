@@ -61,6 +61,16 @@ const DISBURSEMENT_STATUS_STYLES = {
   Rejected: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
 }
 
+// User-facing wording for the disbursement lifecycle. The backend stores the
+// short keys (Pending / Approved / Released); we only rename what users SEE
+// so every filter, stat, sort and status-check keeps working unchanged.
+const DISBURSEMENT_STATUS_LABELS = {
+  Pending: 'Waiting for Approval',
+  Approved: 'Approved — Waiting for Release',
+  Released: 'Released',
+  Rejected: 'Rejected',
+}
+
 const SOURCE_BADGE_STYLES = {
   ap: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
   payroll: 'bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-400',
@@ -180,6 +190,17 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
   // should never be their own checker.
   const canApprovePayments = hasPermission(permissions, 'disbursements.approve')
   const canReleasePayments = hasPermission(permissions, 'disbursements.release') || canManagePayments || canApprovePayments
+
+  // The backend refuses to let a creator approve their own voucher
+  // (separation of duties). Surface that up front: hide the Approve action
+  // on the maker's own rows and explain why, instead of letting the API
+  // bounce a 422.
+  const isOwnVoucher = (d) =>
+    profile?.user_id != null &&
+    d?.created_by != null &&
+    Number(profile.user_id) === Number(d.created_by)
+
+  const SOD_TOOLTIP = 'You created this voucher — approval must come from another user (separation of duties).'
 
   const {
     disbursements, stats, meta, loading, error,
@@ -327,7 +348,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
   const closeDisbursementDetail = () => { setDDetailRecord(null); setDActionError('') }
 
   // Selecting a bill already tells us who's being paid and how much they're
-  // owed  -  auto-fill Payee/Amount Paid/Currency (and Payment Method, if the
+  // owed  -  auto-fill Received By/Amount Paid/Currency (and Payment Method, if the
   // bill's method is one this form actually supports) instead of making the
   // user retype what's already on the bill. Amount Paid defaults to the
   // FULL remaining_balance (a full settlement); the user can still lower it
@@ -360,7 +381,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
     const isPayroll = getSourceType(d) === 'payroll'
     const rows = isPayroll
       ? [
-          ['Payee', d.payee],
+          ['Received By', d.payee],
           ['Payroll Batch No.', d.payroll_batch_number || '—'],
           ['Requesting Department', d.department_name || '—'],
           ['Pay Period', d.pay_period_start && d.pay_period_end ? `${formatDate(d.pay_period_start)}  -  ${formatDate(d.pay_period_end)}` : '—'],
@@ -371,10 +392,10 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
           ['Cash Account', d.cash_account_name || '—'],
           ['Reference No.', d.reference_number || '—'],
           ['Approved By', d.approved_by_name || '—'],
-          ['Status', d.status],
+          ['Status', DISBURSEMENT_STATUS_LABELS[d.status] || d.status],
         ]
       : [
-          ['Payee', d.payee],
+          ['Received By', d.payee],
           ['Related Bill', d.invoice_number || '—'],
           ['Department', d.department_name || '—'],
           ['Payment Date', formatDate(d.payment_date)],
@@ -383,7 +404,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
           ['Cash Account', d.cash_account_name || '—'],
           ['Reference No.', d.reference_number || '—'],
           ['Approved By', d.approved_by_name || '—'],
-          ['Status', d.status],
+          ['Status', DISBURSEMENT_STATUS_LABELS[d.status] || d.status],
         ]
     win.document.write(`
       <html>
@@ -423,7 +444,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
     e.preventDefault()
     const errors = {}
     if (!dForm.ap_id) errors.ap_id = 'Please select a related bill.'
-    if (!dForm.payee.trim()) errors.payee = 'Payee is required.'
+    if (!dForm.payee.trim()) errors.payee = 'Received By is required.'
     if (!dForm.cash_account_id) errors.cash_account_id = 'Please select a cash account.'
     if (!dForm.payment_date) {
       errors.payment_date = 'Payment date is required.'
@@ -552,8 +573,8 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
   const disbursementStatCards = stats && [
     { key: 'total', label: 'Total Payments', value: stats.total, icon: Send, iconBg: 'bg-primary/15', iconColor: 'text-primary-dark', isActive: dStatusFilter === 'all' && !dShowArchived && dSourceFilter === 'all', onClick: () => { setDStatusFilter('all'); setDShowArchived(false); setDSourceFilter('all') } },
     { key: 'released', label: 'Released Amount', value: formatCurrency(stats.total_paid), icon: CheckCircle2, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: dStatusFilter === 'Released' && !dShowArchived, onClick: () => { setDStatusFilter('Released'); setDShowArchived(false) } },
-    { key: 'pending', label: 'Pending', value: stats.pending, icon: Clock3, iconBg: 'bg-amber-50 dark:bg-amber-500/10', iconColor: 'text-amber-600 dark:text-amber-400', isActive: dStatusFilter === 'Pending' && !dShowArchived, onClick: () => { setDStatusFilter('Pending'); setDShowArchived(false) } },
-    { key: 'payroll_pending', label: 'Payroll Pending', value: payrollPendingCount, icon: Users, iconBg: 'bg-violet-50 dark:bg-violet-500/10', iconColor: 'text-violet-600 dark:text-violet-400', isActive: dSourceFilter === 'payroll' && dStatusFilter === 'Pending' && !dShowArchived, onClick: () => { setDStatusFilter('Pending'); setDShowArchived(false); setDSourceFilter('payroll') } },
+    { key: 'pending', label: 'Waiting for Approval', value: stats.pending, icon: Clock3, iconBg: 'bg-amber-50 dark:bg-amber-500/10', iconColor: 'text-amber-600 dark:text-amber-400', isActive: dStatusFilter === 'Pending' && !dShowArchived, onClick: () => { setDStatusFilter('Pending'); setDShowArchived(false) } },
+    { key: 'payroll_pending', label: 'Payroll — Waiting for Approval', value: payrollPendingCount, icon: Users, iconBg: 'bg-violet-50 dark:bg-violet-500/10', iconColor: 'text-violet-600 dark:text-violet-400', isActive: dSourceFilter === 'payroll' && dStatusFilter === 'Pending' && !dShowArchived, onClick: () => { setDStatusFilter('Pending'); setDShowArchived(false); setDSourceFilter('payroll') } },
     // Archived card is visible to all users who can view disbursements — archive/restore actions remain admin-only
     { key: 'archived', label: 'Archived', value: stats.archived, icon: Archive, iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-500 dark:text-slate-400', isActive: dShowArchived, onClick: () => setDShowArchived(true) },
   ]
@@ -638,7 +659,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
       <div className={`${PANEL} ${PANEL_PAD} flex flex-col gap-3 lg:flex-row lg:items-center`}>
         <div className="relative flex-1 min-w-0 basis-full">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-          <input type="text" value={dSearch} onChange={(e) => setDSearch(e.target.value)} placeholder="Search by voucher, payee, or reference..." className={`${INPUT} pl-9`} style={{ ...INPUT_TEXT_STYLE, width: '100%', minWidth: 0 }} autoComplete="off" />
+          <input type="text" value={dSearch} onChange={(e) => setDSearch(e.target.value)} placeholder="Search by voucher, received by, or reference..." className={`${INPUT} pl-9`} style={{ ...INPUT_TEXT_STYLE, width: '100%', minWidth: 0 }} autoComplete="off" />
         </div>
         <select value={dSourceFilter} onChange={(e) => setDSourceFilter(e.target.value)} className={INPUT} style={INPUT_TEXT_STYLE}>
           <option value="all">All Sources</option>
@@ -647,7 +668,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
         </select>
         <select value={dStatusFilter} onChange={(e) => setDStatusFilter(e.target.value)} className={INPUT} style={INPUT_TEXT_STYLE}>
           <option value="all">All Statuses</option>
-          {['Pending', 'Approved', 'Released', 'Rejected'].map((s) => <option key={s} value={s}>{s}</option>)}
+          {['Pending', 'Approved', 'Released', 'Rejected'].map((s) => <option key={s} value={s}>{DISBURSEMENT_STATUS_LABELS[s] || s}</option>)}
         </select>
         <div className="flex items-center gap-1.5 shrink-0">
           <CalendarRange size={15} className="text-muted shrink-0" />
@@ -690,7 +711,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
           <table className="w-full text-sm">
             <thead className="bg-surface">
               <tr className="border-b border-border">
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-3 py-3">Payee</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-3 py-3">Received By</th>
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3">Source</th>
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3">Reference / Dept</th>
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 whitespace-nowrap">Payment Date</th>
@@ -722,7 +743,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                   <tr key={d.disbursement_id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
                     <td className="px-3 py-2.5 min-w-0">
                       <p className="font-medium text-ink truncate max-w-35 sm:masm:max-w-45ax-w-[220px]">{d.payee}</p>
-                      <p className="text-xs text-muted break-words max-w-42.5 xl:max-w-50">{d.voucher_number} &middot; {d.cash_account_name}</p>
+                      <p className="text-xs text-muted wrap-break-word max-w-42.5 xl:max-w-50">{d.voucher_number} &middot; {d.cash_account_name}</p>
                     </td>
                     <td className="px-2 py-2.5 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${SOURCE_BADGE_STYLES[sourceType]}`}>
@@ -746,7 +767,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                     <td className="px-2 py-2.5 whitespace-nowrap font-medium tabular-nums text-ink text-xs sm:text-sm">{formatCurrency(d.amount_paid)}</td>
                     <td className="px-2 py-2.5 whitespace-nowrap">
                       <div className="flex flex-col items-start gap-1">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${DISBURSEMENT_STATUS_STYLES[d.status]}`}>{d.status}</span>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${DISBURSEMENT_STATUS_STYLES[d.status]}`}>{DISBURSEMENT_STATUS_LABELS[d.status] || d.status}</span>
                         {isOverdrawn && (
                           <Tooltip label={`Insufficient balance in ${cashAccName} to cover ${formatCurrency(d.amount_paid)}`}>
                             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300 border border-red-200 dark:border-red-500/30">
@@ -807,17 +828,30 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
 
                         {canApprovePayments && d.status === 'Pending' && (
                           <>
-                            <button
-                              type="button"
-                              disabled={approvingId === d.disbursement_id}
-                              onClick={() => handleApprove(d.disbursement_id)}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-sm transition-all duration-150 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
-                            >
-                              {approvingId === d.disbursement_id
-                                ? <><Loader2 size={11} className="animate-spin" />Approving…</>
-                                : <><CheckCircle2 size={11} />Approve</>
-                              }
-                            </button>
+                            {isOwnVoucher(d) ? (
+                              <Tooltip label={SOD_TOOLTIP}>
+                                <button
+                                  type="button"
+                                  disabled
+                                  title=""
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-emerald-600/50 text-white cursor-not-allowed opacity-60 shrink-0"
+                                >
+                                  <Lock size={11} />Approve
+                                </button>
+                              </Tooltip>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={approvingId === d.disbursement_id}
+                                onClick={() => handleApprove(d.disbursement_id)}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-sm transition-all duration-150 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
+                              >
+                                {approvingId === d.disbursement_id
+                                  ? <><Loader2 size={11} className="animate-spin" />Approving…</>
+                                  : <><CheckCircle2 size={11} />Approve</>
+                                }
+                              </button>
+                            )}
                             <button
                               type="button"
                               disabled={!!approvingId}
@@ -1008,7 +1042,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
               />
             </div>
             <div>
-              <label className={LABEL}>Payee <span className="text-red-500 dark:text-red-400">*</span></label>
+              <label className={LABEL}>Received By <span className="text-red-500 dark:text-red-400">*</span></label>
               <input
                 type="text"
                 value={dForm.payee}
@@ -1235,17 +1269,29 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                 >
                   Reject
                 </button>
-                <button
-                  type="button"
-                  disabled={approvingId === dDetailRecord.disbursement_id}
-                  onClick={() => handleApprove(dDetailRecord.disbursement_id, true)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-sm transition-all duration-150 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  {approvingId === dDetailRecord.disbursement_id
-                    ? <><Loader2 size={13} className="animate-spin" />Approving…</>
-                    : <><CheckCircle2 size={13} />Approve</>
-                  }
-                </button>
+                {isOwnVoucher(dDetailRecord) ? (
+                  <Tooltip label={SOD_TOOLTIP}>
+                    <button
+                      type="button"
+                      disabled
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-lg bg-emerald-600/50 text-white opacity-60 cursor-not-allowed"
+                    >
+                      <Lock size={13} />Approve
+                    </button>
+                  </Tooltip>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={approvingId === dDetailRecord.disbursement_id}
+                    onClick={() => handleApprove(dDetailRecord.disbursement_id, true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-sm transition-all duration-150 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {approvingId === dDetailRecord.disbursement_id
+                      ? <><Loader2 size={13} className="animate-spin" />Approving…</>
+                      : <><CheckCircle2 size={13} />Approve</>
+                    }
+                  </button>
+                )}
               </>
             )}
             {dDetailRecord && canReleasePayments && dDetailRecord.status === 'Approved' && (
@@ -1421,7 +1467,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                   <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${SOURCE_BADGE_STYLES[sourceType]}`}>
                     {SOURCE_TYPES[sourceType].label}
                   </span>
-                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${DISBURSEMENT_STATUS_STYLES[dDetailRecord.status]}`}>{dDetailRecord.status}</span>
+                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${DISBURSEMENT_STATUS_STYLES[dDetailRecord.status]}`}>{DISBURSEMENT_STATUS_LABELS[dDetailRecord.status] || dDetailRecord.status}</span>
                 </div>
               </div>
               <div className="rounded-lg border border-border divide-y divide-border">

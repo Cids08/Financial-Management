@@ -538,9 +538,9 @@ class CollectionService
      *   Dr  Cash / Bank  — the chart_of_accounts row whose account_code
      *                      matches cash_accounts.account_code with the
      *                      "CA-" prefix stripped (e.g. CA-1010 → 1010).
-     *   Cr  Accounts Receivable control — the single chart_of_accounts
-     *                      row whose account_name = 'Accounts Receivable'
-     *                      (account_code 1100, id 5).
+     *   Cr  Accounts Receivable control — the chart_of_accounts row pinned
+     *                      by settings.ar_control_account_id (falls back to
+     *                      account_name = 'Accounts Receivable', code 1100).
      *
      * No config map, no hardcoded IDs. Both sides are resolved from the
      * DB at confirm-time so adding a new cash account never requires a
@@ -571,12 +571,10 @@ class CollectionService
             ]);
         }
 
-        // AR control account is the single "Accounts Receivable" row
-        // (account_code 1100) — resolved by name so it works even if
-        // the code ever changes.
-        $arChartAccount = ChartOfAccount::where('account_name', 'Accounts Receivable')
-            ->where('is_active', true)
-            ->first();
+        // AR control account is pinned by account_id in settings (falls back
+        // to the legacy "Accounts Receivable" name lookup), so it stays the
+        // same row even if the account is renamed.
+        $arChartAccount = ChartOfAccount::arControlAccount();
 
         if (! $arChartAccount) {
             throw ValidationException::withMessages([

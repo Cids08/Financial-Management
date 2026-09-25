@@ -22,6 +22,7 @@ import {
   Landmark,
   BookOpen,
   BookText,
+  Network,
   LineChart,
   TrendingUp,
   Sparkles,
@@ -95,6 +96,8 @@ export const menuData = [
       { id: 'fixed-assets', label: 'Fixed Assets', icon: Boxes, path: '/master-data/fixed-assets', permission: 'fixed-assets.view' },
       // expense-categories.view kept on staff for dropdown; .manage gates nav.
       { id: 'expense-categories', label: 'Expense Categories', icon: Tags, path: '/master-data/expense-categories', permission: 'expense-categories.manage' },
+      // chart-of-accounts.view kept on staff (read-only API); .manage gates nav.
+      { id: 'chart-of-accounts', label: 'Chart of Accounts', icon: Network, path: '/master-data/chart-of-accounts', permission: 'chart-of-accounts.manage' },
       { id: 'titles', label: 'Titles', icon: Briefcase, path: '/master-data/titles', permission: 'users.view' },
     ],
   },

@@ -4,7 +4,8 @@
     "type": "module",
     "scripts": {
         "build": "vite build",
-        "dev": "vite"
+        "dev": "vite",
+        "generate:addresses": "node scripts/generate-address-index.mjs"
     },
     "dependencies": {
         "laravel-echo": "^2.4.0",

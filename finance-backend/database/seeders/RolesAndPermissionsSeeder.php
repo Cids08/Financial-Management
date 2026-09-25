@@ -115,6 +115,8 @@ class RolesAndPermissionsSeeder extends Seeder
         'expenses.manage' => ['Manage Expenses', 'Accounting'],
         'expenses.approve' => ['Approve Expenses', 'Accounting'],
         'general-ledger.view' => ['View General Ledger', 'Accounting'],
+        'chart-of-accounts.view' => ['View Chart of Accounts', 'Accounting'],
+        'chart-of-accounts.manage' => ['Manage Chart of Accounts', 'Accounting'],
         'tax.view' => ['View Tax Obligations', 'Accounting'],
         'tax.manage' => ['Manage Tax Obligations', 'Accounting'],
 
@@ -155,6 +157,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'cash-accounts.view',
             // Accounting / reporting — view-only access for staff.
             'general-ledger.view',
+            'chart-of-accounts.view', // read-only chart — menu link needs .manage, staff just gets the API read
             'tax.view',
             'reports.view',
         ],

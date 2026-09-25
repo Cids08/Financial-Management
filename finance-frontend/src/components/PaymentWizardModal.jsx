@@ -522,7 +522,7 @@ export default function PaymentWizardModal({
                 <p className="text-sm text-muted mt-1">
                   {result.count} disbursement{result.count !== 1 ? 's' : ''} created · {fmt(result.total_amount)} total
                 </p>
-                <p className="text-xs text-muted mt-2">Disbursements are <span className="font-semibold text-amber-600 dark:text-amber-400">Pending</span> and require release through the Disbursements module.</p>
+                <p className="text-xs text-muted mt-2">Disbursements are <span className="font-semibold text-amber-600 dark:text-amber-400">Waiting for Approval</span> and require release through the Disbursements module.</p>
               </div>
 
               <div className="rounded-xl border border-border bg-surface overflow-hidden">
@@ -530,7 +530,7 @@ export default function PaymentWizardModal({
                   <thead className="bg-bg/60 border-b border-border">
                     <tr>
                       <th className="px-4 py-3 text-left font-semibold text-muted text-xs uppercase tracking-wider">Voucher #</th>
-                      <th className="px-4 py-3 text-left font-semibold text-muted text-xs uppercase tracking-wider">Payee</th>
+                      <th className="px-4 py-3 text-left font-semibold text-muted text-xs uppercase tracking-wider">Received By</th>
                       <th className="px-4 py-3 text-left font-semibold text-muted text-xs uppercase tracking-wider">Invoice</th>
                       <th className="px-4 py-3 text-right font-semibold text-muted text-xs uppercase tracking-wider">Amount</th>
                       <th className="px-4 py-3 text-center font-semibold text-muted text-xs uppercase tracking-wider">Status</th>

@@ -34,6 +34,16 @@ class GeneralLedgerController extends Controller
         ]);
     }
 
+    /** GET /api/general-ledger/ledger — SAP B1-style account ledger */
+    public function ledger(GeneralLedgerFilterRequest $request): JsonResponse
+    {
+        return response()->json([
+            'success' => true,
+            'message' => '',
+            'data' => $this->ledger->getAccountLedger($request->validated()),
+        ]);
+    }
+
     /** GET /api/general-ledger/trial-balance */
     public function trialBalance(GeneralLedgerFilterRequest $request): JsonResponse
     {
@@ -66,6 +76,13 @@ class GeneralLedgerController extends Controller
                     'debit' => (float) $line->debit,
                     'credit' => (float) $line->credit,
                     'remarks' => $line->remarks,
+                    'source' => [
+                        'label' => $line->source_info['label'] ?? '',
+                        'name' => $line->source_info['name'] ?? '',
+                        'reference' => $line->source_info['reference'] ?? '',
+                        'reference_type' => $line->reference_type,
+                        'reference_id' => $line->reference_id,
+                    ],
                     'created_at' => $line->created_at?->toIso8601String(),
                 ]),
             ],

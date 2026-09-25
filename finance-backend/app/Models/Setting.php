@@ -29,6 +29,7 @@ class Setting extends Model
         'fiscal_year',
         'default_tax_rate',
         'default_penalty_rate',
+        'ar_control_account_id',
         'forecast_months',
         'data_retention_days',
     ];
@@ -37,6 +38,7 @@ class Setting extends Model
         'fiscal_year' => 'integer',
         'default_tax_rate' => 'decimal:2',
         'default_penalty_rate' => 'decimal:2',
+        'ar_control_account_id' => 'integer',
         'forecast_months' => 'integer',
         'exchange_rates' => 'array',
         'data_retention_days' => 'integer',

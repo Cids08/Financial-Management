@@ -1,5 +1,7 @@
 // Google Places Standard Index with Full address_components Payload
 // Pre-configured with automatic route (Street), postal codes, locality, administrative_area_level_1, and country.
+import { GENERATED_PH_ADDRESS_INDEX } from './generatedAddressIndex.js'
+import { GLOBAL_LOCATION_INDEX } from './locationIndex.js'
 
 export const GOOGLE_PLACES_INDEX = [
   // --- METRO MANILA (NCR) ---
@@ -60,6 +62,18 @@ export const GOOGLE_PLACES_INDEX = [
       country: 'Philippines',
       country_code: 'PH',
       postal_code: '1126',
+    },
+    isLocal: true,
+  },
+  {
+    description: 'Panay Avenue, Diliman, Quezon City, Metro Manila, Philippines',
+    address_components: {
+      route: 'Panay Avenue, Diliman',
+      locality: 'Quezon City',
+      administrative_area_level_1: 'Metro Manila',
+      country: 'Philippines',
+      country_code: 'PH',
+      postal_code: '1103',
     },
     isLocal: true,
   },
@@ -334,6 +348,32 @@ export const GOOGLE_PLACES_INDEX = [
     isLocal: true,
   },
 
+  // --- FAMOUS ISLANDS (anchor to their governing municipality) ---
+  {
+    description: 'Boracay Island, Malay, Aklan, Philippines',
+    address_components: {
+      route: 'White Beach, Boracay Island',
+      locality: 'Malay',
+      administrative_area_level_1: 'Aklan',
+      country: 'Philippines',
+      country_code: 'PH',
+      postal_code: '5608',
+    },
+    isLocal: true,
+  },
+  {
+    description: 'Siargao Island, General Luna, Surigao del Norte, Philippines',
+    address_components: {
+      route: 'Tourism Road, General Luna',
+      locality: 'General Luna',
+      administrative_area_level_1: 'Surigao del Norte',
+      country: 'Philippines',
+      country_code: 'PH',
+      postal_code: '8419',
+    },
+    isLocal: true,
+  },
+
   // --- INTERNATIONAL BUSINESS HUBS ---
   {
     description: 'Marina Bay Financial Centre, Singapore',
@@ -444,6 +484,42 @@ export const GOOGLE_PLACES_INDEX = [
     isLocal: false,
   },
 ]
+
+// =============================================================================
+// AUGMENTED COVERAGE
+// -----------------------------------------------------------------------------
+// The handcrafted list above only covers famous hubs (Ortigas, BGC, Ayala, ...).
+// Merge in EVERY Philippine city/municipality (generated from the official PSGC
+// dataset — see src/data/generatedAddressIndex.js) plus the international hubs
+// (from locationIndex.js) so no PH area is ever missing from address search.
+// Handcrafted entries keep their real street routes and postal codes; generated
+// entries carry the full official city/province fields.
+// =============================================================================
+const PLACES_SEEN = new Set(GOOGLE_PLACES_INDEX.map((p) => p.description.toLowerCase()))
+const pushUniquePlace = (entry) => {
+  const key = entry.description.toLowerCase()
+  if (PLACES_SEEN.has(key)) return
+  PLACES_SEEN.add(key)
+  GOOGLE_PLACES_INDEX.push(entry)
+}
+
+GENERATED_PH_ADDRESS_INDEX.forEach(pushUniquePlace)
+
+GLOBAL_LOCATION_INDEX.forEach((loc) => {
+  if (loc.isLocal || loc.country === 'Philippines') return
+  pushUniquePlace({
+    description: loc.subtitle ? `${loc.name}, ${loc.subtitle}` : `${loc.name}, ${loc.country}`,
+    address_components: {
+      route: '',
+      locality: loc.name,
+      administrative_area_level_1: loc.subtitle || '',
+      country: loc.country,
+      country_code: '',
+      postal_code: '',
+    },
+    isLocal: false,
+  })
+})
 
 // Full list of world countries for the Country Dropdown
 export const ALL_COUNTRIES_LIST = [

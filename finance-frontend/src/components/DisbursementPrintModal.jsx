@@ -247,10 +247,10 @@ export default function DisbursementPrintModal({
             </div>
           ` : ''}
 
-          <div class="section-heading">Disbursement & Payee Information</div>
+          <div class="section-heading">Disbursement & Recipient Information</div>
           <table class="meta-grid">
             <tr>
-              <td class="meta-label">Payee / Beneficiary:</td>
+              <td class="meta-label">Received By:</td>
               <td style="font-weight: 700; color: #111827;">${v.payee || '-'}</td>
               <td class="meta-label">Payment Method:</td>
               <td style="font-weight: 600;">${v.payment_method || '-'}</td>
@@ -329,7 +329,7 @@ export default function DisbursementPrintModal({
                 <div class="sig-date">Date: ${sig.approved_at || '-'}</div>
               </td>
               <td>
-                <div class="sig-title">Received By (Payee)</div>
+                <div class="sig-title">Received By</div>
                 <div class="sig-name">Signature / Printed Name</div>
                 <div class="sig-date">OR# / Date: ____________</div>
               </td>
@@ -520,7 +520,7 @@ export default function DisbursementPrintModal({
                 Disbursement Documents &amp; Tax Certification
               </h2>
               <p className="text-xs text-muted">
-                Voucher {v.voucher_number || '-'} &middot; Payee: {v.payee || '-'}
+                Voucher {v.voucher_number || '-'} &middot; Received By: {v.payee || '-'}
               </p>
             </div>
           </div>
@@ -690,7 +690,7 @@ export default function DisbursementPrintModal({
                         <span className="font-bold text-ink"> {fmt(v.ewt_amount)}</span>
                       </span>
                       <span className="text-muted">
-                        Net Cash Paid Out (actual amount received by payee):
+                        Net Cash Paid Out (actual amount received by recipient):
                         <span className="font-bold text-emerald-600 dark:text-emerald-400"> {fmt(netPaid)}</span>
                       </span>
                     </div>
@@ -771,7 +771,7 @@ export default function DisbursementPrintModal({
                 </div>
                 <div className="p-3 bg-surface rounded-lg border border-border text-xs">
                   <div className="text-muted font-semibold uppercase text-[10px]">Received By</div>
-                  <div className="font-bold text-ink mt-1">{v.payee || 'Beneficiary'}</div>
+                  <div className="font-bold text-ink mt-1">{v.payee || 'Recipient'}</div>
                   <div className="text-muted text-[10px]">Pending Acknowledgment</div>
                 </div>
               </div>

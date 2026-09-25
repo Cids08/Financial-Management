@@ -1,6 +1,13 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { Search, MapPin, X, Navigation, Globe } from 'lucide-react'
 import { GOOGLE_PLACES_INDEX, ALL_COUNTRIES_LIST } from '../data/googlePlacesIndex'
+import { apiFetch } from '../utils/api'
+
+// Street-aware searchable text: description + street route + postal code.
+const isSearchableTextHit = (item, q) => {
+  const a = item.address_components || {}
+  return `${item.description} ${a.route || ''} ${a.postal_code || ''}`.toLowerCase().includes(q)
+}
 
 /**
  * 3-Step Perfected Google Places Address Form
@@ -61,20 +68,76 @@ export default function AddressSelector({
     return () => document.removeEventListener('mousedown', handleOutsideClick)
   }, [])
 
+  // Remote (OpenStreetMap/Nominatim) street hits — the "any street" fallback
+  // fetched from the backend once the static index has no street match.
+  const [remoteResults, setRemoteResults] = useState([])
+
+  // Debounced free-geocoder lookup. Skipped whenever the static index already
+  // matches, so common queries never touch the network.
+  useEffect(() => {
+    const q = searchQuery.trim().toLowerCase()
+    const localHit = q && GOOGLE_PLACES_INDEX.some((item) => isSearchableTextHit(item, q))
+
+    if (q.length < 3 || localHit) {
+      setRemoteResults([])
+      return
+    }
+
+    let cancelled = false
+    const timer = setTimeout(async () => {
+      try {
+        const res = await apiFetch(`/geocode?q=${encodeURIComponent(searchQuery.trim())}`, {
+          timeoutMs: 7000,
+        })
+        if (cancelled) return
+        const data = Array.isArray(res?.data) ? res.data : []
+        setRemoteResults(data.filter((d) => d && d.description))
+      } catch {
+        if (!cancelled) setRemoteResults([])
+      }
+    }, 350)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [searchQuery])
+
   // Filter Google Places suggestions
   const suggestions = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
     if (!q) return []
 
-    const local = GOOGLE_PLACES_INDEX.filter(
-      (item) => item.isLocal && item.description.toLowerCase().includes(q)
-    )
-    const intl = GOOGLE_PLACES_INDEX.filter(
-      (item) => !item.isLocal && item.description.toLowerCase().includes(q)
-    )
+    const byQuery = GOOGLE_PLACES_INDEX.filter((item) => isSearchableTextHit(item, q))
+
+    // Any matched static entry wins. Otherwise fall back to the live street
+    // geocoder first (keeps "Panay Avenue" etc. street-accurate), then to a
+    // city-name anchor only if that too comes up empty.
+    let matched
+    if (byQuery.length) {
+      matched = byQuery
+    } else {
+      const seen = new Set(GOOGLE_PLACES_INDEX.map((item) => item.description.toLowerCase()))
+      const remote = remoteResults.filter((place) => !seen.has(place.description.toLowerCase()))
+      matched = remote.length ? remote : []
+      if (!matched.length) {
+        matched = GOOGLE_PLACES_INDEX.map((item) => ({ item, a: item.address_components || {} }))
+          .filter(({ a }) => {
+            const name = (a.locality || '').toLowerCase()
+            const area = (a.administrative_area_level_1 || '').toLowerCase()
+            return (name && q.includes(name)) || (area && q.includes(area))
+          })
+          .sort((x, y) => Number(Boolean(y.a.locality && q.includes(y.a.locality.toLowerCase()))) -
+            Number(Boolean(x.a.locality && q.includes(x.a.locality.toLowerCase()))))
+          .map(({ item }) => item)
+      }
+    }
+
+    const local = matched.filter((item) => item.isLocal)
+    const intl = matched.filter((item) => !item.isLocal)
 
     return [...local, ...intl].slice(0, 5)
-  }, [searchQuery])
+  }, [searchQuery, remoteResults])
 
   // Construct combined full address and emit
   const emitFullAddress = (fields) => {

@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\SupplierController;
 use App\Http\Controllers\Api\CollectorController;
 use App\Http\Controllers\Api\CashAccountController;
+use App\Http\Controllers\Api\ChartOfAccountController;
 use App\Http\Controllers\Api\FixedAssetController;
 use App\Http\Controllers\Api\AccountsReceivableController;
 use App\Http\Controllers\Api\AccountsPayableController;
@@ -35,6 +36,7 @@ use App\Http\Controllers\Api\DisbursementController;
 use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\SearchController;
 use App\Http\Controllers\Api\PermanentDeleteController;
+use App\Http\Controllers\Api\GeocodeController;
 use Illuminate\Support\Facades\Broadcast;
 
 
@@ -84,6 +86,12 @@ Route::middleware(['auth:sanctum', 'require.password.change'])->group(function (
     // way PermissionController::mine() above is open to every
     // authenticated user but only ever returns that user's own data.
     Route::get('/search', [SearchController::class, 'index']);
+
+    // Address-autocomplete fallback: free OSM/Nominatim geocoding so ANY
+    // typed street resolves, not just the curated PSGC/municipality index.
+    // GeocodeController caches results for 30 days; the throttle keeps us
+    // polite to the public Nominatim instance.
+    Route::get('/geocode', [GeocodeController::class, 'index'])->middleware('throttle:60,1');
 
     // Settings
     Route::prefix('settings')->group(function () {
@@ -189,6 +197,15 @@ Route::middleware(['auth:sanctum', 'require.password.change'])->group(function (
         Route::patch('/{cashAccount}/restore', [CashAccountController::class, 'restore'])->middleware('permission:cash-accounts.manage');
     });
 
+    // Chart of Accounts
+    Route::prefix('chart-of-accounts')->group(function () {
+        Route::get('/', [ChartOfAccountController::class, 'index'])->middleware('permission:chart-of-accounts.view');
+        Route::get('/for-select', [ChartOfAccountController::class, 'dropdown'])->middleware('permission:chart-of-accounts.view');
+        Route::post('/', [ChartOfAccountController::class, 'store'])->middleware('permission:chart-of-accounts.manage');
+        Route::put('/{chartOfAccount}', [ChartOfAccountController::class, 'update'])->middleware('permission:chart-of-accounts.manage');
+        Route::patch('/{chartOfAccount}/toggle-active', [ChartOfAccountController::class, 'toggleActive'])->middleware('permission:chart-of-accounts.manage');
+    });
+
     // Fixed assets
     Route::prefix('fixed-assets')->group(function () {
         Route::get('/depreciation-preview', [FixedAssetController::class, 'depreciationPreview'])->middleware('permission:fixed-assets.view');
@@ -275,6 +292,7 @@ Route::middleware(['auth:sanctum', 'require.password.change'])->group(function (
     // General ledger
     Route::middleware('permission:general-ledger.view')->prefix('general-ledger')->group(function () {
         Route::get('/lines', [GeneralLedgerController::class, 'lines']);
+        Route::get('/ledger', [GeneralLedgerController::class, 'ledger']);
         Route::get('/trial-balance', [GeneralLedgerController::class, 'trialBalance']);
         Route::get('/entries/{journalEntry}', [GeneralLedgerController::class, 'entryDetail']);
     });

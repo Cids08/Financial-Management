@@ -39,3 +39,11 @@ Thumbs.db
 Homestead.json
 Homestead.yaml
 demo_documents/
+
+# Defense review / scratch artifacts (never commit)
+body.txt
+generate_defense_docx.py
+generate_defense_pdf.py
+FMS_Defense_Reviewer.*
+whole system.jfif
+_pdf_check.png

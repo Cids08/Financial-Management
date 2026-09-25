@@ -4,7 +4,10 @@ namespace App\Services;
 
 use App\Models\AccountsReceivable;
 use App\Models\AuditLog;
+use App\Models\ChartOfAccount;
 use App\Models\Customer;
+use App\Models\JournalEntry;
+use App\Models\JournalEntryLine;
 use App\Models\Setting;
 use App\Models\SupportingDocument;
 use App\Models\User;
@@ -13,6 +16,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class AccountsReceivableService
@@ -96,6 +100,12 @@ class AccountsReceivableService
                 'is_archived' => false,
             ]);
 
+            // Accrual revenue recognition: Dr Accounts Receivable / Cr Revenue
+            // on the invoice date. Idempotent — safe for invoices created
+            // directly in a paid/prepaid state (collections close out the AR).
+            $ar->loadMissing('customer:id,customer_name');
+            $this->reconcileJournals($ar, $actor);
+
             AuditLog::create([
                 'user_id' => $actor->id,
                 'module' => 'AccountsReceivable',
@@ -143,6 +153,11 @@ class AccountsReceivableService
                 'status' => $data['status'],
             ]);
 
+            // Reconcile the posted AR/revenue journal to the new invoice amount
+            // (posts a delta adjustment, or a full reversal if cancelled).
+            $ar->loadMissing('customer:id,customer_name');
+            $this->reconcileJournals($ar, $actor);
+
             AuditLog::create([
                 'user_id' => $actor->id,
                 'module' => 'AccountsReceivable',
@@ -157,6 +172,158 @@ class AccountsReceivableService
 
             return $ar->load(['customer', 'collector']);
         });
+    }
+
+    /* ---------------------------------------------------------------------- */
+    /* Accrual revenue recognition                                             */
+    /* ---------------------------------------------------------------------- */
+
+    /**
+     * Keeps the posted AR ↔ Revenue journal in sync with the invoice.
+     *
+     * Target net (Dr AR − Cr Revenue, restricted to lines with
+     * reference_type 'Accounts Receivable') is original_amount for every
+     * non-cancelled invoice and 0 for a cancelled one. The difference is
+     * posted as a single delta entry, so calling this is fully idempotent:
+     *
+     *  - create()  → posts the full Dr AR / Cr Revenue entry (accrual on the
+     *                invoice date; collections later close the receivable).
+     *  - update()  → posts a delta adjustment when original_amount changes,
+     *                or a full reversal when the invoice is cancelled.
+     *  - backfill  → existing invoices can be brought onto the books by
+     *                calling this once per invoice (see notes in summary).
+     *
+     * Revenue is recognized on issue (accrual basis), so the GL and the
+     * income statement carry the full fiscal-year revenue even before cash
+     * is collected.
+     */
+    public function reconcileJournals(AccountsReceivable $ar, User $actor): void
+    {
+        if (! $ar->exists) {
+            return;
+        }
+
+        $amount = (float) ($ar->original_amount ?? 0);
+        $target = $ar->status === 'Cancelled' ? 0.00 : round($amount, 2);
+        $current = $this->arJournalNet($ar->id);
+        $delta = round($target - $current, 2);
+
+        if (abs($delta) < 0.005) {
+            return;
+        }
+
+        $this->postArJournal($ar, $actor, $delta);
+    }
+
+    /** Net balance on the AR control account for this invoice. */
+    private function arJournalNet(int $arId): float
+    {
+        $arControl = $this->resolveArControlAccount();
+
+        if (! $arControl) {
+            return 0.0;
+        }
+
+        return (float) JournalEntryLine::query()
+            ->join('journal_entries', 'journal_entries.id', '=', 'journal_entry_lines.journal_entry_id')
+            ->where('journal_entries.status', 'Posted')
+            ->where('journal_entry_lines.reference_type', 'Accounts Receivable')
+            ->where('journal_entry_lines.reference_id', $arId)
+            ->where('journal_entry_lines.account_id', $arControl->id)
+            ->selectRaw('COALESCE(SUM(journal_entry_lines.debit - journal_entry_lines.credit), 0) as n')
+            ->value('n');
+    }
+
+    /**
+     * The single Accounts Receivable control account, resolved from the
+     * pinned ChartOfAccount::arControlId() setting (falling back to the
+     * legacy name lookup) so it stays stable even if the account is renamed.
+     */
+    private function resolveArControlAccount(): ?ChartOfAccount
+    {
+        return ChartOfAccount::arControlAccount();
+    }
+
+    /**
+     * Posts one balanced pair for this invoice. $delta > 0 recognizes
+     * revenue (Dr AR / Cr Revenue); $delta < 0 reverses it (Dr Revenue /
+     * Cr AR), which is what an adjustment or cancellation looks like.
+     */
+    private function postArJournal(AccountsReceivable $ar, User $actor, float $delta): void
+    {
+        $amount = abs($delta);
+        $arControl = $this->resolveArControlAccount();
+        $revenue = $this->resolveRevenueAccount();
+
+        if (! $arControl || ! $revenue) {
+            throw ValidationException::withMessages([
+                'finance' => 'Cannot post invoice journal — chart of accounts is missing the '
+                    . '"Accounts Receivable" control account or an active Revenue account.',
+            ]);
+        }
+
+        $customerName = $ar->customer->customer_name ?? "Customer #{$ar->customer_id}";
+        $isReversal = $delta < 0;
+
+        $entry = JournalEntry::create([
+            'transaction_no'   => 'JE-AR-' . $ar->id . '-' . now()->format('YmdHis') . Str::upper(Str::random(2)),
+            'transaction_date' => $ar->invoice_date ?? now(),
+            'description'      => $isReversal
+                ? sprintf('Reversal — invoice %s (%s)', $ar->invoice_number, $customerName)
+                : sprintf('Invoice %s recorded — %s', $ar->invoice_number, $customerName),
+            'status'     => 'Posted',
+            'posted_by'  => $actor->id,
+            'posted_at'  => now(),
+            'created_by' => $actor->id,
+        ]);
+
+        $entry->lines()->createMany([
+            [
+                // AR control increases on recognition, decreases on reversal
+                'account_id'     => $arControl->id,
+                'debit'          => $isReversal ? '0.00' : sprintf('%.2f', $amount),
+                'credit'         => $isReversal ? sprintf('%.2f', $amount) : '0.00',
+                'reference_type' => 'Accounts Receivable',
+                'reference_id'   => $ar->id,
+                'remarks'        => $customerName,
+            ],
+            [
+                // Inverted on the revenue side
+                'account_id'     => $revenue->id,
+                'debit'          => $isReversal ? sprintf('%.2f', $amount) : '0.00',
+                'credit'         => $isReversal ? '0.00' : sprintf('%.2f', $amount),
+                'reference_type' => 'Accounts Receivable',
+                'reference_id'   => $ar->id,
+                'remarks'        => "Invoice {$ar->invoice_number}",
+            ],
+        ]);
+    }
+
+    /**
+     * Picks the revenue account the company books service income to.
+     * Defaults to Service Revenue, falls back to Sales Revenue, then to any
+     * active Revenue account. Swap the priority list to change the default
+     * posting account for invoices.
+     *
+     * @return \App\Models\ChartOfAccount|null
+     */
+    private function resolveRevenueAccount(): ?ChartOfAccount
+    {
+        $priority = ['Service Revenue', 'Sales Revenue'];
+
+        foreach ($priority as $name) {
+            $account = ChartOfAccount::where('account_name', $name)
+                ->where('account_type', 'Revenue')
+                ->where('is_active', true)
+                ->first();
+            if ($account) {
+                return $account;
+            }
+        }
+
+        return ChartOfAccount::where('account_type', 'Revenue')
+            ->where('is_active', true)
+            ->first();
     }
 
     /**
