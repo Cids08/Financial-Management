@@ -413,7 +413,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
     }
     const selectedAcc = wizardCashAccounts.find((a) => String(a.id) === String(payForm.cash_account_id))
     if (selectedAcc && amt > Number(selectedAcc.current_balance)) {
-      setPayError(`Insufficient funds in ${selectedAcc.account_name}. Available: ${formatCurrency(selectedAcc.current_balance)}.`)
+      setPayError(`Insufficient funds in ${selectedAcc.account_name}. Reduce the amount or pick a different account.`)
       return
     }
 
@@ -1732,7 +1732,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                 <option value="">Select cash / bank account...</option>
                 {wizardCashAccounts.map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.account_name} {a.bank_name ? `(${a.bank_name})` : ''}  -  Balance: {formatCurrency(a.current_balance)}
+                    {a.account_name} {a.bank_name ? `(${a.bank_name})` : ''}
                   </option>
                 ))}
               </select>
@@ -1741,7 +1741,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                 if (selectedAcc && Number(payForm.amount_to_pay) > Number(selectedAcc.current_balance)) {
                   return (
                     <p className="text-xs text-red-500 dark:text-red-400 mt-1 font-medium">
-                      Warning: Payment amount exceeds available funds in {selectedAcc.account_name} ({formatCurrency(selectedAcc.current_balance)}).
+                      Warning: Payment amount exceeds available funds in {selectedAcc.account_name}. Reduce the amount or pick a different account.
                     </p>
                   )
                 }

@@ -284,7 +284,7 @@ export default function BatchPayTaxWizardModal({
       errors.document = 'Proof of payment (BIR confirmation slip or deposit receipt) is strictly required.'
     }
     if (selectedAccount && totalAmount > Number(selectedAccount.current_balance)) {
-      errors.cash_account_id = `Account balance (${formatCurrency(selectedAccount.current_balance)}) is insufficient for batch total (${formatCurrency(totalAmount)}).`
+      errors.cash_account_id = `Account does not have enough available funds for the batch total (${formatCurrency(totalAmount)}).`
     }
 
     if (Object.keys(errors).length > 0) {
@@ -568,7 +568,7 @@ export default function BatchPayTaxWizardModal({
                 </label>
                 {selectedAccount && (
                   <span className={`text-[11px] font-semibold tabular-nums ${isOverdrawn ? 'text-red-500' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                    Available: {formatCurrency(selectedAccount.current_balance)}
+                    {isOverdrawn ? 'Insufficient available funds' : 'Funds available'}
                   </span>
                 )}
               </div>
@@ -584,7 +584,7 @@ export default function BatchPayTaxWizardModal({
                 <option value="">-- Select Cash or Bank Account --</option>
                 {cashAccounts.map((acc) => (
                   <option key={acc.id} value={acc.id}>
-                    {acc.account_name} ({acc.bank_name || acc.account_code || 'Cash'})  -  Available: {formatCurrency(acc.current_balance)}
+                    {acc.account_name} ({acc.bank_name || acc.account_code || 'Cash'})
                   </option>
                 ))}
               </select>
