@@ -139,9 +139,10 @@ class RolesAndPermissionsSeeder extends Seeder
             'suppliers.view', 'suppliers.manage',
             'collectors.view', 'collectors.manage', // staff can manage collector accounts
             'ar.view', 'ar.manage',
+            'collections.view', 'collections.manage', // staff may RECORD collections + attach deposit proof (data entry), but NOT collections.confirm — final approval/finalize stays Admin-tier
             'ap.view', 'ap.manage', // NOT ap.approve
             'expenses.view', 'expenses.manage', // NOT expenses.approve
-            'disbursements.view', 'disbursements.manage', 'disbursements.release', // NOT disbursements.approve
+            'disbursements.view', 'disbursements.manage', 'disbursements.release', // NOT disbursements.approve — staff may EXECUTE an already-approved voucher (release), but authorization (approve) stays Admin-tier.
             'budgets.view', 'budgets.manage', // NOT budgets.approve — final approval is Admin/CEO-only
             'expense-categories.view', // read-only dropdown source
             // read-only dropdown sources — the Department and Cash Account

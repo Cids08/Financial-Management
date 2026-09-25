@@ -394,6 +394,12 @@ class DisbursementService
             ]);
         }
 
+        if ($disbursement->created_by === $approverId) {
+            throw ValidationException::withMessages([
+                'status' => 'The creator of a disbursement cannot approve their own voucher (separation of duties).',
+            ]);
+        }
+
         return DB::transaction(function () use ($disbursement, $approverId) {
             $disbursement->update([
                 'status' => 'Approved',
@@ -433,6 +439,12 @@ class DisbursementService
         if ($disbursement->status !== 'Pending') {
             throw ValidationException::withMessages([
                 'status' => 'Only a pending disbursement can be rejected.',
+            ]);
+        }
+
+        if ($disbursement->created_by === $approverId) {
+            throw ValidationException::withMessages([
+                'status' => 'The creator of a disbursement cannot reject their own voucher (separation of duties).',
             ]);
         }
 
@@ -481,6 +493,12 @@ class DisbursementService
         if ($disbursement->status !== 'Approved') {
             throw ValidationException::withMessages([
                 'status' => 'Only an approved disbursement can be released.',
+            ]);
+        }
+
+        if ($disbursement->created_by === $releasedById) {
+            throw ValidationException::withMessages([
+                'status' => 'The creator of a disbursement cannot release their own voucher (separation of duties).',
             ]);
         }
 

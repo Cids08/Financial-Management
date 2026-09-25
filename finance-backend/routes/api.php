@@ -231,7 +231,7 @@ Route::middleware(['auth:sanctum', 'require.password.change'])->group(function (
         Route::post('/', [AccountsPayableController::class, 'store'])->middleware('permission:ap.manage');
         // Payment Wizard & Direct Bill Payment — static routes must come before /{accountsPayable} wildcard
         Route::get('/payment-proposals', [AccountsPayableController::class, 'getPaymentProposals'])->middleware('permission:ap.view');
-        Route::post('/execute-payment-run', [AccountsPayableController::class, 'executePaymentRun'])->middleware('permission:ap.manage|ap.approve|disbursements.manage');
+        Route::post('/execute-payment-run', [AccountsPayableController::class, 'executePaymentRun'])->middleware('permission:ap.approve|disbursements.approve|disbursements.release');
         Route::put('/{accountsPayable}', [AccountsPayableController::class, 'update'])->middleware('permission:ap.manage');
 
         Route::patch('/{accountsPayable}/approve', [AccountsPayableController::class, 'approve'])->middleware('permission:ap.approve');
@@ -398,11 +398,11 @@ Route::middleware(['auth:sanctum', 'require.password.change'])->group(function (
         // Printable Voucher & BIR 2307
         Route::get('/{disbursement}/printable-voucher', [DisbursementController::class, 'printableVoucher'])->middleware('permission:disbursements.view');
         Route::get('/{disbursement}/bir-2307', [DisbursementController::class, 'bir2307Data'])->middleware('permission:disbursements.view');
-        Route::patch('/{disbursement}/approve', [DisbursementController::class, 'approve'])->middleware('permission:disbursements.approve|disbursements.manage');
-        Route::patch('/{disbursement}/reject', [DisbursementController::class, 'reject'])->middleware('permission:disbursements.approve|disbursements.manage');
-        Route::patch('/{disbursement}/release', [DisbursementController::class, 'release'])->middleware('permission:disbursements.manage|disbursements.approve|disbursements.release');
-        Route::patch('/{disbursement}/archive', [DisbursementController::class, 'archive'])->middleware('permission:disbursements.manage|disbursements.approve|disbursements.release');
-        Route::patch('/{disbursement}/restore', [DisbursementController::class, 'restore'])->middleware('permission:disbursements.manage|disbursements.approve|disbursements.release')->withTrashed();
+        Route::patch('/{disbursement}/approve', [DisbursementController::class, 'approve'])->middleware('permission:disbursements.approve');
+        Route::patch('/{disbursement}/reject', [DisbursementController::class, 'reject'])->middleware('permission:disbursements.approve');
+        Route::patch('/{disbursement}/release', [DisbursementController::class, 'release'])->middleware('permission:disbursements.approve|disbursements.release');
+        Route::patch('/{disbursement}/archive', [DisbursementController::class, 'archive'])->middleware('permission:disbursements.approve|disbursements.release');
+        Route::patch('/{disbursement}/restore', [DisbursementController::class, 'restore'])->middleware('permission:disbursements.approve|disbursements.release')->withTrashed();
     });
 
 
