@@ -4,7 +4,6 @@ namespace App\Http\Requests;
 
 use App\Models\Budget;
 use App\Models\CashAccount;
-use App\Models\Department;
 use App\Models\Expense;
 use App\Models\ExpenseCategory;
 use Illuminate\Contracts\Validation\Validator;
@@ -84,26 +83,10 @@ class StoreExpenseRequest extends FormRequest
         }
     }
 
-    /**
-     * A budget belongs to a department. An expense should only ever be
-     * filed against — and later draw down — the budget of the department
-     * the filer belongs to, never another department's. This is checked
-     * again in ExpenseService::approve() (the point that actually moves
-     * budget numbers), since that check can't be skipped just because
-     * this one already ran — but catching it here means a mismatched
-     * expense never even makes it to Pending.
-     *
-     * Super Admin/Admin bypass this the same way they bypass it at
-     * approval time (see ExpenseController::approve()'s $isAdminOverride).
-     * Users without an assigned department (e.g. general accounting staff)
-     * are not blocked from recording expenses.
-     */
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator) {
             $budgetId = $this->input('budget_id');
-            $user = $this->user();
-            $isAdminOverride = $user?->hasAnyRole(['super-admin', 'admin', 'Super Admin', 'Admin']) ?? false;
 
             if ($budgetId) {
                 $budget = Budget::find($budgetId);
@@ -115,21 +98,6 @@ class StoreExpenseRequest extends FormRequest
                             'Budget "%s" cannot be charged because its status is "%s". Only Active budgets can be charged for expenses.',
                             $budget->budget_name,
                             $budget->status
-                        )
-                    );
-                }
-
-                if ($budget && $user && ! $isAdminOverride && ! empty($user->department_id) && ! empty($budget->department_id) && $budget->department_id !== $user->department_id) {
-                    $budgetDept = Department::find($budget->department_id)?->department_name ?? 'another department';
-                    $userDept = Department::find($user->department_id)?->department_name ?? 'your department';
-
-                    $validator->errors()->add(
-                        'budget_id',
-                        sprintf(
-                            'Budget "%s" belongs to %s, but you are assigned to %s. You can only file expenses against your own department\'s budget.',
-                            $budget->budget_name,
-                            $budgetDept,
-                            $userDept
                         )
                     );
                 }

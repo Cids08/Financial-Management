@@ -6,7 +6,6 @@ use App\Models\AuditLog;
 use App\Models\Budget;
 use App\Models\CashAccount;
 use App\Models\ChartOfAccount;
-use App\Models\Department;
 use App\Models\Expense;
 use App\Models\JournalEntry;
 use App\Models\Notification;
@@ -273,24 +272,6 @@ class ExpenseService
             if (! $budget) {
                 throw ValidationException::withMessages([
                     'budget' => "Cannot approve expense #{$expense->id}: The assigned budget (ID: {$expense->budget_id}) does not exist or has been deleted.",
-                ]);
-            }
-
-            if (! $skipDepartmentCheck && $expense->creator && ! empty($expense->creator->department_id) && ! empty($budget->department_id) && $expense->creator->department_id !== $budget->department_id) {
-                $filerDeptName = Department::find($expense->creator->department_id)?->department_name;
-                $budgetDeptName = Department::find($budget->department_id)?->department_name ?? 'no department';
-                $filerPhrase = $filerDeptName
-                    ? "under the {$filerDeptName} department"
-                    : 'without an assigned department';
-
-                throw ValidationException::withMessages([
-                    'budget' => sprintf(
-                        '%s filed this expense %s, but budget "%s" belongs to %s. An expense can only be approved against a budget owned by the same department as whoever filed it.',
-                        $expense->creator->first_name ?? 'This user',
-                        $filerPhrase,
-                        $budget->budget_name,
-                        $budgetDeptName
-                    ),
                 ]);
             }
 
