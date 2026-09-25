@@ -62,6 +62,10 @@ Route::middleware(['auth:sanctum', 'require.password.change'])->group(function (
     Route::prefix('notifications')->group(function () {
         Route::get('/', [NotificationController::class, 'index']);
         Route::get('/unread-count', [NotificationController::class, 'unreadCount']);
+        Route::get('/vapid-key', [NotificationController::class, 'vapidKey']);
+        Route::post('/subscribe', [NotificationController::class, 'subscribe']);
+        Route::patch('/subscribe', [NotificationController::class, 'updateSubscriptionPrivacy']);
+        Route::delete('/subscribe', [NotificationController::class, 'unsubscribe']);
         Route::patch('/read-all', [NotificationController::class, 'markAllAsRead']);
         Route::patch('/{notification}/read', [NotificationController::class, 'markAsRead']);
         Route::delete('/{notification}', [NotificationController::class, 'destroy']);

@@ -15,6 +15,7 @@
         "laravel/tinker": "^2.10.1",
         "league/commonmark": "^2.10",
         "league/flysystem-aws-s3-v3": "^3.35",
+        "minishlink/web-push": "^11.0",
         "thiagoalessio/tesseract_ocr": "^2.13"
     },
     "require-dev": {

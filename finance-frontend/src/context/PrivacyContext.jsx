@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { setPrivacyMasking } from '../utils/formatters'
+import { syncPushPrivacy } from '../utils/pushNotifications'
 
 const PrivacyContext = createContext(null)
 
@@ -39,6 +40,9 @@ export function PrivacyProvider({ children }) {
       const next = !prev
       setPrivacyMasking(next)
       try { localStorage.setItem('privacyMode', next ? 'on' : 'off') } catch {}
+      // Keep OS push toasts in step with the toggle (redact amounts/names
+      // from the screen when Privacy Mode is on). Best-effort, no await.
+      syncPushPrivacy(next)
       return next
     })
   }

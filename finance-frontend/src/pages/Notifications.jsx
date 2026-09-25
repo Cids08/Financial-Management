@@ -1,18 +1,31 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bell, BellOff, Check, CheckCheck, Trash2, Loader2 } from 'lucide-react'
+import { Bell, BellOff, Check, CheckCheck, Trash2, Loader2, BellPlus } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Pagination from '../components/Pagination'
 import Button from '../components/Button'
 import Tooltip from '../components/Tooltip'
 import { useNotificationsContext } from '../context/NotificationsContext'
-import { notificationTypeMeta } from '../utils/notificationTypes'
+import { notificationTypeMeta, NOTIFICATION_MODULES, NOTIFICATION_SEVERITIES } from '../utils/notificationTypes'
+import { enablePush, disablePush, getBrowserSubscriptionState, fetchVapidKey } from '../utils/pushNotifications'
 
 const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
+const INPUT = `h-9 px-3 rounded-lg border border-border bg-bg text-sm text-ink
+  placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary
+  transition-all duration-150`
 
 function formatDateTime(iso) {
   if (!iso) return '—'
   return new Date(iso).toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+}
+
+async function fetchVapidKeyQuietly() {
+  try {
+    const { push_enabled: enabled } = await fetchVapidKey()
+    return Boolean(enabled)
+  } catch {
+    return false
+  }
 }
 
 export default function Notifications({ title = 'Notifications', crumbs = ['Notifications'] }) {
@@ -37,11 +50,35 @@ export default function Notifications({ title = 'Notifications', crumbs = ['Noti
   } = useNotificationsContext()
 
   const [unreadOnly, setUnreadOnly] = useState(false)
+  const [severity, setSeverity] = useState('')
+  const [module, setModule] = useState('')
   const [page, setPage] = useState(1)
 
+  // --- Push notification state ---
+  const [pushServerEnabled, setPushServerEnabled] = useState(false)
+  const [pushSubscribed, setPushSubscribed] = useState(false)
+  const [pushBusy, setPushBusy] = useState(false)
+  const [pushNotice, setPushNotice] = useState('')
+
   useEffect(() => {
-    fetchNotifications({ unread: unreadOnly }, page)
-  }, [unreadOnly, page]) // eslint-disable-line react-hooks/exhaustive-deps
+    let cancelled = false
+    ;(async () => {
+      try {
+        const state = await getBrowserSubscriptionState()
+        if (!cancelled) setPushSubscribed(state.subscribed)
+      } catch {
+        /* push unavailable in this browser */
+      }
+    })()
+    fetchVapidKeyQuietly().then((enabled) => {
+      if (!cancelled) setPushServerEnabled(enabled)
+    })
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    fetchNotifications({ unread: unreadOnly, types: severity ? [severity] : [], modules: module ? [module] : [] }, page)
+  }, [unreadOnly, severity, module, page]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const totalPages = meta.last_page || 1
 
@@ -57,6 +94,34 @@ export default function Notifications({ title = 'Notifications', crumbs = ['Noti
   const handleDelete = async (e, id) => {
     e.stopPropagation()
     await deleteNotification(id)
+  }
+
+  const handleEnablePush = async () => {
+    setPushBusy(true)
+    setPushNotice('')
+    try {
+      await enablePush()
+      setPushSubscribed(true)
+      setPushNotice('Push notifications enabled for this browser.')
+    } catch (err) {
+      setPushNotice(err.message || 'Could not enable push notifications.')
+    } finally {
+      setPushBusy(false)
+    }
+  }
+
+  const handleDisablePush = async () => {
+    setPushBusy(true)
+    setPushNotice('')
+    try {
+      await disablePush()
+      setPushSubscribed(false)
+      setPushNotice('Push notifications disabled for this browser.')
+    } catch {
+      setPushNotice('Could not disable push notifications.')
+    } finally {
+      setPushBusy(false)
+    }
   }
 
   const groups = useMemo(() => {
@@ -102,6 +167,50 @@ export default function Notifications({ title = 'Notifications', crumbs = ['Noti
         </div>
       </div>
 
+      {/* Filters */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="flex flex-wrap items-center gap-2">
+          <select value={severity} onChange={(e) => { setSeverity(e.target.value); setPage(1) }} className={INPUT}>
+            <option value="">All severities</option>
+            {NOTIFICATION_SEVERITIES.map((s) => (
+              <option key={s} value={s}>{notificationTypeMeta(s).label}</option>
+            ))}
+          </select>
+          <select value={module} onChange={(e) => { setModule(e.target.value); setPage(1) }} className={INPUT}>
+            <option value="">All units</option>
+            {NOTIFICATION_MODULES.map((m) => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Push notifications */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-xl border border-border bg-surface px-4 py-3 shadow-card">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-ink">Desktop push notifications</p>
+          <p className="mt-0.5 text-xs text-muted">
+            {pushSubscribed
+              ? 'This browser receives OS-level toasts for new notifications.'
+              : pushServerEnabled
+                ? 'Get notified even when the app tab is not open.'
+                : 'Push is not configured on the server yet.'}
+          </p>
+          {pushNotice && <p className="mt-1 text-xs text-primary">{pushNotice}</p>}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {pushSubscribed ? (
+            <Button variant="secondary" size="sm" icon={BellOff} onClick={handleDisablePush} disabled={pushBusy}>
+              {pushBusy ? <Loader2 size={14} className="animate-spin" /> : 'Disable'}
+            </Button>
+          ) : (
+            <Button variant="primary" size="sm" icon={BellPlus} onClick={handleEnablePush} disabled={pushBusy || !pushServerEnabled}>
+              {pushBusy ? <Loader2 size={14} className="animate-spin" /> : 'Enable push'}
+            </Button>
+          )}
+        </div>
+      </div>
+
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{error}</div>
       )}
@@ -118,9 +227,9 @@ export default function Notifications({ title = 'Notifications', crumbs = ['Noti
           </div>
         ) : (
           groups.map((group) => (
-            <div key={group.label}>
-              <p className="px-4 pt-3 pb-1 text-xs font-semibold uppercase tracking-wide text-muted">{group.label}</p>
-              <div className="divide-y divide-border">
+            <div key={group.label} className="px-3 pb-2 first:pt-3">
+              <p className="px-1 py-2 text-xs font-semibold uppercase tracking-wider text-muted">{group.label}</p>
+              <div className="space-y-2">
                 {group.items.map((n) => {
                   const meta = notificationTypeMeta(n.type, n)
                   const Icon = meta.icon
@@ -129,8 +238,15 @@ export default function Notifications({ title = 'Notifications', crumbs = ['Noti
                       key={n.id}
                       type="button"
                       onClick={() => handleOpen(n)}
-                      className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors duration-150 hover:bg-bg ${!n.is_read ? 'bg-primary/5' : ''}`}
+                      className={`relative flex w-full items-start gap-3 rounded-lg border py-3 pl-4 pr-3 text-left transition-all duration-150
+                        ${!n.is_read
+                          ? 'border-primary/40 bg-primary/[0.06] shadow-sm ring-1 ring-primary/20'
+                          : 'border-border bg-surface hover:border-border/80 hover:bg-bg'}`}
                     >
+                      <span
+                        aria-hidden
+                        className={`absolute inset-y-0 left-0 w-1 rounded-l-lg opacity-80 ${meta.color.replaceAll('text-', 'bg-')}`}
+                      />
                       <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${meta.bg}`}>
                         <Icon size={16} className={meta.color} />
                       </div>

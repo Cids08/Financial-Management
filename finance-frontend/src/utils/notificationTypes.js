@@ -101,6 +101,23 @@ export const DEFAULT_NOTIFICATION_TYPE_META = {
   bg:    'bg-slate-100 dark:bg-slate-800',
 }
 
+// Filter dropdown options for the Notifications page. `module` is written
+// by the backend on every new notification (see NotificationService).
+export const NOTIFICATION_MODULES = [
+  { value: 'tax',           label: 'Tax' },
+  { value: 'budget',        label: 'Budget' },
+  { value: 'expense',       label: 'Expense' },
+  { value: 'collection',    label: 'Collection' },
+  { value: 'disbursement',  label: 'Disbursement' },
+  { value: 'receivable',    label: 'Receivable' },
+  { value: 'payable',       label: 'Payable' },
+  { value: 'forecast',      label: 'Forecasting' },
+  { value: 'general',       label: 'General' },
+]
+
+// Severity types — the DB CHECK constraint allows exactly these four.
+export const NOTIFICATION_SEVERITIES = ['Success', 'Warning', 'Info', 'Error']
+
 export function notificationTypeMeta(type, item = null) {
   const base = NOTIFICATION_TYPE_META[type] ?? DEFAULT_NOTIFICATION_TYPE_META
 

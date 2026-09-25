@@ -22,7 +22,8 @@ export function useNotifications() {
     try {
       const params = new URLSearchParams()
       if (filters.unread) params.set('unread', '1')
-      if (filters.type) params.set('type', filters.type)
+      ;(filters.types ?? []).forEach((t) => params.append('type[]', t))
+      ;(filters.modules ?? []).forEach((m) => params.append('module[]', m))
       params.set('per_page', perPage)
       params.set('page', page)
 

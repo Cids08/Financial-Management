@@ -15,6 +15,7 @@ class Notification extends Model
         'title',
         'message',
         'type',
+        'module',
         'is_read',
         'read_at',
     ];
@@ -49,5 +50,15 @@ class Notification extends Model
         }
 
         return $query->where('user_id', $userId);
+    }
+
+    public function scopeForModules($query, array $modules)
+    {
+        return $query->whereIn('module', $modules);
+    }
+
+    public function scopeForTypes($query, array $types)
+    {
+        return $query->whereIn('type', $types);
     }
 }
