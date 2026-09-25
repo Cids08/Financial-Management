@@ -37,6 +37,7 @@ class SettingsController extends Controller
             'address' => 'company_address',
             'email' => 'company_email',
             'phone' => 'company_phone',
+            'tin' => 'company_tin',
             'currency' => 'currency',
             'baseCurrency' => 'base_currency',
             'exchangeRates' => 'exchange_rates',

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Building2, CheckCircle2, Coins, Mail, MapPin, Phone, Trash2, Upload } from 'lucide-react'
+import { Building2, CheckCircle2, Coins, Hash, Mail, MapPin, Phone, Trash2, Upload } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
@@ -63,7 +63,7 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
   const canManageBranding = hasPermission('settings.manage')
 
   const {
-    name, tagline, address, email, phone, logoUrl,
+    name, tagline, address, email, phone, tin, logoUrl,
     currency, baseCurrency, exchangeRates,
     fiscalYear, defaultTaxRate, defaultPenaltyRate, forecastMonths,
     loading: companyLoading, error: brandApiError,
@@ -71,7 +71,7 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
   } = useCompany()
 
   const [brandForm, setBrandForm] = useState({
-    name: '', tagline: '', address: '', email: '', phone: '',
+    name: '', tagline: '', address: '', email: '', phone: '', tin: '',
     currency: 'PHP', baseCurrency: 'PHP', exchangeRates: {},
     fiscalYear: new Date().getFullYear(), defaultTaxRate: 0, defaultPenaltyRate: 0, forecastMonths: 12,
   })
@@ -94,6 +94,7 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
       address: address || '',
       email: email || '',
       phone: phone || '',
+      tin: tin || '',
       currency: currency || 'PHP',
       baseCurrency: baseCurrency || 'PHP',
       exchangeRates: exchangeRates || {},
@@ -102,7 +103,7 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
       defaultPenaltyRate: defaultPenaltyRate ?? 0,
       forecastMonths: forecastMonths ?? 12,
     })
-  }, [companyLoading, name, tagline, address, email, phone, currency, baseCurrency, exchangeRates, fiscalYear, defaultTaxRate, defaultPenaltyRate, forecastMonths])
+  }, [companyLoading, name, tagline, address, email, phone, tin, currency, baseCurrency, exchangeRates, fiscalYear, defaultTaxRate, defaultPenaltyRate, forecastMonths])
 
   const handleBrandField = (field) => (e) =>
     setBrandForm((f) => ({ ...f, [field]: e.target.value }))
@@ -145,6 +146,7 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
       address: brandForm.address.trim(),
       email: brandForm.email.trim(),
       phone: brandForm.phone.trim(),
+      tin: brandForm.tin.trim(),
     })
     setBrandSubmitting(false)
     if (result.success) {
@@ -292,6 +294,21 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
                     disabled={companyLoading}
                   />
                 </div>
+              </div>
+              <div>
+                <label className={LABEL}>Company TIN</label>
+                <div className="flex items-center gap-2 rounded-lg border border-border bg-bg px-3 py-2 focus-within:border-primary focus-within:bg-surface transition-colors duration-150">
+                  <Hash size={15} className="text-muted shrink-0" />
+                  <input
+                    type="text"
+                    value={brandForm.tin}
+                    onChange={handleBrandField('tin')}
+                    placeholder="000-000-000-000"
+                    className="w-full text-sm text-ink bg-transparent outline-none border-0"
+                    disabled={companyLoading}
+                  />
+                </div>
+                <p className="text-[11px] text-muted mt-1">Printed as the payor TIN on BIR Form 2307 and tax documents.</p>
               </div>
             </div>
 

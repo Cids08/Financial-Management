@@ -21,6 +21,7 @@ class Setting extends Model
         'company_address',
         'company_email',
         'company_phone',
+        'company_tin',
         'company_logo',
         'currency',
         'base_currency',

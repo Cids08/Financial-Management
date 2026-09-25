@@ -16,6 +16,7 @@ class SettingsResource extends JsonResource
             'address' => $this->company_address,
             'email' => $this->company_email,
             'phone' => $this->company_phone,
+            'tin' => $this->company_tin,
             'logoUrl' => FileStorage::signedUrl($this->company_logo, FileStorage::IMAGE_TTL_SECONDS),
             'currency' => $this->currency,
             'baseCurrency' => $this->base_currency,

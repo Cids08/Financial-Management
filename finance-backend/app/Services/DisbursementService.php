@@ -1330,6 +1330,13 @@ class DisbursementService
         $disbursement->loadMissing(['accountsPayable.supplier']);
         $supplier = $disbursement->accountsPayable?->supplier;
 
+        // Payor (withholding agent = the company itself) comes from the
+        // configurable Settings registry — never a hardcoded TIN. The payee
+        // TIN is the master-data supplier TIN; when a supplier has none the
+        // certificate leaves the field blank (nothing fake printed), and the
+        // operator can still type the correct TIN in the print preview.
+        $setting = \App\Models\Setting::current();
+
         // Released disbursements carry the exact numbers retained at release
         // time (ewt_rate/ewt_atc_code/ewt_amount/net_amount). Pre-release or
         // legacy rows fall back to the same resolver used at release, so the
@@ -1405,13 +1412,13 @@ class DisbursementService
                 'month_index_in_quarter' => $monthInQuarter,
             ],
             'payor' => [
-                'tin' => '009-876-543-000',
-                'registered_name' => 'Financial Management System Inc.',
-                'address' => '100 Ayala Avenue, Makati City, Metro Manila',
+                'tin' => $setting->company_tin,
+                'registered_name' => $setting->company_name ?: 'Financial Management System Inc.',
+                'address' => $setting->company_address ?: '100 Ayala Avenue, Makati City, Metro Manila',
                 'zip_code' => '1226',
             ],
             'payee' => [
-                'tin' => $supplier?->tin ?: '123-456-789-000',
+                'tin' => $supplier?->tin,
                 'registered_name' => $disbursement->payee,
                 'address' => $supplier?->address ?: 'Philippines',
                 'zip_code' => '1000',

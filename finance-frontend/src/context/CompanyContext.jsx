@@ -25,6 +25,7 @@ export function CompanyProvider({ children }) {
     address: '',
     email: '',
     phone: '',
+    tin: '',
     logoUrl: null,
     currency: 'PHP',
     baseCurrency: 'PHP',

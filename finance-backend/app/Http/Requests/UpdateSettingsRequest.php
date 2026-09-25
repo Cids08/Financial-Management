@@ -29,6 +29,7 @@ class UpdateSettingsRequest extends FormRequest
             'address' => ['sometimes', 'nullable', 'string', 'max:500'],
             'email' => ['sometimes', 'nullable', 'email', 'max:255'],
             'phone' => ['sometimes', 'nullable', 'string', 'max:50'],
+            'tin' => ['sometimes', 'nullable', 'string', 'max:30'],
 
             // Regional & Financial Defaults
             'currency' => ['sometimes', 'required', 'string', 'in:' . implode(',', self::CURRENCIES)],

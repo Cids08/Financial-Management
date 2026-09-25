@@ -122,7 +122,7 @@ export default function DisbursementPrintModal({
             (a) => a.code === (bRes.data.default_atc || 'WC157')
           )
           setOverrideRate(matchedAtc ? matchedAtc.rate : 2.0)
-          setPayeeTin(bRes.data.payee?.tin || '000-000-000-000')
+          setPayeeTin(bRes.data.payee?.tin || '')
           setPayeeAddress(bRes.data.payee?.address || 'Philippines')
         }
       })
@@ -399,7 +399,7 @@ export default function DisbursementPrintModal({
             <tr>
               <td style="width: 35%;">
                 <div class="field-lbl">1. Taxpayer Identification No. (TIN)</div>
-                <div class="field-val" style="font-family: monospace; letter-spacing: 1px;">${payeeTin || '000-000-000-000'}</div>
+                <div class="field-val" style="font-family: monospace; letter-spacing: 1px;">${payeeTin || '________________________'}</div>
               </td>
               <td style="width: 65%;">
                 <div class="field-lbl">2. Payee's Registered Name (Last Name, First Name for Individuals / Corporate Name)</div>
@@ -419,7 +419,7 @@ export default function DisbursementPrintModal({
             <tr>
               <td style="width: 35%;">
                 <div class="field-lbl">4. Taxpayer Identification No. (TIN)</div>
-                <div class="field-val" style="font-family: monospace; letter-spacing: 1px;">${payor.tin || '009-876-543-000'}</div>
+                <div class="field-val" style="font-family: monospace; letter-spacing: 1px;">${payor.tin || '________________________'}</div>
               </td>
               <td style="width: 65%;">
                 <div class="field-lbl">5. Payor's Registered Name</div>
