@@ -722,7 +722,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                   <tr key={d.disbursement_id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
                     <td className="px-3 py-2.5 min-w-0">
                       <p className="font-medium text-ink truncate max-w-35 sm:masm:max-w-45ax-w-[220px]">{d.payee}</p>
-                      <p className="text-xs text-muted truncate max-w-.2.5:max-w-42.5 xl:max-w-50">{d.voucher_number} &middot; {d.cash_account_name}</p>
+                      <p className="text-xs text-muted break-words max-w-42.5 xl:max-w-50">{d.voucher_number} &middot; {d.cash_account_name}</p>
                     </td>
                     <td className="px-2 py-2.5 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${SOURCE_BADGE_STYLES[sourceType]}`}>

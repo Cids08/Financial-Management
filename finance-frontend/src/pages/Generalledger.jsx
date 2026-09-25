@@ -453,9 +453,9 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
                     <td className="px-4 py-3.5 text-ink text-xs">
                       <span className="block truncate" title={e.description}>{e.description}</span>
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap">
+                    <td className="px-4 py-3.5 min-w-0">
                       {e.reference_type && (
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium truncate max-w-full ${getSourceStyle(e.reference_type)}`}>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium break-words max-w-full ${getSourceStyle(e.reference_type)}`}>
                           {formatSource(e.reference_type)}
                         </span>
                       )}

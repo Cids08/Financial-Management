@@ -49,7 +49,6 @@ function printSingleSOA(soa) {
       <td style="padding:6px 8px;text-align:right;font-weight:600">${fmt(inv.remaining_balance)}</td>
       <td style="padding:6px 8px;text-align:right;color:${inv.days_overdue > 0 ? '#dc2626' : '#059669'}">${inv.days_overdue > 0 ? inv.days_overdue + ' days' : 'Current'}</td>
       <td style="padding:6px 8px">${BUCKET_LABELS[inv.aging_bucket] ?? inv.aging_bucket}</td>
-      <td style="padding:6px 8px">${inv.status}</td>
     </tr>`).join('')
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
@@ -90,14 +89,14 @@ function printSingleSOA(soa) {
         <th style="text-align:right">Original</th>
         <th style="text-align:right">Paid</th>
         <th style="text-align:right">Balance</th>
-        <th style="text-align:right">Days Overdue</th>
-        <th>Bucket</th><th>Status</th>
-      </tr></thead>
-      <tbody>${invoiceRows}</tbody>
-      <tfoot><tr style="background:#f1f5f9;font-weight:700">
+<th style="text-align:right">Days Overdue</th>
+         <th>Bucket</th>
+       </tr></thead>
+       <tbody>${invoiceRows}</tbody>
+       <tfoot><tr style="background:#f1f5f9;font-weight:700">
         <td colspan="5" style="padding:8px">TOTAL OUTSTANDING</td>
         <td style="padding:8px;text-align:right">${fmt(total_outstanding)}</td>
-        <td colspan="3"></td>
+        <td colspan="2"></td>
       </tr></tfoot>
     </table>
     <script>window.onload=()=>{window.print();window.onafterprint=()=>window.close();}<\/script>
@@ -118,7 +117,6 @@ function printBatchSOA(batch) {
         <td style="padding:4px 6px">${fmtDate(inv.due_date)}</td>
         <td style="padding:4px 6px;text-align:right">${fmt(inv.remaining_balance)}</td>
         <td style="padding:4px 6px;color:${inv.days_overdue > 0 ? '#dc2626' : '#059669'}">${inv.days_overdue > 0 ? inv.days_overdue + ' days' : 'Current'}</td>
-        <td style="padding:4px 6px">${inv.status}</td>
       </tr>`).join('')
     return `
       <div style="page-break-after:always;padding:20px 0">
@@ -145,7 +143,6 @@ function printBatchSOA(batch) {
             <th style="text-align:left;padding:5px 6px">Due Date</th>
             <th style="text-align:right;padding:5px 6px">Balance</th>
             <th style="text-align:left;padding:5px 6px">Days Overdue</th>
-            <th style="text-align:left;padding:5px 6px">Status</th>
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>
