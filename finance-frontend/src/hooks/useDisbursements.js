@@ -166,11 +166,33 @@ export function useDisbursements() {
   const uploadProof = useCallback(async (id, file) => {
     const formData = new FormData()
     formData.append('proof', file)
-    const res = await apiFetch(`/api/disbursements/${id}/proof`, {
-      method: 'POST',
-      body: formData,
-    })
-    const json = await res.json()
+
+    // 2-minute hard cap: on shared hosting an oversized body can get
+    // silently stalled by the web server layer and never resolve, which
+    // used to leave the modal's spinner spinning forever.
+    let res
+    try {
+      res = await apiFetch(`/api/disbursements/${id}/proof`, {
+        method: 'POST',
+        body: formData,
+        timeoutMs: 120000,
+      })
+    } catch (err) {
+      if (err?.name === 'AbortError') {
+        throw new Error('Upload timed out. The file may be too large for the server — try compressing the image below 1MB and uploading again.')
+      }
+      throw err
+    }
+
+    let json
+    try {
+      json = await res.json()
+    } catch {
+      // Non-JSON body (e.g. a proxy's HTML 413 page) — don't show a raw
+      // parse error, tell the user what's actually wrong.
+      throw new Error(`Upload failed (server returned an unexpected response, status ${res.status}). The file likely exceeds the host's upload limit.`)
+    }
+
     if (!res.ok || !json.success) throw new Error(json.message || 'Failed to attach proof of payment.')
     await refresh()
     return json.data

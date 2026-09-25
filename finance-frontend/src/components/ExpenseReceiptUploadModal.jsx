@@ -3,6 +3,7 @@ import { useRef, useState } from 'react'
 import { UploadCloud, FileText, X, AlertTriangle } from 'lucide-react'
 import Modal from './Modal'
 import Button from './Button'
+import { compressImageToUploadable, cannotFitHostLimit } from '../utils/fileUpload'
 
 // Confirmed against UploadExpenseReceiptRequest::rules()  -  keep these two
 // constants in sync if that validation rule ever changes. Images/PDF
@@ -45,6 +46,8 @@ export default function ExpenseReceiptUploadModal({ open, onClose, expense, onUp
     if (candidate.size > MAX_SIZE_MB * 1024 * 1024) {
       return `"${candidate.name}" is ${formatBytes(candidate.size)}, which exceeds the ${MAX_SIZE_MB}MB limit.`
     }
+    const hostError = cannotFitHostLimit(candidate)
+    if (hostError) return hostError
     return ''
   }
 
@@ -73,7 +76,7 @@ export default function ExpenseReceiptUploadModal({ open, onClose, expense, onUp
     }
     setUploading(true)
     setError('')
-    const result = await onUpload(file)
+    const result = await onUpload(await compressImageToUploadable(file))
     setUploading(false)
     if (result?.success) {
       reset()

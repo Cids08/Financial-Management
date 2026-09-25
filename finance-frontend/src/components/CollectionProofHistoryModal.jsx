@@ -4,6 +4,7 @@ import Modal from './Modal'
 import Button from './Button'
 import Tooltip from './Tooltip'
 import { apiFetch } from '../utils/api'
+import { compressImageToUploadable, cannotFitHostLimit } from '../utils/fileUpload'
 
 function formatBytes(bytes) {
   if (!bytes) return ''
@@ -93,11 +94,17 @@ export default function CollectionProofHistoryModal({ open, onClose, collection,
 
   const handleUpload = async (file) => {
     if (!file) return
+    const hostError = cannotFitHostLimit(file)
+    if (hostError) {
+      setError(hostError)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      return
+    }
     setUploading(true)
     setError('')
 
     const formData = new FormData()
-    formData.append('proof', file)
+    formData.append('proof', await compressImageToUploadable(file))
 
     try {
       const res  = await apiFetch(`/api/collections/${collection.id}/proof`, {

@@ -13,6 +13,7 @@ import OtpInput from '../components/OtpInput'
 import { useProfile } from '../hooks/useProfile'
 import { useAccountSecurity } from '../hooks/useAccountSecurity'
 import { useCountdown, formatCountdown } from '../hooks/useCountdown'
+import { compressImageToUploadable } from '../utils/fileUpload'
 
 const ACTIVITY_ICON = {
   Login: CheckCircle2,
@@ -882,7 +883,7 @@ function AvatarUploadModal({ currentUrl, onClose, onUpload, onRemove }) {
   const handleSave = async () => {
     if (!file) return
     setBusy(true)
-    const result = await onUpload(file)
+    const result = await onUpload(await compressImageToUploadable(file))
     setBusy(false)
     if (!result.success) setError(result.message || 'Failed to upload photo.')
   }

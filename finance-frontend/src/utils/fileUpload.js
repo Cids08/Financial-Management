@@ -12,6 +12,20 @@ export function isImageFile(file) {
   return /^image\/(jpeg|png|webp)$/i.test(file.type)
 }
 
+/**
+ * Non-image files (PDF) can't be re-encoded client-side, so they must
+ * already fit under the host's ~1MB upload cap or the upload will be
+ * rejected by the web server. Images are exempt - they get compressed
+ * below the cap by compressImageToUploadable(). Mirrors the scan flow's
+ * HOSTED_PDF_MAX_BYTES guard.
+ */
+export function cannotFitHostLimit(file) {
+  if (file?.type === 'application/pdf' && file.size > HOSTED_PDF_MAX_BYTES) {
+    return `PDFs over ${Math.round(HOSTED_PDF_MAX_BYTES / 1024)}KB exceed the server's ~1MB upload limit. Please compress the PDF or upload a smaller file.`
+  }
+  return ''
+}
+
 export function drawImageToCanvas(bitmap, maxDimension) {
   const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height))
   const width = Math.max(1, Math.round(bitmap.width * scale))

@@ -3,6 +3,7 @@ import { useRef, useState } from 'react'
 import { UploadCloud, FileText, X, AlertTriangle } from 'lucide-react'
 import Modal from './Modal'
 import Button from './Button'
+import { compressImageToUploadable, cannotFitHostLimit } from '../utils/fileUpload'
 
 // Confirmed against UploadTaxObligationDocumentRequest::rules()  -  keep
 // these two constants in sync if that validation rule ever changes.
@@ -48,6 +49,8 @@ export default function TaxObligationDocumentUploadModal({ open, onClose, obliga
     if (candidate.size > MAX_SIZE_MB * 1024 * 1024) {
       return `"${candidate.name}" is ${formatBytes(candidate.size)}, which exceeds the ${MAX_SIZE_MB}MB limit.`
     }
+    const hostError = cannotFitHostLimit(candidate)
+    if (hostError) return hostError
     return ''
   }
 
@@ -76,7 +79,7 @@ export default function TaxObligationDocumentUploadModal({ open, onClose, obliga
     }
     setUploading(true)
     setError('')
-    const result = await onUpload(file)
+    const result = await onUpload(await compressImageToUploadable(file))
     setUploading(false)
     if (result?.success) {
       reset()

@@ -6,6 +6,7 @@ import Modal from '../components/Modal'
 import { useCompany } from '../context/CompanyContext'
 import { usePermissions } from '../context/PermissionsContext'
 import { currencySymbol } from '../utils/formatters'
+import { compressImageToUploadable } from '../utils/fileUpload'
 import AddressSelector from '../components/AddressSelector'
 
 const CURRENCIES = [
@@ -491,7 +492,7 @@ function LogoUploadModal({ open, currentUrl, onClose, onUpload, onRemove }) {
   const handleSave = async () => {
     if (!file) return
     setBusy(true)
-    const result = await onUpload(file)
+    const result = await onUpload(await compressImageToUploadable(file))
     setBusy(false)
     if (!result.success) setError(result.message || 'Failed to upload logo.')
   }

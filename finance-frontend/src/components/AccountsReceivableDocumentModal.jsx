@@ -3,6 +3,7 @@ import { UploadCloud, FileText, X, AlertTriangle, Eye, Loader2 } from 'lucide-re
 import Modal from './Modal'
 import Button from './Button'
 import Tooltip from './Tooltip'
+import { compressImageToUploadable, cannotFitHostLimit } from '../utils/fileUpload'
 
 const ALLOWED_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png', 'webp']
 const ACCEPT = '.pdf,.jpg,.jpeg,.png,.webp'
@@ -69,6 +70,8 @@ export default function AccountsReceivableDocumentModal({ open, onClose, invoice
     if (candidate.size > MAX_SIZE_MB * 1024 * 1024) {
       return `"${candidate.name}" is ${formatBytes(candidate.size)}, which exceeds the ${MAX_SIZE_MB}MB limit.`
     }
+    const hostError = cannotFitHostLimit(candidate)
+    if (hostError) return hostError
     return ''
   }
 
@@ -90,7 +93,7 @@ export default function AccountsReceivableDocumentModal({ open, onClose, invoice
     if (!file) { setUploadError('Choose a file to attach first.'); return }
     setUploading(true)
     setUploadError('')
-    const result = await onUpload(file)
+    const result = await onUpload(await compressImageToUploadable(file))
     setUploading(false)
     if (result?.success) {
       resetUpload()

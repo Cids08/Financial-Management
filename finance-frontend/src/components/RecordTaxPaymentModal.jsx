@@ -13,6 +13,7 @@ import Modal from './Modal'
 import Button from './Button'
 import { apiFetch } from '../utils/api'
 import { formatCurrency } from '../utils/formatters'
+import { compressImageToUploadable, cannotFitHostLimit } from '../utils/fileUpload'
 import { usePrivacy } from '../context/PrivacyContext'
 
 const ALLOWED_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png']
@@ -111,6 +112,8 @@ export default function RecordTaxPaymentModal({
     if (candidate.size > MAX_SIZE_MB * 1024 * 1024) {
       return `"${candidate.name}" is ${formatBytes(candidate.size)}, which exceeds the ${MAX_SIZE_MB}MB limit.`
     }
+    const hostError = cannotFitHostLimit(candidate)
+    if (hostError) return hostError
     return ''
   }
 
@@ -172,7 +175,7 @@ export default function RecordTaxPaymentModal({
         formData.append('remarks', form.remarks.trim())
       }
       if (file) {
-        formData.append('document', file)
+        formData.append('document', await compressImageToUploadable(file))
       }
 
       const result = await onPay(obligation.tax_id || obligation.id, formData)

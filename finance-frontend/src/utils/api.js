@@ -11,7 +11,7 @@ function notifyAuthExpired() {
 }
 
 export async function apiFetch(path, options = {}) {
-  const { skipAuthRedirect = false, ...fetchOptions } = options
+  const { skipAuthRedirect = false, timeoutMs, ...fetchOptions } = options
   const token = getToken()
   const isFormData = fetchOptions.body instanceof FormData
 
@@ -22,10 +22,31 @@ export async function apiFetch(path, options = {}) {
     ...fetchOptions.headers,
   }
 
-  const response = await fetch(`${BASE_URL}${path}`, {
-    ...fetchOptions,
-    headers,
-  })
+  // Optional hard timeout so a stalled/oversized request (e.g. an upload
+  // the hosting layer silently swallows) can never leave a UI spinner
+  // spinning forever. Aborts and surfaces as an AbortError the caller can
+  // translate into a user-facing message.
+  let abortTimer
+  let signal = fetchOptions.signal
+  if (timeoutMs > 0 && typeof AbortController !== 'undefined') {
+    const controller = new AbortController()
+    abortTimer = setTimeout(() => controller.abort(), timeoutMs)
+    signal =
+      signal && typeof AbortSignal?.any === 'function'
+        ? AbortSignal.any([signal, controller.signal])
+        : controller.signal
+  }
+
+  let response
+  try {
+    response = await fetch(`${BASE_URL}${path}`, {
+      ...fetchOptions,
+      headers,
+      ...(signal ? { signal } : {}),
+    })
+  } finally {
+    clearTimeout(abortTimer)
+  }
 
   if (response.status === 401 && !skipAuthRedirect) {
     // Only clear the token if it's the SAME one this request used. Each

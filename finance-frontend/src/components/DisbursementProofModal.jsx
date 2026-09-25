@@ -3,6 +3,7 @@ import { UploadCloud, FileText, X, AlertTriangle, Eye, Loader2 } from 'lucide-re
 import Modal from './Modal'
 import Button from './Button'
 import Tooltip from './Tooltip'
+import { isImageFile, compressImageToUploadable, cannotFitHostLimit } from '../utils/fileUpload'
 
 const ALLOWED_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png', 'webp']
 const ACCEPT = '.pdf,.jpg,.jpeg,.png,.webp'
@@ -72,6 +73,8 @@ export default function DisbursementProofModal({ open, onClose, disbursement, fe
     if (candidate.size > MAX_SIZE_MB * 1024 * 1024) {
       return `"${candidate.name}" is ${formatBytes(candidate.size)}, which exceeds the ${MAX_SIZE_MB}MB limit.`
     }
+    const hostError = cannotFitHostLimit(candidate)
+    if (hostError) return hostError
     return ''
   }
 
@@ -94,7 +97,8 @@ export default function DisbursementProofModal({ open, onClose, disbursement, fe
     setUploading(true)
     setUploadError('')
     try {
-      await onUpload(disbursement.disbursement_id, file)
+      const uploadFile = isImageFile(file) ? await compressImageToUploadable(file) : file
+      await onUpload(disbursement.disbursement_id, uploadFile)
       resetUpload()
       loadHistory()
       onUploaded?.()
@@ -172,7 +176,7 @@ export default function DisbursementProofModal({ open, onClose, disbursement, fe
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <Button variant="primary" size="sm" onClick={handleUpload} loading={uploading}>
-                    Upload Proof
+                    {uploading ? 'Uploading...' : 'Upload Proof'}
                   </Button>
                   <button
                     type="button"
