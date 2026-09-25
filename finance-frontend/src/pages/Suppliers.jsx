@@ -9,7 +9,6 @@ import { apiFetch } from '../utils/api'
 import { useCompany } from '../context/CompanyContext'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 import DeletePermanentButton from '../components/DeletePermanentButton'
-import { usePrivacy } from '../context/PrivacyContext'
 import { formatCurrency } from '../utils/formatters'
 import { useProfile } from '../hooks/useProfile'
 import AddressSelector from '../components/AddressSelector'
@@ -44,7 +43,6 @@ const STATUS_STYLES = {
 }
 
 export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data', 'Suppliers'] }) {
-  const { privacyOn } = usePrivacy()
   const { profile } = useProfile()
   const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
   const { currency } = useCompany()
@@ -330,7 +328,7 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
                               <span className="flex items-center gap-1"><Mail size={11} className="shrink-0" /> {revealed ? s.email : maskEmail(s.email)}</span>
                               <span className="flex items-center gap-1"><Phone size={11} className="shrink-0" /> {revealed ? s.contact_number : maskValue(s.contact_number)}</span>
                               {s.tin && (
-                                <span className="flex items-center gap-1"><Hash size={11} className="shrink-0" /> TIN: {privacyOn || !revealed ? maskValue(s.tin) : s.tin}</span>
+                                <span className="flex items-center gap-1"><Hash size={11} className="shrink-0" /> TIN: {revealed ? s.tin : maskValue(s.tin)}</span>
                               )}
                             </div>
                           </div>

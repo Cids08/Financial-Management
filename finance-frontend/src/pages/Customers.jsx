@@ -8,7 +8,6 @@ import Tooltip from '../components/Tooltip'
 import { apiFetch } from '../utils/api'
 import { useCompany } from '../context/CompanyContext'
 import { useHighlightRow } from '../hooks/useHighlightRow'
-import { usePrivacy } from '../context/PrivacyContext'
 import { formatCurrency } from '../utils/formatters'
 import { usePermissions } from '../context/PermissionsContext'
 import AddressSelector from '../components/AddressSelector'
@@ -52,7 +51,6 @@ const STATUS_STYLES = {
 }
 
 export default function Customers({ title = 'Customers', crumbs = ['Master Data', 'Customers'] }) {
-  const { privacyOn } = usePrivacy()
   // Role-agnostic gate matching the backend: collector has customers.view
   // (for lookup) but not customers.manage, so Add/Edit/Archive must not
   // render for them — backend would 403 those endpoints anyway.
@@ -90,7 +88,6 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
   const [saving, setSaving] = useState(false)
 
   // Controls visibility of contact number, email, and TIN together per row.
-  // TIN is additionally withheld while Privacy Mode is on.
   const [revealedIds, setRevealedIds] = useState(new Set())
   const toggleReveal = (id) => {
     setRevealedIds((prev) => {
@@ -349,7 +346,7 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
                               <span className="flex items-center gap-1"><Mail size={11} className="shrink-0" /> {revealed ? c.email : maskEmail(c.email)}</span>
                               <span className="flex items-center gap-1"><Phone size={11} className="shrink-0" /> {revealed ? c.contact_number : maskValue(c.contact_number)}</span>
                               {c.tin && (
-                                <span className="flex items-center gap-1"><Hash size={11} className="shrink-0" /> TIN: {privacyOn || !revealed ? maskValue(c.tin) : c.tin}</span>
+                                <span className="flex items-center gap-1"><Hash size={11} className="shrink-0" /> TIN: {revealed ? c.tin : maskValue(c.tin)}</span>
                               )}
                             </div>
                           </div>
