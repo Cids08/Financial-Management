@@ -56,7 +56,7 @@ class Setting extends Model
     public static function current(): self
     {
         return static::query()->orderBy('id')->first() ?? static::query()->create([
-            'company_name' => config('app.name', 'FMS'),
+            'company_name' => config('app.company_name', config('app.name', 'FMS')),
             'tagline' => null,
             'company_address' => null,
             'company_email' => null,

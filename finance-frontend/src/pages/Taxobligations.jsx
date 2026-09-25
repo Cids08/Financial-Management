@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, Receipt, CheckCircle2, Clock3, AlertTriangle, Info, Printer, Sparkles, Loader2, CalendarRange, X, Paperclip, History, FileText, Calculator, FileSpreadsheet } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, Receipt, CheckCircle2, Clock3, AlertTriangle, Info, Printer, Sparkles, Loader2, CalendarRange, X, Paperclip, History, FileText, Calculator, FileSpreadsheet, Layers } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Pagination from '../components/Pagination'
 import Button from '../components/Button'
@@ -8,7 +8,7 @@ import Tooltip from '../components/Tooltip'
 import TaxObligationDocumentUploadModal from '../components/TaxObligationDocumentUploadModal'
 import TaxObligationDocumentHistoryModal from '../components/TaxObligationDocumentHistoryModal'
 import RecordTaxPaymentModal from '../components/RecordTaxPaymentModal'
-import BatchRecordTaxPaymentModal from '../components/BatchRecordTaxPaymentModal'
+import BatchPayTaxWizardModal from '../components/BatchPayTaxWizardModal'
 import GenerateTaxScheduleModal from '../components/GenerateTaxScheduleModal'
 import TaxComplianceReportModal from '../components/TaxComplianceReportModal'
 import { formatCurrency } from '../utils/formatters'
@@ -157,14 +157,9 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
   const { profile } = useProfile()
   const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
 
-  // Multi-row selection for batch payment
-  const [selectedTaxIds, setSelectedTaxIds] = useState([])
+  // Batch payment wizard (selection happens inside the modal now  -  the
+  // table no longer carries a checkbox column or selection bar).
   const [showBatchModal, setShowBatchModal] = useState(false)
-
-  // Clear selection whenever any filter or pagination page changes
-  useEffect(() => {
-    setSelectedTaxIds([])
-  }, [search, statusFilter, showArchived, dateFrom, dateTo, page])
 
   // Global search (SearchBar.jsx) navigates here with a highlightId (and,
   // since this table's `search` filter is server-side/debounced inside
@@ -181,37 +176,31 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
     setPage(1)
   }, [highlightSearch])
 
+  // Zero-amount obligations are "upcoming/uncalculated" — nothing is owed yet
+  // (no taxable base computed), so they are NOT payable and never count as raw
+  // material for the batch wizard or the single-row Pay action.
   const eligibleObligations = useMemo(() => {
-    return obligations.filter((o) => o.status !== 'Paid' && !showArchived)
+    return obligations.filter((o) => o.status !== 'Paid' && !showArchived && (Number(o.amount) || 0) > 0)
   }, [obligations, showArchived])
 
-  const isAllEligibleSelected = useMemo(() => {
-    return eligibleObligations.length > 0 && eligibleObligations.every((o) => selectedTaxIds.includes(o.tax_id))
-  }, [eligibleObligations, selectedTaxIds])
-
-  const selectedObligations = useMemo(() => {
-    return obligations.filter((o) => selectedTaxIds.includes(o.tax_id))
-  }, [obligations, selectedTaxIds])
-
-  const selectedTotalAmount = useMemo(() => {
-    return selectedObligations.reduce((sum, o) => sum + (Number(o.amount) || 0), 0)
-  }, [selectedObligations])
-
-  const toggleSelectAll = () => {
-    if (isAllEligibleSelected) {
-      const eligibleIds = new Set(eligibleObligations.map((o) => o.tax_id))
-      setSelectedTaxIds((prev) => prev.filter((id) => !eligibleIds.has(id)))
-    } else {
-      const eligibleIds = eligibleObligations.map((o) => o.tax_id)
-      setSelectedTaxIds((prev) => Array.from(new Set([...prev, ...eligibleIds])))
-    }
-  }
-
-  const toggleSelectOne = (tax_id) => {
-    setSelectedTaxIds((prev) =>
-      prev.includes(tax_id) ? prev.filter((id) => id !== tax_id) : [...prev, tax_id]
-    )
-  }
+  // Table display order mirrors the server-side urgency ranking (see
+  // TaxObligationService::list) so it holds on every page: Paid last,
+  // then Overdue first, then obligations with an amount, then the
+  // zero-amount (upcoming/uncalculated) ones. Within each group, soonest
+  // due date first so the most urgent tax is on top.
+  const sortedObligations = useMemo(() => {
+    return [...obligations].sort((a, b) => {
+      const paid = (o) => o.status === 'Paid'
+      if (paid(a) !== paid(b)) return paid(a) ? 1 : -1
+      const aOverdue = a.status === 'Overdue' || (a.status !== 'Paid' && daysUntil(a.due_date) < 0)
+      const bOverdue = b.status === 'Overdue' || (b.status !== 'Paid' && daysUntil(b.due_date) < 0)
+      if (aOverdue !== bOverdue) return aOverdue ? -1 : 1
+      const aAmount = Number(a.amount) || 0
+      const bAmount = Number(b.amount) || 0
+      if ((aAmount > 0) !== (bAmount > 0)) return aAmount > 0 ? -1 : 1
+      return new Date(a.due_date) - new Date(b.due_date)
+    })
+  }, [obligations])
 
   const [modalMode, setModalMode] = useState(null)
   // Company default tax rate (Settings) seeds new tax obligations.
@@ -582,6 +571,9 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
           <Button variant="secondary" size="sm" icon={CalendarRange} onClick={() => setShowScheduleModal(true)}>
             Generate Schedule
           </Button>
+          <Button variant="secondary" size="sm" icon={Layers} onClick={() => setShowBatchModal(true)} disabled={eligibleObligations.length === 0}>
+            Batch Pay
+          </Button>
           <Button variant="primary" size="sm" icon={Plus} onClick={openAdd}>
             Add Obligation
           </Button>
@@ -727,59 +719,10 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
       </div>
 
       <div className={PANEL}>
-        {/* Active multi-row selection bar for batch payment */}
-        {selectedTaxIds.length > 0 && (
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-2.5 bg-emerald-500/10 border-b border-emerald-500/20 text-xs animate-fadeIn">
-            <div className="flex items-center gap-2">
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-white font-bold text-[10px]">
-                {selectedTaxIds.length}
-              </span>
-              <span className="font-semibold text-ink">
-                {selectedTaxIds.length} obligation{selectedTaxIds.length === 1 ? '' : 's'} selected
-              </span>
-              <span className="text-muted">·</span>
-              <span className="text-muted">
-                Total Due:{' '}
-                <span className="font-bold text-ink">
-                  {formatCurrency(selectedTotalAmount)}
-                </span>
-              </span>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={() => setSelectedTaxIds([])}
-                className="text-xs text-muted hover:text-ink font-medium px-2 py-1 rounded hover:bg-bg transition-colors"
-              >
-                Clear
-              </button>
-              <Button
-                variant="secondary"
-                size="sm"
-                icon={Sparkles}
-                onClick={() => setShowBatchModal(true)}
-              >
-                Batch Pay ({selectedTaxIds.length})
-              </Button>
-            </div>
-          </div>
-        )}
-
         <div className="overflow-hidden rounded-t-xl">
           <table className="w-full text-sm">
             <thead className="bg-surface">
               <tr className="border-b border-border">
-                <th className="bg-surface text-center font-semibold text-muted text-xs uppercase tracking-wider px-2.5 py-3 w-10 whitespace-nowrap">
-                  {!showArchived && eligibleObligations.length > 0 && (
-                    <input
-                      type="checkbox"
-                      checked={isAllEligibleSelected}
-                      onChange={toggleSelectAll}
-                      aria-label="Select all eligible unpaid obligations on this page"
-                      className="rounded border-border text-primary focus:ring-primary/40 cursor-pointer h-3.5 w-3.5 align-middle"
-                    />
-                  )}
-                </th>
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-3.5 py-3 whitespace-nowrap">Tax Type / Period</th>
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-3 py-3 whitespace-nowrap">Due Date</th>
                 <th className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wider px-3 py-3 whitespace-nowrap">Amount</th>
@@ -789,11 +732,11 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">
+                <tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-muted">
                   <Loader2 size={16} className="inline animate-spin mr-2" /> Loading tax obligations…
                 </td></tr>
               )}
-              {!loading && obligations.map((o) => {
+              {!loading && sortedObligations.map((o) => {
                 const remaining = daysUntil(o.due_date)
                 const formattedAmount = formatCurrency(o.amount)
                 return (
@@ -801,19 +744,8 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                     key={o.tax_id}
                     data-row-id={o.tax_id}
                     className={`border-b border-border last:border-0 transition-colors duration-300
-                      ${selectedTaxIds.includes(o.tax_id) ? 'bg-emerald-50/40 dark:bg-emerald-500/5' : highlightedId === o.tax_id ? 'bg-primary/10' : 'hover:bg-bg'}`}
+                      ${highlightedId === o.tax_id ? 'bg-primary/10' : 'hover:bg-bg'}`}
                   >
-                    <td className="px-2.5 py-2.5 text-center w-10 whitespace-nowrap">
-                      {o.status !== 'Paid' && !showArchived ? (
-                        <input
-                          type="checkbox"
-                          checked={selectedTaxIds.includes(o.tax_id)}
-                          onChange={() => toggleSelectOne(o.tax_id)}
-                          aria-label={`Select ${o.tax_type}`}
-                          className="rounded border-border text-primary focus:ring-primary/40 cursor-pointer h-3.5 w-3.5 align-middle"
-                        />
-                      ) : null}
-                    </td>
                     <td className="px-3.5 py-2.5 min-w-0">
                       <button
                         type="button"
@@ -850,8 +782,10 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                     </td>
                     <td className="px-3.5 py-2.5 whitespace-nowrap text-right">
                       <div className="flex items-center justify-end gap-1">
-                        {/* Workflow Action: Pay (Unpaid obligations only) */}
-                        {o.status !== 'Paid' && !showArchived && (
+                        {/* Workflow Action: Pay (Unpaid obligations only, and only
+                            when there's actually an amount owed  -  zero-amount
+                            "upcoming/uncalculated" obligations have nothing to pay) */}
+                        {o.status !== 'Paid' && !showArchived && (Number(o.amount) || 0) > 0 && (
                           <div className="flex items-center mr-1 pr-1.5 border-r border-border">
                             <Tooltip label="Record BIR Payment" align="start">
                               <button
@@ -944,7 +878,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                 )
               })}
               {!loading && obligations.length === 0 && (
-                <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">
+                <tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-muted">
                   {hasDateFilter ? 'No tax obligations fall within the selected date range.' : 'No tax obligations match your filters.'}
                 </td></tr>
               )}
@@ -1452,18 +1386,12 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
         onPay={recordTaxPayment}
       />
 
-      {/* Batch Record BIR tax payment modal */}
-      <BatchRecordTaxPaymentModal
+      {/* Batch BIR tax payment wizard (Review & Select -> Payment Details) */}
+      <BatchPayTaxWizardModal
         open={showBatchModal}
         onClose={() => setShowBatchModal(false)}
-        obligations={selectedObligations}
-        onBatchPay={async (formData) => {
-          const res = await batchRecordTaxPayment(formData)
-          if (res?.success) {
-            setSelectedTaxIds([])
-          }
-          return res
-        }}
+        obligations={eligibleObligations}
+        onBatchPay={batchRecordTaxPayment}
       />
 
       {/* Generate statutory tax filing schedule modal */}

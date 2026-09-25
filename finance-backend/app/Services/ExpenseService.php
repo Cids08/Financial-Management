@@ -237,7 +237,7 @@ class ExpenseService
      *      independent of the expenses filed against it. This check is
      *      never skipped, including for system-generated postings.
      */
-    public function approve(Expense $expense, User $approver, bool $skipDepartmentCheck = false): Expense
+    public function approve(Expense $expense, User $approver, bool $skipDepartmentCheck = false, bool $skipReceiptCheck = false): Expense
     {
         if ($expense->status !== Expense::STATUS_PENDING) {
             throw ValidationException::withMessages([
@@ -245,7 +245,14 @@ class ExpenseService
             ]);
         }
 
-        if (! $expense->has_receipt) {
+        // The receipt-document gate can be skipped for system-generated
+        // postings like TaxObligationService::recordAsExpense(), where the
+        // payment is already settled with BIR before the obligation is
+        // marked Paid (the receipt is optional there by design — see
+        // RecordTaxPaymentRequest). It must never be skipped for real,
+        // user-submitted expense requests, which is why this stays opt-in
+        // and is only ever passed as true from that one system path.
+        if (! $expense->has_receipt && ! $skipReceiptCheck) {
             throw ValidationException::withMessages([
                 'receipt' => 'This expense cannot be approved without an attached receipt document.',
             ]);

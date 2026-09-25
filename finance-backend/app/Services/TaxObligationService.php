@@ -6,6 +6,7 @@ use App\Models\AuditLog;
 use App\Models\Budget;
 use App\Models\CashAccount;
 use App\Models\Collection;
+use App\Models\Department;
 use App\Models\Disbursement;
 use App\Models\Expense;
 use App\Models\ExpenseCategory;
@@ -30,6 +31,12 @@ class TaxObligationService
     protected const TAX_BUDGET_CODE = 'STAT-COMPLIANCE';
     protected const TAX_CATEGORY_CODE = 'TAX';
 
+    // Starting allocation for a lazily-provisioned system budget. Nominal
+    // ceiling for statutory tax outflows — never meant to be precise, just
+    // large enough that the first payments don't immediately bump into a
+    // budget-remaining guard. Adjust it in the Budgets page if needed.
+    protected const TAX_BUDGET_ALLOCATION = 10_000_000;
+
     // Fields captured in AuditLog.old_values/new_values for create/update —
     // the obligation's actual financial and status data, not timestamps or
     // relationship ids that don't need a diff trail.
@@ -53,7 +60,25 @@ class TaxObligationService
             $query->onlyTrashed();
         }
 
-        $query->search($filters['search'] ?? null)->latest('due_date');
+        $query->search($filters['search'] ?? null);
+
+        // Urgency ranking lives here (server-side), not in the frontend:
+        // pagination slices the list by page, so a client-only sort can
+        // never pull the urgent rows onto page 1 — it can only reorder
+        // whatever page the user happens to be on. This order keeps the
+        // ranking true across every page:
+        //   1. Overdue (Pending past due) — urgency, regardless of amount
+        //   2. Has an amount (nearer due, non-zero)
+        //   3. Zero-amount (upcoming/uncalculated)
+        //   4. Paid (settled) always last
+        $query->orderByRaw(
+            "CASE
+                WHEN status = 'Paid' THEN 3
+                WHEN due_date < CURRENT_DATE THEN 0
+                WHEN tax_amount > 0 THEN 1
+                ELSE 2
+            END"
+        )->orderBy('due_date');
 
         // "Overdue" is derived (Pending + due_date < today) rather than a
         // stored value, but it's still expressible in SQL, so filter here —
@@ -283,6 +308,15 @@ class TaxObligationService
             ]);
         }
 
+        // Zero-amount obligations have nothing to pay ('upcoming/uncalculated'
+        // or no taxable base computed yet)  -  settling would post a meaningless
+        // ₱0 expense/GL entry.
+        if ((float) $obligation->tax_amount <= 0) {
+            throw ValidationException::withMessages([
+                'tax_amount' => 'This obligation has no tax amount to pay yet. Compute its taxable base first.',
+            ]);
+        }
+
         return DB::transaction(function () use ($user, $obligation, $data, $document) {
             /** @var CashAccount $cashAccount */
             $cashAccount = CashAccount::lockForUpdate()->findOrFail($data['cash_account_id']);
@@ -358,6 +392,17 @@ class TaxObligationService
                 $labels = $alreadyPaid->map(fn ($o) => "{$o->tax_type} ({$o->tax_period})")->join(', ');
                 throw ValidationException::withMessages([
                     'tax_ids' => "The following tax obligation(s) are already marked as Paid: {$labels}.",
+                ]);
+            }
+
+            // Zero-amount obligations have nothing to pay ('upcoming/uncalculated'
+            // or no taxable base computed yet)  -  settling them would post a
+            // meaningless ₱0 expense/GL entry, so reject them explicitly.
+            $zeroAmounts = $obligations->filter(fn ($o) => (float) $o->tax_amount <= 0);
+            if ($zeroAmounts->isNotEmpty()) {
+                $labels = $zeroAmounts->map(fn ($o) => "{$o->tax_type} ({$o->tax_period})")->join(', ');
+                throw ValidationException::withMessages([
+                    'tax_ids' => "The following obligation(s) have no tax amount to pay yet: {$labels}. Compute their taxable base first or exclude them from the batch.",
                 ]);
             }
 
@@ -453,9 +498,10 @@ class TaxObligationService
         $category = ExpenseCategory::where('category_code', self::TAX_CATEGORY_CODE)->first();
 
         if (! $budget || ! $category) {
-            throw ValidationException::withMessages([
-                'finance' => "Tax obligation expense posting is not configured. Create a Budget with code '" . self::TAX_BUDGET_CODE . "' and an ExpenseCategory with code '" . self::TAX_CATEGORY_CODE . "'.",
-            ]);
+            $this->ensureTaxPostingConfiguration($user, $obligation);
+
+            $budget = Budget::where('budget_code', self::TAX_BUDGET_CODE)->first();
+            $category = ExpenseCategory::where('category_code', self::TAX_CATEGORY_CODE)->first();
         }
 
         $expense = $this->expenseService->create([
@@ -468,7 +514,7 @@ class TaxObligationService
             'expense_amount'      => $obligation->tax_amount,
             'expense_source'      => $obligation->cashAccount?->account_name ?? 'Statutory Tax Payment',
             'receipt_number'      => $obligation->reference_number,
-            'receipt_status'      => Expense::RECEIPT_VERIFIED,
+            'receipt_status'      => $proofDoc ? Expense::RECEIPT_UPLOADED : Expense::RECEIPT_PENDING,
         ], $user);
 
         // If a payment proof document was uploaded, link it as an expense supporting document
@@ -486,11 +532,69 @@ class TaxObligationService
             ]);
         }
 
-        $expense = $this->expenseService->approve($expense, $user, skipDepartmentCheck: true);
+        $expense = $this->expenseService->approve($expense, $user, skipDepartmentCheck: true, skipReceiptCheck: true);
 
         $obligation->update(['expense_id' => $expense->id]);
 
         return $obligation;
+    }
+
+    /**
+     * Lazily provisions the fixed system reference data tax payments post
+     * against (Budget 'STAT-COMPLIANCE' + ExpenseCategory 'TAX') the first
+     * time an obligation is marked Paid. Previously this was a hard error
+     * requiring manual DB seeding — deployed databases (or fresh demos)
+     * with no seeder run commonly hit it on the very first payment.
+     *
+     * Creates only the missing piece(s): the ExpenseCategory is standalone,
+     * the Budget is attached to the acting user's department (falling back
+     * to the first department), Active for the payment's fiscal year, and
+     * approved by the acting user so it can be spent immediately.
+     */
+    protected function ensureTaxPostingConfiguration(User $user, TaxObligation $obligation): void
+    {
+        $category = ExpenseCategory::where('category_code', self::TAX_CATEGORY_CODE)->first();
+
+        if (! $category) {
+            ExpenseCategory::create([
+                'category_code' => self::TAX_CATEGORY_CODE,
+                'category_name' => 'Statutory Tax Payments',
+                'description'   => 'System category for statutory BIR tax obligation payments, auto-created by the tax module.',
+                'is_active'     => true,
+            ]);
+        }
+
+        if (Budget::where('budget_code', self::TAX_BUDGET_CODE)->exists()) {
+            return;
+        }
+
+        $departmentId = $user->department_id ?? Department::query()->value('id');
+
+        if (! $departmentId) {
+            throw ValidationException::withMessages([
+                'finance' => "Tax obligation expense posting is not configured: no Department could be found to attach the system 'STAT-COMPLIANCE' budget to.",
+            ]);
+        }
+
+        $year = (int) ($obligation->payment_date?->format('Y') ?? now()->year);
+
+        Budget::create([
+            'department_id'     => $departmentId,
+            'budget_code'       => self::TAX_BUDGET_CODE,
+            'budget_name'       => 'Statutory Compliance',
+            'budget_type'       => 'Operational',
+            'fiscal_year'       => $year,
+            'allocated_amount'  => self::TAX_BUDGET_ALLOCATION,
+            'used_amount'       => 0,
+            'remaining_amount'  => self::TAX_BUDGET_ALLOCATION,
+            'warning_percentage'=> 80,
+            'start_date'        => Carbon::create($year, 1, 1)->toDateString(),
+            'end_date'          => Carbon::create($year, 12, 31)->toDateString(),
+            'status'            => Budget::STATUS_ACTIVE,
+            'created_by'        => $user->id,
+            'approved_by'       => $user->id,
+            'approved_at'       => now(),
+        ]);
     }
 
     /**

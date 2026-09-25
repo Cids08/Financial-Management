@@ -20,10 +20,17 @@ import Button from './Button'
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-const fmt = (n) =>
-  Number(n).toLocaleString('en-PH', { style: 'currency', currency: 'PHP' })
 
 const STEPS = ['Configure Run', 'Review & Select', 'Confirmation']
+
+// Stable references for optional props so they never change identity between
+// renders (an inline default []/{} would get a fresh array each render and
+// trip effects that list them as dependencies).
+const NO_PRESELECTION = []
+const NO_EXPENSES = []
+const NO_ACCOUNTS = []
+const NO_BUDGETS = []
+const NO_CATEGORIES = []
 
 // ---------------------------------------------------------------------------
 // Component
@@ -31,11 +38,11 @@ const STEPS = ['Configure Run', 'Review & Select', 'Confirmation']
 export default function BatchApproveExpensesModal({
   open,
   onClose,
-  allExpenses = [],
-  preSelectedIds = [],
-  cashAccounts = [],
-  budgets = [],
-  categories = [],
+  allExpenses = NO_EXPENSES,
+  preSelectedIds = NO_PRESELECTION,
+  cashAccounts = NO_ACCOUNTS,
+  budgets = NO_BUDGETS,
+  categories = NO_CATEGORIES,
   fetchApprovalProposals,
   onBatchApprove,
 }) {
@@ -155,6 +162,32 @@ export default function BatchApproveExpensesModal({
     }
   }, [fetchApprovalProposals, filterCategory, filterBudget, filterDateFrom, filterDateTo, eligibleFromProps])
 
+  // Live filter refresh: as soon as the user picks ANY filter on the
+  // Configure screen, debounce and reload the proposals automatically —
+  // no need to click "Load Proposals". Backing out to Step 0 to tweak a
+  // filter re-triggers the same auto-load. Runs only while on Step 0,
+  // only when at least one filter is active (with zero filters the wizard
+  // waits for explicit input so it never forces the configure screen away
+  // on open), and never while a load is already in flight.
+  //
+  // The handler is called through a ref (loadProposalsRef) instead of being
+  // a dependency: handleLoadProposals' identity can churn when its own deps
+  // change, and including it here would re-fire/re-schedule this effect on
+  // every such render — the "Maximum update depth exceeded" crash.
+  const loadProposalsRef = useRef(null)
+  loadProposalsRef.current = handleLoadProposals
+
+  useEffect(() => {
+    if (!open || step !== 0 || loadingProposals) return
+    const hasActiveFilter =
+      filterCategory || filterBudget || filterDateFrom || filterDateTo
+    if (!hasActiveFilter) return
+    const timer = setTimeout(() => {
+      loadProposalsRef.current()
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [open, step, loadingProposals, filterCategory, filterBudget, filterDateFrom, filterDateTo])
+
   // ── Selection helpers ─────────────────────────────────────────────────────
   const selectedExpenses = useMemo(
     () => proposals.filter((p) => selected[p.id]),
@@ -272,9 +305,9 @@ export default function BatchApproveExpensesModal({
       <div className="bg-surface border border-border text-ink rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-gradient-to-r from-emerald-500/10 via-primary/5 to-transparent">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-gradient-to-r from-primary/10 via-primary/5 to-transparent">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 rounded-xl">
+            <div className="p-2 bg-primary/20 text-primary-dark dark:text-primary rounded-xl">
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
@@ -294,12 +327,12 @@ export default function BatchApproveExpensesModal({
         <div className="flex items-center gap-0 px-6 py-3 border-b border-border bg-bg/50">
           {STEPS.map((label, i) => (
             <div key={i} className="flex items-center flex-1 last:flex-none">
-              <div className={`flex items-center gap-2 ${i <= step ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted'}`}>
+              <div className={`flex items-center gap-2 ${i <= step ? 'text-primary-dark dark:text-primary' : 'text-muted'}`}>
                 <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-colors
                   ${i < step
-                    ? 'bg-emerald-600 border-emerald-600 text-white dark:bg-emerald-500 dark:border-emerald-500'
+                    ? 'bg-primary border-primary text-white'
                     : i === step
-                    ? 'border-emerald-600 text-emerald-600 dark:border-emerald-400 dark:text-emerald-400 bg-surface'
+                    ? 'border-primary text-primary-dark dark:text-primary bg-surface'
                     : 'border-border text-muted bg-surface'
                   }`}>
                   {i < step ? <CheckCircle className="w-4 h-4" /> : i + 1}
@@ -307,7 +340,7 @@ export default function BatchApproveExpensesModal({
                 <span className="text-xs font-semibold hidden sm:block">{label}</span>
               </div>
               {i < STEPS.length - 1 && (
-                <div className={`flex-1 h-0.5 mx-3 ${i < step ? 'bg-emerald-500/50' : 'bg-border'}`} />
+                <div className={`flex-1 h-0.5 mx-3 ${i < step ? 'bg-primary/50' : 'bg-border'}`} />
               )}
             </div>
           ))}
@@ -324,14 +357,17 @@ export default function BatchApproveExpensesModal({
               <div>
                 <h3 className="text-base font-semibold text-ink mb-1">Approval Run Settings</h3>
                 <p className="text-xs sm:text-sm text-muted">
-                  Configure filters to load pending expense proposals. In accordance with strict documentary policy,
-                  <span className="font-semibold text-emerald-600 dark:text-emerald-400"> only expenses with attached proof of receipt</span> will be included in the approval run.
-                </p>
+                    Configure filters to load pending expense proposals. In accordance with strict documentary policy,
+                    <span className="font-semibold text-primary-dark dark:text-primary"> only expenses with attached proof of receipt</span> will be included in the approval run.
+                  </p>
+                  <p className="text-[11px] text-muted mt-1.5">
+                    Eligible proposals load automatically as you change any filter — you can also press <span className="font-medium">Load Proposals</span> to refresh manually.
+                  </p>
               </div>
 
               {/* Policy badge */}
-              <div className="flex items-center gap-3 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs sm:text-sm text-emerald-800 dark:text-emerald-300">
-                <Receipt className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <div className="flex items-center gap-3 p-3 bg-primary/10 border border-primary/20 rounded-xl text-xs sm:text-sm text-primary-dark dark:text-primary">
+                <Receipt className="w-5 h-5 text-primary-dark dark:text-primary shrink-0" />
                 <span>
                   <strong>Strict Policy Enforced:</strong> Expenses missing supporting receipts are automatically withheld from batch release.
                 </span>
@@ -346,7 +382,7 @@ export default function BatchApproveExpensesModal({
                   ref={firstInputRef}
                   value={filterCategory}
                   onChange={(e) => setFilterCategory(e.target.value)}
-                  className="w-full border border-border bg-surface text-ink rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  className="w-full border border-border bg-surface text-ink rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
                 >
                   <option value="">All Categories</option>
                   {categories.map((c) => (
@@ -363,7 +399,7 @@ export default function BatchApproveExpensesModal({
                 <select
                   value={filterBudget}
                   onChange={(e) => setFilterBudget(e.target.value)}
-                  className="w-full border border-border bg-surface text-ink rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  className="w-full border border-border bg-surface text-ink rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
                 >
                   <option value="">All Budgets</option>
                   {budgets.map((b) => (
@@ -384,7 +420,7 @@ export default function BatchApproveExpensesModal({
                     value={filterDateFrom}
                     onChange={(e) => setFilterDateFrom(e.target.value)}
                     max={filterDateTo || undefined}
-                    className="flex-1 border border-border bg-surface text-ink rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 scheme-light dark:scheme-dark"
+                    className="flex-1 border border-border bg-surface text-ink rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 scheme-light dark:scheme-dark"
                   />
                   <span className="text-xs text-muted">to</span>
                   <input
@@ -392,7 +428,7 @@ export default function BatchApproveExpensesModal({
                     value={filterDateTo}
                     onChange={(e) => setFilterDateTo(e.target.value)}
                     min={filterDateFrom || undefined}
-                    className="flex-1 border border-border bg-surface text-ink rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 scheme-light dark:scheme-dark"
+                    className="flex-1 border border-border bg-surface text-ink rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 scheme-light dark:scheme-dark"
                   />
                 </div>
               </div>
@@ -411,17 +447,36 @@ export default function BatchApproveExpensesModal({
           ================================================================ */}
           {step === 1 && (
             <div className="space-y-4">
+              {/* Active filters applied to this run — confirmation the
+                  Configure Run selections actually reached the loader. */}
+              {(() => {
+                const chips = []
+                if (filterCategory) chips.push(categories.find((c) => String(c.id) === String(filterCategory))?.category_name || 'Category #' + filterCategory)
+                if (filterBudget) chips.push(budgets.find((b) => String(b.budget_id) === String(filterBudget))?.budget_name || 'Budget #' + filterBudget)
+                if (filterDateFrom && filterDateTo) chips.push(`${filterDateFrom} → ${filterDateTo}`)
+                else if (filterDateFrom) chips.push(`From ${filterDateFrom}`)
+                else if (filterDateTo) chips.push(`To ${filterDateTo}`)
+                return chips.length > 0 ? (
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                    <span className="text-muted">Active filters:</span>
+                    {chips.map((c, i) => (
+                      <span key={i} className="inline-flex items-center rounded-full bg-primary/10 text-primary-dark dark:text-primary border border-primary/20 px-2 py-0.5">{c}</span>
+                    ))}
+                  </div>
+                ) : null
+              })()}
+
               {/* Summary bar */}
               <div className="flex flex-wrap gap-3">
-                <div className="flex-1 min-w-[140px] p-3 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
-                  <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">Total Eligible (With Proof)</div>
+                <div className="flex-1 min-w-[140px] p-3 bg-primary/10 rounded-xl border border-primary/20">
+                  <div className="text-xs text-primary-dark dark:text-primary font-medium">Total Eligible (With Proof)</div>
                   <div className="text-lg font-bold text-ink">{proposals.length} expenses</div>
-                  <div className="text-xs text-muted">{fmt(totals.total_amount ?? 0)} available</div>
+                  <div className="text-xs text-muted">{formatCurrency(totals.total_amount ?? 0)} available</div>
                 </div>
                 <div className={`flex-1 min-w-[140px] p-3 rounded-xl border ${selectedCount > 0 ? 'bg-primary/10 border-primary/20' : 'bg-bg/40 border-border'}`}>
                   <div className={`text-xs font-medium ${selectedCount > 0 ? 'text-primary' : 'text-muted'}`}>Selected</div>
                   <div className={`text-lg font-bold ${selectedCount > 0 ? 'text-ink' : 'text-muted'}`}>{selectedCount} of {proposals.length}</div>
-                  <div className={`text-xs ${selectedCount > 0 ? 'text-primary' : 'text-muted'}`}>{fmt(selectedTotal)}</div>
+                  <div className={`text-xs ${selectedCount > 0 ? 'text-primary' : 'text-muted'}`}>{formatCurrency(selectedTotal)}</div>
                 </div>
               </div>
 
@@ -506,7 +561,7 @@ export default function BatchApproveExpensesModal({
                               {x.expense_date}
                             </td>
                             <td className="px-3 py-3 text-right font-mono font-semibold text-ink whitespace-nowrap">
-                              {fmt(x.expense_amount)}
+                              {formatCurrency(x.expense_amount)}
                               {x.is_over_budget && (
                                 <span className="ml-1 inline-flex items-center px-1 py-0.5 rounded text-[9px] font-semibold bg-red-500/10 text-red-600 dark:text-red-400">Over</span>
                               )}
@@ -526,8 +581,8 @@ export default function BatchApproveExpensesModal({
                         <td colSpan={5} className="px-3 py-3 text-xs font-semibold text-muted">
                           {selectedCount} of {proposals.length} selected
                         </td>
-                        <td className="px-3 py-3 text-right font-bold text-emerald-600 dark:text-emerald-400 font-mono">
-                          {fmt(selectedTotal)}
+                        <td className="px-3 py-3 text-right font-bold text-primary-dark dark:text-primary font-mono">
+                          {formatCurrency(selectedTotal)}
                         </td>
                         <td />
                       </tr>
@@ -558,13 +613,13 @@ export default function BatchApproveExpensesModal({
               </div>
 
               {/* Selected summary */}
-              <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center justify-between">
+              <div className="p-4 bg-primary/10 border border-primary/20 rounded-xl flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">{selectedCount} expense{selectedCount !== 1 ? 's' : ''} to approve</p>
-                  <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">All items verified with attached proof</p>
+                  <p className="text-sm font-semibold text-primary-dark dark:text-primary">{selectedCount} expense{selectedCount !== 1 ? 's' : ''} to approve</p>
+                  <p className="text-xs text-primary-dark/80 dark:text-primary/80 mt-0.5">All items verified with attached proof</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400 font-mono">{fmt(selectedTotal)}</p>
+                  <p className="text-xl font-bold text-primary-dark dark:text-primary font-mono">{formatCurrency(selectedTotal)}</p>
                   <p className="text-xs text-muted">Total payout</p>
                 </div>
               </div>
@@ -590,10 +645,10 @@ export default function BatchApproveExpensesModal({
                               {c.account_name}
                               {c.bank_name && <span className="text-muted text-xs ml-1">· {c.bank_name}</span>}
                             </td>
-                            <td className="px-4 py-2.5 text-right font-mono text-muted">{fmt(c.current_balance)}</td>
-                            <td className="px-4 py-2.5 text-right font-mono font-semibold text-rose-600 dark:text-rose-400">{fmt(c.total)}</td>
+                            <td className="px-4 py-2.5 text-right font-mono text-muted">{formatCurrency(c.current_balance)}</td>
+                            <td className="px-4 py-2.5 text-right font-mono font-semibold text-rose-600 dark:text-rose-400">{formatCurrency(c.total)}</td>
                             <td className={`px-4 py-2.5 text-right font-mono font-bold ${c.isOverdrawn ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                              {fmt(c.remaining)}
+                              {formatCurrency(c.remaining)}
                               {c.isOverdrawn && <span className="ml-1 text-[9px] bg-rose-500/20 text-rose-600 dark:text-rose-400 px-1 py-0.5 rounded font-semibold">OVERDRAFT</span>}
                             </td>
                           </tr>
@@ -622,10 +677,10 @@ export default function BatchApproveExpensesModal({
                         {budgetImpact.map((b, i) => (
                           <tr key={i} className={b.isOverBudget ? 'bg-rose-500/10' : ''}>
                             <td className="px-4 py-2.5 font-medium text-ink">{b.budget_name}</td>
-                            <td className="px-4 py-2.5 text-right font-mono text-muted">{fmt(b.remaining_amount)}</td>
-                            <td className="px-4 py-2.5 text-right font-mono font-semibold text-rose-600 dark:text-rose-400">{fmt(b.total)}</td>
+                            <td className="px-4 py-2.5 text-right font-mono text-muted">{formatCurrency(b.remaining_amount)}</td>
+                            <td className="px-4 py-2.5 text-right font-mono font-semibold text-rose-600 dark:text-rose-400">{formatCurrency(b.total)}</td>
                             <td className={`px-4 py-2.5 text-right font-mono font-bold ${b.isOverBudget ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                              {fmt(b.after)}
+                              {formatCurrency(b.after)}
                               {b.isOverBudget && <span className="ml-1 text-[9px] bg-rose-500/20 text-rose-600 dark:text-rose-400 px-1 py-0.5 rounded font-semibold">OVER</span>}
                             </td>
                           </tr>
@@ -669,7 +724,7 @@ export default function BatchApproveExpensesModal({
                 <p className="text-sm text-muted mt-1">
                   {result?.count ?? selectedCount} expense{(result?.count ?? selectedCount) !== 1 ? 's' : ''} approved
                   {' · '}
-                  {fmt(result?.total_amount ?? selectedTotal)} total
+                  {formatCurrency(result?.total_amount ?? selectedTotal)} total
                 </p>
                 <p className="text-xs text-muted mt-2">
                   Journal entries have been posted to the <span className="font-semibold text-ink">General Ledger</span> and cash accounts have been updated.
@@ -729,7 +784,7 @@ export default function BatchApproveExpensesModal({
               onClick={handleExecute}
             >
               {executing ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin inline" /> : <Sparkles className="w-4 h-4 mr-1.5 inline" />}
-              {executing ? 'Processing…' : `Approve ${selectedCount} Expense${selectedCount !== 1 ? 's' : ''} · ${fmt(selectedTotal)}`}
+              {executing ? 'Processing…' : `Approve ${selectedCount} Expense${selectedCount !== 1 ? 's' : ''} · ${formatCurrency(selectedTotal)}`}
             </Button>
           )}
         </div>

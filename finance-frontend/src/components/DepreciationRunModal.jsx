@@ -289,10 +289,10 @@ export default function DepreciationRunModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-surface rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-500/15 dark:to-orange-500/15">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-gradient-to-r from-primary/10 via-primary/5 to-transparent">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-amber-100 dark:bg-amber-500/20 rounded-xl">
-              <TrendingDown className="w-5 h-5 text-amber-600" />
+            <div className="p-2 bg-primary/20 text-primary-dark dark:text-primary rounded-xl">
+              <TrendingDown className="w-5 h-5" />
             </div>
             <div>
               <h2 className="text-lg font-bold text-ink">Fixed Assets Depreciation Run</h2>
@@ -308,13 +308,13 @@ export default function DepreciationRunModal({
         <div className="flex items-center gap-0 px-6 py-3 border-b border-border bg-bg">
           {STEPS.map((label, i) => (
             <div key={i} className="flex items-center flex-1 last:flex-none">
-              <div className={`flex items-center gap-2 ${i <= step ? 'text-amber-600' : 'text-muted'}`}>
+              <div className={`flex items-center gap-2 ${i <= step ? 'text-primary-dark dark:text-primary' : 'text-muted'}`}>
                 <div
                   className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-colors ${
                     i < step
-                      ? 'bg-amber-600 border-amber-600 text-white'
+                      ? 'bg-primary border-primary text-[#111827]'
                       : i === step
-                      ? 'border-amber-600 text-amber-600'
+                      ? 'border-primary text-primary-dark dark:text-primary'
                       : 'border-border text-muted'
                   }`}
                 >
@@ -323,7 +323,7 @@ export default function DepreciationRunModal({
                 <span className="text-xs font-semibold hidden sm:block">{label}</span>
               </div>
               {i < STEPS.length - 1 && (
-                <div className={`flex-1 h-0.5 mx-3 ${i < step ? 'bg-amber-400' : 'bg-border'}`} />
+                <div className={`flex-1 h-0.5 mx-3 ${i < step ? 'bg-primary/50' : 'bg-border'}`} />
               )}
             </div>
           ))}
@@ -346,7 +346,7 @@ export default function DepreciationRunModal({
                   <select
                     value={fiscalYear}
                     onChange={(e) => setFiscalYear(Number(e.target.value))}
-                    className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-300 focus:outline-none"
+                    className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/50 focus:outline-none"
                   >
                     {[2024, 2025, 2026, 2027, 2028, 2029, 2030].map((y) => (
                       <option key={y} value={y}>FY {y}</option>
@@ -360,7 +360,7 @@ export default function DepreciationRunModal({
                       type="button"
                       onClick={() => setPeriod('monthly')}
                       className={`flex-1 py-2 font-medium transition-colors ${
-                        period === 'monthly' ? 'bg-amber-600 text-white font-semibold' : 'bg-surface text-ink hover:bg-bg'
+                        period === 'monthly' ? 'bg-primary text-[#111827] font-semibold' : 'bg-surface text-ink hover:bg-bg'
                       }`}
                     >
                       Monthly
@@ -369,7 +369,7 @@ export default function DepreciationRunModal({
                       type="button"
                       onClick={() => setPeriod('annual')}
                       className={`flex-1 py-2 font-medium transition-colors ${
-                        period === 'annual' ? 'bg-amber-600 text-white font-semibold' : 'bg-surface text-ink hover:bg-bg'
+                        period === 'annual' ? 'bg-primary text-[#111827] font-semibold' : 'bg-surface text-ink hover:bg-bg'
                       }`}
                     >
                       Annual
@@ -385,7 +385,7 @@ export default function DepreciationRunModal({
                   <select
                     value={month}
                     onChange={(e) => setMonth(Number(e.target.value))}
-                    className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-300 focus:outline-none"
+                    className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/50 focus:outline-none"
                   >
                     {MONTHS.map((m) => (
                       <option key={m.value} value={m.value}>
@@ -402,7 +402,7 @@ export default function DepreciationRunModal({
                 <select
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-300 focus:outline-none"
+                  className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/50 focus:outline-none"
                 >
                   <option value="all">All Asset Categories</option>
                   {categories.map((c) => (
@@ -417,7 +417,7 @@ export default function DepreciationRunModal({
                 <select
                   value={methodOverride}
                   onChange={(e) => setMethodOverride(e.target.value)}
-                  className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-300 focus:outline-none"
+                  className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/50 focus:outline-none"
                 >
                   {METHODS.map((m) => (
                     <option key={m.value} value={m.value}>{m.label}</option>
@@ -432,7 +432,7 @@ export default function DepreciationRunModal({
                   type="date"
                   value={postingDate}
                   onChange={(e) => setPostingDate(e.target.value)}
-                  className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-300 focus:outline-none"
+                  className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/50 focus:outline-none"
                 />
               </div>
 
@@ -444,7 +444,7 @@ export default function DepreciationRunModal({
                   value={remarks}
                   onChange={(e) => setRemarks(e.target.value)}
                   placeholder="e.g. Monthly asset depreciation run"
-                  className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-300 focus:outline-none"
+                  className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/50 focus:outline-none"
                 />
               </div>
 
@@ -498,13 +498,13 @@ export default function DepreciationRunModal({
               </div>
 
               {/* GL Double-Entry Preview Box */}
-              <div className="p-3 bg-blue-50/70 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/30 rounded-xl text-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div className="p-3 bg-primary/10 border border-primary/20 rounded-xl text-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <div>
-                  <span className="font-bold text-blue-900 dark:text-blue-200 uppercase">General Ledger Journal Entry:</span>{' '}
-                  <span className="font-mono text-blue-700 dark:text-blue-300 font-semibold">{previewData.voucher_number}</span> &middot;{' '}
-                  <span className="text-blue-800 dark:text-blue-300">Posting Date: {postingDate}</span>
+                  <span className="font-bold text-primary-dark dark:text-primary uppercase">General Ledger Journal Entry:</span>{' '}
+                  <span className="font-mono text-primary-dark dark:text-primary font-semibold">{previewData.voucher_number}</span> &middot;{' '}
+                  <span className="text-ink">Posting Date: {postingDate}</span>
                 </div>
-                <div className="font-mono font-semibold text-blue-900 dark:text-blue-200 flex items-center gap-3">
+                <div className="font-mono font-semibold text-primary-dark dark:text-primary flex items-center gap-3">
                   <span>Dr. 5500 Depreciation Expense: {fmt(selectedDepreciationTotal)}</span>
                   <span>|</span>
                   <span>Cr. 1590 Accumulated Depreciation: {fmt(selectedDepreciationTotal)}</span>
@@ -546,7 +546,7 @@ export default function DepreciationRunModal({
                         return (
                           <tr
                             key={p.asset_id}
-                            className={`hover:bg-bg transition-colors ${isChecked ? 'bg-amber-50/40 dark:bg-amber-500/15' : 'opacity-60'}`}
+                            className={`hover:bg-bg transition-colors ${isChecked ? 'bg-primary/10 dark:bg-primary/15' : 'opacity-60'}`}
                           >
                             <td className="px-3 py-2">
                               <input
@@ -607,7 +607,7 @@ export default function DepreciationRunModal({
               <div className="p-4 bg-bg border border-border rounded-xl space-y-2 text-sm text-left">
                 <div className="flex justify-between">
                   <span className="text-muted">Journal Voucher No:</span>
-                  <span className="font-mono font-bold text-blue-700 dark:text-blue-300">{runResult.voucher_number}</span>
+                  <span className="font-mono font-bold text-primary-dark dark:text-primary">{runResult.voucher_number}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted">Total Depreciation Posted:</span>
@@ -670,7 +670,7 @@ export default function DepreciationRunModal({
               type="button"
               disabled={loadingPreview}
               onClick={loadPreview}
-              className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-lg transition-colors shadow-sm"
+              className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-primary hover:bg-primary-dark disabled:opacity-50 text-[#111827] rounded-lg transition-colors shadow-sm"
             >
               {loadingPreview ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
               {loadingPreview ? 'Calculating…' : 'Calculate Preview'}
@@ -682,7 +682,7 @@ export default function DepreciationRunModal({
               type="button"
               disabled={previewData?.already_posted || selectedAssetIds.size === 0 || executing}
               onClick={handleExecuteRun}
-              className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-lg transition-colors shadow-sm"
+              className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-primary hover:bg-primary-dark disabled:opacity-50 text-[#111827] rounded-lg transition-colors shadow-sm"
             >
               {executing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
               {executing ? 'Posting to GL…' : `Post Depreciation · ${fmt(selectedDepreciationTotal)}`}
