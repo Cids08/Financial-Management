@@ -51,6 +51,16 @@ class OpenAiAdvisorEngine implements AdvisorEngine
     private function complete(array $messages, int $maxTokens, float $temperature): ?string
     {
         $baseUrl = rtrim(config('services.openai.base_url'), '/');
+        $payload = [
+            'model' => config('services.openai.advisor_model', 'gpt-5-mini'),
+            'messages' => $messages,
+            'max_tokens' => $maxTokens,
+            'temperature' => $temperature,
+        ];
+        $effort = config('services.openai.reasoning_effort');
+        if ($effort !== null && $effort !== '') {
+            $payload['reasoning_effort'] = $effort;
+        }
 
         try {
             $response = Http::withToken(config('services.openai.key'))
@@ -59,13 +69,7 @@ class OpenAiAdvisorEngine implements AdvisorEngine
                     'X-Title' => config('services.openai.title'),
                 ])
                 ->timeout(30)
-                ->post($baseUrl . '/chat/completions', [
-                    'model' => config('services.openai.advisor_model', 'openai/gpt-4o-mini'),
-                    'messages' => $messages,
-                    'max_tokens' => $maxTokens,
-                    'temperature' => $temperature,
-                    'reasoning_effort' => config('services.openai.reasoning_effort', 'low'),
-                ]);
+                ->post($baseUrl . '/chat/completions', $payload);
 
             if ($response->failed()) {
                 Log::error('OpenAI advisor request failed', [

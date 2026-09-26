@@ -2,9 +2,9 @@
 AI Advisor microservice.
 
 Owns everything that talks to the LLM for the advisor chat feature —
-prompt construction, the OpenRouter call, and post-processing (em-dash
+prompt construction, the OpenAI-compatible call, and post-processing (em-dash
 stripping). Laravel's RemoteAdvisorEngine calls this over HTTP instead of
-calling OpenRouter directly. Everything else (conversation history,
+calling OpenAI directly. Everything else (conversation history,
 ownership checks, summarization job scheduling) stays in Laravel, since
 those are tightly coupled to the User/database model that has to remain
 centralized.
@@ -35,13 +35,15 @@ load_dotenv()
 
 app = FastAPI(title="AI Advisor Service")
 
-OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://openrouter.ai/api/v1").rstrip("/")
+OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 OPENAI_REFERER = os.environ.get("OPENAI_REFERER", "")
 OPENAI_TITLE = os.environ.get("OPENAI_TITLE", "")
-ADVISOR_MODEL = os.environ.get("OPENAI_ADVISOR_MODEL", "openai/gpt-4o-mini")
-RECOMMENDATION_MODEL = os.environ.get("OPENAI_RECOMMENDATION_MODEL", "openai/gpt-4o-mini")
-REASONING_EFFORT = os.environ.get("OPENAI_REASONING_EFFORT", "low")
+ADVISOR_MODEL = os.environ.get("OPENAI_ADVISOR_MODEL", "gpt-5-mini")
+RECOMMENDATION_MODEL = os.environ.get("OPENAI_RECOMMENDATION_MODEL", "gpt-5-mini")
+# OpenAI only accepts this on reasoning models (gpt-5 family, o3-*, etc.)
+# and rejects it on gpt-4o-mini; the env var is opt-in so either case works.
+REASONING_EFFORT = os.environ.get("OPENAI_REASONING_EFFORT", "").strip()
 
 VALID_CATEGORIES = ["Revenue", "Expense", "Cash Flow", "Budget"]
 VALID_PRIORITIES = ["Low", "Medium", "High", "Critical"]
@@ -242,18 +244,19 @@ def build_system_prompt(summary: Optional[str], grounding_data: List[dict]) -> s
 
 
 async def complete(messages: list, max_tokens: int, temperature: float) -> Optional[str]:
-    headers = {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
-        "HTTP-Referer": OPENAI_REFERER,
-        "X-Title": OPENAI_TITLE,
-    }
+    headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
+    if OPENAI_REFERER:
+        headers["HTTP-Referer"] = OPENAI_REFERER
+    if OPENAI_TITLE:
+        headers["X-Title"] = OPENAI_TITLE
     body = {
         "model": ADVISOR_MODEL,
         "messages": messages,
         "max_tokens": max_tokens,
         "temperature": temperature,
-        "reasoning_effort": REASONING_EFFORT,
     }
+    if REASONING_EFFORT:
+        body["reasoning_effort"] = REASONING_EFFORT
 
     try:
         async with httpx.AsyncClient(timeout=30) as client:
@@ -345,11 +348,11 @@ async def recommendations(req: RecommendationRequest, x_internal_token: str = He
         {"role": "user", "content": _json.dumps(payload)},
     ]
 
-    headers = {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
-        "HTTP-Referer": OPENAI_REFERER,
-        "X-Title": OPENAI_TITLE,
-    }
+    headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
+    if OPENAI_REFERER:
+        headers["HTTP-Referer"] = OPENAI_REFERER
+    if OPENAI_TITLE:
+        headers["X-Title"] = OPENAI_TITLE
     body = {
         "model": RECOMMENDATION_MODEL,
         "messages": messages,

@@ -145,13 +145,11 @@ services:
     container_name: fms_aiservice
     restart: unless-stopped
     environment:
-      OPENAI_BASE_URL: https://openrouter.ai/api/v1
+      OPENAI_BASE_URL: https://api.openai.com/v1
       OPENAI_API_KEY: ${OPENAI_API_KEY}
-      OPENAI_ADVISOR_MODEL: ${OPENAI_ADVISOR_MODEL:-openai/gpt-4o-mini}
-      OPENAI_RECOMMENDATION_MODEL: ${OPENAI_RECOMMENDATION_MODEL:-openai/gpt-4o-mini}
+      OPENAI_ADVISOR_MODEL: ${OPENAI_ADVISOR_MODEL:-gpt-5-mini}
+      OPENAI_RECOMMENDATION_MODEL: ${OPENAI_RECOMMENDATION_MODEL:-gpt-5-mini}
       OPENAI_REASONING_EFFORT: ${OPENAI_REASONING_EFFORT:-low}
-      OPENAI_REFERER: ${APP_URL}
-      OPENAI_TITLE: "Financial Management System"
       INTERNAL_SERVICE_TOKEN: ${AI_ADVISOR_SERVICE_TOKEN}
     ports:
       - "8002:8002"

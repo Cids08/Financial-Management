@@ -37,26 +37,23 @@ return [
 
     // Currently pointed at OpenRouter (funded), not api.openai.com directly
     // (out of credits). Both are OpenAI-compatible, so OpenAiAdvisorEngine /
-    // OpenAiRecommendationEngine needed zero code changes for this swap —
-    // only base_url, key, and model naming convention changed here.
-    // To switch back to real OpenAI later: OPENAI_BASE_URL=https://api.openai.com/v1,
-    // a real OpenAI key, and plain model names (e.g. gpt-5-mini instead of
-    // openai/gpt-5-mini).
+    // Direct-call engines (OpenAiAdvisorEngine / OpenAiRecommendationEngine).
+    // Pointed at api.openai.com by default; set OPENAI_BASE_URL to switch
+    // back to an OpenAI-compatible proxy (e.g. openrouter.ai/api/v1) and use
+    // that provider's model naming (e.g. openai/gpt-4o-mini). The active
+    // chain (RemoteAdvisorEngine / RemoteRecommendationEngine) does NOT read
+    // this block — it calls the finance-aiservice microservice instead.
     'openai' => [
-        'base_url' => env('OPENAI_BASE_URL', 'https://openrouter.ai/api/v1'),
+        'base_url' => env('OPENAI_BASE_URL', 'https://api.openai.com/v1'),
         'key' => env('OPENAI_API_KEY'),
-        'advisor_model' => env('OPENAI_ADVISOR_MODEL', 'openai/gpt-oss-120b:free'),
-        'recommendation_model' => env('OPENAI_RECOMMENDATION_MODEL', 'openai/gpt-oss-120b:free'),
-        // gpt-oss models support low/medium/high reasoning effort via OpenRouter.
-        // 'low' keeps advisor replies short and fast for a chat box; bump to
-        // 'medium' if replies feel shallow on more complex questions.
-        // NOTE: this is OpenRouter/gpt-oss-specific. If you switch back to real
-        // OpenAI (see note above), remove this key or leave it unset —
-        // real OpenAI's /chat/completions endpoint does not use this param.
-        'reasoning_effort' => env('OPENAI_REASONING_EFFORT', 'low'),
-        // OpenRouter-specific, optional but recommended by their docs for
-        // attribution/rankings — ignored entirely by real OpenAI if you
-        // switch back, so safe to leave set either way.
+        'advisor_model' => env('OPENAI_ADVISOR_MODEL', 'gpt-5-mini'),
+        'recommendation_model' => env('OPENAI_RECOMMENDATION_MODEL', 'gpt-5-mini'),
+        // OpenAI only accepts reasoning_effort on its reasoning models
+        // (gpt-5, o3-*, etc.); for gpt-4o-mini leave it unset or the call
+        // returns HTTP 400. Bump only when a reasoning model is configured.
+        'reasoning_effort' => env('OPENAI_REASONING_EFFORT', ''),
+        // OpenRouter attribution headers; ignored by api.openai.com, so
+        // harmless to leave set either way.
         'referer' => env('OPENAI_HTTP_REFERER', 'http://localhost'),
         'title' => env('OPENAI_APP_TITLE', 'Financial Management System'),
     ],

@@ -45,7 +45,7 @@ class OpenAiRecommendationEngine implements RecommendationEngine
                 ])
                 ->timeout(30)
                 ->post($baseUrl . '/chat/completions', [
-                    'model' => config('services.openai.recommendation_model', 'openai/gpt-4o-mini'),
+                    'model' => config('services.openai.recommendation_model', 'gpt-5-mini'),
                     'messages' => $messages,
                     'max_tokens' => 600,
                     'temperature' => 0.2,
