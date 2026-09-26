@@ -291,9 +291,10 @@ async def reply(req: ReplyRequest, x_internal_token: str = Header(default="")):
         messages.append({"role": m.role, "content": m.content})
     messages.append({"role": "user", "content": req.message})
 
-    # gpt-5-mini consumes output budget on reasoning even at 'low' effort; the
-    # advisor system prompt is large, so a small cap can return an empty reply.
-    result = await complete(messages, max_tokens=600, temperature=0.4)
+    # gpt-5-mini consumes its output budget on reasoning even at 'low' effort;
+    # at 'medium' a measured call burned ~1700 of 4096 tokens just to answer a
+    # short question over the large advisor system prompt. Keep a generous cap.
+    result = await complete(messages, max_tokens=3000, temperature=0.4)
     return ReplyResponse(reply=result or "Sorry, I could not generate a response right now.")
 
 
@@ -313,7 +314,7 @@ async def summarize(req: SummarizeRequest, x_internal_token: str = Header(defaul
             },
             {"role": "user", "content": req.transcript},
         ],
-        max_tokens=400,
+        max_tokens=800,
         temperature=0,
     )
     return SummarizeResponse(summary=result)
@@ -366,7 +367,7 @@ async def recommendations(req: RecommendationRequest, x_internal_token: str = He
     body = {
         "model": RECOMMENDATION_MODEL,
         "messages": messages,
-        "max_completion_tokens": 600,
+        "max_completion_tokens": 1500,
         "response_format": {"type": "json_object"},
     }
     if _allows_temperature(RECOMMENDATION_MODEL):
