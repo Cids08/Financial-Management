@@ -48,6 +48,13 @@ REASONING_EFFORT = os.environ.get("OPENAI_REASONING_EFFORT", "").strip()
 VALID_CATEGORIES = ["Revenue", "Expense", "Cash Flow", "Budget"]
 VALID_PRIORITIES = ["Low", "Medium", "High", "Critical"]
 
+
+def _allows_temperature(model: str) -> bool:
+    """OpenAI reasoning models (gpt-5 family, o1/o3/o4-*) only accept the
+    default temperature of 1 and reject any other value with HTTP 400."""
+    lowered = model.lower()
+    return not lowered.startswith(("gpt-5", "o1", "o3", "o4"))
+
 # Shared secret between Laravel and this service — anyone hitting this
 # service directly without it gets rejected. Set the SAME value in both
 # this service's .env (INTERNAL_SERVICE_TOKEN) and Laravel's .env
@@ -252,9 +259,10 @@ async def complete(messages: list, max_tokens: int, temperature: float) -> Optio
     body = {
         "model": ADVISOR_MODEL,
         "messages": messages,
-        "max_tokens": max_tokens,
-        "temperature": temperature,
+        "max_completion_tokens": max_tokens,
     }
+    if _allows_temperature(ADVISOR_MODEL):
+        body["temperature"] = temperature
     if REASONING_EFFORT:
         body["reasoning_effort"] = REASONING_EFFORT
 
@@ -283,7 +291,9 @@ async def reply(req: ReplyRequest, x_internal_token: str = Header(default="")):
         messages.append({"role": m.role, "content": m.content})
     messages.append({"role": "user", "content": req.message})
 
-    result = await complete(messages, max_tokens=300, temperature=0.4)
+    # gpt-5-mini consumes output budget on reasoning even at 'low' effort; the
+    # advisor system prompt is large, so a small cap can return an empty reply.
+    result = await complete(messages, max_tokens=600, temperature=0.4)
     return ReplyResponse(reply=result or "Sorry, I could not generate a response right now.")
 
 
@@ -303,7 +313,7 @@ async def summarize(req: SummarizeRequest, x_internal_token: str = Header(defaul
             },
             {"role": "user", "content": req.transcript},
         ],
-        max_tokens=200,
+        max_tokens=400,
         temperature=0,
     )
     return SummarizeResponse(summary=result)
@@ -356,10 +366,11 @@ async def recommendations(req: RecommendationRequest, x_internal_token: str = He
     body = {
         "model": RECOMMENDATION_MODEL,
         "messages": messages,
-        "max_tokens": 600,
-        "temperature": 0.2,
+        "max_completion_tokens": 600,
         "response_format": {"type": "json_object"},
     }
+    if _allows_temperature(RECOMMENDATION_MODEL):
+        body["temperature"] = 0.2
 
     try:
         async with httpx.AsyncClient(timeout=30) as client:

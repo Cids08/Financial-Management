@@ -54,9 +54,14 @@ class OpenAiAdvisorEngine implements AdvisorEngine
         $payload = [
             'model' => config('services.openai.advisor_model', 'gpt-5-mini'),
             'messages' => $messages,
-            'max_tokens' => $maxTokens,
-            'temperature' => $temperature,
+            'max_completion_tokens' => $maxTokens,
         ];
+        $modelName = strtolower(config('services.openai.advisor_model', 'gpt-5-mini'));
+        $isReasoningModel = str_starts_with($modelName, 'gpt-5') || str_starts_with($modelName, 'o1')
+            || str_starts_with($modelName, 'o3') || str_starts_with($modelName, 'o4');
+        if (!$isReasoningModel) {
+            $payload['temperature'] = $temperature;
+        }
         $effort = config('services.openai.reasoning_effort');
         if ($effort !== null && $effort !== '') {
             $payload['reasoning_effort'] = $effort;

@@ -37,6 +37,19 @@ class OpenAiRecommendationEngine implements RecommendationEngine
         $validCategories = ['Revenue', 'Expense', 'Cash Flow', 'Budget'];
         $validPriorities = ['Low', 'Medium', 'High', 'Critical'];
 
+        $requestBody = [
+            'model' => config('services.openai.recommendation_model', 'gpt-5-mini'),
+            'messages' => $messages,
+            'max_completion_tokens' => 600,
+            'response_format' => ['type' => 'json_object'],
+        ];
+        $modelName = strtolower(config('services.openai.recommendation_model', 'gpt-5-mini'));
+        $isReasoningModel = str_starts_with($modelName, 'gpt-5') || str_starts_with($modelName, 'o1')
+            || str_starts_with($modelName, 'o3') || str_starts_with($modelName, 'o4');
+        if (!$isReasoningModel) {
+            $requestBody['temperature'] = 0.2;
+        }
+
         try {
             $response = Http::withToken(config('services.openai.key'))
                 ->withHeaders([
@@ -44,13 +57,7 @@ class OpenAiRecommendationEngine implements RecommendationEngine
                     'X-Title' => config('services.openai.title'),
                 ])
                 ->timeout(30)
-                ->post($baseUrl . '/chat/completions', [
-                    'model' => config('services.openai.recommendation_model', 'gpt-5-mini'),
-                    'messages' => $messages,
-                    'max_tokens' => 600,
-                    'temperature' => 0.2,
-                    'response_format' => ['type' => 'json_object'],
-                ]);
+                ->post($baseUrl . '/chat/completions', $requestBody);
 
             if ($response->failed()) {
                 Log::error('OpenAI recommendation request failed', [
