@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, Tags } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, Tags, X } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
@@ -8,6 +8,7 @@ import Tooltip from '../components/Tooltip'
 import { usePermissions } from '../context/PermissionsContext'
 import { useExpenseCategories } from '../hooks/useExpenseCategories'
 import DeletePermanentButton from '../components/DeletePermanentButton'
+import RetentionCountdown from '../components/RetentionCountdown'
 import { useProfile } from '../hooks/useProfile'
 
 const EMPTY_FORM = { category_code: '', category_name: '', description: '', is_active: true }
@@ -110,40 +111,55 @@ export default function ExpenseCategories({ title = 'Expense Categories', crumbs
         )}
       </div>
 
-      <div className={`${PANEL} ${PANEL_PAD} flex flex-col gap-3 sm:flex-row sm:items-center`}>
-        <div className="relative flex-1 min-w-0">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => runSearch(e.target.value)}
-            placeholder="Search by code or name..."
-            className={`${INPUT} pl-9`}
-            style={{ ...INPUT_TEXT_STYLE, width: '100%' }}
-            autoComplete="off"
-          />
+      <div className={`${PANEL} ${PANEL_PAD}`}>
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end flex-wrap">
+          <div className="relative flex-1 min-w-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Search</label>
+            <div className="relative">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none z-10" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => runSearch(e.target.value)}
+                placeholder="Search by code or name..."
+                className={`${INPUT} pl-9 pr-9`}
+                style={{ ...INPUT_TEXT_STYLE, minWidth: 0 }}
+                autoComplete="off"
+              />
+              {search && (
+                <button type="button" onClick={() => runSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-border hover:text-ink transition-colors duration-150">
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="w-full sm:w-44 shrink-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Status</label>
+            <select
+              value={filters.is_active}
+              onChange={(e) => { setPage(1); setFilter({ is_active: e.target.value }) }}
+              className={INPUT}
+              style={{ ...INPUT_TEXT_STYLE }}
+            >
+              <option value="">All Statuses</option>
+              <option value="1">Active</option>
+              <option value="0">Inactive</option>
+            </select>
+          </div>
+          {canManage && (
+            <div className="shrink-0 sm:ml-auto">
+              <Button
+                variant={filters.trashed ? 'primary' : 'secondary'}
+                size="sm"
+                icon={Archive}
+                onClick={() => { setPage(1); setFilter({ trashed: !filters.trashed }) }}
+                className="whitespace-nowrap"
+              >
+                Show Archived
+              </Button>
+            </div>
+          )}
         </div>
-        <select
-          value={filters.is_active}
-          onChange={(e) => { setPage(1); setFilter({ is_active: e.target.value }) }}
-          className={INPUT}
-          style={{ ...INPUT_TEXT_STYLE, width: '12rem' }}
-        >
-          <option value="">All Statuses</option>
-          <option value="1">Active</option>
-          <option value="0">Inactive</option>
-        </select>
-        {canManage && (
-          <Button
-            variant={filters.trashed ? 'primary' : 'secondary'}
-            size="sm"
-            icon={Archive}
-            onClick={() => { setPage(1); setFilter({ trashed: !filters.trashed }) }}
-            className="shrink-0 whitespace-nowrap"
-          >
-            Show Archived
-          </Button>
-        )}
       </div>
 
       {listError && (
@@ -188,7 +204,7 @@ export default function ExpenseCategories({ title = 'Expense Categories', crumbs
                     </span>
                   </td>
                   {canManage && (
-                    <td className="px-4 py-3.5 whitespace-nowrap text-right">
+                    <td className="px-4 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-1">
                         {!filters.trashed && (
                           <Tooltip label="Edit category" align="start">
@@ -210,12 +226,15 @@ export default function ExpenseCategories({ title = 'Expense Categories', crumbs
                           </Tooltip>
                         )}
                         {filters.trashed && (
+                          <>
+                          <RetentionCountdown deletedAt={c.deleted_at} compact />
                           <DeletePermanentButton
                             endpoint={`/api/expense-categories/${c.id}/permanent`}
                             label="expense category"
                             name={c.category_name || ''}
                             onDeleted={refetch}
                           />
+                          </>
                         )}
                       </div>
                     </td>

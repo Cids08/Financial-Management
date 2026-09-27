@@ -10,6 +10,7 @@ import Tooltip from '../components/Tooltip'
 import Pagination from '../components/Pagination'
 import AdvisorChatPanel from '../components/AdvisorChatPanel'
 import DeletePermanentButton from '../components/DeletePermanentButton'
+import RetentionCountdown from '../components/RetentionCountdown'
 import { normalizeAiCurrencyText } from '../utils/formatters'
 import { useAiRecommendations } from '../hooks/useAiRecommendations'
 import { useProfile } from '../hooks/useProfile'
@@ -261,29 +262,54 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
       )}
 
       <div className="space-y-4">
-        <div className={`${PANEL} ${PANEL_PAD} flex flex-col gap-3 lg:flex-row lg:items-center`}>
-            <div className="relative flex-1 min-w-0 basis-full">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none z-10" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by summary, category, or linked forecast..."
-                aria-label="Search recommendations"
-                className={SEARCH_INPUT}
-                style={{ ...INPUT_TEXT_STYLE, width: '100%', minWidth: 0, outline: 'none' }}
-                autoComplete="off"
-              />
+        <div className={`${PANEL} ${PANEL_PAD}`}>
+          <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end flex-wrap">
+            {/* Search */}
+            <div className="relative flex-1 min-w-0">
+              <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Search</label>
+              <div className="relative">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none z-10" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search by summary, category, or linked forecast..."
+                  aria-label="Search recommendations"
+                  className={`${INPUT} pl-9 pr-9`}
+                  style={{ ...INPUT_TEXT_STYLE, minWidth: 0, outline: 'none' }}
+                  autoComplete="off"
+                />
+                {search && (
+                  <button type="button" onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-border hover:text-ink transition-colors duration-150">
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
             </div>
-            <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setActiveStat('all') }} aria-label="Filter by category" className={`${INPUT} lg:w-56 lg:shrink-0`} style={INPUT_TEXT_STYLE}>
-              <option value="all">All Categories</option>
-              {RECOMMENDATION_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
-            <select value={forecastFilter} onChange={(e) => setForecastFilter(e.target.value)} aria-label="Filter by linked forecast" className={`${INPUT} lg:w-56 lg:shrink-0`} style={INPUT_TEXT_STYLE}>
-              <option value="all">All Linked Forecasts</option>
-              {distinctForecasts.map((r) => <option key={r.forecast_id} value={r.forecast_id}>{forecastLabel(r)}</option>)}
-            </select>
+            {/* Category */}
+            <div className="w-full sm:w-52 shrink-0">
+              <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Category</label>
+              <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setActiveStat('all') }} aria-label="Filter by category" className={INPUT} style={INPUT_TEXT_STYLE}>
+                <option value="all">All Categories</option>
+                {RECOMMENDATION_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            {/* Linked Forecast */}
+            <div className="w-full sm:w-52 shrink-0">
+              <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Linked Forecast</label>
+              <select value={forecastFilter} onChange={(e) => setForecastFilter(e.target.value)} aria-label="Filter by linked forecast" className={INPUT} style={INPUT_TEXT_STYLE}>
+                <option value="all">All Linked Forecasts</option>
+                {distinctForecasts.map((r) => <option key={r.forecast_id} value={r.forecast_id}>{forecastLabel(r)}</option>)}
+              </select>
+            </div>
+            {/* Reset */}
+            {(search || typeFilter !== 'all' || forecastFilter !== 'all') && (
+              <div className="shrink-0">
+                <Button variant="secondary" size="sm" icon={RotateCcw} iconPosition="left" onClick={clearFilters}>Reset</Button>
+              </div>
+            )}
           </div>
+        </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {loading && (
@@ -319,12 +345,15 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
                         </Tooltip>
                       )}
                       {r.is_archived && (
+                        <>
+                        <RetentionCountdown deletedAt={r.deleted_at} compact />
                         <DeletePermanentButton
                           endpoint={`/api/ai-recommendations/${r.recommendation_id}/permanent`}
                           label="AI recommendation"
                           name={r.recommendation_type || ''}
                           onDeleted={fetchRecommendations}
                         />
+                        </>
                       )}
                     </div>
                   </div>

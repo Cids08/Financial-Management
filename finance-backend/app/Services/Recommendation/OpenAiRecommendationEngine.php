@@ -112,8 +112,11 @@ class OpenAiRecommendationEngine implements RecommendationEngine
     {
         return "You are a financial analysis assistant for Alibaton Construction Inc.'s "
             . "Financial Management System. You will be given a single ARIMA forecast result as "
-            . "JSON. Generate 1-2 recommendations based ONLY on the figures given — never invent "
-            . "or estimate numbers not provided. Always communicate forecast uncertainty honestly; "
+            . "JSON. Generate recommendations based ONLY on the figures given — never invent "
+            . "or estimate numbers not provided. Return at most ONE recommendation per category — "
+            . "never output two entries for the same category; fold multiple insights for one "
+            . "category into a single combined recommendation. Different categories may each get "
+            . "their own recommendation. Always communicate forecast uncertainty honestly; "
             . "never present the forecast as guaranteed. Avoid definitive financial advice "
             . "(e.g. never say 'you should invest more') — explain why, highlight supporting data, "
             . "and discuss possible risks instead.\n\n"

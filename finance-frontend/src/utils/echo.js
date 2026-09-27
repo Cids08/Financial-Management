@@ -10,6 +10,22 @@ window.Pusher = Pusher
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 const AUTH_ENDPOINT = `${BASE_URL}/api/broadcasting/auth`
 
+// Reverb's WebSocket has to be reachable from the device actually running
+// the app, not just from the dev machine that hosts the backend. When
+// VITE_REVERB_HOST isn't set explicitly, target the same host the API is
+// served from (LAN IP, public domain, ...) so any device that can use the
+// API can also receive forced-logout broadcasts. localhost is only correct
+// when the API itself is on localhost.
+const REVERB_HOST =
+  import.meta.env.VITE_REVERB_HOST ||
+  (() => {
+    try {
+      return new URL(BASE_URL).hostname
+    } catch {
+      return 'localhost'
+    }
+  })()
+
 // Default Echo/Pusher authorizer sends cookies (withCredentials), which
 // works for Laravel's session-cookie SPA auth pattern  -  but this app uses
 // a Sanctum Bearer token instead, so a custom authorizer is required to
@@ -51,7 +67,7 @@ export function getEcho() {
   echoInstance = new Echo({
     broadcaster: 'reverb',
     key: import.meta.env.VITE_REVERB_APP_KEY,
-    wsHost: import.meta.env.VITE_REVERB_HOST,
+    wsHost: REVERB_HOST,
     wsPort: import.meta.env.VITE_REVERB_PORT ?? 80,
     wssPort: import.meta.env.VITE_REVERB_PORT ?? 443,
     forceTLS: (import.meta.env.VITE_REVERB_SCHEME ?? 'https') === 'https',

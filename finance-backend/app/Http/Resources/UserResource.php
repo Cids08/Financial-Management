@@ -36,6 +36,7 @@ class UserResource extends JsonResource
             // deleted_at is the real "archived" signal — there's no
             // separate is_archived column in the DB.
             'is_archived' => $this->deleted_at !== null,
+            'deleted_at' => $this->deleted_at?->toIso8601String(),
             'last_login' => $this->last_login?->toIso8601String(),
             // Only present immediately after UserService::create() sets
             // this transient, non-persisted attribute on the model

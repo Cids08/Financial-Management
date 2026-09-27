@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, Wallet, PiggyBank, Landmark, CreditCard, Eye, EyeOff, Loader2 } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, Wallet, PiggyBank, Landmark, CreditCard, Eye, EyeOff, Loader2, X } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
@@ -9,6 +9,7 @@ import { formatCurrency, maskedAmount } from '../utils/formatters'
 import { useCashAccounts } from '../hooks/useCashAccounts'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 import DeletePermanentButton from '../components/DeletePermanentButton'
+import RetentionCountdown from '../components/RetentionCountdown'
 import { usePrivacy } from '../context/PrivacyContext'
 import { useProfile } from '../hooks/useProfile'
 
@@ -187,19 +188,37 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
         })}
       </div>
 
-      <div className={`${PANEL} ${PANEL_PAD} flex flex-col gap-3 lg:flex-row lg:items-center`}>
-        <div className="relative flex-1">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by account or bank name..." className={`${INPUT} pl-9`} />
+      <div className={`${PANEL} ${PANEL_PAD}`}>
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end flex-wrap">
+          <div className="relative flex-1 min-w-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Search</label>
+            <div className="relative">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none z-10" />
+              <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by account or bank name..." className={`${INPUT} pl-9 pr-9`} autoComplete="off" />
+              {search && (
+                <button type="button" onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-border hover:text-ink transition-colors duration-150">
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="w-full sm:w-52 shrink-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Account Type</label>
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              className={INPUT}
+            >
+              <option value="all">All Types</option>
+              {ACCOUNT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          {(search || typeFilter !== 'all') && (
+            <div className="shrink-0">
+              <Button variant="secondary" size="sm" icon={RotateCcw} iconPosition="left" onClick={() => { setSearch(''); setTypeFilter('all') }}>Reset</Button>
+            </div>
+          )}
         </div>
-        <select
-          value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value)}
-          className={`${INPUT} lg:w-56! shrink-0`}
-        >
-          <option value="all">All Types</option>
-          {ACCOUNT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-        </select>
       </div>
 
       <div className={PANEL}>
@@ -262,13 +281,15 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
                     <td className="px-4 py-3.5 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[a.status]}`}>{a.status}</span>
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap text-right">
+                    <td className="px-4 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-1">
+                        {!showArchived && (
                         <Tooltip label="Edit account" align="start">
                           <button type="button" onClick={() => openEdit(a)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                             <Pencil size={15} />
                           </button>
                         </Tooltip>
+                        )}
                         {isAdmin && (
                           <Tooltip label={showArchived ? 'Restore account' : 'Archive account'} align="end">
                             <button
@@ -281,12 +302,15 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
                           </Tooltip>
                         )}
                         {showArchived && (
+                          <>
+                          <RetentionCountdown deletedAt={a.deleted_at} compact />
                           <DeletePermanentButton
                             endpoint={`/api/cash-accounts/${a.cash_account_id}/permanent`}
                             label="cash account"
                             name={a.account_name || ''}
                             onDeleted={refetch}
                           />
+                          </>
                         )}
                       </div>
                     </td>

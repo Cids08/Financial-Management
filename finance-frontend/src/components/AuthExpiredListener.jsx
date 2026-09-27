@@ -19,7 +19,10 @@ export default function AuthExpiredListener() {
     const handleAuthExpired = () => {
       if (redirectingRef.current) return
       redirectingRef.current = true
-      navigate('/', { replace: true })
+      // Pass a reason through router state so the Login page can explain
+      // WHY the session ended (single-tab/WS notices are not guaranteed to
+      // reach every device, e.g. a phone that can't reach the Reverb host).
+      navigate('/', { replace: true, state: { authNotice: 'signedOutByServer' } })
     }
 
     window.addEventListener('auth:expired', handleAuthExpired)

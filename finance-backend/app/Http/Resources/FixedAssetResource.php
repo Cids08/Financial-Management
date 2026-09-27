@@ -33,6 +33,7 @@ class FixedAssetResource extends JsonResource
             'status'                   => $this->status,
             'remarks'                  => $this->remarks,
             'is_archived'              => $this->trashed(),
+            'deleted_at'               => $this->deleted_at?->toIso8601String(),
         ];
     }
 }

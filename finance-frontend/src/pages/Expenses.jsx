@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { usePermissions } from '../context/PermissionsContext'
 import { useProfileContext } from '../context/ProfileContext'
 import DeletePermanentButton from '../components/DeletePermanentButton'
+import RetentionCountdown from '../components/RetentionCountdown'
 import { usePrivacy } from '../context/PrivacyContext'
+import { useCompany } from '../context/CompanyContext'
 import { hasPermission } from '../utils/permissions'
 import { Search, Plus, Pencil, Archive, RotateCcw, Receipt, Wallet, Tag, Info, Printer, CheckCircle2, XCircle, CalendarRange, X, Paperclip, FileText, History, AlertTriangle, Upload, ScanLine, Sparkles } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
@@ -14,10 +16,13 @@ import ExpenseReceiptUploadModal from '../components/ExpenseReceiptUploadModal'
 import ExpenseReceiptHistoryModal from '../components/ExpenseReceiptHistoryModal'
 import BatchApproveExpensesModal from '../components/BatchApproveExpensesModal'
 import { formatCurrency } from '../utils/formatters'
+import { printSlip } from '../utils/printSlip'
+import { money, SIGNATURE_PRESETS } from '../utils/print'
 import { MIN_COLLECTION_AMOUNT, minHint } from '../utils/business'
 import { apiFetch } from '../utils/api'
 import { isImageFile, compressImageToUploadable, HOSTED_PDF_MAX_BYTES } from '../utils/fileUpload'
 import { useExpenses } from '../hooks/useExpenses'
+import { useHighlightRow } from '../hooks/useHighlightRow'
 import { useSearchParams } from 'react-router-dom'
 
 const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
@@ -294,6 +299,8 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
 
   usePrivacy()
 
+  const company = useCompany()
+
   // Batch Approval Wizard state
   const [showBatchApproveModal, setShowBatchApproveModal] = useState(false)
 
@@ -325,6 +332,17 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search])
+
+  // Global search / General Ledger jump navigates here with a highlightId
+  // (and, since this table is server-filtered, a highlightSearch seed)
+  // whenever an expense record is clicked elsewhere.
+  const { highlightedId, highlightSearch } = useHighlightRow()
+  useEffect(() => {
+    if (highlightSearch == null) return
+    setFilter({ status: '', trashed: false, expense_date_from: '', expense_date_to: '' })
+    setSearch(highlightSearch)
+    goToPage(1)
+  }, [highlightSearch])
 
   // Expense-date range filter  -  sent to the backend the same way as
   // search/status/category (see useExpenses.buildQuery), so it applies
@@ -580,57 +598,53 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
     }
   }
 
-  const escapeHtml = (value) =>
-    String(value ?? '').replace(/[&<>"']/g, (c) => ({
-      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-    }[c]))
-
   const handlePrint = (x) => {
-    const win = window.open('', '_blank', 'width=800,height=900')
-    if (!win) return
-    const rows = [
-      ['Budget', budgetLabel(x.budget_id)],
-      ['Expense Date', formatDate(x.expense_date)],
-      ['Category', categoryName(x.expense_category_id)],
-      ['Amount', formatCurrency(x.expense_amount)],
-      ['Receipt No.', x.receipt_number || '—'],
-      ['Supplier', supplierName(x.supplier_id)],
-      ['Cash Account', x.cash_account_name ? `${x.cash_account_name} (${x.cash_account_bank || x.cash_account_code})` : (x.expense_source || '—')],
-      ['Status', x.status],
-      ['Description', x.description || '—'],
-    ]
-    win.document.write(`
-      <html>
-        <head>
-          <title>${escapeHtml(x.receipt_number || 'Expense')}</title>
-          <style>
-            * { box-sizing: border-box; }
-            body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #1a1a1a; padding: 48px; }
-            .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1a1a1a; padding-bottom: 20px; margin-bottom: 24px; }
-            .header h1 { margin: 0 0 4px; font-size: 22px; }
-            .header p { margin: 0; color: #666; font-size: 14px; }
-            .status { display: inline-block; padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; background: #f3f3f3; }
-            table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-            td { padding: 10px 4px; border-bottom: 1px solid #eee; font-size: 14px; }
-            td:first-child { color: #666; width: 40%; }
-            td:last-child { font-weight: 600; text-align: right; }
-            .footer { margin-top: 32px; font-size: 12px; color: #999; text-align: center; }
-            @media print { body { padding: 24px; } }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div><h1>Expense Slip</h1><p>${escapeHtml(x.description)}</p></div>
-            <span class="status">${escapeHtml(categoryName(x.expense_category_id))}</span>
-          </div>
-          <table>${rows.map(([label, value]) => `<tr><td>${escapeHtml(label)}</td><td>${escapeHtml(value)}</td></tr>`).join('')}</table>
-          <div class="footer">Printed on ${escapeHtml(formatDateTime(new Date().toISOString()))}</div>
-        </body>
-      </html>
-    `)
-    win.document.close()
-    win.focus()
-    win.print()
+    printSlip({
+      company,
+      profile,
+      spec: 'expense',
+      title: 'Expense Slip',
+      subtitle: x.description || '—',
+      status: x.status,
+      meta: [
+        ['Receipt No.', x.receipt_number || '—'],
+        ['Expense Date', formatDate(x.expense_date)],
+        ['Category', categoryName(x.expense_category_id)],
+      ],
+      groups: [
+        {
+          heading: 'Expense Details',
+          rows: [
+            ['Description', x.description || '—', 'span'],
+            ['Category', categoryName(x.expense_category_id)],
+            ['Expense Date', formatDate(x.expense_date)],
+            ['Supplier / Payee', supplierName(x.supplier_id), 'span'],
+            ['Budget', budgetLabel(x.budget_id), 'span'],
+            ['Receipt No.', x.receipt_number || '—'],
+            [
+              'Cash Account',
+              x.cash_account_name
+                ? `${x.cash_account_name} (${x.cash_account_bank || x.cash_account_code})`
+                : (x.expense_source || '—'),
+              'span',
+            ],
+          ],
+        },
+        {
+          heading: 'Amount',
+          rows: [
+            ['Expense Amount', money(x.expense_amount), 'total'],
+          ],
+        },
+      ],
+      signatureTitle: 'Prepared, Reviewed & Approved',
+      signatures: SIGNATURE_PRESETS.internal({
+        preparedName: profile?.name,
+        preparedRole: profile?.role,
+        approvedName: x.approved_by_name || null,
+      }),
+      disclaimer: 'This slip documents the expense voucher recorded in the system. Amounts are subject to the budget allocation and approval routing shown above.',
+    })
   }
 
   const statCards = [
@@ -697,53 +711,78 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
         })}
       </div>
 
-      <div className={`${PANEL} ${PANEL_PAD} flex flex-col gap-3 lg:flex-row lg:items-center`}>
-        <div className="relative flex-1 min-w-0 basis-full">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by description, receipt no., or source..." className={`${INPUT} pl-9`} style={{ ...INPUT_TEXT_STYLE, width: '100%', minWidth: 0 }} autoComplete="off" />
-        </div>
-        <select value={filters.status} onChange={(e) => setFilter({ status: e.target.value })} className={INPUT} style={INPUT_TEXT_STYLE}>
-          <option value="">All Statuses</option>
-          <option value="Pending">Pending</option>
-          <option value="Approved">Approved</option>
-          <option value="Rejected">Rejected</option>
-        </select>
-        <select value={filters.expense_category_id} onChange={(e) => setFilter({ expense_category_id: e.target.value })} className={INPUT} style={INPUT_TEXT_STYLE}>
-          <option value="">All Categories</option>
-          {categories.map((c) => <option key={c.id} value={c.id}>{c.category_name}</option>)}
-        </select>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <CalendarRange size={15} className="text-muted shrink-0" />
-          <input
-            type="date"
-            value={filters.expense_date_from}
-            onChange={(e) => setFilter({ expense_date_from: e.target.value })}
-            max={filters.expense_date_to || undefined}
-            aria-label="Expense date from"
-            className={`${INPUT} scheme-light dark:scheme-dark`}
-            style={{ ...INPUT_TEXT_STYLE, width: '9.5rem' }}
-          />
-          <span className="text-xs text-muted">to</span>
-          <input
-            type="date"
-            value={filters.expense_date_to}
-            onChange={(e) => setFilter({ expense_date_to: e.target.value })}
-            min={filters.expense_date_from || undefined}
-            aria-label="Expense date to"
-            className={`${INPUT} scheme-light dark:scheme-dark`}
-            style={{ ...INPUT_TEXT_STYLE, width: '9.5rem' }}
-          />
-          {hasDateFilter && (
-            <Tooltip label="Clear date filter" align="end">
-              <button
-                type="button"
-                onClick={clearDateFilter}
-                aria-label="Clear date filter"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
-              >
-                <X size={15} />
-              </button>
-            </Tooltip>
+      <div className={`${PANEL} ${PANEL_PAD}`}>
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end flex-wrap">
+          {/* Search */}
+          <div className="relative flex-1 min-w-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Search</label>
+            <div className="relative">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none z-10" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by description, receipt no., or source..."
+                className={`${INPUT} pl-9 pr-9`}
+                style={{ ...INPUT_TEXT_STYLE, minWidth: 0 }}
+                autoComplete="off"
+              />
+              {search && (
+                <button type="button" onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-border hover:text-ink transition-colors duration-150">
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+          </div>
+          {/* Status */}
+          <div className="w-full sm:w-44 shrink-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Status</label>
+            <select value={filters.status} onChange={(e) => setFilter({ status: e.target.value })} className={INPUT} style={INPUT_TEXT_STYLE}>
+              <option value="">All Statuses</option>
+              <option value="Pending">Pending</option>
+              <option value="Approved">Approved</option>
+              <option value="Rejected">Rejected</option>
+            </select>
+          </div>
+          {/* Category */}
+          <div className="w-full sm:w-48 shrink-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Category</label>
+            <select value={filters.expense_category_id} onChange={(e) => setFilter({ expense_category_id: e.target.value })} className={INPUT} style={INPUT_TEXT_STYLE}>
+              <option value="">All Categories</option>
+              {categories.map((c) => <option key={c.id} value={c.id}>{c.category_name}</option>)}
+            </select>
+          </div>
+          {/* Date From */}
+          <div className="shrink-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">From</label>
+            <input
+              type="date"
+              value={filters.expense_date_from}
+              onChange={(e) => setFilter({ expense_date_from: e.target.value })}
+              max={filters.expense_date_to || undefined}
+              aria-label="Expense date from"
+              className={`${INPUT} scheme-light dark:scheme-dark`}
+              style={{ ...INPUT_TEXT_STYLE, width: '9.5rem' }}
+            />
+          </div>
+          {/* Date To */}
+          <div className="shrink-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">To</label>
+            <input
+              type="date"
+              value={filters.expense_date_to}
+              onChange={(e) => setFilter({ expense_date_to: e.target.value })}
+              min={filters.expense_date_from || undefined}
+              aria-label="Expense date to"
+              className={`${INPUT} scheme-light dark:scheme-dark`}
+              style={{ ...INPUT_TEXT_STYLE, width: '9.5rem' }}
+            />
+          </div>
+          {/* Reset */}
+          {(search || filters.status || filters.expense_category_id || hasDateFilter) && (
+            <div className="shrink-0">
+              <Button variant="secondary" size="sm" icon={RotateCcw} iconPosition="left" onClick={() => { setSearch(''); setFilter({ status: '', expense_category_id: '' }); clearDateFilter() }}>Reset</Button>
+            </div>
           )}
         </div>
       </div>
@@ -785,7 +824,8 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
               ) : expenses.map((x) => (
                 <tr
                   key={x.id}
-                  className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150"
+                  data-row-id={x.id}
+                  className={`border-b border-border last:border-0 transition-colors duration-150 ${highlightedId === x.id ? 'bg-primary/10' : 'hover:bg-bg'}`}
                 >
                   <td className="px-3.5 py-3 min-w-0">
                     <p className="font-medium text-ink truncate max-w-50 xl:max-w-xs">{x.description}</p>
@@ -809,7 +849,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                   <td className="px-2.5 py-3 whitespace-nowrap">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[x.status] || ''}`}>{x.status}</span>
                   </td>
-                  <td className="px-3.5 py-3 whitespace-nowrap text-right">
+                  <td className="px-3.5 py-3 text-right">
                     <div className="flex items-center justify-end gap-0.5">
                       {canApprove && x.status === 'Pending' && !filters.trashed && x.has_receipt && (() => {
                         const hasBudget = Boolean(x.budget_id && (x.budget_name || budgets.some((b) => Number(b.budget_id) === Number(x.budget_id))))
@@ -886,11 +926,13 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                           </Tooltip>
                         )
                       )}
+                      {!filters.trashed && (
                       <Tooltip label="Print expense slip" align="start">
                         <button type="button" onClick={() => handlePrint(x)} className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                           <Printer size={14} />
                         </button>
                       </Tooltip>
+                      )}
                       {x.status === 'Pending' && !filters.trashed && (
                         <Tooltip label="Edit expense" align="start">
                           <button type="button" onClick={() => openEdit(x)} className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
@@ -906,12 +948,15 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                         </Tooltip>
                       )}
                       {filters.trashed && (
+                        <>
+                        <RetentionCountdown deletedAt={x.deleted_at} compact />
                         <DeletePermanentButton
                           endpoint={`/api/expenses/${x.id}/permanent`}
                           label="expense"
                           name={x.description || ''}
                           onDeleted={refetch}
                         />
+                        </>
                       )}
                     </div>
                   </td>

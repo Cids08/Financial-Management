@@ -6,10 +6,14 @@ import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
 import Pagination from '../components/Pagination'
 import { formatCurrency, currencySymbol, getActiveBaseCurrency } from '../utils/formatters'
+import { printSlip } from '../utils/printSlip'
+import { money, SIGNATURE_PRESETS } from '../utils/print'
 import { MIN_INVOICE_AMOUNT, MIN_COLLECTION_AMOUNT, minHint } from '../utils/business'
 import { useAccountsPayable } from '../hooks/useAccountsPayable'
+import { useHighlightRow } from '../hooks/useHighlightRow'
 import { apiFetch } from '../utils/api'
 import DeletePermanentButton from '../components/DeletePermanentButton'
+import RetentionCountdown from '../components/RetentionCountdown'
 import { isImageFile, compressImageToUploadable, HOSTED_PDF_MAX_BYTES } from '../utils/fileUpload'
 import AccountsPayableDocumentModal from '../components/AccountsPayableDocumentModal'
 import PaymentWizardModal from '../components/PaymentWizardModal'
@@ -101,20 +105,11 @@ function addDaysISO(days) {
   return d.toISOString().slice(0, 10)
 }
 
-// Escapes free-text/user-controlled values before they're injected into the
-// print window's raw HTML string (via document.write). Bill fields like
-// description/remarks and billing_address are user-editable and stored as-is,
-// so without this a bill containing e.g. `<img src=x onerror=...>` in its
-// description would execute script in the print window.
-function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>"']/g, (c) => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;',
-  }[c]))
-}
+// Escaping of user-controlled values before they reach a print window lives
+// in utils/print.js (escapeHtml) and is applied inside the shared slip/table
+// builders — these documents are assembled with document.write(), so every
+// interpolated value (billing_address, description, remarks) has to go
+// through it.
 
 function DetailRow({ label, value }) {
   return (
@@ -314,7 +309,8 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
   } = useAccountsPayable()
 
   const { hasPermission } = usePermissions()
-  const { defaultPenaltyRate } = useCompany()
+  const company = useCompany()
+  const { defaultPenaltyRate } = company
   const { profile } = useProfile()
   const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
   const canApprove = hasPermission('ap.approve')
@@ -330,6 +326,18 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
 
   const PER_PAGE = 10
   const [page, setPage] = useState(1)
+
+  // Global search / General Ledger jump navigates here with a highlightId
+  // (and, since this table is server-filtered, a highlightSearch seed)
+  // whenever a bill record is clicked elsewhere.
+  const { highlightedId, highlightSearch } = useHighlightRow()
+  useEffect(() => {
+    if (highlightSearch == null) return
+    setSearch(highlightSearch)
+    setStatusFilter('all')
+    setShowArchived(false)
+    setPage(1)
+  }, [highlightSearch])
 
   const [modalMode, setModalMode] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
@@ -614,66 +622,58 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
   }
 
   const handlePrint = (r) => {
-    const win = window.open('', '_blank', 'width=800,height=900')
-    if (!win) return
-    // Every value below is escaped before being interpolated into the raw
-    // HTML string  -  description/billing_address are user-controlled fields
-    // stored verbatim, so this print window is otherwise an XSS vector.
-    const rows = [
-      ['Supplier', escapeHtml(supplierName(r.supplier_id))],
-      ['Account', escapeHtml(r.account_id ? accountLabel(r.account_id) : '—')],
-      ['Invoice Date', escapeHtml(formatDate(r.invoice_date))],
-      ['Due Date', escapeHtml(formatDate(r.due_date))],
-      ['Purchase Order No.', escapeHtml(r.purchase_order_no || '—')],
-      ['Original Amount', escapeHtml(formatCurrency(r.amount))],
-      ['Paid Amount', escapeHtml(formatCurrency(r.paid_amount))],
-      ['Remaining Balance', escapeHtml(formatCurrency(r.remaining_balance))],
-      ...(r.penalty_rate
-        ? isOverdueBill(r)
-          ? [['Penalty', `${r.penalty_rate}% (${formatCurrency(r.penalty_amount)})`]]
-          : [['Penalty Rate', `${r.penalty_rate}% (applies when overdue)`]]
-        : []),
-      ['Payment Method', escapeHtml(r.payment_method || '—')],
-      ['Billing Address', escapeHtml(r.billing_address || '—')],
-      ['Description', escapeHtml(r.description || '—')],
-      ['Reference No.', escapeHtml(r.reference_number || '—')],
-      ['Status', escapeHtml(r.status)],
-    ]
-    const invoiceNumberSafe = escapeHtml(r.invoice_number)
-    const supplierNameSafe = escapeHtml(supplierName(r.supplier_id))
-    const statusSafe = escapeHtml(r.status)
-    win.document.write(`
-      <html>
-        <head>
-          <title>${invoiceNumberSafe}</title>
-          <style>
-            * { box-sizing: border-box; }
-            body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #1a1a1a; padding: 48px; }
-            .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1a1a1a; padding-bottom: 20px; margin-bottom: 24px; }
-            .header h1 { margin: 0 0 4px; font-size: 22px; }
-            .header p { margin: 0; color: #666; font-size: 14px; }
-            .status { display: inline-block; padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; background: #f3f3f3; }
-            table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-            td { padding: 10px 4px; border-bottom: 1px solid #eee; font-size: 14px; }
-            td:first-child { color: #666; width: 40%; }
-            td:last-child { font-weight: 600; text-align: right; }
-            .footer { margin-top: 32px; font-size: 12px; color: #999; text-align: center; }
-            @media print { body { padding: 24px; } }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div><h1>Bill ${invoiceNumberSafe}</h1><p>${supplierNameSafe}</p></div>
-            <span class="status">${statusSafe}</span>
-          </div>
-          <table>${rows.map(([label, value]) => `<tr><td>${escapeHtml(label)}</td><td>${value}</td></tr>`).join('')}</table>
-          <div class="footer">Printed on ${escapeHtml(formatDateTime(new Date().toISOString()))}</div>
-        </body>
-      </html>
-    `)
-    win.document.close()
-    win.focus()
-    win.print()
+    const supplier = supplierName(r.supplier_id)
+    const money_ = (v) => money(v)
+
+    printSlip({
+      company,
+      profile,
+      spec: 'bill',
+      title: `Bill ${r.invoice_number}`,
+      subtitle: supplier,
+      status: r.status,
+      meta: [
+        ['Bill No.', r.invoice_number],
+        ['Supplier', supplier],
+        ['Invoice Date', formatDate(r.invoice_date)],
+      ],
+      groups: [
+        {
+          heading: 'Supplier & Invoice Information',
+          rows: [
+            ['Supplier', supplier, 'span'],
+            ['Account', r.account_id ? accountLabel(r.account_id) : '—', 'span'],
+            ['Billing Address', r.billing_address || '—', 'span'],
+            ['Invoice Date', formatDate(r.invoice_date)],
+            ['Due Date', formatDate(r.due_date)],
+            ['Payment Method', r.payment_method || '—'],
+            ['Purchase Order No.', r.purchase_order_no || '—'],
+            ['Reference No.', r.reference_number || '—'],
+            ['Description', r.description || '—', 'span'],
+          ],
+        },
+        {
+          heading: 'Amounts',
+          rows: [
+            ['Original Amount', money_(r.amount)],
+            ['Paid Amount', money_(r.paid_amount)],
+            ...(r.penalty_rate
+              ? isOverdueBill(r)
+                ? [['Penalty', `${r.penalty_rate}% (${money_(r.penalty_amount)})`, 'muted']]
+                : [['Penalty Rate', `${r.penalty_rate}% (applies when overdue)`, 'muted']]
+              : []),
+            ['Remaining Balance', money_(r.remaining_balance), 'total'],
+          ],
+        },
+      ],
+      signatureTitle: 'Prepared, Approved & Acknowledged',
+      signatures: SIGNATURE_PRESETS.voucher({
+        preparedName: profile?.name,
+        preparedRole: profile?.role,
+        counterpartyLabel: 'Received By (Supplier)',
+      }),
+      disclaimer: 'This bill was generated from the supplier invoice record held in the system. Amounts are shown in the company\'s base currency and remain subject to the payment terms stated above.',
+    })
   }
 
   const handleSubmit = async (e) => {
@@ -880,19 +880,47 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
         })}
       </div>
 
-      <div className={`${PANEL} ${PANEL_PAD} flex flex-col gap-3 lg:flex-row lg:items-center`}>
-        <div className="relative flex-1">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by invoice no., supplier, or reference..." className={`${INPUT} pl-9`} />
+      <div className={`${PANEL} ${PANEL_PAD}`}>
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end flex-wrap">
+          {/* Search */}
+          <div className="relative flex-1 min-w-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Search</label>
+            <div className="relative">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none z-10" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+                placeholder="Search by invoice no., supplier, or reference..."
+                className={`${INPUT} pl-9 pr-9`}
+                autoComplete="off"
+              />
+              {search && (
+                <button type="button" onClick={() => { setSearch(''); setPage(1) }} className="absolute right-2 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-border hover:text-ink transition-colors duration-150">
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+          </div>
+          {/* Status */}
+          <div className="w-full sm:w-48 shrink-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Status</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
+              className={INPUT}
+            >
+              <option value="all">All Statuses</option>
+              {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          {/* Reset */}
+          {(search || statusFilter !== 'all') && (
+            <div className="shrink-0">
+              <Button variant="secondary" size="sm" icon={RotateCcw} iconPosition="left" onClick={() => { setSearch(''); setStatusFilter('all'); setPage(1) }}>Reset</Button>
+            </div>
+          )}
         </div>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className={`${INPUT} lg:w-56! shrink-0`}
-        >
-          <option value="all">All Statuses</option>
-          {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
       </div>
 
       <div className={PANEL}>
@@ -906,7 +934,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[12%] whitespace-nowrap">Amount Due</th>
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[12%] whitespace-nowrap">Penalty</th>
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[12%] whitespace-nowrap">Status</th>
-                <th className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wider px-2.5 py-3 w-[24%] whitespace-nowrap">Actions</th>
+                <th className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wider px-2.5 py-3 w-[19%] whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -915,7 +943,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
               )}
 
               {!billsLoading && filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE).map((r) => (
-                <tr key={r.ap_id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
+                <tr key={r.ap_id} data-row-id={r.ap_id} className={`border-b border-border last:border-0 transition-colors duration-150 ${highlightedId === r.ap_id ? 'bg-primary/10' : 'hover:bg-bg'}`}>
                   <td className="px-2.5 py-2 min-w-0">
                     <div className="flex items-center gap-1.5 min-w-0">
                       <button
@@ -966,7 +994,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                   <td className="px-2 py-2 whitespace-nowrap text-left">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[r.status] || 'bg-gray-100 text-muted'}`}>{r.status}</span>
                   </td>
-                  <td className="px-2.5 py-2 whitespace-nowrap text-right">
+                  <td className="px-2.5 py-2 text-right">
                     <div className="flex items-center justify-end gap-1">
                       {/* Workflow decision buttons  -  Approve / Reject (Pending only) */}
                       {canApprove && !r.is_archived && !r.approved_by && r.status !== 'Cancelled' && (
@@ -1013,76 +1041,83 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                         </div>
                       )}
 
-                      {/* Standard Utilities (present on every row) */}
-                      <Tooltip label="View details" align="start">
-                        <button type="button" onClick={() => openDetail(r)} className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                      {/* Active rows keep the full working set. Only ARCHIVED
+                          rows get trimmed to Info + Restore + countdown + purge,
+                          because that's where the wide countdown badge used to
+                          collide with the Status column. */}
+                      <Tooltip label="View details" align="end">
+                        <button type="button" onClick={() => openDetail(r)} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                           <Info size={14} />
                         </button>
                       </Tooltip>
 
-                      <Tooltip label="Print bill voucher" align="start">
-                        <button type="button" onClick={() => handlePrint(r)} className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                          <Printer size={14} />
-                        </button>
-                      </Tooltip>
-
-                      <Tooltip label={r.has_attachment ? 'Supporting document attached (click to view/manage)' : 'Attach supporting document'} align="start">
-                        <button
-                          type="button"
-                          onClick={() => setDocumentTarget(r)}
-                          className={`flex h-7 w-7 items-center justify-center rounded-lg transition-colors duration-150 ${
-                            r.has_attachment
-                              ? 'text-primary-dark bg-primary/10 hover:bg-primary/20'
-                              : 'text-muted hover:bg-bg hover:text-ink'
-                          }`}
-                        >
-                          <Paperclip size={14} fill={r.has_attachment ? 'currentColor' : 'none'} fillOpacity={r.has_attachment ? 0.2 : 0} />
-                        </button>
-                      </Tooltip>
-
-                      {/* Edit bill  -  only rendered when bill is editable */}
-                      {!r.is_archived && canEditBill(r) && (
-                        <Tooltip label="Edit bill" align="start">
-                          <button type="button" onClick={() => openEdit(r)} className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                            <Pencil size={14} />
-                          </button>
-                        </Tooltip>
-                      )}
-
-                      {/* Archive / Restore bill  -  only rendered when actionable */}
-                      {isAdmin && (r.is_archived ? (
+                      {r.is_archived ? (
+                        isAdmin && (
+                          <>
+                            <Tooltip label="Restore bill" align="end">
+                              <button
+                                type="button"
+                                onClick={() => restoreBill(r.ap_id)}
+                                disabled={actionBusyId === r.ap_id}
+                                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                              >
+                                <RotateCcw size={14} />
+                              </button>
+                            </Tooltip>
+                            <RetentionCountdown deletedAt={r.deleted_at} compact />
+                            <DeletePermanentButton
+                              endpoint={`/api/accounts-payable/${r.ap_id}/permanent`}
+                              label="bill"
+                              name={r.vendor_name || r.invoice_number || ''}
+                              onDeleted={refetch}
+                            />
+                          </>
+                        )
+                      ) : (
                         <>
-                        <Tooltip label="Restore bill" align="end">
-                          <button
-                            type="button"
-                            onClick={() => restoreBill(r.ap_id)}
-                            disabled={actionBusyId === r.ap_id}
-                            className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
-                          >
-                            <RotateCcw size={14} />
-                          </button>
-                        </Tooltip>
-                      {r.is_archived && (
-                        <DeletePermanentButton
-                          endpoint={`/api/accounts-payable/${r.ap_id}/permanent`}
-                          label="bill"
-                          name={r.vendor_name || r.invoice_number || ''}
-                          onDeleted={refetch}
-                        />
-                      )}
+                          <Tooltip label="Print bill voucher" align="end">
+                            <button type="button" onClick={() => handlePrint(r)} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                              <Printer size={14} />
+                            </button>
+                          </Tooltip>
+
+                          <Tooltip label={r.has_attachment ? 'Supporting document attached (click to view/manage)' : 'Attach supporting document'} align="end">
+                            <button
+                              type="button"
+                              onClick={() => setDocumentTarget(r)}
+                              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors duration-150 ${
+                                r.has_attachment
+                                  ? 'text-primary-dark bg-primary/10 hover:bg-primary/20'
+                                  : 'text-muted hover:bg-bg hover:text-ink'
+                              }`}
+                            >
+                              <Paperclip size={14} fill={r.has_attachment ? 'currentColor' : 'none'} fillOpacity={r.has_attachment ? 0.2 : 0} />
+                            </button>
+                          </Tooltip>
+
+                          {/* Edit bill  -  only rendered when bill is editable */}
+                          {canEditBill(r) && (
+                            <Tooltip label="Edit bill" align="end">
+                              <button type="button" onClick={() => openEdit(r)} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                                <Pencil size={14} />
+                              </button>
+                            </Tooltip>
+                          )}
+
+                          {isAdmin && canArchiveBill(r) && (
+                            <Tooltip label="Archive bill" align="end">
+                              <button
+                                type="button"
+                                onClick={() => archiveBill(r.ap_id)}
+                                disabled={actionBusyId === r.ap_id}
+                                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                              >
+                                <Archive size={14} />
+                              </button>
+                            </Tooltip>
+                          )}
                         </>
-                      ) : canArchiveBill(r) ? (
-                        <Tooltip label="Archive bill" align="end">
-                          <button
-                            type="button"
-                            onClick={() => archiveBill(r.ap_id)}
-                            disabled={actionBusyId === r.ap_id}
-                            className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
-                          >
-                            <Archive size={14} />
-                          </button>
-                        </Tooltip>
-                      ) : null)}
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -1408,6 +1443,17 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                 <Wallet size={16} />
                 Pay Bill ({formatCurrency(detailRecord.remaining_balance)})
               </button>
+            )}
+            {detailRecord && !detailRecord.is_archived && canEditBill(detailRecord) && (
+              <Button variant="secondary" size="md" icon={Pencil} onClick={() => { const t = detailRecord; closeDetail(); openEdit(t) }}>Edit</Button>
+            )}
+            {detailRecord && (
+              <Button variant="secondary" size="md" icon={Paperclip} onClick={() => setDocumentTarget(detailRecord)}>Documents</Button>
+            )}
+            {/* Archive is the gateway to the retention countdown and the
+                permanent purge, so it stays reachable from the modal. */}
+            {detailRecord && isAdmin && !detailRecord.is_archived && canArchiveBill(detailRecord) && (
+              <Button variant="secondary" size="md" icon={Archive} onClick={() => archiveBill(detailRecord.ap_id)}>Archive</Button>
             )}
             {detailRecord && <Button variant="primary" size="md" icon={Printer} onClick={() => handlePrint(detailRecord)}>Print Bill</Button>}
           </>

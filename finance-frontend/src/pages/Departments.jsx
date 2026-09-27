@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, Building2, Users, Mail, Phone, UserCog, Eye, EyeOff } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, Building2, Users, Mail, Phone, UserCog, Eye, EyeOff, X } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
@@ -9,6 +9,7 @@ import { apiFetch } from '../utils/api'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 import { useProfile } from '../hooks/useProfile'
 import DeletePermanentButton from '../components/DeletePermanentButton'
+import RetentionCountdown from '../components/RetentionCountdown'
 
 // Masks every character (keeps dashes/spaces as visual separators)
 function maskValue(value) {
@@ -232,20 +233,32 @@ export default function Departments({ title = 'Departments', crumbs = ['Master D
         </div>
       </div>
 
-      <div className={`${PANEL} p-4 flex flex-col gap-3 sm:flex-row sm:items-center`}>
-        <div className="relative flex-1">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search departments..." className={`${INPUT} pl-9`} />
+      <div className={`${PANEL} p-4`}>
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end flex-wrap">
+          <div className="relative flex-1 min-w-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Search</label>
+            <div className="relative">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none z-10" />
+              <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search departments..." className={`${INPUT} pl-9 pr-9`} autoComplete="off" />
+              {search && (
+                <button type="button" onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-border hover:text-ink transition-colors duration-150">
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="shrink-0 sm:ml-auto">
+            <Button
+              variant={showArchived ? 'primary' : 'secondary'}
+              size="sm"
+              icon={Archive}
+              onClick={() => setShowArchived((prev) => !prev)}
+              className="whitespace-nowrap"
+            >
+              Show Archived
+            </Button>
+          </div>
         </div>
-        <Button
-          variant={showArchived ? 'primary' : 'secondary'}
-          size="sm"
-          icon={Archive}
-          onClick={() => setShowArchived((prev) => !prev)}
-          className="shrink-0 whitespace-nowrap"
-        >
-          Show Archived
-        </Button>
       </div>
 
       {loadError && (
@@ -288,12 +301,15 @@ export default function Departments({ title = 'Departments', crumbs = ['Master D
                       </button>
                     </Tooltip>
                       {showArchived && (
+                        <>
+                        <RetentionCountdown deletedAt={d.deleted_at} compact />
                         <DeletePermanentButton
                           endpoint={`/api/departments/${d.department_id}/permanent`}
                           label="department"
                           name={d.department_name || ''}
                           onDeleted={fetchDepartments}
                         />
+                        </>
                       )}
                     </>
                     )) : (

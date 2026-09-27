@@ -94,4 +94,59 @@ class FileStorage
 
         return $url ?: (asset('storage/' . ltrim($storagePath, '/')));
     }
+
+    /**
+     * Read a stored image back as an inline `data:` URI.
+     *
+     * Server-rendered PDFs (dompdf) can't reliably fetch a remote image:
+     * it needs isRemoteEnabled() plus allow_url_fopen, it makes the PDF
+     * render depend on a network round-trip to R2, and a slow or blocked
+     * fetch yields a silently missing logo. Pulling the bytes through the
+     * same private disk and inlining them as base64 makes the letterhead
+     * self-contained and deterministic — the logo is either in the PDF or
+     * the company genuinely has none set.
+     *
+     * Returns null (rather than throwing) when there's no file or it can't
+     * be read, so callers can fall back to the initial-letter box.
+     */
+    public static function inlineDataUri(?string $storagePath): ?string
+    {
+        if (! $storagePath) {
+            return null;
+        }
+
+        $mime = match (strtolower(pathinfo($storagePath, PATHINFO_EXTENSION))) {
+            'png'  => 'image/png',
+            'jpg', 'jpeg' => 'image/jpeg',
+            'gif'  => 'image/gif',
+            'svg'  => 'image/svg+xml',
+            'webp' => 'image/webp',
+            default => null,
+        };
+
+        if ($mime === null) {
+            return null;
+        }
+
+        try {
+            $disk = Storage::disk(self::DISK);
+
+            if (! $disk->exists($storagePath)) {
+                return null;
+            }
+
+            $bytes = $disk->get($storagePath);
+
+            if (! is_string($bytes) || $bytes === '') {
+                return null;
+            }
+
+            return 'data:' . $mime . ';base64,' . base64_encode($bytes);
+        } catch (\Throwable $e) {
+            // A missing/unreachable logo must never break a financial export.
+            report($e);
+
+            return null;
+        }
+    }
 }

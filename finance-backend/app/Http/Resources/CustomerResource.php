@@ -24,6 +24,7 @@ class CustomerResource extends JsonResource
             'current_balance' => (float) $this->current_balance,
             'status' => $this->status,
             'is_archived' => $this->deleted_at !== null,
+            'deleted_at' => $this->deleted_at?->toIso8601String(),
         ];
     }
 }

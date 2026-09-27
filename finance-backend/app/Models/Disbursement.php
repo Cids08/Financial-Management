@@ -13,6 +13,11 @@ class Disbursement extends Model
         'source_type',
         'ap_id',
         'department_id',
+        // Set at release time for payroll disbursements. Records WHICH budget
+        // this payment actually consumed, so the utilization ledger can list
+        // the transactions behind `budgets.used_amount`. Null for AP-sourced
+        // disbursements, which have never moved a budget.
+        'budget_id',
         'cash_account_id',
         'voucher_number',
         'payee',
@@ -71,6 +76,11 @@ class Disbursement extends Model
     public function department()
     {
         return $this->belongsTo(Department::class);
+    }
+
+    public function budget()
+    {
+        return $this->belongsTo(Budget::class);
     }
 
     public function cashAccount()

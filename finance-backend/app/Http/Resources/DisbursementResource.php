@@ -88,6 +88,7 @@ class DisbursementResource extends JsonResource
             // so no extra cast is needed on the model for this.
             'is_archived' => $this->trashed(),
             'archived_at' => $this->deleted_at?->toIso8601String(),
+            'deleted_at' => $this->deleted_at?->toIso8601String(),
             'archived_by' => $this->deleted_by,
 
             'created_by' => $this->created_by,

@@ -16,4 +16,9 @@ class AiAdvisorConversationPolicy
     {
         return $user->id === $conversation->user_id;
     }
+
+    public function delete(User $user, AiAdvisorConversation $conversation): bool
+    {
+        return $user->id === $conversation->user_id;
+    }
 }

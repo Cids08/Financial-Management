@@ -16,7 +16,13 @@ import {
   X,
 } from 'lucide-react'
 import { formatCurrency } from '../utils/formatters'
+import {
+  buildHeader, buildFooter, buildSignatureBlock, SIGNATURE_PRESETS,
+  escapeHtml, printHtml, money,
+} from '../utils/print'
 import { useCompany } from '../context/CompanyContext'
+import { useProfileContext } from '../context/ProfileContext'
+import { usePrivacy } from '../context/PrivacyContext'
 
 const fmt = (n) => formatCurrency(n)
 
@@ -54,7 +60,12 @@ export default function DepreciationRunModal({
   const [step, setStep] = useState(0)
 
   // Step 0 config — fiscal year defaults from Settings.
-  const { fiscalYear: settingsFiscalYear } = useCompany()
+  const { fiscalYear: settingsFiscalYear, ...company } = useCompany()
+  const { profile } = useProfileContext()
+
+  // Re-render when the privacy flag flips. The on-screen modal keeps showing
+  // masked amounts (fmt); the printed schedule always shows real ones (money).
+  usePrivacy()
   const [fiscalYear, setFiscalYear] = useState(() => Number(settingsFiscalYear) || new Date().getFullYear())
   const [period, setPeriod] = useState('monthly')
   const [month, setMonth] = useState(() => new Date().getMonth() + 1)
@@ -184,103 +195,86 @@ export default function DepreciationRunModal({
   // Print Schedule
   // -------------------------------------------------------------------------
   const printSchedule = () => {
-    const win = window.open('', '_blank', 'width=950,height=1000')
-    if (!win) return
-
     const periodLabel = period === 'monthly'
       ? `${MONTHS.find((m) => m.value === Number(month))?.label} ${fiscalYear}`
       : `Full Year ${fiscalYear}`
 
     const items = runResult?.updated_assets || selectedProposals
+    const voucherNo = runResult?.voucher_number || previewData?.voucher_number || '—'
+    const totalDep = selectedDepreciationTotal || runResult?.total_depreciation || 0
+    const totalProjected = selectedProjectedBookTotal || 0
 
-    win.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Depreciation Schedule ${runResult?.voucher_number || previewData?.voucher_number || ''}</title>
-          <style>
-            @page { size: landscape; margin: 12mm; }
-            * { box-sizing: border-box; }
-            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; color: #111827; margin: 0; padding: 12px; font-size: 11px; }
-            .hdr { border-bottom: 2px solid #111827; padding-bottom: 8px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-end; }
-            .title { font-size: 16px; font-weight: 800; text-transform: uppercase; color: #1e3a8a; }
-            .subtitle { font-size: 11px; color: #4b5563; }
-            table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-            th { background: #f3f4f6; border: 1px solid #d1d5db; padding: 5px 6px; font-size: 10px; font-weight: 700; text-align: left; text-transform: uppercase; }
-            td { border: 1px solid #e5e7eb; padding: 5px 6px; }
-            td.num { text-align: right; font-family: monospace; }
-            .gl-box { border: 1px solid #111827; background: #f9fafb; padding: 8px; margin-top: 16px; font-size: 11px; }
-            .sig-row { display: flex; justify-content: space-between; margin-top: 24px; }
-            .sig-col { width: 30%; border-top: 1px solid #111827; text-align: center; padding-top: 4px; font-weight: 700; }
-          </style>
-        </head>
-        <body>
-          <div class="hdr">
-            <div>
-              <div class="title">Fixed Assets Periodic Depreciation Schedule</div>
-              <div class="subtitle">Period: ${periodLabel} &middot; Voucher: ${runResult?.voucher_number || previewData?.voucher_number || '—'} &middot; Posting Date: ${postingDate}</div>
-            </div>
-            <div style="text-align: right; font-size: 10px; color: #6b7280;">
-              Printed on ${new Date().toLocaleString('en-PH')}
-            </div>
-          </div>
+    // NOTE: print uses money() (real amounts), not fmt() (privacy-masked).
+    // A posted depreciation schedule is an accounting record  -  it must never
+    // print as "Php ••••••". The on-screen modal keeps using fmt().
+    const rowHtml = items.map((p) => `
+      <tr>
+        <td style="font-weight:700">${escapeHtml(p.asset_code)}</td>
+        <td>${escapeHtml(p.asset_name)}</td>
+        <td>${escapeHtml(p.asset_category || '—')}</td>
+        <td class="pf-num">${escapeHtml(money(p.purchase_cost || 0))}</td>
+        <td class="pf-num">${escapeHtml(money(p.current_book_value || 0))}</td>
+        <td class="pf-num" style="font-weight:700;color:#b91c1c">${escapeHtml(money(p.period_depreciation || p.depreciation_amount || 0))}</td>
+        <td class="pf-num" style="font-weight:700;color:#15803d">${escapeHtml(money(p.projected_book_value || p.new_book_value || 0))}</td>
+      </tr>`).join('')
 
-          <table>
-            <thead>
-              <tr>
-                <th>Asset Code</th>
-                <th>Asset Description</th>
-                <th>Category</th>
-                <th style="text-align: right;">Acquisition Cost</th>
-                <th style="text-align: right;">Current Book Value</th>
-                <th style="text-align: right;">Depreciation This Period</th>
-                <th style="text-align: right;">Projected Book Value</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${items.map((p) => `
-                <tr>
-                  <td style="font-family: monospace; font-weight: 700;">${p.asset_code}</td>
-                  <td>${p.asset_name}</td>
-                  <td>${p.asset_category || '—'}</td>
-                  <td class="num">${fmt(p.purchase_cost || 0)}</td>
-                  <td class="num">${fmt(p.current_book_value || 0)}</td>
-                  <td class="num" style="font-weight: 700; color: #b91c1c;">${fmt(p.period_depreciation || p.depreciation_amount || 0)}</td>
-                  <td class="num" style="font-weight: 700; color: #15803d;">${fmt(p.projected_book_value || p.new_book_value || 0)}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-            <tfoot>
-              <tr style="background: #f9fafb; font-weight: 800;">
-                <td colspan="5" style="text-align: right; text-transform: uppercase;">Total Period Depreciation Expense</td>
-                <td class="num" style="border-top: 2px solid #111827; border-bottom: 3px double #111827; color: #b91c1c;">
-                  ${fmt(selectedDepreciationTotal || runResult?.total_depreciation || 0)}
-                </td>
-                <td class="num" style="border-top: 2px solid #111827; border-bottom: 3px double #111827;">
-                  ${fmt(selectedProjectedBookTotal || 0)}
-                </td>
-              </tr>
-            </tfoot>
-          </table>
+    const body = `
+      ${buildHeader({
+        company,
+        title: 'Fixed Assets Depreciation Schedule',
+        meta: [
+          ['Period', periodLabel],
+          ['Voucher No.', voucherNo],
+          ['Posting Date', postingDate],
+          ['Assets', String(items.length)],
+          ['Fiscal Year', `FY${fiscalYear}`],
+        ],
+        preparedBy: profile?.name,
+        preparedRole: profile?.role || 'Asset Accountant',
+      })}
 
-          <div class="gl-box">
-            <strong>General Ledger Journal Entry Summary:</strong><br>
-            &bull; <strong>Debit 5500 &middot; Depreciation Expense</strong>: ${fmt(selectedDepreciationTotal || runResult?.total_depreciation || 0)}<br>
-            &bull; <strong>Credit 1590 &middot; Accumulated Depreciation</strong>: ${fmt(selectedDepreciationTotal || runResult?.total_depreciation || 0)}
-          </div>
+      <table class="pf-grid">
+        <thead><tr>
+          <th>Asset Code</th>
+          <th>Asset Description</th>
+          <th>Category</th>
+          <th style="text-align:right">Acquisition Cost</th>
+          <th style="text-align:right">Current Book Value</th>
+          <th style="text-align:right">Depreciation This Period</th>
+          <th style="text-align:right">Projected Book Value</th>
+        </tr></thead>
+        <tbody>${rowHtml || '<tr><td colspan="7" class="pf-empty">No assets in this run.</td></tr>'}</tbody>
+        <tfoot><tr>
+          <td colspan="5" style="text-align:right;text-transform:uppercase">Total Period Depreciation Expense</td>
+          <td class="pf-num" style="color:#b91c1c">${escapeHtml(money(totalDep))}</td>
+          <td class="pf-num">${escapeHtml(money(totalProjected))}</td>
+        </tr></tfoot>
+      </table>
 
-          <div class="sig-row">
-            <div class="sig-col">Prepared By: Asset Accountant</div>
-            <div class="sig-col">Reviewed By: Financial Controller</div>
-            <div class="sig-col">Approved By: Chief Financial Officer</div>
-          </div>
-        </body>
-      </html>
-    `)
+      <div class="pf-certification">
+        <div class="pf-certification-title">General Ledger Journal Entry Summary</div>
+        &bull; <strong>Debit 5500 &middot; Depreciation Expense</strong>: ${escapeHtml(money(totalDep))}<br>
+        &bull; <strong>Credit 1590 &middot; Accumulated Depreciation</strong>: ${escapeHtml(money(totalDep))}
+      </div>
 
-    win.document.close()
-    win.focus()
-    win.print()
+      ${buildSignatureBlock({
+        title: 'Prepared, Reviewed & Approved',
+        blocks: SIGNATURE_PRESETS.internal({
+          preparedName: profile?.name,
+          preparedRole: profile?.role || 'Asset Accountant',
+        }),
+      })}
+
+      <div class="pf-disclaimer">Book values shown are the carrying amounts after this period's depreciation. The journal entry above is the distribution posted by the depreciation run; verify against the General Ledger before closing the period.</div>
+
+      ${buildFooter({ company, detail: `Depreciation Schedule ${voucherNo} — ${periodLabel}` })}`
+
+    return printHtml({
+      title: `Depreciation Schedule ${voucherNo}`,
+      body,
+      company,
+      spec: 'schedule',
+    })
   }
 
   if (!open) return null

@@ -25,6 +25,7 @@ import Pagination from '../components/Pagination'
 import Tooltip from '../components/Tooltip'
 import { useUsers } from '../hooks/useUsers'
 import DeletePermanentButton from '../components/DeletePermanentButton'
+import RetentionCountdown from '../components/RetentionCountdown'
 import { useProfile } from '../hooks/useProfile'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 import { apiFetch } from '../utils/api'
@@ -663,28 +664,46 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
           )
         })}
       </div>
-      <div className={`${PANEL} ${PANEL_PAD} flex flex-col gap-3 lg:flex-row lg:items-center`}>
-        <div className="relative flex-1">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name or email..."
-            className={`${INPUT} pl-9`}
-          />
+      <div className={`${PANEL} ${PANEL_PAD}`}>
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end flex-wrap">
+          <div className="relative flex-1 min-w-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Search</label>
+            <div className="relative">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none z-10" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by name or email..."
+                className={`${INPUT} pl-9 pr-9`}
+                autoComplete="off"
+              />
+              {search && (
+                <button type="button" onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-border hover:text-ink transition-colors duration-150">
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="w-full sm:w-52 shrink-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Role</label>
+            <select
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value)}
+              className={INPUT}
+            >
+              <option value="all">All Roles</option>
+              {roles.map((r) => (
+                <option key={r.role_id} value={r.role_id}>{r.role_name}</option>
+              ))}
+            </select>
+          </div>
+          {(search || roleFilter !== 'all') && (
+            <div className="shrink-0">
+              <Button variant="secondary" size="sm" icon={RotateCcw} iconPosition="left" onClick={() => { setSearch(''); setRoleFilter('all') }}>Reset</Button>
+            </div>
+          )}
         </div>
-
-        <select
-          value={roleFilter}
-          onChange={(e) => setRoleFilter(e.target.value)}
-          className={`${INPUT} lg:w-56! shrink-0`}
-        >
-          <option value="all">All Roles</option>
-          {roles.map((r) => (
-            <option key={r.role_id} value={r.role_id}>{r.role_name}</option>
-          ))}
-        </select>
       </div>
 
       {/* Table */}
@@ -773,8 +792,9 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
                         <Clock size={12} /> {formatDateTime(u.last_login)}
                       </span>
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap text-right">
+                    <td className="px-4 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-1">
+                        {!u.is_archived && (
                         <Tooltip label="View profile" align="start">
                           <button
                             type="button"
@@ -784,6 +804,7 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
                             <IdCard size={15} />
                           </button>
                         </Tooltip>
+                        )}
                         {!u.is_archived && (isSuperAdmin || roleName(u.role_id) !== 'Super Admin') && (
                           <Tooltip label="Edit user" align="start">
                             <button
@@ -808,12 +829,15 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
                           </Tooltip>
                         )}
                         {u.is_archived && (
+                          <>
+                          <RetentionCountdown deletedAt={u.deleted_at} compact />
                           <DeletePermanentButton
                             endpoint={`/api/users/${u.user_id}/permanent`}
                             label="user"
                             name={`${u.first_name} ${u.last_name}`}
                             onDeleted={refetch}
                           />
+                          </>
                         )}
                       </div>
                     </td>

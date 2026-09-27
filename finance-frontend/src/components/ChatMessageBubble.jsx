@@ -11,7 +11,7 @@ function renderMessageText(text) {
   return parts.map((part, idx) => {
     if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
       return (
-        <strong key={idx} className="font-bold text-ink">
+        <strong key={idx} className="font-bold text-amber-700 dark:text-primary-light">
           {part.slice(2, -2)}
         </strong>
       )
@@ -23,17 +23,24 @@ function renderMessageText(text) {
 function ChatMessageBubble({ role, text }) {
   const isUser = role === 'user'
   return (
-    <div className={`flex items-start gap-2 ${isUser ? 'flex-row-reverse' : ''}`}>
+    <div className={`flex items-end gap-2.5 ${isUser ? 'flex-row-reverse' : ''}`}>
+      {/* Avatar */}
       <div
-        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
-          isUser ? 'bg-primary/15 text-primary-dark' : 'bg-bg text-muted border border-border'
+        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold shadow-xs ${
+          isUser
+            ? 'bg-primary text-[#111827]'
+            : 'bg-primary/15 text-amber-700 dark:text-primary border border-primary/30'
         }`}
       >
         {isUser ? <User size={13} /> : <Sparkles size={13} />}
       </div>
+
+      {/* Bubble */}
       <div
-        className={`max-w-[80%] rounded-xl px-3 py-2 text-sm whitespace-pre-line leading-relaxed ${
-          isUser ? 'bg-primary text-white rounded-tr-sm' : 'bg-bg text-ink border border-border rounded-tl-sm'
+        className={`max-w-[82%] rounded-2xl px-3.5 py-2.5 text-sm whitespace-pre-line leading-relaxed shadow-sm ${
+          isUser
+            ? 'bg-primary text-[#111827] font-medium rounded-br-xs'
+            : 'bg-surface text-ink border border-border rounded-bl-xs'
         }`}
       >
         {isUser ? text : renderMessageText(text)}

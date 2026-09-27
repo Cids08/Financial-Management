@@ -24,6 +24,7 @@ class SupplierResource extends JsonResource
             'status' => $this->status,
             'default_withholding_type' => $this->default_withholding_type,
             'is_archived' => $this->deleted_at !== null,
+            'deleted_at' => $this->deleted_at?->toIso8601String(),
         ];
     }
 }

@@ -4,8 +4,14 @@ import {
   FileText, Users, Download
 } from 'lucide-react'
 import { formatCurrencyRaw } from '../utils/formatters'
+import {
+  buildHeader, buildFooter, buildSignatureBlock, SIGNATURE_PRESETS,
+  escapeHtml, printHtml, printTimestamp, money,
+} from '../utils/print'
 import { usePermissions } from '../context/PermissionsContext'
 import { usePrivacy } from '../context/PrivacyContext'
+import { useCompany } from '../context/CompanyContext'
+import { useProfileContext } from '../context/ProfileContext'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -34,137 +40,181 @@ const BUCKET_LABELS = {
 }
 
 // ─── Print helpers ───────────────────────────────────────────────────────────
+//
+// Both statements are customer-facing documents, so they carry the full
+// company letterhead, a "certified correct" sign-off and a customer
+// acknowledgement line. Page numbering isn't possible from CSS in Chrome, so
+// the running footer repeats on every sheet and the batch labels each
+// statement "N of M" instead.
 
-function printSingleSOA(soa) {
+function printSingleSOA(soa, { company, profile } = {}) {
   const { customer, aging, total_outstanding, invoices, as_of_date } = soa
-  const fmt = (v) => formatCurrencyRaw(v)
+  const fmt = (v) => money(v)
+
+  const agingBoxes = Object.entries(aging).map(([k, v]) => `
+    <div class="pf-aging-box">
+      <div class="pf-aging-label">${escapeHtml(BUCKET_LABELS[k] ?? k)}</div>
+      <div class="pf-aging-val">${escapeHtml(fmt(v))}</div>
+    </div>`).join('')
 
   const invoiceRows = invoices.map((inv) => `
-    <tr style="border-bottom:1px solid #e2e8f0">
-      <td style="padding:6px 8px">${inv.invoice_number}</td>
-      <td style="padding:6px 8px">${fmtDate(inv.invoice_date)}</td>
-      <td style="padding:6px 8px">${fmtDate(inv.due_date)}</td>
-      <td style="padding:6px 8px;text-align:right">${fmt(inv.original_amount)}</td>
-      <td style="padding:6px 8px;text-align:right">${fmt(inv.paid_amount)}</td>
-      <td style="padding:6px 8px;text-align:right;font-weight:600">${fmt(inv.remaining_balance)}</td>
-      <td style="padding:6px 8px;text-align:right;color:${inv.days_overdue > 0 ? '#dc2626' : '#059669'}">${inv.days_overdue > 0 ? inv.days_overdue + ' days' : 'Current'}</td>
-      <td style="padding:6px 8px">${BUCKET_LABELS[inv.aging_bucket] ?? inv.aging_bucket}</td>
+    <tr>
+      <td>${escapeHtml(inv.invoice_number)}</td>
+      <td>${escapeHtml(fmtDate(inv.invoice_date))}</td>
+      <td>${escapeHtml(fmtDate(inv.due_date))}</td>
+      <td class="pf-num">${escapeHtml(fmt(inv.original_amount))}</td>
+      <td class="pf-num">${escapeHtml(fmt(inv.paid_amount))}</td>
+      <td class="pf-num">${escapeHtml(fmt(inv.remaining_balance))}</td>
+      <td class="pf-num" style="color:${inv.days_overdue > 0 ? '#b91c1c' : '#047857'}">${inv.days_overdue > 0 ? `${inv.days_overdue} days` : 'Current'}</td>
+      <td>${escapeHtml(BUCKET_LABELS[inv.aging_bucket] ?? inv.aging_bucket)}</td>
     </tr>`).join('')
 
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
-    <title>SOA  -  ${customer.customer_name}</title>
-    <style>
-      body { font-family: Arial, sans-serif; font-size: 12px; color: #1e293b; margin: 24px; }
-      h2 { margin: 0 0 2px; font-size: 18px; }
-      p  { margin: 2px 0; color: #64748b; }
-      table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-      th { background: #f1f5f9; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; padding: 8px; text-align: left; }
-      td { padding: 6px 8px; vertical-align: top; }
-      .aging-box { display:inline-block; padding:6px 16px; margin:4px; border-radius:8px; text-align:center; background:#f8fafc; border:1px solid #e2e8f0; }
-      .aging-box .label { font-size:10px; color:#64748b; }
-      .aging-box .val   { font-size:15px; font-weight:700; }
-      @media print { @page { size: A4 landscape; margin: 16mm; } }
-    </style></head><body>
-    <div style="display:flex;justify-content:space-between;align-items:flex-start">
-      <div>
-        <h2>Statement of Account</h2>
-        <p><strong>${customer.customer_name}</strong> (${customer.customer_code ?? ''})</p>
-        <p>${customer.address ?? ''}</p>
-        <p>${customer.email ?? ''} | ${customer.contact_person ?? ''} ${customer.contact_number ? '| ' + customer.contact_number : ''}</p>
-      </div>
-      <div style="text-align:right">
-        <p style="font-size:10px;color:#94a3b8">As of ${fmtDate(as_of_date)}</p>
-        <p style="font-size:20px;font-weight:700;color:#1e293b">Total: ${fmt(total_outstanding)}</p>
-      </div>
+  const body = `
+    ${buildHeader({
+      company,
+      title: 'Statement of Account',
+      meta: [
+        ['Customer', customer.customer_name],
+        ['Customer Code', customer.customer_code || '—'],
+        ['As of Date', fmtDate(as_of_date)],
+        ['Total Outstanding', fmt(total_outstanding)],
+      ],
+      confidential: 'Account Statement',
+      preparedBy: profile?.name,
+      preparedRole: profile?.role,
+    })}
+
+    <div class="pf-customer">
+      <div><span>Billing Address</span><strong>${escapeHtml(customer.address || '—')}</strong></div>
+      <div><span>Email</span><strong>${escapeHtml(customer.email || '—')}</strong></div>
+      <div><span>Attention</span><strong>${escapeHtml(customer.contact_person || '—')}</strong></div>
+      <div><span>Contact No.</span><strong>${escapeHtml(customer.contact_number || '—')}</strong></div>
     </div>
-    <hr style="border:none;border-top:1px solid #e2e8f0;margin:12px 0">
-    <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">
-      ${Object.entries(aging).map(([k, v]) =>
-        `<div class="aging-box"><div class="label">${BUCKET_LABELS[k]}</div><div class="val">${fmt(v)}</div></div>`
-      ).join('')}
-    </div>
-    <table>
+
+    <div class="pf-aging-row">${agingBoxes}</div>
+
+    <table class="pf-grid">
       <thead><tr>
         <th>Invoice #</th><th>Invoice Date</th><th>Due Date</th>
         <th style="text-align:right">Original</th>
         <th style="text-align:right">Paid</th>
         <th style="text-align:right">Balance</th>
-<th style="text-align:right">Days Overdue</th>
-         <th>Bucket</th>
-       </tr></thead>
-       <tbody>${invoiceRows}</tbody>
-       <tfoot><tr style="background:#f1f5f9;font-weight:700">
-        <td colspan="5" style="padding:8px">TOTAL OUTSTANDING</td>
-        <td style="padding:8px;text-align:right">${fmt(total_outstanding)}</td>
+        <th style="text-align:right">Days Overdue</th>
+        <th>Bucket</th>
+      </tr></thead>
+      <tbody>${invoiceRows || '<tr><td colspan="8" class="pf-empty">No outstanding invoices.</td></tr>'}</tbody>
+      <tfoot><tr>
+        <td colspan="5">TOTAL OUTSTANDING</td>
+        <td class="pf-num">${escapeHtml(fmt(total_outstanding))}</td>
         <td colspan="2"></td>
       </tr></tfoot>
     </table>
-    <script>window.onload=()=>{window.print();window.onafterprint=()=>window.close();}<\/script>
-  </body></html>`
 
-  const w = window.open('', '_blank', 'width=1000,height=700')
-  if (w) { w.document.write(html); w.document.close() }
+    ${buildSignatureBlock({
+      title: 'Certified & Acknowledged',
+      blocks: SIGNATURE_PRESETS.statement({
+        preparedName: profile?.name,
+        preparedRole: profile?.role,
+        customerName: customer.customer_name,
+      }),
+    })}
+
+    <div class="pf-disclaimer">This statement reflects the receivable records held in the system as of the date shown above. Please reconcile against your own records and report any discrepancy within fifteen (15) days.</div>
+
+    ${buildFooter({ company, detail: `Statement of Account — ${customer.customer_name}` })}`
+
+  return printHtml({
+    title: `Statement of Account - ${customer.customer_name}`,
+    body,
+    company,
+    spec: 'statement',
+  })
 }
 
-function printBatchSOA(batch) {
-  const fmt = (v) => formatCurrencyRaw(v)
+function printBatchSOA(batch, { company, profile } = {}) {
+  const fmt = (v) => money(v)
 
-  const pages = batch.map((soa) => {
+  // One statement per page. page-break-after is applied BETWEEN pages only
+  // (not on the last block) — applying it to the last one too is what used
+  // to leave a trailing blank sheet after every batch print.
+  const pages = batch.map((soa, i) => {
     const { customer, aging, total_outstanding, invoices, as_of_date } = soa
+    const last = i === batch.length - 1
+
     const rows = invoices.map((inv) => `
-      <tr style="border-bottom:1px solid #e2e8f0">
-        <td style="padding:4px 6px">${inv.invoice_number}</td>
-        <td style="padding:4px 6px">${fmtDate(inv.due_date)}</td>
-        <td style="padding:4px 6px;text-align:right">${fmt(inv.remaining_balance)}</td>
-        <td style="padding:4px 6px;color:${inv.days_overdue > 0 ? '#dc2626' : '#059669'}">${inv.days_overdue > 0 ? inv.days_overdue + ' days' : 'Current'}</td>
+      <tr>
+        <td>${escapeHtml(inv.invoice_number)}</td>
+        <td>${escapeHtml(fmtDate(inv.due_date))}</td>
+        <td class="pf-num">${escapeHtml(fmt(inv.remaining_balance))}</td>
+        <td style="color:${inv.days_overdue > 0 ? '#b91c1c' : '#047857'}">${inv.days_overdue > 0 ? `${inv.days_overdue} days` : 'Current'}</td>
       </tr>`).join('')
+
+    const agingChips = Object.entries(aging).map(([k, v]) =>
+      `<span class="pf-chip"><b>${escapeHtml(BUCKET_LABELS[k] ?? k)}:</b> ${escapeHtml(fmt(v))}</span>`).join('')
+
     return `
-      <div style="page-break-after:always;padding:20px 0">
-        <div style="display:flex;justify-content:space-between">
-          <div>
-            <h3 style="margin:0">${customer.customer_name} (${customer.customer_code ?? ''})</h3>
-            <p style="margin:2px 0;color:#64748b;font-size:11px">${customer.email ?? ''} | ${customer.address ?? ''}</p>
-          </div>
-          <div style="text-align:right">
-            <p style="font-size:10px;color:#94a3b8">As of ${fmtDate(as_of_date)}</p>
-            <p style="font-size:16px;font-weight:700">${fmt(total_outstanding)}</p>
-          </div>
-        </div>
-        <div style="display:flex;gap:6px;margin:8px 0;flex-wrap:wrap">
-          ${Object.entries(aging).map(([k, v]) =>
-            `<span style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:6px;padding:3px 10px;font-size:11px">
-              <b>${BUCKET_LABELS[k]}:</b> ${fmt(v)}
-            </span>`
-          ).join('')}
-        </div>
-        <table style="width:100%;border-collapse:collapse;font-size:11px">
-          <thead><tr style="background:#f1f5f9">
-            <th style="text-align:left;padding:5px 6px">Invoice #</th>
-            <th style="text-align:left;padding:5px 6px">Due Date</th>
-            <th style="text-align:right;padding:5px 6px">Balance</th>
-            <th style="text-align:left;padding:5px 6px">Days Overdue</th>
-          </tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>`
+    <section class="pf-sheet${last ? '' : ' pf-sheet-break'}">
+      ${buildHeader({
+        company,
+        title: 'Statement of Account',
+        meta: [
+          ['Customer', customer.customer_name],
+          ['Customer Code', customer.customer_code || '—'],
+          ['As of Date', fmtDate(as_of_date)],
+          ['Total Outstanding', fmt(total_outstanding)],
+        ],
+        confidential: 'Account Statement',
+      })}
+
+      <div class="pf-customer">
+        <div><span>Email</span><strong>${escapeHtml(customer.email || '—')}</strong></div>
+        <div><span>Address</span><strong>${escapeHtml(customer.address || '—')}</strong></div>
+        <div><span>Invoices</span><strong>${invoices.length}</strong></div>
+        <div><span>Statement</span><strong>${i + 1} of ${batch.length}</strong></div>
+      </div>
+
+      <div class="pf-chip-row">${agingChips}</div>
+
+      <table class="pf-grid">
+        <thead><tr>
+          <th>Invoice #</th><th>Due Date</th>
+          <th style="text-align:right">Balance</th>
+          <th>Days Overdue</th>
+        </tr></thead>
+        <tbody>${rows || '<tr><td colspan="4" class="pf-empty">No outstanding invoices.</td></tr>'}</tbody>
+        <tfoot><tr>
+          <td colspan="2">TOTAL OUTSTANDING</td>
+          <td class="pf-num">${escapeHtml(fmt(total_outstanding))}</td>
+          <td></td>
+        </tr></tfoot>
+      </table>
+
+      ${buildSignatureBlock({
+        title: 'Certified & Acknowledged',
+        blocks: SIGNATURE_PRESETS.statement({
+          preparedName: profile?.name,
+          preparedRole: profile?.role,
+          customerName: customer.customer_name,
+        }),
+      })}
+
+      ${buildFooter({ company, detail: `Statement ${i + 1} of ${batch.length} — ${customer.customer_name}` })}
+    </section>`
   }).join('')
 
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
-    <title>Batch SOA</title>
-    <style>
-      body { font-family: Arial, sans-serif; font-size: 12px; color: #1e293b; margin: 20px; }
-      h2   { margin: 0 0 4px; }
-      @media print { @page { size: A4; margin: 12mm; } }
-    </style></head><body>
-    <h2>Batch Statement of Accounts</h2>
-    <p style="color:#64748b;font-size:11px">${batch.length} customer(s) with outstanding balances</p>
-    <hr style="border:none;border-top:1px solid #e2e8f0;margin:8px 0">
-    ${pages}
-    <script>window.onload=()=>{window.print();window.onafterprint=()=>window.close();}<\/script>
-  </body></html>`
+  const body = `
+    <div class="pf-batch-head">
+      <div class="pf-title">Batch Statement of Accounts</div>
+      <div class="pf-subtitle">${batch.length} customer(s) with outstanding balances &middot; printed ${escapeHtml(printTimestamp())}</div>
+    </div>
+    ${pages}`
 
-  const w = window.open('', '_blank', 'width=1000,height=700')
-  if (w) { w.document.write(html); w.document.close() }
+  return printHtml({
+    title: 'Batch Statement of Accounts',
+    body,
+    company,
+    spec: 'statementBatch',
+  })
 }
 
 // ─── Aging Summary Table ──────────────────────────────────────────────────────
@@ -391,9 +441,14 @@ function CustomerSOADetail({ soa, onBack, onPrint }) {
 
 export default function StatementOfAccountModal({ open, onClose, fetchAgingSummary, fetchCustomerSoa, fetchBatchSoa }) {
   const { hasPermission } = usePermissions()
+  const company = useCompany()
+  const { profile } = useProfileContext()
 
   // Re-render when the privacy flag flips; this document always shows real amounts.
   usePrivacy()
+
+  // Letterhead + signatory context shared by both print paths.
+  const printContext = { company, profile }
 
   const canBatchPrint = hasPermission('ar.manage')
 
@@ -444,7 +499,7 @@ export default function StatementOfAccountModal({ open, onClose, fetchAgingSumma
     setLoadingBatch(true)
     const res = await fetchBatchSoa()
     if (res.success) {
-      printBatchSOA(res.data)
+      printBatchSOA(res.data, printContext)
     } else {
       setAgingError(res.message || 'Failed to load batch statements.')
     }
@@ -548,7 +603,7 @@ export default function StatementOfAccountModal({ open, onClose, fetchAgingSumma
             <CustomerSOADetail
               soa={selectedSoa}
               onBack={() => { setView('aging'); setSelectedSoa(null) }}
-              onPrint={() => printSingleSOA(selectedSoa)}
+              onPrint={() => printSingleSOA(selectedSoa, printContext)}
             />
           )}
         </div>

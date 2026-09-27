@@ -37,7 +37,12 @@ class AiAdvisorService
     private const ACKNOWLEDGMENT_REPLIES = [
         "Sure, just let me know if you need anything else.",
         "Got it, I'm here if you have more questions.",
-        "Alright, let me know what you'd like to look at next.",
+        // Deliberately does NOT ask the user to pick a topic. A canned "let me
+        // know what you'd like to look at next" reliably produced a vague
+        // follow-up like "idk tell me", which the advisor then had no good
+        // answer for. Staying open-ended but not soliciting a choice keeps the
+        // next turn on whatever the user actually cares about.
+        "Alright, I'm here if you need me.",
     ];
 
     public function __construct(private AdvisorEngine $engine)

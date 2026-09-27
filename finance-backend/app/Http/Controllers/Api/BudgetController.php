@@ -71,6 +71,104 @@ class BudgetController extends Controller
         ]);
     }
 
+    /**
+     * Utilization ledger: the transactions actually charged against this
+     * budget, so `used_amount` can be explained instead of just displayed.
+     *
+     * Two sources move a budget: expenses (real budget_id FK) and payroll
+     * disbursements (budget_id written at release, backfilled for history).
+     * Both are returned in one date-ordered list with a running balance.
+     *
+     * The reconciliation block is the important part: `used_amount` is a
+     * denormalized running total, so it can silently drift from the sum of
+     * its parts (manual edits, rows archived after being counted, legacy
+     * payroll with no budget_id). Surfacing the difference is what stops a
+     * wrong number from looking authoritative.
+     */
+    public function utilization(Budget $budget, Request $request)
+    {
+        $budget->loadMissing('department');
+
+        $expenses = $budget->expenses()
+            ->with(['category:id,category_name', 'supplier:id,supplier_name'])
+            ->get(['id', 'expense_date', 'description', 'expense_amount', 'expense_category_id', 'supplier_id', 'status', 'created_at']);
+
+        $payroll = $budget->disbursements()
+            ->get(['id', 'voucher_number', 'payee', 'payment_date', 'released_date', 'amount_paid', 'status', 'payroll_batch_number', 'employee_count', 'created_at']);
+
+        $rows = [];
+
+        foreach ($expenses as $e) {
+            $rows[] = [
+                'kind' => 'expense',
+                'id' => $e->id,
+                'date' => $e->expense_date?->toDateString(),
+                'reference' => $e->receipt_number ?: null,
+                'description' => $e->description,
+                'counterparty' => $e->supplier?->supplier_name,
+                'meta' => $e->category?->name,
+                'status' => $e->status,
+                'amount' => (float) $e->expense_amount,
+            ];
+        }
+
+        foreach ($payroll as $d) {
+            $rows[] = [
+                'kind' => 'payroll',
+                'id' => $d->id,
+                'date' => ($d->released_date ?: $d->payment_date)?->toDateString(),
+                'reference' => $d->payroll_batch_number ?: $d->voucher_number,
+                'description' => 'Payroll'.($d->employee_count ? " ({$d->employee_count} employees)" : ''),
+                'counterparty' => $d->payee,
+                'meta' => null,
+                'status' => $d->status,
+                'amount' => (float) $d->amount_paid,
+            ];
+        }
+
+        // Chronological, with a running balance so the user can see the
+        // budget drain in the order it actually happened.
+        usort($rows, fn ($a, $b) => ($a['date'] ?? '') <=> ($b['date'] ?? ''));
+
+        $running = 0.0;
+        foreach ($rows as &$r) {
+            $running += $r['amount'];
+            $r['running_total'] = round($running, 2);
+        }
+        unset($r);
+
+        $expenseTotal = round(array_sum(array_column(
+            array_values(array_filter($rows, fn ($r) => $r['kind'] === 'expense')),
+            'amount'
+        )), 2);
+
+        $payrollTotal = round(array_sum(array_column(
+            array_values(array_filter($rows, fn ($r) => $r['kind'] === 'payroll')),
+            'amount'
+        )), 2);
+
+        $ledgerTotal = round($expenseTotal + $payrollTotal, 2);
+        $storedTotal = round((float) $budget->used_amount, 2);
+
+        return response()->json([
+            'success' => true,
+            'message' => '',
+            'data' => [
+                'rows' => $rows,
+                'summary' => [
+                    'expense_total' => $expenseTotal,
+                    'payroll_total' => $payrollTotal,
+                    'ledger_total' => $ledgerTotal,
+                    'stored_used_amount' => $storedTotal,
+                    // Non-zero means the running total and its parts disagree.
+                    'variance' => round($storedTotal - $ledgerTotal, 2),
+                    'allocated_amount' => (float) $budget->allocated_amount,
+                    'remaining_amount' => (float) $budget->remaining_amount,
+                ],
+            ],
+        ]);
+    }
+
     public function update(UpdateBudgetRequest $request, Budget $budget)
     {
         $budget = $this->budgets->update($budget, $request->validated(), $request->user()->id);

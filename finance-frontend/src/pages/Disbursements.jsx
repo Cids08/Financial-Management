@@ -16,9 +16,11 @@ import { MIN_COLLECTION_AMOUNT, minHint } from '../utils/business'
 import { usePermissions } from '../context/PermissionsContext'
 import { useProfileContext } from '../context/ProfileContext'
 import DeletePermanentButton from '../components/DeletePermanentButton'
+import RetentionCountdown from '../components/RetentionCountdown'
 import { usePrivacy } from '../context/PrivacyContext'
 import { hasPermission } from '../utils/permissions'
 import { useDisbursements } from '../hooks/useDisbursements'
+import { useHighlightRow } from '../hooks/useHighlightRow'
 import { useDepartments } from '../hooks/useDepartments'
 import { useCashAccounts } from '../hooks/useCashAccounts'
 import { useAccountsPayable } from '../hooks/useAccountsPayable'
@@ -226,6 +228,20 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
 
   usePrivacy()
 
+  // Global search / General Ledger jump navigates here with a highlightId
+  // (and, since this table is server-filtered inside useDisbursements, a
+  // highlightSearch seed) whenever a disbursement record is clicked elsewhere.
+  const { highlightedId, highlightSearch } = useHighlightRow()
+  useEffect(() => {
+    if (highlightSearch == null) return
+    setDSearch(highlightSearch)
+    setDStatusFilter('all')
+    setDShowArchived(false)
+    setDDateFrom('')
+    setDDateTo('')
+    setDPage(1)
+  }, [highlightSearch])
+
   // useDepartments() doesn't auto-fetch on mount (unlike useCashAccounts
   // and useAccountsPayable)  -  it's built to be called with filters/page
   // from the Departments page itself. Pull a single large page here since
@@ -375,70 +391,13 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
     }))
   }
 
-  const handlePrintDisbursement = (d) => {
-    const win = window.open('', '_blank', 'width=800,height=900')
-    if (!win) return
-    const isPayroll = getSourceType(d) === 'payroll'
-    const rows = isPayroll
-      ? [
-          ['Received By', d.payee],
-          ['Payroll Batch No.', d.payroll_batch_number || '—'],
-          ['Requesting Department', d.department_name || '—'],
-          ['Pay Period', d.pay_period_start && d.pay_period_end ? `${formatDate(d.pay_period_start)}  -  ${formatDate(d.pay_period_end)}` : '—'],
-          ['Employees Covered', d.employee_count ?? '—'],
-          ['Payment Date', formatDate(d.payment_date)],
-          ['Amount Paid', formatCurrency(d.amount_paid)],
-          ['Payment Method', d.payment_method],
-          ['Cash Account', d.cash_account_name || '—'],
-          ['Reference No.', d.reference_number || '—'],
-          ['Approved By', d.approved_by_name || '—'],
-          ['Status', DISBURSEMENT_STATUS_LABELS[d.status] || d.status],
-        ]
-      : [
-          ['Received By', d.payee],
-          ['Related Bill', d.invoice_number || '—'],
-          ['Department', d.department_name || '—'],
-          ['Payment Date', formatDate(d.payment_date)],
-          ['Amount Paid', formatCurrency(d.amount_paid)],
-          ['Payment Method', d.payment_method],
-          ['Cash Account', d.cash_account_name || '—'],
-          ['Reference No.', d.reference_number || '—'],
-          ['Approved By', d.approved_by_name || '—'],
-          ['Status', DISBURSEMENT_STATUS_LABELS[d.status] || d.status],
-        ]
-    win.document.write(`
-      <html>
-        <head>
-          <title>${isPayroll ? 'Payroll Disbursement Voucher' : 'Disbursement Voucher'} ${d.voucher_number}</title>
-          <style>
-            * { box-sizing: border-box; }
-            body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #1a1a1a; padding: 48px; }
-            .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1a1a1a; padding-bottom: 20px; margin-bottom: 24px; }
-            .header h1 { margin: 0 0 4px; font-size: 22px; }
-            .header p { margin: 0; color: #666; font-size: 14px; }
-            .status { display: inline-block; padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; background: #f3f3f3; }
-            table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-            td { padding: 10px 4px; border-bottom: 1px solid #eee; font-size: 14px; }
-            td:first-child { color: #666; width: 40%; }
-            td:last-child { font-weight: 600; text-align: right; }
-            .footer { margin-top: 32px; font-size: 12px; color: #999; text-align: center; }
-            @media print { body { padding: 24px; } }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div><h1>${isPayroll ? 'Payroll Disbursement Voucher' : 'Disbursement Voucher'}</h1><p>${d.payee}</p></div>
-            <span class="status">${d.status}</span>
-          </div>
-          <table>${rows.map(([label, value]) => `<tr><td>${label}</td><td>${value}</td></tr>`).join('')}</table>
-          <div class="footer">Printed on ${formatDateTime(new Date().toISOString())}</div>
-        </body>
-      </html>
-    `)
-    win.document.close()
-    win.focus()
-    win.print()
-  }
+  // NOTE: there used to be a `handlePrintDisbursement` here that built a
+  // hand-rolled "Disbursement Voucher" popup. It had no call site  —  the
+  // live print path is <DisbursementPrintModal />, which renders the
+  // voucher (and the BIR 2307 certificate) from the backend
+  // printable-voucher payload and already carries the Prepared / Checked /
+  // Approved / Received signature block. Deleted rather than migrated: it
+  // was a second, divergent definition of the same legal document.
 
   const handleDisbursementSubmit = async (e) => {
     e.preventDefault()
@@ -656,52 +615,77 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
         </div>
       )}
 
-      <div className={`${PANEL} ${PANEL_PAD} flex flex-col gap-3 lg:flex-row lg:items-center`}>
-        <div className="relative flex-1 min-w-0 basis-full">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-          <input type="text" value={dSearch} onChange={(e) => setDSearch(e.target.value)} placeholder="Search by voucher, received by, or reference..." className={`${INPUT} pl-9`} style={{ ...INPUT_TEXT_STYLE, width: '100%', minWidth: 0 }} autoComplete="off" />
-        </div>
-        <select value={dSourceFilter} onChange={(e) => setDSourceFilter(e.target.value)} className={INPUT} style={INPUT_TEXT_STYLE}>
-          <option value="all">All Sources</option>
-          <option value="ap">Accounts Payable</option>
-          <option value="payroll">Payroll</option>
-        </select>
-        <select value={dStatusFilter} onChange={(e) => setDStatusFilter(e.target.value)} className={INPUT} style={INPUT_TEXT_STYLE}>
-          <option value="all">All Statuses</option>
-          {['Pending', 'Approved', 'Released', 'Rejected'].map((s) => <option key={s} value={s}>{DISBURSEMENT_STATUS_LABELS[s] || s}</option>)}
-        </select>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <CalendarRange size={15} className="text-muted shrink-0" />
-          <input
-            type="date"
-            value={dDateFrom}
-            onChange={(e) => setDDateFrom(e.target.value)}
-            max={dDateTo || undefined}
-            aria-label="Payment date from"
-            className={`${INPUT} scheme-light dark:scheme-dark`}
-            style={{ ...INPUT_TEXT_STYLE, width: '9.5rem' }}
-          />
-          <span className="text-xs text-muted">to</span>
-          <input
-            type="date"
-            value={dDateTo}
-            onChange={(e) => setDDateTo(e.target.value)}
-            min={dDateFrom || undefined}
-            aria-label="Payment date to"
-            className={`${INPUT} scheme-light dark:scheme-dark`}
-            style={{ ...INPUT_TEXT_STYLE, width: '9.5rem' }}
-          />
-          {dHasDateFilter && (
-            <Tooltip label="Clear date filter" align="end">
-              <button
-                type="button"
-                onClick={clearDDateFilter}
-                aria-label="Clear date filter"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
-              >
-                <X size={15} />
-              </button>
-            </Tooltip>
+      <div className={`${PANEL} ${PANEL_PAD}`}>
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end flex-wrap">
+          {/* Search */}
+          <div className="relative flex-1 min-w-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Search</label>
+            <div className="relative">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none z-10" />
+              <input
+                type="text"
+                value={dSearch}
+                onChange={(e) => setDSearch(e.target.value)}
+                placeholder="Search by voucher, received by, or reference..."
+                className={`${INPUT} pl-9 pr-9`}
+                style={{ ...INPUT_TEXT_STYLE, minWidth: 0 }}
+                autoComplete="off"
+              />
+              {dSearch && (
+                <button type="button" onClick={() => setDSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-border hover:text-ink transition-colors duration-150">
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+          </div>
+          {/* Source */}
+          <div className="w-full sm:w-44 shrink-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Source</label>
+            <select value={dSourceFilter} onChange={(e) => setDSourceFilter(e.target.value)} className={INPUT} style={INPUT_TEXT_STYLE}>
+              <option value="all">All Sources</option>
+              <option value="ap">Accounts Payable</option>
+              <option value="payroll">Payroll</option>
+            </select>
+          </div>
+          {/* Status */}
+          <div className="w-full sm:w-44 shrink-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Status</label>
+            <select value={dStatusFilter} onChange={(e) => setDStatusFilter(e.target.value)} className={INPUT} style={INPUT_TEXT_STYLE}>
+              <option value="all">All Statuses</option>
+              {['Pending', 'Approved', 'Released', 'Rejected'].map((s) => <option key={s} value={s}>{DISBURSEMENT_STATUS_LABELS[s] || s}</option>)}
+            </select>
+          </div>
+          {/* Date From */}
+          <div className="shrink-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">From</label>
+            <input
+              type="date"
+              value={dDateFrom}
+              onChange={(e) => setDDateFrom(e.target.value)}
+              max={dDateTo || undefined}
+              aria-label="Payment date from"
+              className={`${INPUT} scheme-light dark:scheme-dark`}
+              style={{ ...INPUT_TEXT_STYLE, width: '9.5rem' }}
+            />
+          </div>
+          {/* Date To */}
+          <div className="shrink-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">To</label>
+            <input
+              type="date"
+              value={dDateTo}
+              onChange={(e) => setDDateTo(e.target.value)}
+              min={dDateFrom || undefined}
+              aria-label="Payment date to"
+              className={`${INPUT} scheme-light dark:scheme-dark`}
+              style={{ ...INPUT_TEXT_STYLE, width: '9.5rem' }}
+            />
+          </div>
+          {/* Reset */}
+          {(dSearch || dSourceFilter !== 'all' || dStatusFilter !== 'all' || dHasDateFilter) && (
+            <div className="shrink-0">
+              <Button variant="secondary" size="sm" icon={RotateCcw} iconPosition="left" onClick={() => { setDSearch(''); setDSourceFilter('all'); setDStatusFilter('all'); clearDDateFilter() }}>Reset</Button>
+            </div>
           )}
         </div>
       </div>
@@ -740,7 +724,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                 const isMissingProof = !isPayroll && !d.has_attachment && d.status === 'Approved'
                 const cashAccName = cashAcc?.account_name || d.cash_account_name || 'Cash Account'
                 return (
-                  <tr key={d.disbursement_id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
+                  <tr key={d.disbursement_id} data-row-id={d.disbursement_id} className={`border-b border-border last:border-0 transition-colors duration-150 ${highlightedId === d.disbursement_id ? 'bg-primary/10' : 'hover:bg-bg'}`}>
                     <td className="px-3 py-2.5 min-w-0">
                       <p className="font-medium text-ink truncate max-w-35 sm:masm:max-w-45ax-w-[220px]">{d.payee}</p>
                       <p className="text-xs text-muted wrap-break-word max-w-42.5 xl:max-w-50">{d.voucher_number} &middot; {d.cash_account_name}</p>
@@ -786,18 +770,20 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                         )}
                       </div>
                     </td>
-                    <td className="px-3 py-2.5 whitespace-nowrap text-right">
+                    <td className="px-3 py-2.5 text-right">
                       <div className="flex items-center justify-end gap-0.5">
                         <Tooltip label="View full record" align="start">
                           <button type="button" onClick={() => openDisbursementDetail(d)} className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                             <Info size={14} />
                           </button>
                         </Tooltip>
+                        {!d.is_archived && (
                         <Tooltip label="Print voucher / BIR 2307" align="start">
                           <button type="button" onClick={() => setPrintTarget(d)} className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                             <Printer size={14} />
                           </button>
                         </Tooltip>
+                        )}
 
 
                         {/* Proof attachment button  -  AP-only */}
@@ -931,12 +917,15 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                             </button>
                           </Tooltip>
                           {d.is_archived && (
+                            <>
+                            <RetentionCountdown deletedAt={d.deleted_at} compact />
                             <DeletePermanentButton
                               endpoint={`/api/disbursements/${d.disbursement_id}/permanent`}
                               label="disbursement"
                               name={d.voucher_number || ''}
                               onDeleted={refresh}
                             />
+                            </>
                           )}
                           </>
                         ) : ['Released', 'Rejected'].includes(d.status) ? (

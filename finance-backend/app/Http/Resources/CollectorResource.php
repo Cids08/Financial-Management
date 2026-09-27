@@ -29,6 +29,7 @@ class CollectorResource extends JsonResource
             'monthly_target'  => (float) $this->monthly_target,
             'is_active'       => $this->status === 'Active',
             'is_archived'     => $this->trashed(),
+            'deleted_at'      => $this->deleted_at?->toIso8601String(),
             // Which login account (if any) is linked to this collector —
             // powers the "Linked User Account" field in the Add/Edit
             // modal. user_id can be null (see the add_user_id_to_collectors

@@ -63,7 +63,19 @@ class GenerateAiRecommendations implements ShouldQueue
         }
 
         DB::transaction(function () use ($recommendations) {
+            // One recommendation per category per forecast: if the engine
+            // returns several entries for a category (e.g. the model
+            // ignoring its constraint), only the first one is persisted so
+            // the same forecast never accumulates duplicate-category rows.
+            $seenCategories = [];
+
             foreach ($recommendations as $r) {
+                if (isset($seenCategories[$r['type']])) {
+                    continue;
+                }
+
+                $seenCategories[$r['type']] = true;
+
                 AiRecommendation::create([
                     'forecast_id' => $this->forecast->getKey(),
                     'category' => $r['type'],

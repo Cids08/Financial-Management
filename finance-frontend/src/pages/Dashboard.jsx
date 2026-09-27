@@ -29,6 +29,7 @@ import {
   ChevronRight,
   Activity,
   Loader2,
+  CalendarRange,
 } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import DashboardCard from '../components/DashboardCard'
@@ -131,6 +132,7 @@ const TOOLTIP_STYLE = {
   borderRadius: 8,
   border: '1px solid var(--color-border, #e2e8f0)',
   backgroundColor: 'var(--color-surface, #fff)',
+  color: 'var(--color-ink, #0f172a)',
 }
 
 const COLUMNS = [
@@ -324,25 +326,35 @@ export default function Dashboard() {
   // sync everywhere.
   const { privacyOn: privacyMode } = usePrivacy()
 
+  // Which calendar year the period figures (revenue, expenses, net cash flow,
+  // and the monthly trends) are scoped to. Defaults to this year; the
+  // selectable list comes from the backend, which derives it from the actual
+  // range of transaction dates rather than a hardcoded span.
+  const [year, setYear] = useState(() => new Date().getFullYear())
+  const [availableYears, setAvailableYears] = useState([])
+
   useEffect(() => {
     setLoading(true)
     setError(null)
-    apiFetch('/api/dashboard')
+    apiFetch(`/api/dashboard?year=${year}`)
       .then((res) => res.json())
-      .then((json) => setData(json.data))
+      .then((json) => {
+        setData(json.data)
+        if (json.data?.available_years?.length) setAvailableYears(json.data.available_years)
+      })
       .catch(() => setError('Could not load the dashboard. Please try again.'))
       .finally(() => setLoading(false))
-  }, [])
+  }, [year])
 
   useEffect(() => {
     setChartsLoading(true)
     setChartsError(null)
-    apiFetch('/api/dashboard/charts')
+    apiFetch(`/api/dashboard/charts?year=${year}`)
       .then((res) => res.json())
       .then((json) => setChartData(json.data))
       .catch(() => setChartsError('Could not load charts.'))
       .finally(() => setChartsLoading(false))
-  }, [])
+  }, [year])
 
   const handleModuleClick = (route) => {
     if (route) navigate(route)
@@ -352,13 +364,13 @@ export default function Dashboard() {
     setExporting(true)
     setExportError(null)
     try {
-      const res = await apiFetch('/api/dashboard/export')
+      const res = await apiFetch(`/api/dashboard/export?year=${year}`)
       if (!res.ok) throw new Error('Export request failed')
       const blob = await res.blob()
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = `dashboard-summary-${new Date().toISOString().slice(0, 10)}.pdf`
+      link.download = `dashboard-summary-${year}-${new Date().toISOString().slice(0, 10)}.pdf`
       document.body.appendChild(link)
       link.click()
       link.remove()
@@ -452,6 +464,19 @@ export default function Dashboard() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 rounded-lg border border-border bg-bg px-2">
+            <CalendarRange size={14} className="shrink-0 text-muted" />
+            <select
+              value={year}
+              onChange={(e) => setYear(Number(e.target.value))}
+              aria-label="Dashboard year"
+              className="h-9 cursor-pointer bg-transparent pr-1 text-sm font-medium text-ink focus:outline-none"
+            >
+              {(availableYears.length ? availableYears : [year]).map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
           <Button variant="secondary" size="sm" icon={Download} onClick={handleExport} disabled={exporting}>
             {exporting ? 'Exporting…' : 'Export'}
           </Button>
@@ -461,7 +486,12 @@ export default function Dashboard() {
 
       {/* Financial overview */}
       <div>
-        <h2 className={`mb-2 ${SECTION_TITLE}`}>Financial Overview</h2>
+        <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          <h2 className={SECTION_TITLE}>Financial Overview</h2>
+          <p className={SECTION_SUBTITLE}>
+            Revenue, expenses &amp; net cash flow for {year} (vs. {year - 1}) &middot; available cash is a live balance
+          </p>
+        </div>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {overviewCards.map((card) => (
             <DashboardCard
@@ -612,7 +642,7 @@ export default function Dashboard() {
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
-            <ChartCard title="Revenue Trend" subtitle="Last 6 months" route={CHART_ROUTES.revenue_trend} navigate={navigate} empty={!chartData?.revenue_trend?.length}>
+            <ChartCard title="Revenue Trend" subtitle={`${year}, monthly`} route={CHART_ROUTES.revenue_trend} navigate={navigate} empty={!chartData?.revenue_trend?.length}>
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData?.revenue_trend} margin={CHART_MARGIN}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e2e8f0)" />
@@ -624,7 +654,7 @@ export default function Dashboard() {
               </ResponsiveContainer>
             </ChartCard>
 
-            <ChartCard title="Expense Trend" subtitle="Last 6 months" route={CHART_ROUTES.expense_trend} navigate={navigate} empty={!chartData?.expense_trend?.length}>
+            <ChartCard title="Expense Trend" subtitle={`${year}, monthly`} route={CHART_ROUTES.expense_trend} navigate={navigate} empty={!chartData?.expense_trend?.length}>
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData?.expense_trend} margin={CHART_MARGIN}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e2e8f0)" />
@@ -691,7 +721,7 @@ export default function Dashboard() {
               </ResponsiveContainer>
             </ChartCard>
 
-            <ChartCard title="Expenses by Category" subtitle="This month" route={CHART_ROUTES.expense_trend} navigate={navigate} empty={!chartData?.expense_breakdown?.length}>
+            <ChartCard title="Expenses by Category" subtitle={String(year)} route={CHART_ROUTES.expense_trend} navigate={navigate} empty={!chartData?.expense_breakdown?.length}>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie

@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { apiFetch } from '../utils/api'
 import { currencySymbol } from '../utils/formatters'
+import { escapeHtml } from '../utils/print'
 import { useCompany } from '../context/CompanyContext'
 
 // ---------------------------------------------------------------------------
@@ -170,9 +171,10 @@ export default function DisbursementPrintModal({
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Disbursement Voucher ${v.voucher_number || ''}</title>
+          <title>Disbursement Voucher ${escapeHtml(v.voucher_number || '')}</title>
           <style>
-            @page { size: portrait; margin: 15mm; }
+            /* 'voucher' PAGE_SPEC: signing room at the foot, no running footer. */
+            @page { size: A4 portrait; margin: 15mm 15mm 18mm 15mm; }
             * { box-sizing: border-box; }
             body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; color: #111827; margin: 0; padding: 12px; font-size: 13px; line-height: 1.4; }
             .header-table { width: 100%; border-bottom: 2px solid #111827; padding-bottom: 12px; margin-bottom: 16px; }
@@ -196,20 +198,27 @@ export default function DisbursementPrintModal({
             .sig-name { font-weight: 700; color: #111827; border-top: 1px solid #111827; padding-top: 4px; text-align: center; }
             .sig-date { font-size: 10px; color: #6b7280; text-align: center; margin-top: 2px; }
             .sig-position { font-size: 10px; color: #6b7280; text-align: center; margin-top: 1px; }
-            @media print { .no-print { display: none; } }
+            /* Keep the printed voucher/BIR sheet intact: repeat column
+               headings after a break and never split a single row. */
+            thead { display: table-header-group; }
+            tr, .signature-block, .certification { break-inside: avoid; page-break-inside: avoid; }
+            @media print {
+              .no-print { display: none; }
+              * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            }
           </style>
         </head>
         <body>
           <table class="header-table">
             <tr>
               <td>
-                <div class="company-name">${coName}</div>
-                <div class="company-sub">${coAddr} &middot; Tel: ${coTel}</div>
+                <div class="company-name">${escapeHtml(coName)}</div>
+                <div class="company-sub">${escapeHtml(coAddr)} &middot; Tel: ${escapeHtml(coTel)}</div>
               </td>
               <td style="text-align: right;">
                 <div class="doc-title">${isCheck ? 'Check Disbursement Voucher' : 'Disbursement Voucher'}</div>
-                <div style="font-size: 14px; font-weight: 700; color: #1e3a8a; margin-top: 4px;"># ${v.voucher_number || '-'}</div>
-                <div style="font-size: 11px; color: #6b7280;">Date: ${v.payment_date || '-'}</div>
+                <div style="font-size: 14px; font-weight: 700; color: #1e3a8a; margin-top: 4px;"># ${escapeHtml(v.voucher_number || '-')}</div>
+                <div style="font-size: 11px; color: #6b7280;">Date: ${escapeHtml(v.payment_date || '-')}</div>
               </td>
             </tr>
           </table>
@@ -218,19 +227,19 @@ export default function DisbursementPrintModal({
             <div class="check-card">
               <div class="check-header">
                 <div>
-                  <div style="font-weight: 800; font-size: 14px; color: #1e3a8a;">${cash.bank_name || 'BANK CHECK'}</div>
-                  <div style="font-size: 10px; color: #6b7280;">Acct: ${cash.account_number || '-'} &middot; ${cash.account_name || ''}</div>
+                  <div style="font-weight: 800; font-size: 14px; color: #1e3a8a;">${escapeHtml(cash.bank_name || 'BANK CHECK')}</div>
+                  <div style="font-size: 10px; color: #6b7280;">Acct: ${escapeHtml(cash.account_number || '-')} &middot; ${escapeHtml(cash.account_name || '')}</div>
                 </div>
                 <div style="text-align: right;">
                   <div style="font-size: 10px; color: #6b7280;">CHECK DATE</div>
-                  <div style="font-weight: 700;">${v.payment_date || '-'}</div>
+                  <div style="font-weight: 700;">${escapeHtml(v.payment_date || '-')}</div>
                 </div>
               </div>
               <table style="width: 100%; margin-bottom: 8px;">
                 <tr>
                   <td style="width: 80px; font-weight: 700; font-size: 11px; color: #4b5563;">PAY TO THE ORDER OF</td>
                   <td style="border-bottom: 1px solid #111827; font-weight: 800; font-size: 13px; color: #111827; padding-left: 8px;">
-                    ${v.payee || '-'}
+                    ${escapeHtml(v.payee || '-')}
                   </td>
                   <td style="width: 130px; text-align: right; font-family: monospace; font-size: 14px; font-weight: 800; border: 1px solid #111827; padding: 4px 8px; background: #fff;">
                     ${fmt(v.amount_paid)}
@@ -251,31 +260,31 @@ export default function DisbursementPrintModal({
           <table class="meta-grid">
             <tr>
               <td class="meta-label">Received By:</td>
-              <td style="font-weight: 700; color: #111827;">${v.payee || '-'}</td>
+              <td style="font-weight: 700; color: #111827;">${escapeHtml(v.payee || '-')}</td>
               <td class="meta-label">Payment Method:</td>
-              <td style="font-weight: 600;">${v.payment_method || '-'}</td>
+              <td style="font-weight: 600;">${escapeHtml(v.payment_method || '-')}</td>
             </tr>
             <tr>
               <td class="meta-label">Supplier TIN:</td>
-              <td>${s.tin || '-'}</td>
+              <td>${escapeHtml(s.tin || '-')}</td>
               <td class="meta-label">Cash Account:</td>
-              <td>${cash.account_name || '-'} (${cash.bank_name || ''})</td>
+              <td>${escapeHtml(cash.account_name || '-')} (${escapeHtml(cash.bank_name || '')})</td>
             </tr>
             <tr>
               <td class="meta-label">Supplier Address:</td>
-              <td>${s.address || '-'}</td>
+              <td>${escapeHtml(s.address || '-')}</td>
               <td class="meta-label">Reference Number:</td>
-              <td style="font-family: monospace;">${v.reference_number || '-'}</td>
+              <td style="font-family: monospace;">${escapeHtml(v.reference_number || '-')}</td>
             </tr>
             <tr>
               <td class="meta-label">Related AP Bill:</td>
-              <td>${bill.invoice_number ? `${bill.invoice_number} (Due: ${bill.due_date || '-'})` : '- (Direct / Payroll)'}</td>
+              <td>${bill.invoice_number ? `${escapeHtml(bill.invoice_number)} (Due: ${escapeHtml(bill.due_date || '-')})` : '- (Direct / Payroll)'}</td>
               <td class="meta-label">Total Amount Paid:</td>
               <td style="font-weight: 800; color: #1e3a8a; font-family: monospace; font-size: 13px;">${fmt(v.amount_paid)}</td>
             </tr>
             <tr>
               <td class="meta-label">Remarks / Purpose:</td>
-              <td colspan="3">${v.remarks || bill.description || 'Settlement of approved expenditure'}</td>
+              <td colspan="3">${escapeHtml(v.remarks || bill.description || 'Settlement of approved expenditure')}</td>
             </tr>
           </table>
 
@@ -292,8 +301,8 @@ export default function DisbursementPrintModal({
             <tbody>
               ${entries.map((e) => `
                 <tr>
-                  <td style="font-family: monospace; font-weight: 600;">${e.account_code}</td>
-                  <td>${e.account_name} ${e.remarks ? `<span style="font-size: 10px; color: #6b7280;">(${e.remarks})</span>` : ''}</td>
+                  <td style="font-family: monospace; font-weight: 600;">${escapeHtml(e.account_code)}</td>
+                  <td>${escapeHtml(e.account_name)} ${e.remarks ? `<span style="font-size: 10px; color: #6b7280;">(${escapeHtml(e.remarks)})</span>` : ''}</td>
                   <td class="num">${e.debit > 0 ? fmt(e.debit) : '-'}</td>
                   <td class="num">${e.credit > 0 ? fmt(e.credit) : '-'}</td>
                 </tr>
@@ -312,21 +321,21 @@ export default function DisbursementPrintModal({
             <tr>
               <td>
                 <div class="sig-title">Prepared By</div>
-                <div class="sig-name">${sig.prepared_by || 'Accounting Staff'}</div>
-                <div class="sig-position">${sig.prepared_by_position || 'Accounting Staff'}</div>
-                <div class="sig-date">Date: ${sig.prepared_at || v.payment_date || '-'}</div>
+                <div class="sig-name">${escapeHtml(sig.prepared_by || 'Accounting Staff')}</div>
+                <div class="sig-position">${escapeHtml(sig.prepared_by_position || 'Accounting Staff')}</div>
+                <div class="sig-date">Date: ${escapeHtml(sig.prepared_at || v.payment_date || '-')}</div>
               </td>
               <td>
                 <div class="sig-title">Checked / Verified By</div>
                 <div class="sig-name">Finance Manager</div>
-                <div class="sig-position">${sig.verified_by_position || 'Finance Manager'}</div>
+                <div class="sig-position">${escapeHtml(sig.verified_by_position || 'Finance Manager')}</div>
                 <div class="sig-date">Date: _______________</div>
               </td>
               <td>
                 <div class="sig-title">Approved By</div>
-                <div class="sig-name">${sig.approved_by || 'Finance Director'}</div>
-                <div class="sig-position">${sig.approved_by_position || 'Finance Officer'}</div>
-                <div class="sig-date">Date: ${sig.approved_at || '-'}</div>
+                <div class="sig-name">${escapeHtml(sig.approved_by || 'Finance Director')}</div>
+                <div class="sig-position">${escapeHtml(sig.approved_by_position || 'Finance Officer')}</div>
+                <div class="sig-date">Date: ${escapeHtml(sig.approved_at || '-')}</div>
               </td>
               <td>
                 <div class="sig-title">Received By</div>
@@ -361,9 +370,10 @@ export default function DisbursementPrintModal({
       <!DOCTYPE html>
       <html>
         <head>
-          <title>BIR Form 2307 - ${payeeName}</title>
+          <title>BIR Form 2307 - ${escapeHtml(payeeName)}</title>
           <style>
-            @page { size: portrait; margin: 10mm; }
+            /* 'statutory' PAGE_SPEC: filed on government paper  -  tight on purpose. */
+            @page { size: A4 portrait; margin: 10mm 10mm 12mm 10mm; }
             * { box-sizing: border-box; }
             body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; color: #000; margin: 0; padding: 8px; font-size: 11px; line-height: 1.3; }
             .bir-header { border: 2px solid #000; padding: 6px; margin-bottom: 8px; text-align: center; background: #fafafa; }
@@ -374,6 +384,14 @@ export default function DisbursementPrintModal({
             .box-table td { border: 1px solid #000; padding: 4px 6px; font-size: 10.5px; }
             .field-lbl { font-size: 9px; text-transform: uppercase; color: #4b5563; font-weight: 700; }
             .field-val { font-weight: 700; color: #000; }
+            /* BIR 2307 is a single statutory sheet: keep every box whole. */
+            tr, .bir-header, .part-header, .box-table, .certification, .signatures {
+              break-inside: avoid; page-break-inside: avoid;
+            }
+            @media print {
+              * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+              .no-print { display: none; }
+            }
             .tax-table { width: 100%; border-collapse: collapse; margin-top: 4px; }
             .tax-table th { border: 1px solid #000; background: #e5e7eb; font-size: 9.5px; font-weight: 800; padding: 4px; text-align: center; text-transform: uppercase; }
             .tax-table td { border: 1px solid #000; padding: 4px 6px; font-size: 10px; }
@@ -390,7 +408,7 @@ export default function DisbursementPrintModal({
             <div class="bir-title">Certificate of Creditable Tax Withheld at Source</div>
             <div class="bir-subtitle">BIR Form No. 2307 &middot; Republic Act No. 8424 / Tax Reform Act of 1997</div>
             <div style="font-size: 9.5px; font-weight: 700; margin-top: 4px;">
-              For the Period: From <u>${period.from || '-'}</u> To <u>${period.to || '-'}</u> &middot; Applicable Quarter: <u>${period.quarter || '-'} ${period.year || ''}</u>
+              For the Period: From <u>${escapeHtml(period.from || '-')}</u> To <u>${escapeHtml(period.to || '-')}</u> &middot; Applicable Quarter: <u>${escapeHtml(period.quarter || '-')} ${escapeHtml(period.year || '')}</u>
             </div>
           </div>
 
@@ -399,17 +417,17 @@ export default function DisbursementPrintModal({
             <tr>
               <td style="width: 35%;">
                 <div class="field-lbl">1. Taxpayer Identification No. (TIN)</div>
-                <div class="field-val" style="font-family: monospace; letter-spacing: 1px;">${payeeTin || '________________________'}</div>
+                <div class="field-val" style="font-family: monospace; letter-spacing: 1px;">${escapeHtml(payeeTin || '________________________')}</div>
               </td>
               <td style="width: 65%;">
                 <div class="field-lbl">2. Payee's Registered Name (Last Name, First Name for Individuals / Corporate Name)</div>
-                <div class="field-val">${payeeName}</div>
+                <div class="field-val">${escapeHtml(payeeName)}</div>
               </td>
             </tr>
             <tr>
               <td colspan="2">
                 <div class="field-lbl">3. Registered Address</div>
-                <div class="field-val">${payeeAddress}</div>
+                <div class="field-val">${escapeHtml(payeeAddress)}</div>
               </td>
             </tr>
           </table>
@@ -419,17 +437,17 @@ export default function DisbursementPrintModal({
             <tr>
               <td style="width: 35%;">
                 <div class="field-lbl">4. Taxpayer Identification No. (TIN)</div>
-                <div class="field-val" style="font-family: monospace; letter-spacing: 1px;">${payor.tin || '________________________'}</div>
+                <div class="field-val" style="font-family: monospace; letter-spacing: 1px;">${escapeHtml(payor.tin || '________________________')}</div>
               </td>
               <td style="width: 65%;">
                 <div class="field-lbl">5. Payor's Registered Name</div>
-                <div class="field-val">${company?.name || payor.registered_name || 'FINANCIAL MANAGEMENT SYSTEM INC.'}</div>
+                <div class="field-val">${escapeHtml(company?.name || payor.registered_name || 'FINANCIAL MANAGEMENT SYSTEM INC.')}</div>
               </td>
             </tr>
             <tr>
               <td colspan="2">
                 <div class="field-lbl">6. Registered Address</div>
-                <div class="field-val">${company?.address || payor.address || '100 Ayala Avenue, Makati City, Metro Manila'} &middot; ZIP: ${payor.zip_code || '1226'}</div>
+                <div class="field-val">${escapeHtml(company?.address || payor.address || '100 Ayala Avenue, Makati City, Metro Manila')} &middot; ZIP: ${escapeHtml(payor.zip_code || '1226')}</div>
               </td>
             </tr>
           </table>
@@ -453,13 +471,13 @@ export default function DisbursementPrintModal({
             </thead>
             <tbody>
               <tr>
-                <td><strong>${matchedAtc?.nature || 'Professional / Supplier Payments'}</strong><br><span style="font-size: 8.5px; color: #4b5563;">${matchedAtc?.description || ''}</span></td>
-                <td style="text-align: center; font-family: monospace; font-weight: 800;">${selectedAtc}</td>
+                <td><strong>${escapeHtml(matchedAtc?.nature || 'Professional / Supplier Payments')}</strong><br><span style="font-size: 8.5px; color: #4b5563;">${escapeHtml(matchedAtc?.description || '')}</span></td>
+                <td style="text-align: center; font-family: monospace; font-weight: 800;">${escapeHtml(selectedAtc)}</td>
                 <td class="num">${period.month_index_in_quarter === 1 ? fmt(grossIncome) : '-'}</td>
                 <td class="num">${period.month_index_in_quarter === 2 ? fmt(grossIncome) : '-'}</td>
                 <td class="num">${period.month_index_in_quarter === 3 ? fmt(grossIncome) : '-'}</td>
                 <td class="num" style="font-size: 11px;">${fmt(grossIncome)}</td>
-                <td style="text-align: center; font-weight: 700;">${overrideRate}%</td>
+                <td style="text-align: center; font-weight: 700;">${escapeHtml(overrideRate)}%</td>
                 <td class="num" style="font-size: 11px; color: #991b1b;">${fmt(taxWithheld)}</td>
               </tr>
             </tbody>
@@ -480,12 +498,12 @@ export default function DisbursementPrintModal({
           <div class="sig-row">
             <div class="sig-col">
               <div>Authorized Representative / Withholding Agent</div>
-              <div style="font-weight: 800; margin-top: 18px;">${company?.name || 'FINANCIAL MANAGEMENT SYSTEM INC.'}</div>
+              <div style="font-weight: 800; margin-top: 18px;">${escapeHtml(company?.name || 'FINANCIAL MANAGEMENT SYSTEM INC.')}</div>
               <div style="font-size: 9px; color: #4b5563;">Date Signed: ${new Date().toISOString().slice(0, 10)}</div>
             </div>
             <div class="sig-col">
               <div>Payee / Supplier Conforme Signature</div>
-              <div style="font-weight: 800; margin-top: 18px;">${payeeName}</div>
+              <div style="font-weight: 800; margin-top: 18px;">${escapeHtml(payeeName)}</div>
               <div style="font-size: 9px; color: #4b5563;">Date Received: ______________</div>
             </div>
           </div>
@@ -686,7 +704,7 @@ export default function DisbursementPrintModal({
                   {hasEwt && (
                     <div className="mt-2 p-2 bg-bg rounded-lg border border-border text-xs flex flex-wrap gap-x-6 gap-y-1">
                       <span className="text-muted">
-                        Expanded Withholding Tax ({v.ewt_rate != null ? `${v.ewt_rate}%` : '—'} &middot; {v.ewt_atc_code ?? 'Auto'}) withheld:
+                        Expanded Withholding Tax ({v.ewt_rate != null ? `${escapeHtml(v.ewt_rate)}%` : '—'} &middot; {v.ewt_atc_code ?? 'Auto'}) withheld:
                         <span className="font-bold text-ink"> {fmt(v.ewt_amount)}</span>
                       </span>
                       <span className="text-muted">

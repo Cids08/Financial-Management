@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, HandCoins, Clock3, Wallet, Info, Printer, CheckCircle2, XCircle, Paperclip } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, HandCoins, Clock3, Wallet, Info, Printer, CheckCircle2, XCircle, Paperclip, X } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
@@ -8,9 +8,14 @@ import Pagination from '../components/Pagination'
 import CollectionEfficiencyPanel from '../components/CollectionEfficiencyPanel'
 import CollectionProofHistoryModal from '../components/CollectionProofHistoryModal'
 import { useCollectionUpdates } from '../hooks/useCollectionUpdates'
+import { useHighlightRow } from '../hooks/useHighlightRow'
 import { useProfile } from '../hooks/useProfile'
+import { useCompany } from '../context/CompanyContext'
 import DeletePermanentButton from '../components/DeletePermanentButton'
+import RetentionCountdown from '../components/RetentionCountdown'
 import { formatCurrency } from '../utils/formatters'
+import { printSlip } from '../utils/printSlip'
+import { money, SIGNATURE_PRESETS } from '../utils/print'
 import { MIN_COLLECTION_AMOUNT, minHint, formatBaseAmount } from '../utils/business'
 import { apiFetch } from '../utils/api'
 import { useSearchParams } from 'react-router-dom'
@@ -209,6 +214,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
   usePrivacy()
 
   const { profile } = useProfile()
+  const company = useCompany()
   const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
   const isCollectorUser = profile?.role_slug === 'collector' || profile?.role?.toLowerCase() === 'collector'
   const userCollectorId = profile?.collector_id ? String(profile.collector_id) : null
@@ -294,6 +300,18 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
 
   const [page, setPage] = useState(1)
   useEffect(() => { setPage(1) }, [search, statusFilter, trashed])
+
+  // Global search / General Ledger jump navigates here with a highlightId
+  // (and, since this table is filtered client-side over the fetched page, a
+  // highlightSearch seed) whenever a collection record is clicked elsewhere.
+  const { highlightedId, highlightSearch } = useHighlightRow()
+  useEffect(() => {
+    if (highlightSearch == null) return
+    setSearch(highlightSearch)
+    setStatusFilter('all')
+    setTrashed(false)
+    setPage(1)
+  }, [highlightSearch])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const paginated  = useMemo(() => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [filtered, page])
@@ -551,39 +569,50 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
   // Print
   // -------------------------------------------------------------------------
   const handlePrint = (c) => {
-    const win = window.open('', '_blank', 'width=800,height=900')
-    if (!win) return
     const info = arInfo(c.ar_id)
-    const rows = [
-      ['Invoice',         c.invoice_number  || info?.invoice_number  || '—'],
-      ['Customer',        info?.customer_name || '—'],
-      ['Collector',       c.collector_name  || collectorName(c.collector_id)],
-      ['Collection Date', formatDate(c.collection_date)],
-      ['Amount Received', formatCurrency(c.amount_received)],
-      ['Payment Method',  c.payment_method],
-      ['Deposited To',    c.cash_account_name || accountName(c.cash_account_id)],
-      ['Reference No.',   c.reference_number || '—'],
-      ['Status',          c.status],
-      ...(c.remarks ? [['Remarks', c.remarks]] : []),
-    ]
-    win.document.write(`<html><head><title>${c.receipt_number}</title><style>
-      *{box-sizing:border-box}body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1a1a1a;padding:48px}
-      .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #1a1a1a;padding-bottom:20px;margin-bottom:24px}
-      .header h1{margin:0 0 4px;font-size:22px}.header p{margin:0;color:#666;font-size:14px}
-      .status{display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:600;background:#f3f3f3}
-      table{width:100%;border-collapse:collapse;margin-top:8px}
-      td{padding:10px 4px;border-bottom:1px solid #eee;font-size:14px}
-      td:first-child{color:#666;width:40%}td:last-child{font-weight:600;text-align:right}
-      .footer{margin-top:32px;font-size:12px;color:#999;text-align:center}
-      @media print{body{padding:24px}}
-    </style></head><body>
-      <div class="header"><div><h1>Official Receipt ${c.receipt_number}</h1><p>${info?.customer_name || ''}</p></div><span class="status">${c.status}</span></div>
-      <table>${rows.map(([l, v]) => `<tr><td>${l}</td><td>${v}</td></tr>`).join('')}</table>
-      <div class="footer">Printed on ${formatDateTime(new Date().toISOString())}</div>
-    </body></html>`)
-    win.document.close()
-    win.focus()
-    win.print()
+    const customer = info?.customer_name || '—'
+
+    printSlip({
+      company,
+      profile,
+      spec: 'receipt',
+      title: `Official Receipt ${c.receipt_number}`,
+      subtitle: customer,
+      status: c.status,
+      meta: [
+        ['OR Number', c.receipt_number],
+        ['Customer', customer],
+        ['Collection Date', formatDate(c.collection_date)],
+      ],
+      groups: [
+        {
+          heading: 'Receipt Details',
+          rows: [
+            ['Customer', customer, 'span'],
+            ['Collector', c.collector_name || collectorName(c.collector_id), 'span'],
+            ['Invoice', c.invoice_number || info?.invoice_number || '—', 'span'],
+            ['Collection Date', formatDate(c.collection_date)],
+            ['Payment Method', c.payment_method || '—'],
+            ['Deposited To', c.cash_account_name || accountName(c.cash_account_id), 'span'],
+            ['Reference No.', c.reference_number || '—'],
+            ...(c.remarks ? [['Remarks', c.remarks, 'span']] : []),
+          ],
+        },
+        {
+          heading: 'Amount',
+          rows: [
+            ['Amount Received', money(c.amount_received), 'total'],
+          ],
+        },
+      ],
+      signatureTitle: 'Received, Prepared & Verified',
+      signatures: SIGNATURE_PRESETS.voucher({
+        preparedName: c.collector_name || profile?.name,
+        preparedRole: 'Collector',
+        counterpartyLabel: 'Received By (Customer)',
+      }),
+      disclaimer: 'This receipt acknowledges the amount received above and reflects the collection record held in the system. Retain for your records; official receipts are re-printable from the Collections module.',
+    })
   }
 
   const statCards = [
@@ -644,17 +673,57 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
       <CollectionEfficiencyPanel />
 
       {/* Search / filter */}
-      <div className={`${PANEL} ${PANEL_PAD} flex flex-col gap-3 lg:flex-row lg:items-center`}>
-        <div className="relative flex-1">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by receipt no., customer, or collector..."
-            className={`${INPUT} pl-9`} />
+      <div className={`${PANEL} ${PANEL_PAD}`}>
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end">
+          <div className="relative flex-1 min-w-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Search</label>
+            <div className="relative">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none z-10" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by receipt no., customer, or collector..."
+                className={`${INPUT} pl-9 pr-9`}
+                autoComplete="off"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch('')}
+                  title="Clear search"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-border hover:text-ink transition-colors duration-150"
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="w-full sm:w-56 shrink-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Status</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className={INPUT}
+            >
+              <option value="all">All Statuses</option>
+              {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          {(search || statusFilter !== 'all') && (
+            <div className="shrink-0">
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={RotateCcw}
+                iconPosition="left"
+                onClick={() => { setSearch(''); setStatusFilter('all') }}
+              >
+                Reset
+              </Button>
+            </div>
+          )}
         </div>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={`${INPUT} lg:w-56! shrink-0`}>
-          <option value="all">All Statuses</option>
-          {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
       </div>
 
       {/* Table */}
@@ -679,7 +748,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
               ) : paginated.map((c) => {
                 const info = arInfo(c.ar_id)
                 return (
-                  <tr key={c.id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
+                  <tr key={c.id} data-row-id={c.id} className={`border-b border-border last:border-0 transition-colors duration-150 ${highlightedId === c.id ? 'bg-primary/10' : 'hover:bg-bg'}`}>
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-2">
                         <p className="font-medium text-ink">{c.receipt_number}</p>
@@ -705,14 +774,16 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                         {c.status}
                       </span>
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap text-right">
+                    <td className="px-4 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <Tooltip label="View full record" align="start">
                           <button type="button" onClick={() => openDetail(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"><Info size={15} /></button>
                         </Tooltip>
+                        {!c.deleted_at && (
                         <Tooltip label="Print receipt" align="start">
                           <button type="button" onClick={() => handlePrint(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"><Printer size={15} /></button>
                         </Tooltip>
+                        )}
                         <Tooltip label="Proof of receipt" align="start">
                           <button type="button" onClick={() => setProofTarget(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"><Paperclip size={15} /></button>
                         </Tooltip>
@@ -726,7 +797,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                             <button type="button" onClick={() => openCancel(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400 transition-colors duration-150"><XCircle size={15} /></button>
                           </Tooltip>
                         )}
-                        {c.status !== 'Confirmed' && (
+                        {c.status !== 'Confirmed' && !c.deleted_at && (
                           <Tooltip label="Edit collection" align="start">
                             <button type="button" onClick={() => openEdit(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"><Pencil size={15} /></button>
                           </Tooltip>
@@ -739,12 +810,15 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                           </Tooltip>
                         )}
                         {c.deleted_at && (
+                          <>
+                          <RetentionCountdown deletedAt={c.deleted_at} compact />
                           <DeletePermanentButton
                             endpoint={`/api/collections/${c.id}/permanent`}
                             label="collection"
                             name={c.customer_name || ''}
                             onDeleted={refetch}
                           />
+                          </>
                         )}
                       </div>
                     </td>

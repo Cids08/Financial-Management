@@ -70,6 +70,23 @@ class Budget extends Model
         return $this->belongsTo(Department::class);
     }
 
+    /**
+     * The two things that move `used_amount`, so the total can be explained
+     * rather than just displayed. Disbursements are payroll-only in practice
+     * (AP-sourced payments never touch a budget) and are scoped here so the
+     * ledger can't be inflated by unrelated AP releases.
+     */
+    public function expenses()
+    {
+        return $this->hasMany(Expense::class);
+    }
+
+    public function disbursements()
+    {
+        return $this->hasMany(Disbursement::class)
+            ->where('source_type', 'payroll');
+    }
+
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');

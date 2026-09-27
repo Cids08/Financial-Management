@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, Boxes, Wrench, Truck as TruckIcon, Building2, Loader2, TrendingDown } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, Boxes, Wrench, Truck as TruckIcon, Building2, Loader2, TrendingDown, X } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Pagination from '../components/Pagination'
 import Button from '../components/Button'
@@ -11,6 +11,7 @@ import { useFixedAssets } from '../hooks/useFixedAssets'
 import { apiFetch } from '../utils/api'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 import DeletePermanentButton from '../components/DeletePermanentButton'
+import RetentionCountdown from '../components/RetentionCountdown'
 import { usePrivacy } from '../context/PrivacyContext'
 import { useProfile } from '../hooks/useProfile'
 import DepreciationRunModal from '../components/DepreciationRunModal'
@@ -274,29 +275,50 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
         })}
       </div>
       
-      <div className={`${PANEL} ${PANEL_PAD} flex flex-col gap-3 lg:flex-row lg:items-center`}>
-        <div className="relative flex-1">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by asset name, code, or serial no..." className={`${INPUT} pl-9`} />
+      <div className={`${PANEL} ${PANEL_PAD}`}>
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end flex-wrap">
+          <div className="relative flex-1 min-w-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Search</label>
+            <div className="relative">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none z-10" />
+              <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by asset name, code, or serial no..." className={`${INPUT} pl-9 pr-9`} autoComplete="off" />
+              {search && (
+                <button type="button" onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-border hover:text-ink transition-colors duration-150">
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="w-full sm:w-48 shrink-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Category</label>
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className={INPUT}
+            >
+              <option value="all">All Categories</option>
+              {ASSET_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div className="w-full sm:w-48 shrink-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Status</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className={INPUT}
+            >
+              <option value="all">All Statuses</option>
+              <option value="Active">Active</option>
+              <option value="Under Maintenance">Under Maintenance</option>
+              <option value="Disposed">Disposed</option>
+            </select>
+          </div>
+          {(search || categoryFilter !== 'all' || statusFilter !== 'all') && (
+            <div className="shrink-0">
+              <Button variant="secondary" size="sm" icon={RotateCcw} iconPosition="left" onClick={() => { setSearch(''); setCategoryFilter('all'); setStatusFilter('all') }}>Reset</Button>
+            </div>
+          )}
         </div>
-        <select
-          value={categoryFilter}
-          onChange={(e) => setCategoryFilter(e.target.value)}
-          className={`${INPUT} lg:w-48! shrink-0`}
-        >
-          <option value="all">All Categories</option>
-          {ASSET_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className={`${INPUT} lg:w-48! shrink-0`}
-        >
-          <option value="all">All Statuses</option>
-          <option value="Active">Active</option>
-          <option value="Under Maintenance">Under Maintenance</option>
-          <option value="Disposed">Disposed</option>
-        </select>
       </div>
 
       <div className={PANEL}>
@@ -353,13 +375,15 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
                     <td className="px-4 py-3.5 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[a.status]}`}>{a.status}</span>
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap text-right">
+                    <td className="px-4 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-1">
+                        {!showArchived && (
                         <Tooltip label="Edit asset" align="start">
                           <button type="button" onClick={() => openEdit(a)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                             <Pencil size={15} />
                           </button>
                         </Tooltip>
+                        )}
                         {isAdmin && (
                           <Tooltip label={showArchived ? 'Restore asset' : 'Archive asset'} align="end">
                             <button
@@ -372,12 +396,15 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
                           </Tooltip>
                         )}
                         {showArchived && (
+                          <>
+                          <RetentionCountdown deletedAt={a.deleted_at} compact />
                           <DeletePermanentButton
                             endpoint={`/api/fixed-assets/${a.id}/permanent`}
                             label="fixed asset"
                             name={a.asset_name || ''}
                             onDeleted={refetch}
                           />
+                          </>
                         )}
                       </div>
                     </td>

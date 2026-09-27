@@ -332,6 +332,9 @@ Route::middleware(['auth:sanctum', 'require.password.change'])->group(function (
         Route::post('/conversations', [AiAdvisorController::class, 'start']);
         Route::get('/conversations/{conversation}', [AiAdvisorController::class, 'show']);
         Route::post('/conversations/{conversation}/messages', [AiAdvisorController::class, 'chat'])->middleware('throttle:20,1');
+        Route::patch('/conversations/{conversation}/archive', [AiAdvisorController::class, 'archive']);
+        Route::patch('/conversations/{conversation}/restore', [AiAdvisorController::class, 'restore'])->withTrashed();
+        Route::delete('/conversations/{conversation}', [AiAdvisorController::class, 'destroy']);
     });
 
     // Forecasting
@@ -387,6 +390,7 @@ Route::middleware(['auth:sanctum', 'require.password.change'])->group(function (
         Route::get('/stats', [BudgetController::class, 'stats'])->middleware('permission:budgets.view');
         Route::get('/', [BudgetController::class, 'index'])->middleware('permission:budgets.view');
         Route::get('/{budget}', [BudgetController::class, 'show'])->middleware('permission:budgets.view');
+        Route::get('/{budget}/utilization', [BudgetController::class, 'utilization'])->middleware('permission:budgets.view');
         Route::post('/', [BudgetController::class, 'store'])->middleware('permission:budgets.manage');
         Route::put('/{budget}', [BudgetController::class, 'update'])->middleware('permission:budgets.manage');
         Route::post('/{budget}/plan', [BudgetController::class, 'uploadPlan'])->middleware('permission:budgets.manage');
@@ -432,14 +436,14 @@ Route::middleware(['auth:sanctum', 'require.password.change'])->group(function (
     });
 
     // Permanent deletion of ARCHIVED records — Admin/Super Admin only (also
-    // enforced inside PermanentDeleteController). One shared handler per
-    // entity slug; the permission middleware mirrors each entity's manage
-    // permission so permission-holders who are NOT admins still never reach
-    // the handler (they only see archive/restore, not permanent delete).
-    foreach (PermanentDeleteController::ENTITIES as $slug => $config) {
-        Route::delete("/{$slug}/{id}/permanent", [PermanentDeleteController::class, 'destroy'])
-            ->middleware('permission:' . $config['permission']);
-    }
+    // enforced inside PermanentDeleteController). One shared handler for
+    // every entity; {slug} is a REAL route parameter (whitelisted below) so
+    // the controller's destroy(Request, string $slug, string $id) resolves
+    // both by name — no per-entity literal loops or ->defaults() tricks.
+    // Permission gates vary per entity, so enforce the per-entity manage
+    // permission inside the controller rather than per-route middleware.
+    Route::delete('/{slug}/{id}/permanent', [PermanentDeleteController::class, 'destroy'])
+        ->whereIn('slug', array_keys(PermanentDeleteController::ENTITIES));
 
     // Future modules go here.
 });

@@ -344,6 +344,23 @@ export function useBudgets() {
     }
   }, [])
 
+  /**
+   * GET /budgets/{id}/utilization
+   *
+   * The transactions actually charged against a budget. `used_amount` is a
+   * denormalized running total, so on its own it can't explain WHY the
+   * balance moved. This returns the expense + payroll rows behind it plus a
+   * reconciliation summary, so a mismatch surfaces instead of hiding.
+   */
+  const fetchUtilization = useCallback(async (budgetId) => {
+    const res = await apiFetch(`/api/budgets/${budgetId}/utilization`)
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok || !json.success) {
+      throw new Error(json.message || 'Failed to load the utilization ledger.')
+    }
+    return json.data
+  }, [])
+
   return {
     budgets,
     meta,
@@ -359,6 +376,7 @@ export function useBudgets() {
     uploadPlan,
     downloadPlan,
     viewPlan,
+    fetchUtilization,
     fetchPlanHistory,
     downloadPlanVersion,
     viewPlanVersion,

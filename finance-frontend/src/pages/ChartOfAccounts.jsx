@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Search, Plus, Pencil, Power, BookText, Activity, Layers, Loader2, Info } from 'lucide-react'
+import { Search, Plus, Pencil, Power, BookText, Activity, Layers, Loader2, Info, RotateCcw, X } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
@@ -257,19 +257,37 @@ export default function ChartOfAccounts({ title = 'Chart of Accounts', crumbs = 
         })}
       </div>
 
-      <div className={`${PANEL} p-4 flex flex-col gap-3 lg:flex-row lg:items-center`}>
-        <div className="relative flex-1">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by code, name, type or category..." className={`${INPUT} pl-9`} />
+      <div className={`${PANEL} p-4`}>
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end flex-wrap">
+          <div className="relative flex-1 min-w-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Search</label>
+            <div className="relative">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none z-10" />
+              <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by code, name, type or category..." className={`${INPUT} pl-9 pr-9`} autoComplete="off" />
+              {search && (
+                <button type="button" onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-border hover:text-ink transition-colors duration-150">
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="w-full sm:w-44 shrink-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Account Type</label>
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              className={INPUT}
+            >
+              <option value="all">All Types</option>
+              {ACCOUNT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          {(search || typeFilter !== 'all') && (
+            <div className="shrink-0">
+              <Button variant="secondary" size="sm" icon={RotateCcw} iconPosition="left" onClick={() => { setSearch(''); setTypeFilter('all') }}>Reset</Button>
+            </div>
+          )}
         </div>
-        <select
-          value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value)}
-          className={`${INPUT} lg:w-48! shrink-0`}
-        >
-          <option value="all">All Types</option>
-          {ACCOUNT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-        </select>
       </div>
 
       <div className={PANEL}>

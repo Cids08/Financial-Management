@@ -1,10 +1,11 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Search, Plus, TrendingUp, Target, Percent, Info, Activity, CalendarRange, Archive, ArchiveRestore, AlertTriangle,
+  Search, Plus, TrendingUp, Target, Percent, Info, Activity, CalendarRange, Archive, ArchiveRestore, AlertTriangle, RotateCcw, X,
 } from 'lucide-react'
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend,
 } from 'recharts'
+import { DATE_PRESETS, applyDatePresetChange } from '../utils/datePresets'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
@@ -15,6 +16,7 @@ import { usePrivacy } from '../context/PrivacyContext'
 import { useForecasts } from '../hooks/useForecasts'
 import { useProfile } from '../hooks/useProfile'
 import DeletePermanentButton from '../components/DeletePermanentButton'
+import RetentionCountdown from '../components/RetentionCountdown'
 import { useCompany } from '../context/CompanyContext'
 
 // Exactly 5 categories per spec: Expense, Accounts Receivable,
@@ -162,7 +164,7 @@ const ForecastRow = memo(function ForecastRow({ forecast: f, showArchived, isAdm
         </span>
       </td>
       <td className="px-2.5 py-2.5 whitespace-nowrap text-muted text-xs">{f.arima_model}</td>
-      <td className="px-2.5 py-2.5 whitespace-nowrap text-right">
+      <td className="px-2.5 py-2.5 text-right">
         <div className="flex items-center justify-end gap-1">
           <Tooltip label="View forecast trend" align="end">
             <button
@@ -187,12 +189,15 @@ const ForecastRow = memo(function ForecastRow({ forecast: f, showArchived, isAdm
               </button>
             </Tooltip>
             {showArchived && (
+              <>
+              <RetentionCountdown deletedAt={f.deleted_at} compact />
               <DeletePermanentButton
                 endpoint={`/api/forecasts/${f.forecast_id}/permanent`}
                 label="forecast"
                 name={f.forecast_period || ''}
                 onDeleted={onPermanentDeleted}
               />
+              </>
             )}
             </>
           ) : (
@@ -520,6 +525,15 @@ export default function FinancialForecasting({ title = 'Financial Forecasting', 
   const [typeFilter, setTypeFilter] = useState('all')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  // Date-range presets, shared across modules via utils/datePresets.js.
+  const [datePreset, setDatePreset] = useState('all')
+
+  const applyDatePreset = (key) => {
+    const next = applyDatePresetChange(key)
+    setDatePreset(next.datePreset)
+    setDateFrom(next.dateFrom)
+    setDateTo(next.dateTo)
+  }
 
   const PER_PAGE = 10
   const [page, setPage] = useState(1)
@@ -651,44 +665,87 @@ export default function FinancialForecasting({ title = 'Financial Forecasting', 
         </div>
       )}
 
-      <div className={`${PANEL} ${PANEL_PAD} flex flex-col gap-3`}>
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-          <div className="relative flex-1 min-w-0 basis-full">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none z-10" />
+      <div className={`${PANEL} ${PANEL_PAD}`}>
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end flex-wrap">
+          {/* Search */}
+          <div className="relative flex-1 min-w-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Search</label>
+            <div className="relative">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none z-10" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by period, type, or model..."
+                className={`${INPUT} pl-9 pr-9`}
+                style={{ minWidth: 0 }}
+                autoComplete="off"
+              />
+              {search && (
+                <button type="button" onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-border hover:text-ink transition-colors duration-150">
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+          </div>
+          {/* Forecast Type */}
+          <div className="w-full sm:w-52 shrink-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Forecast Type</label>
+            <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className={INPUT}>
+              <option value="all" className={OPTION}>All Forecast Types</option>
+              {FORECAST_TYPES.map((t) => <option key={t} value={t} className={OPTION}>{t}</option>)}
+            </select>
+          </div>
+          {/* Period Preset */}
+          <div className="w-full sm:w-40 shrink-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Period</label>
+            <select
+              value={datePreset}
+              onChange={(e) => applyDatePreset(e.target.value)}
+              className={`${INPUT} scheme-light dark:scheme-dark ${datePreset === 'custom' ? 'border-primary/60 bg-primary/5' : ''}`}
+            >
+              {DATE_PRESETS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+            </select>
+          </div>
+          {/* Date From */}
+          <div className="shrink-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Generated From</label>
             <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by period, type, or model..."
-              className={SEARCH_INPUT}
-              style={{ width: '100%', minWidth: 0 }}
-              autoComplete="off"
+              type="date"
+              value={dateFrom}
+              onChange={(e) => { setDatePreset('custom'); setDateFrom(e.target.value) }}
+              className={`${INPUT} scheme-light dark:scheme-dark ${datePreset === 'custom' ? 'border-primary/60 bg-primary/5' : ''}`}
+              style={{ width: '9.5rem' }}
             />
           </div>
-          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className={INPUT}>
-            <option value="all" className={OPTION}>All Forecast Types</option>
-            {FORECAST_TYPES.map((t) => <option key={t} value={t} className={OPTION}>{t}</option>)}
-          </select>
-        </div>
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-muted whitespace-nowrap">Generated From</label>
-              <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className={`${INPUT} scheme-light dark:scheme-dark`} />
-            </div>
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-muted whitespace-nowrap">To</label>
-              <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className={`${INPUT} scheme-light dark:scheme-dark`} />
-            </div>
+          {/* Date To */}
+          <div className="shrink-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">To</label>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => { setDatePreset('custom'); setDateTo(e.target.value) }}
+              className={`${INPUT} scheme-light dark:scheme-dark ${datePreset === 'custom' ? 'border-primary/60 bg-primary/5' : ''}`}
+              style={{ width: '9.5rem' }}
+            />
           </div>
-          <Button
-            variant={showArchived ? 'primary' : 'secondary'}
-            size="sm"
-            icon={showArchived ? ArchiveRestore : Archive}
-            onClick={() => setShowArchived((prev) => !prev)}
-          >
-            {showArchived ? 'Showing Archived' : 'Show Archived'}
-          </Button>
+          {/* Reset */}
+          {(search || typeFilter !== 'all' || dateFrom || dateTo) && (
+            <div className="shrink-0">
+              <Button variant="secondary" size="sm" icon={RotateCcw} iconPosition="left" onClick={() => { setSearch(''); setTypeFilter('all'); applyDatePreset('all') }}>Reset</Button>
+            </div>
+          )}
+          {/* Show Archived toggle */}
+          <div className="shrink-0 sm:ml-auto">
+            <Button
+              variant={showArchived ? 'primary' : 'secondary'}
+              size="sm"
+              icon={showArchived ? ArchiveRestore : Archive}
+              onClick={() => setShowArchived((prev) => !prev)}
+            >
+              {showArchived ? 'Showing Archived' : 'Show Archived'}
+            </Button>
+          </div>
         </div>
       </div>
 

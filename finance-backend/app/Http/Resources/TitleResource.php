@@ -13,6 +13,7 @@ class TitleResource extends JsonResource
             'title_id' => $this->id,
             'title_name' => $this->name,
             'status' => $this->is_active ? 'Active' : 'Inactive',
+            'deleted_at' => $this->deleted_at?->toIso8601String(),
             'headcount' => $this->whenCounted('users'),
         ];
     }

@@ -74,12 +74,22 @@ class DisbursementService
                         }
 
                         if ($disbursement->isPayroll() && $disbursement->department_id) {
-                            $budget = Budget::where('department_id', $disbursement->department_id)
-                                ->where('status', Budget::STATUS_ACTIVE)
-                                ->first();
-                            if ($budget) {
-                                $budget->decrement('used_amount', $disbursement->amount_paid);
-                                $budget->increment('remaining_amount', $disbursement->amount_paid);
+                            // Unwind the SAME budget the forward release
+                            // charged. The old lookup here re-resolved the
+                            // budget with a looser query than the release path
+                            // used (no payment-date window, no Operational
+                            // preference), so it could decrement a different
+                            // budget than it incremented. Rows released before
+                            // budget_id existed still fall back to the guess.
+                            $chargedBudget = $disbursement->budget_id
+                                ? Budget::find($disbursement->budget_id)
+                                : Budget::where('department_id', $disbursement->department_id)
+                                    ->where('status', Budget::STATUS_ACTIVE)
+                                    ->first();
+
+                            if ($chargedBudget) {
+                                $chargedBudget->decrement('used_amount', $disbursement->amount_paid);
+                                $chargedBudget->increment('remaining_amount', $disbursement->amount_paid);
                             }
                         }
 
@@ -874,6 +884,12 @@ class DisbursementService
                 'status' => 'Released',
                 'released_date' => now()->toDateString(),
                 'released_by' => $releasedById,
+                // Record WHICH budget this payroll run consumed. Without this
+                // the link is guesswork, and `budgets.used_amount` can't be
+                // explained by any list of transactions. Resolved just above by
+                // $budget; persisted here so the utilization ledger can show
+                // the real drivers instead of a bare total.
+                'budget_id' => $budget->id,
             ]);
 
             // ── Budget Utilization Deduction ─────────────────────────────

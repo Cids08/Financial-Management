@@ -29,6 +29,7 @@ class CashAccountResource extends JsonResource
             'is_default'      => $this->is_default,
             'status'          => $this->status,
             'is_archived'     => $this->trashed(),
+            'deleted_at'      => $this->deleted_at?->toIso8601String(),
         ];
     }
 }

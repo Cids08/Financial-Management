@@ -12,10 +12,13 @@ import BatchPayTaxWizardModal from '../components/BatchPayTaxWizardModal'
 import GenerateTaxScheduleModal from '../components/GenerateTaxScheduleModal'
 import TaxComplianceReportModal from '../components/TaxComplianceReportModal'
 import { formatCurrency } from '../utils/formatters'
+import { printSlip } from '../utils/printSlip'
+import { money, SIGNATURE_PRESETS } from '../utils/print'
 import { MIN_INVOICE_AMOUNT, minHint } from '../utils/business'
 import { useTaxObligations } from '../hooks/useTaxObligations'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 import DeletePermanentButton from '../components/DeletePermanentButton'
+import RetentionCountdown from '../components/RetentionCountdown'
 import { usePrivacy } from '../context/PrivacyContext'
 import { useProfile } from '../hooks/useProfile'
 import { useCompany } from '../context/CompanyContext'
@@ -204,7 +207,8 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
 
   const [modalMode, setModalMode] = useState(null)
   // Company default tax rate (Settings) seeds new tax obligations.
-  const { defaultTaxRate } = useCompany()
+  const company = useCompany()
+  const { defaultTaxRate } = company
   const [form, setForm] = useState(buildEmptyForm)
   const [formError, setFormError] = useState('')
   const [fieldErrors, setFieldErrors] = useState({})
@@ -477,52 +481,54 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
   }
 
   const handlePrint = (o) => {
-    const win = window.open('', '_blank', 'width=800,height=900')
-    if (!win) return
-    const rows = [
-      ['Tax Type', o.tax_type],
-      ['Tax Period', o.tax_period],
-      ['Due Date', formatDate(o.due_date)],
-      ['Taxable Amount', formatCurrency(o.taxable_amount)],
-      ['Tax Rate', `${o.tax_rate}%`],
-      ['Amount', formatCurrency(o.amount)],
-      ['Status', o.status],
-      ...(o.payment_date ? [['Payment Date', formatDate(o.payment_date)]] : []),
-      ...(o.reference_number ? [['Reference No.', o.reference_number]] : []),
-      ...(o.remarks ? [['Remarks', o.remarks]] : []),
-    ]
-    win.document.write(`
-      <html>
-        <head>
-          <title>${o.tax_type}  -  ${o.tax_period}</title>
-          <style>
-            * { box-sizing: border-box; }
-            body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #1a1a1a; padding: 48px; }
-            .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1a1a1a; padding-bottom: 20px; margin-bottom: 24px; }
-            .header h1 { margin: 0 0 4px; font-size: 22px; }
-            .header p { margin: 0; color: #666; font-size: 14px; }
-            .status { display: inline-block; padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; background: #f3f3f3; }
-            table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-            td { padding: 10px 4px; border-bottom: 1px solid #eee; font-size: 14px; }
-            td:first-child { color: #666; width: 40%; }
-            td:last-child { font-weight: 600; text-align: right; }
-            .footer { margin-top: 32px; font-size: 12px; color: #999; text-align: center; }
-            @media print { body { padding: 24px; } }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div><h1>${o.tax_type}</h1><p>Period: ${o.tax_period}</p></div>
-            <span class="status">${o.status}</span>
-          </div>
-          <table>${rows.map(([label, value]) => `<tr><td>${label}</td><td>${value}</td></tr>`).join('')}</table>
-          <div class="footer">Printed on ${formatDateTime(new Date().toISOString())}</div>
-        </body>
-      </html>
-    `)
-    win.document.close()
-    win.focus()
-    win.print()
+    printSlip({
+      company,
+      profile,
+      spec: 'register',
+      title: o.tax_type,
+      subtitle: `Tax Period: ${o.tax_period}`,
+      status: o.status,
+      meta: [
+        ['Tax Period', o.tax_period],
+        ['Due Date', formatDate(o.due_date)],
+        ['Status', o.status],
+      ],
+      groups: [
+        {
+          heading: 'Obligation Details',
+          rows: [
+            ['Tax Type', o.tax_type],
+            ['Tax Period', o.tax_period],
+            ['Due Date', formatDate(o.due_date)],
+            ...(o.payment_date ? [['Payment Date', formatDate(o.payment_date)]] : []),
+            ...(o.reference_number ? [['Reference / eFPS No.', o.reference_number, 'span']] : []),
+            ...(o.remarks ? [['Remarks', o.remarks, 'span']] : []),
+          ],
+        },
+        {
+          heading: 'Computation',
+          rows: [
+            ['Taxable Amount', money(o.taxable_amount)],
+            ['Tax Rate', `${o.tax_rate}%`],
+            ['Tax Amount Due', money(o.amount), 'total'],
+          ],
+        },
+        ...(o.payment_date
+          ? [{
+            heading: 'Settlement',
+            rows: [
+              ['Amount Remitted', money(o.amount), 'total'],
+            ],
+          }]
+          : []),
+      ],
+      signatureTitle: 'Prepared & Certified',
+      signatures: SIGNATURE_PRESETS.internal({
+        preparedName: profile?.name,
+        preparedRole: 'Tax Accountant / Compliance Officer',
+      }),
+      disclaimer: 'This record documents a single statutory tax obligation. The consolidated compliance certification, which carries the full sign-off for the period, is printed from the Tax Compliance Report.',
+    })
   }
 
   const statCards = [
@@ -654,68 +660,84 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
         })}
       </div>
 
-      <div className={`${PANEL} ${PANEL_PAD} flex flex-col gap-3 lg:flex-row lg:items-center`}>
-        <div className="relative flex-1 min-w-0 basis-full">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none z-10" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by tax type, period, or reference no..."
-            className={SEARCH_INPUT}
-            style={{ ...INPUT_TEXT_STYLE, width: '100%', minWidth: 0 }}
-            autoComplete="off"
-          />
-        </div>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={INPUT} style={{ ...INPUT_TEXT_STYLE, width: 'auto', minWidth: '9rem' }}>
-          <option value="all">All Statuses</option>
-          <option value="Pending">Pending</option>
-          <option value="Overdue">Overdue</option>
-          <option value="Paid">Paid</option>
-        </select>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <CalendarRange size={15} className="text-muted shrink-0" />
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            max={dateTo || undefined}
-            aria-label="Due date from"
-            className={`${INPUT} scheme-light dark:scheme-dark`}
-            style={{ ...INPUT_TEXT_STYLE, width: '9.5rem' }}
-          />
-          <span className="text-xs text-muted">to</span>
-          <input
-            type="date"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            min={dateFrom || undefined}
-            aria-label="Due date to"
-            className={`${INPUT} scheme-light dark:scheme-dark`}
-            style={{ ...INPUT_TEXT_STYLE, width: '9.5rem' }}
-          />
-          {hasDateFilter && (
-            <Tooltip label="Clear date filter" align="end">
-              <button
-                type="button"
-                onClick={clearDateFilter}
-                aria-label="Clear date filter"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
-              >
-                <X size={15} />
-              </button>
-            </Tooltip>
+      <div className={`${PANEL} ${PANEL_PAD}`}>
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end flex-wrap">
+          {/* Search */}
+          <div className="relative flex-1 min-w-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Search</label>
+            <div className="relative">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none z-10" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by tax type, period, or reference no..."
+                className={`${INPUT} pl-9 pr-9`}
+                style={{ ...INPUT_TEXT_STYLE, minWidth: 0 }}
+                autoComplete="off"
+              />
+              {search && (
+                <button type="button" onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-border hover:text-ink transition-colors duration-150">
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+          </div>
+          {/* Status */}
+          <div className="w-full sm:w-44 shrink-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Status</label>
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={INPUT} style={{ ...INPUT_TEXT_STYLE, minWidth: '9rem' }}>
+              <option value="all">All Statuses</option>
+              <option value="Pending">Pending</option>
+              <option value="Overdue">Overdue</option>
+              <option value="Paid">Paid</option>
+            </select>
+          </div>
+          {/* Date From */}
+          <div className="shrink-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">From</label>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              max={dateTo || undefined}
+              aria-label="Due date from"
+              className={`${INPUT} scheme-light dark:scheme-dark`}
+              style={{ ...INPUT_TEXT_STYLE, width: '9.5rem' }}
+            />
+          </div>
+          {/* Date To */}
+          <div className="shrink-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">To</label>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              min={dateFrom || undefined}
+              aria-label="Due date to"
+              className={`${INPUT} scheme-light dark:scheme-dark`}
+              style={{ ...INPUT_TEXT_STYLE, width: '9.5rem' }}
+            />
+          </div>
+          {/* Reset */}
+          {(search || statusFilter !== 'all' || hasDateFilter) && (
+            <div className="shrink-0">
+              <Button variant="secondary" size="sm" icon={RotateCcw} iconPosition="left" onClick={() => { setSearch(''); setStatusFilter('all'); setDateFrom(''); setDateTo('') }}>Reset</Button>
+            </div>
           )}
+          {/* Show Archived toggle */}
+          <div className="shrink-0 sm:ml-auto">
+            <Button
+              variant={showArchived ? 'primary' : 'secondary'}
+              size="sm"
+              icon={Archive}
+              onClick={() => setShowArchived((prev) => !prev)}
+              className="whitespace-nowrap"
+            >
+              Show Archived
+            </Button>
+          </div>
         </div>
-        <Button
-          variant={showArchived ? 'primary' : 'secondary'}
-          size="sm"
-          icon={Archive}
-          onClick={() => setShowArchived((prev) => !prev)}
-          className="shrink-0 whitespace-nowrap"
-        >
-          Show Archived
-        </Button>
       </div>
 
       <div className={PANEL}>
@@ -780,7 +802,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                     <td className="px-3 py-2.5 whitespace-nowrap text-center">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[o.status]}`}>{o.status}</span>
                     </td>
-                    <td className="px-3.5 py-2.5 whitespace-nowrap text-right">
+                    <td className="px-3.5 py-2.5 text-right">
                       <div className="flex items-center justify-end gap-1">
                         {/* Workflow Action: Pay (Unpaid obligations only, and only
                             when there's actually an amount owed  -  zero-amount
@@ -823,11 +845,13 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                         </Tooltip>
 
                         {/* Print tax voucher */}
+                        {!showArchived && (
                         <Tooltip label="Print tax voucher" align="start">
                           <button type="button" onClick={() => handlePrint(o)} className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                             <Printer size={14} />
                           </button>
                         </Tooltip>
+                        )}
 
                         {/* Edit: only when not paid and not archived */}
                         {o.status !== 'Paid' && !showArchived && (
@@ -853,12 +877,15 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                             </button>
                           </Tooltip>
                           {showArchived && (
+                            <>
+                            <RetentionCountdown deletedAt={o.deleted_at} compact />
                             <DeletePermanentButton
                               endpoint={`/api/tax-obligations/${o.tax_id}/permanent`}
                               label="tax obligation"
                               name={String(o.tax_id)}
                               onDeleted={refetch}
                             />
+                            </>
                           )}
                           </>
                         ) : o.status === 'Paid' ? (

@@ -56,6 +56,7 @@ class AiRecommendationResource extends JsonResource
             // never surface a trashed row here at all, so this would
             // always read as false regardless of what it should show.
             'is_archived' => $this->trashed(),
+            'deleted_at' => $this->deleted_at?->toIso8601String(),
         ];
     }
 

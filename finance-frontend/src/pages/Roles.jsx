@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Pencil, Archive, RotateCcw, ShieldCheck, Users, Lock, Search, ShieldAlert } from 'lucide-react'
+import { Plus, Pencil, Archive, RotateCcw, ShieldCheck, Users, Lock, Search, ShieldAlert, X } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
@@ -282,26 +282,39 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
 
       {/* Search + Show Archived  -  same filter-bar pattern as the other
           modules, instead of a lone checkbox up in the header. */}
-      <div className={`${PANEL} ${PANEL_PAD} flex flex-col gap-3 sm:flex-row sm:items-center`}>
-        <div className="relative flex-1">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1) }}
-            placeholder="Search by role name or description..."
-            className={`${INPUT} pl-9`}
-          />
+      <div className={`${PANEL} ${PANEL_PAD}`}>
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end flex-wrap">
+          <div className="relative flex-1 min-w-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Search</label>
+            <div className="relative">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none z-10" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+                placeholder="Search by role name or description..."
+                className={`${INPUT} pl-9 pr-9`}
+                autoComplete="off"
+              />
+              {search && (
+                <button type="button" onClick={() => { setSearch(''); setPage(1) }} className="absolute right-2 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-border hover:text-ink transition-colors duration-150">
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="shrink-0 sm:ml-auto">
+            <Button
+              variant={showArchived ? 'primary' : 'secondary'}
+              size="sm"
+              icon={Archive}
+              onClick={() => { setPage(1); setShowArchived((prev) => !prev) }}
+              className="whitespace-nowrap"
+            >
+              Show Archived
+            </Button>
+          </div>
         </div>
-        <Button
-          variant={showArchived ? 'primary' : 'secondary'}
-          size="sm"
-          icon={Archive}
-          onClick={() => { setPage(1); setShowArchived((prev) => !prev) }}
-          className="shrink-0 whitespace-nowrap"
-        >
-          Show Archived
-        </Button>
       </div>
 
       {rolesError && (

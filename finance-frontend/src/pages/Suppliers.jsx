@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, Truck, UserCheck, UserX, Mail, Phone, Eye, EyeOff, Globe, Briefcase, Hash } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, Truck, UserCheck, UserX, Mail, Phone, Eye, EyeOff, Globe, Briefcase, Hash, X } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
@@ -9,6 +9,7 @@ import { apiFetch } from '../utils/api'
 import { useCompany } from '../context/CompanyContext'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 import DeletePermanentButton from '../components/DeletePermanentButton'
+import RetentionCountdown from '../components/RetentionCountdown'
 import { formatCurrency } from '../utils/formatters'
 import { useProfile } from '../hooks/useProfile'
 import AddressSelector from '../components/AddressSelector'
@@ -267,16 +268,27 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
         })}
       </div>
 
-      <div className={`${PANEL} ${PANEL_PAD} flex flex-col gap-3 lg:flex-row lg:items-center`}>
-        <div className="relative flex-1">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name or email..."
-            className={`${INPUT} pl-9`}
-          />
+      <div className={`${PANEL} ${PANEL_PAD}`}>
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end flex-wrap">
+          <div className="relative flex-1 min-w-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Search</label>
+            <div className="relative">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none z-10" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by name or email..."
+                className={`${INPUT} pl-9 pr-9`}
+                autoComplete="off"
+              />
+              {search && (
+                <button type="button" onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-border hover:text-ink transition-colors duration-150">
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -350,13 +362,15 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
                       <td className="px-4 py-3.5 whitespace-nowrap">
                         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[s.status]}`}>{s.status}</span>
                       </td>
-                      <td className="px-4 py-3.5 whitespace-nowrap text-right">
+                      <td className="px-4 py-3.5 text-right">
                         <div className="flex items-center justify-end gap-1">
+                          {!s.is_archived && (
                           <Tooltip label="Edit supplier" align="start">
                             <button type="button" onClick={() => openEdit(s)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                               <Pencil size={15} />
                             </button>
                           </Tooltip>
+                          )}
                           {isAdmin && (
                             <Tooltip label={s.is_archived ? 'Restore supplier' : 'Archive supplier'} align="end">
                               <button type="button" onClick={() => toggleArchive(s)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
@@ -365,12 +379,15 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
                             </Tooltip>
                           )}
                           {s.is_archived && (
+                            <>
+                            <RetentionCountdown deletedAt={s.deleted_at} compact />
                             <DeletePermanentButton
                               endpoint={`/api/suppliers/${s.supplier_id}/permanent`}
                               label="supplier"
                               name={s.supplier_name || ''}
                               onDeleted={() => { fetchSuppliers(); fetchStats() }}
                             />
+                            </>
                           )}
                         </div>
                       </td>

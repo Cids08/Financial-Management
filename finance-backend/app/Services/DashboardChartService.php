@@ -23,32 +23,40 @@ use Illuminate\Support\Facades\DB;
  */
 class DashboardChartService
 {
-    /** Monthly collected revenue for the last $months, oldest first, zero-filled for empty months. */
-    public function getRevenueTrend(int $months = 6): array
+    /** Monthly collected revenue for the selected year (defaults to this year), zero-filled for empty months. */
+    public function getRevenueTrend(?int $year = null): array
     {
-        return $this->monthlySeries(CollectionModel::class, 'collection_date', 'amount_received', $months);
+        $year ??= (int) Carbon::today()->year;
+
+        $rows = CollectionModel::query()
+            ->selectRaw("TO_CHAR(collection_date, 'YYYY-MM') as month, SUM(amount_received) as total")
+            ->whereYear('collection_date', $year)
+            ->groupBy('month')
+            ->pluck('total', 'month');
+
+        return $this->zeroFillYearMonths($rows, $year);
     }
 
-    /** Monthly non-rejected expenses for the last $months, oldest first, zero-filled. */
-    public function getExpenseTrend(int $months = 6): array
+    /** Monthly non-rejected expenses for the selected year, zero-filled for empty months. */
+    public function getExpenseTrend(?int $year = null): array
     {
-        $start = Carbon::today()->subMonthsNoOverflow($months - 1)->startOfMonth();
+        $year ??= (int) Carbon::today()->year;
 
         $rows = Expense::query()
             ->selectRaw("TO_CHAR(expense_date, 'YYYY-MM') as month, SUM(expense_amount) as total")
-            ->where('expense_date', '>=', $start)
+            ->whereYear('expense_date', $year)
             ->where('status', '!=', Expense::STATUS_REJECTED)
             ->groupBy('month')
             ->pluck('total', 'month');
 
-        return $this->zeroFillMonths($rows, $months);
+        return $this->zeroFillYearMonths($rows, $year);
     }
 
     /** Net cash flow (revenue - expenses) per month, derived from the two trends above. */
-    public function getCashFlowTrend(int $months = 6): array
+    public function getCashFlowTrend(?int $year = null): array
     {
-        $revenue = collect($this->getRevenueTrend($months))->keyBy('label');
-        $expense = collect($this->getExpenseTrend($months))->keyBy('label');
+        $revenue = collect($this->getRevenueTrend($year))->keyBy('label');
+        $expense = collect($this->getExpenseTrend($year))->keyBy('label');
 
         return $revenue->map(function ($point, $label) use ($expense) {
             $inflow = (float) $point['value'];
@@ -147,21 +155,20 @@ class DashboardChartService
     }
 
     /**
-     * Current month's non-rejected expenses grouped by category, largest
-     * first — a composition (donut) slice per category. Expenses without a
+     * Current year's non-rejected expenses grouped by category, largest
+     * first  —  a composition (donut) slice per category. Expenses without a
      * category fall into an "Uncategorized" slice so the total still adds
-     * up to the month's expense figure instead of silently missing chunks.
+     * up to the year's expense figure instead of silently missing chunks.
      */
-    public function getExpenseBreakdown(): array
+    public function getExpenseBreakdown(?int $year = null): array
     {
-        $today = Carbon::today();
+        $year ??= (int) Carbon::today()->year;
 
         $rows = Expense::query()
             ->selectRaw("COALESCE(expense_categories.category_name, 'Uncategorized') as category, SUM(expenses.expense_amount) as total")
             ->leftJoin('expense_categories', 'expense_categories.id', '=', 'expenses.expense_category_id')
             ->where('expenses.status', '!=', Expense::STATUS_REJECTED)
-            ->whereMonth('expenses.expense_date', $today->month)
-            ->whereYear('expenses.expense_date', $today->year)
+            ->whereYear('expenses.expense_date', $year)
             ->groupBy('category')
             ->orderByDesc('total')
             ->pluck('total', 'category');
@@ -172,51 +179,43 @@ class DashboardChartService
             ->toArray();
     }
 
-    /** All eight chart datasets in one call — mirrors the "one aggregated payload" pattern used for the rest of the dashboard. */
-    public function getAll(): array
+    /**
+     * All eight chart datasets in one call  —  mirrors the "one aggregated payload" pattern used for the rest of the dashboard.
+     *
+     * $year only reaches the period-scoped series (revenue/expense/cash flow/
+     * expense breakdown). The point-in-time ones  —  cash distribution, budget
+     * utilization, AR/AP aging  —  and the rolling 30-day collections trend
+     * have no meaningful "selected year" version, so they stay as-is.
+     */
+    public function getAll(?int $year = null): array
     {
         return [
-            'revenue_trend' => $this->getRevenueTrend(),
-            'expense_trend' => $this->getExpenseTrend(),
-            'cash_flow_trend' => $this->getCashFlowTrend(),
+            'revenue_trend' => $this->getRevenueTrend($year),
+            'expense_trend' => $this->getExpenseTrend($year),
+            'cash_flow_trend' => $this->getCashFlowTrend($year),
             'collections_trend' => $this->getCollectionsTrend(),
             'budget_utilization' => $this->getBudgetUtilization(),
             'receivable_aging' => $this->getReceivableAging(),
             'payable_aging' => $this->getPayableAging(),
-            'expense_breakdown' => $this->getExpenseBreakdown(),
+            'expense_breakdown' => $this->getExpenseBreakdown($year),
             'cash_distribution' => $this->getCashDistribution(),
         ];
     }
 
     /**
-     * Shared monthly-sum-with-gap-filling logic for any model with a date
-     * column + an amount column (Collections today, easy to reuse for
-     * anything else shaped the same way later).
+     * Same gap-filling shape as zeroFillMonths, but anchored to Jan 1 of
+     * $year and always emitting all 12 months — that's what "this year"
+     * means on the Dashboard trends (Jan..Dec on the X axis, with the
+     * not-yet-reached months legitimately sitting at 0).
      *
-     * NOTE: $dateColumn/$amountColumn must always be trusted literals from
-     * call sites in this file — never derived from request input — since
-     * they're interpolated directly into raw SQL.
+     * @param \Illuminate\Support\Collection<string, mixed> $rows keyed by 'YYYY-MM'
      */
-    private function monthlySeries(string $modelClass, string $dateColumn, string $amountColumn, int $months): array
-    {
-        $start = Carbon::today()->subMonthsNoOverflow($months - 1)->startOfMonth();
-
-        $rows = $modelClass::query()
-            ->selectRaw("TO_CHAR({$dateColumn}, 'YYYY-MM') as month, SUM({$amountColumn}) as total")
-            ->where($dateColumn, '>=', $start)
-            ->groupBy('month')
-            ->pluck('total', 'month');
-
-        return $this->zeroFillMonths($rows, $months);
-    }
-
-    /** @param \Illuminate\Support\Collection<string, mixed> $rows keyed by 'YYYY-MM' */
-    private function zeroFillMonths($rows, int $months): array
+    private function zeroFillYearMonths($rows, int $year): array
     {
         $series = [];
-        $cursor = Carbon::today()->subMonthsNoOverflow($months - 1)->startOfMonth();
+        $cursor = Carbon::create($year, 1, 1);
 
-        for ($i = 0; $i < $months; $i++) {
+        for ($i = 0; $i < 12; $i++) {
             $key = $cursor->format('Y-m');
             $series[] = [
                 'label' => $cursor->format('M Y'),

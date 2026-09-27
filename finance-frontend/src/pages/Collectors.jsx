@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, UserCheck, UserX, Phone, Mail, MapPin, Target, Eye, EyeOff, Loader2, BarChart3, Copy, Check, ShieldCheck } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, UserCheck, UserX, Phone, Mail, MapPin, Target, Eye, EyeOff, Loader2, BarChart3, Copy, Check, ShieldCheck, X } from 'lucide-react'
 import {
   ResponsiveContainer, ComposedChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Bar, Line, ReferenceLine,
 } from 'recharts'
@@ -13,6 +13,7 @@ import { apiFetch } from '../utils/api'
 import { useCollectors } from '../hooks/useCollectors'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 import DeletePermanentButton from '../components/DeletePermanentButton'
+import RetentionCountdown from '../components/RetentionCountdown'
 import { usePrivacy } from '../context/PrivacyContext'
 import { useProfile } from '../hooks/useProfile'
 
@@ -461,16 +462,27 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
         })}
       </div>
 
-      <div className={`${PANEL} ${PANEL_PAD} flex flex-col gap-3 lg:flex-row lg:items-center`}>
-        <div className="relative flex-1">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name or email..."
-            className={`${INPUT} pl-9`}
-          />
+      <div className={`${PANEL} ${PANEL_PAD}`}>
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end flex-wrap">
+          <div className="relative flex-1 min-w-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Search</label>
+            <div className="relative">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none z-10" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by name or email..."
+                className={`${INPUT} pl-9 pr-9`}
+                autoComplete="off"
+              />
+              {search && (
+                <button type="button" onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-border hover:text-ink transition-colors duration-150">
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -548,18 +560,22 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
                         {c.is_active ? 'Active' : 'Inactive'}
                       </span>
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap text-right">
+                    <td className="px-4 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-1">
+                        {!showArchived && (
                         <Tooltip2 label="View efficiency" align="start">
                           <button type="button" onClick={() => setEfficiencyTarget(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                             <BarChart3 size={15} />
                           </button>
                         </Tooltip2>
+                        )}
+                        {!showArchived && (
                         <Tooltip2 label="Edit collector" align="start">
                           <button type="button" onClick={() => openEdit(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                             <Pencil size={15} />
                           </button>
                         </Tooltip2>
+                        )}
                         {isAdmin && (
                           <Tooltip2 label={showArchived ? 'Restore collector' : 'Archive collector'} align="end">
                             <button
@@ -572,12 +588,15 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
                           </Tooltip2>
                         )}
                         {showArchived && (
+                          <>
+                          <RetentionCountdown deletedAt={c.deleted_at} compact />
                           <DeletePermanentButton
                             endpoint={`/api/collectors/${c.collector_id}/permanent`}
                             label="collector"
                             name={`${c.first_name} ${c.last_name}`}
                             onDeleted={refetch}
                           />
+                          </>
                         )}
                       </div>
                     </td>

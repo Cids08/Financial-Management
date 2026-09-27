@@ -44,52 +44,108 @@ use Illuminate\Support\Facades\DB;
  */
 class DashboardService
 {
-    public function getOverview(): array
+    public function getOverview(?int $year = null): array
     {
-        $today = Carbon::today();
-        $monthStart = $today->copy()->startOfMonth();
-        $lastMonthStart = $today->copy()->subMonthNoOverflow()->startOfMonth();
-        $lastMonthEnd = $today->copy()->subMonthNoOverflow()->endOfMonth();
+        $year ??= (int) Carbon::today()->year;
 
-        // Actual cash collected, not invoiced AR — Collection now exists.
-        $revenueThisMonth = CollectionModel::whereBetween('collection_date', [$monthStart, $today])
+        $yearStart = Carbon::create($year, 1, 1);
+        $lastYearStart = $yearStart->copy()->subYear();
+
+        // A past year is complete  -  so it runs to Dec 31  -  while the
+        // current year is still accumulating, so it stops at today. A future
+        // year has nothing in it yet, hence the empty window.
+        $end = $this->yearEnd($year);
+
+        // Actual cash collected, not invoiced AR  -  Collection now exists.
+        // Scoped to the selected year instead of a rolling windowed month,
+        // so the overview cards match the "this year" framing by default.
+        $revenueThisYear = CollectionModel::whereBetween('collection_date', [$yearStart, $end])
             ->sum('amount_received');
 
-        $revenueLastMonth = CollectionModel::whereBetween('collection_date', [$lastMonthStart, $lastMonthEnd])
+        $revenueLastYear = CollectionModel::whereBetween('collection_date', [$lastYearStart, $this->yearEnd($year - 1)])
             ->sum('amount_received');
 
-        $expensesThisMonth = Expense::whereBetween('expense_date', [$monthStart, $today])
+        $expensesThisYear = Expense::whereBetween('expense_date', [$yearStart, $end])
             ->where('status', '!=', Expense::STATUS_REJECTED)
             ->sum('expense_amount');
 
-        $expensesLastMonth = Expense::whereBetween('expense_date', [$lastMonthStart, $lastMonthEnd])
+        $expensesLastYear = Expense::whereBetween('expense_date', [$lastYearStart, $this->yearEnd($year - 1)])
             ->where('status', '!=', Expense::STATUS_REJECTED)
             ->sum('expense_amount');
 
         $availableCash = CashAccount::where('status', 'Active')->sum('current_balance');
 
-        $netCashFlow = $revenueThisMonth - $expensesThisMonth;
-        $netCashFlowLastMonth = $revenueLastMonth - $expensesLastMonth;
+        $netCashFlow = $revenueThisYear - $expensesThisYear;
+        $netCashFlowLastYear = $revenueLastYear - $expensesLastYear;
 
         return [
             'total_revenue' => [
-                'value' => (float) $revenueThisMonth,
-                'trend' => $this->percentChange($revenueLastMonth, $revenueThisMonth),
-                'note' => 'Actual cash collected (Collections), not invoiced AR.',
+                'value' => (float) $revenueThisYear,
+                'trend' => $this->percentChange($revenueLastYear, $revenueThisYear),
+                'note' => 'Actual cash collected in ' . $year . ' (Collections), not invoiced AR.',
             ],
             'total_expenses' => [
-                'value' => (float) $expensesThisMonth,
-                'trend' => $this->percentChange($expensesLastMonth, $expensesThisMonth),
+                'value' => (float) $expensesThisYear,
+                'trend' => $this->percentChange($expensesLastYear, $expensesThisYear),
             ],
             'available_cash' => [
                 'value' => (float) $availableCash,
                 'trend' => null, // point-in-time balance, no meaningful period trend
+                'note' => 'Current balance across active cash accounts.',
             ],
             'net_cash_flow' => [
                 'value' => (float) $netCashFlow,
-                'trend' => $this->percentChange($netCashFlowLastMonth, $netCashFlow),
+                'trend' => $this->percentChange($netCashFlowLastYear, $netCashFlow),
             ],
         ];
+    }
+
+    /**
+     * Years the Dashboard's year picker can offer, newest first.
+     *
+     * Derived from the earliest actual transaction date rather than a
+     * hardcoded floor, so a fresh install doesn't show a decade of empty
+     * years. The current year is always present even with no records yet.
+     * A future year is deliberately NOT offered: nothing on the dashboard
+     * reads forecast figures, so it would just render as an empty year.
+     */
+    public function getAvailableYears(): array
+    {
+        $currentYear = (int) Carbon::today()->year;
+
+        $dates = collect([
+            CollectionModel::min('collection_date'),
+            Expense::min('expense_date'),
+            AccountsReceivable::min('invoice_date'),
+            AccountsPayable::min('invoice_date'),
+            Disbursement::min('payment_date'),
+        ])->filter()->map(fn ($date) => (int) Carbon::parse($date)->year);
+
+        $earliest = $dates->isEmpty() ? $currentYear : $dates->min();
+
+        return collect(range($currentYear, max($earliest, $currentYear - 10), -1))
+            ->map(fn ($year) => (string) $year)
+            ->values()
+            ->toArray();
+    }
+
+    /**
+     * Where a year's figures should stop accumulating. The current year is
+     * still in progress (stop at today), any past year is complete (stop at
+     * its Dec 31), and a future year has nothing in it yet.
+     */
+    private function yearEnd(int $year): Carbon
+    {
+        if ($year === (int) Carbon::today()->year) {
+            return Carbon::today()->endOfDay();
+        }
+
+        if ($year > (int) Carbon::today()->year) {
+            // Deliberately before the year's start  ->  always an empty window.
+            return Carbon::create($year, 1, 1)->subDay();
+        }
+
+        return Carbon::create($year, 12, 31)->endOfDay();
     }
 
     public function getModuleCards(): array

@@ -41,6 +41,7 @@ class AccountsReceivableResource extends JsonResource
             'has_attachment' => (bool) $this->supportingDocuments()->exists(),
             'is_archived' => (bool) $this->is_archived,
             'archived_at' => $this->archived_at?->toIso8601String(),
+            'deleted_at' => $this->archived_at?->toIso8601String(),
             'archived_by' => $this->archived_by,
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),

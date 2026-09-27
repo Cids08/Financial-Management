@@ -44,6 +44,7 @@ class AccountsPayableResource extends JsonResource
             // via deleted_at/deleted_by, same pattern as users.
             'is_archived' => $this->deleted_at !== null,
             'archived_at' => $this->deleted_at?->toIso8601String(),
+            'deleted_at' => $this->deleted_at?->toIso8601String(),
             'archived_by' => $this->deleted_by,
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),

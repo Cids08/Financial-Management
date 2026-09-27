@@ -155,6 +155,17 @@ export default function Login() {
               </div>
             )}
 
+            {authNotice === 'signedOutByServer' && (
+              <div className="flex items-start gap-2 mt-5 px-3 py-2.5 rounded-lg bg-sky-50/70 border border-sky-200/70 text-xs text-sky-700 backdrop-blur-sm dark:border-sky-500/25 dark:bg-sky-500/10 dark:text-sky-400">
+                <ShieldCheck size={14} className="shrink-0 mt-0.5" />
+                <span>
+                  Your session was ended. This happens when you sign in on
+                  another device, or when your session expires. If this wasn't
+                  you, change your password.
+                </span>
+              </div>
+            )}
+
             {error && !accountLockedFor && (() => {
               // Detect message type to show the right visual treatment
               const isWarning = error.toLowerCase().includes('remaining')

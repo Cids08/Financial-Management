@@ -18,6 +18,7 @@ class DepartmentResource extends JsonResource
             'department_phone' => $this->department_phone,
             'description' => $this->description,
             'status' => $this->is_active ? 'Active' : 'Inactive',
+            'deleted_at' => $this->deleted_at?->toIso8601String(),
             'headcount' => $this->whenCounted('users'),
         ];
     }

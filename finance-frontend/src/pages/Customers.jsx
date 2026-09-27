@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, Users as UsersIcon, UserCheck, UserX, Mail, Phone, Eye, EyeOff, Wallet, Briefcase, Hash } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, Users as UsersIcon, UserCheck, UserX, Mail, Phone, Eye, EyeOff, Wallet, Briefcase, Hash, X } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
@@ -12,6 +12,7 @@ import { formatCurrency } from '../utils/formatters'
 import { usePermissions } from '../context/PermissionsContext'
 import AddressSelector from '../components/AddressSelector'
 import DeletePermanentButton from '../components/DeletePermanentButton'
+import RetentionCountdown from '../components/RetentionCountdown'
 
 // Masks every character (keeps dashes/spaces as visual separators)
 function maskValue(value) {
@@ -290,10 +291,20 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
         })}
       </div>
 
-      <div className={`${PANEL} ${PANEL_PAD} flex flex-col gap-3 lg:flex-row lg:items-center`}>
-        <div className="relative flex-1 min-w-0">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-          <input type="text" value={search} onChange={(e) => updateFilter(setSearch)(e.target.value)} placeholder="Search by name, contact, or email..." className={`${INPUT} pl-9`} />
+      <div className={`${PANEL} ${PANEL_PAD}`}>
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end flex-wrap">
+          <div className="relative flex-1 min-w-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Search</label>
+            <div className="relative">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none z-10" />
+              <input type="text" value={search} onChange={(e) => updateFilter(setSearch)(e.target.value)} placeholder="Search by name, contact, or email..." className={`${INPUT} pl-9 pr-9`} autoComplete="off" />
+              {search && (
+                <button type="button" onClick={() => updateFilter(setSearch)('')} className="absolute right-2 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-border hover:text-ink transition-colors duration-150">
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -372,9 +383,9 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
                       <td className="px-4 py-3.5 whitespace-nowrap">
                         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[c.status]}`}>{c.status}</span>
                       </td>
-                      <td className="px-4 py-3.5 whitespace-nowrap text-right">
+                      <td className="px-4 py-3.5 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          {canManage && (
+                          {canManage && !c.is_archived && (
                             <Tooltip label="Edit customer" align="start">
                               <button type="button" onClick={() => openEdit(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                                 <Pencil size={15} />
@@ -389,6 +400,8 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
                             </Tooltip>
                           )}
                           {c.is_archived && (
+                            <>
+                            <RetentionCountdown deletedAt={c.deleted_at} compact />
                             <DeletePermanentButton
                               endpoint={`/api/customers/${c.customer_id}/permanent`}
                               label="customer"
@@ -396,6 +409,7 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
                               onDeleted={() => { fetchCustomers(); fetchStats() }}
                               onError={(m) => setLoadError(m)}
                             />
+                            </>
                           )}
                         </div>
                       </td>

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bell, BellOff, Check, CheckCheck, Trash2, Loader2, BellPlus } from 'lucide-react'
+import { Bell, BellOff, Check, CheckCheck, Trash2, Loader2, BellPlus, Search, RotateCcw, X } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Pagination from '../components/Pagination'
 import Button from '../components/Button'
@@ -168,20 +168,31 @@ export default function Notifications({ title = 'Notifications', crumbs = ['Noti
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="flex flex-wrap items-center gap-2">
-          <select value={severity} onChange={(e) => { setSeverity(e.target.value); setPage(1) }} className={INPUT}>
-            <option value="">All severities</option>
-            {NOTIFICATION_SEVERITIES.map((s) => (
-              <option key={s} value={s}>{notificationTypeMeta(s).label}</option>
-            ))}
-          </select>
-          <select value={module} onChange={(e) => { setModule(e.target.value); setPage(1) }} className={INPUT}>
-            <option value="">All units</option>
-            {NOTIFICATION_MODULES.map((m) => (
-              <option key={m.value} value={m.value}>{m.label}</option>
-            ))}
-          </select>
+      <div className={`${PANEL} p-4`}>
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end flex-wrap">
+          <div className="w-full sm:w-52 shrink-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Severity</label>
+            <select value={severity} onChange={(e) => { setSeverity(e.target.value); setPage(1) }} className={INPUT}>
+              <option value="">All severities</option>
+              {NOTIFICATION_SEVERITIES.map((s) => (
+                <option key={s} value={s}>{notificationTypeMeta(s).label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="w-full sm:w-52 shrink-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Module</label>
+            <select value={module} onChange={(e) => { setModule(e.target.value); setPage(1) }} className={INPUT}>
+              <option value="">All units</option>
+              {NOTIFICATION_MODULES.map((m) => (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              ))}
+            </select>
+          </div>
+          {(severity || module) && (
+            <div className="shrink-0">
+              <Button variant="secondary" size="sm" icon={RotateCcw} iconPosition="left" onClick={() => { setSeverity(''); setModule(''); setPage(1) }}>Reset</Button>
+            </div>
+          )}
         </div>
       </div>
 

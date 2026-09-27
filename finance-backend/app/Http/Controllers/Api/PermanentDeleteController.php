@@ -63,9 +63,13 @@ class PermanentDeleteController extends Controller
         'disbursements' => ['model' => Disbursement::class, 'permission' => 'disbursements.manage|disbursements.approve|disbursements.release', 'label' => 'disbursement'],
     ];
 
-    public function destroy(Request $request, string $entity, int $id): JsonResponse
+    public function destroy(Request $request, string $slug, string $id): JsonResponse
     {
-        if (! isset(self::ENTITIES[$entity])) {
+        // Route params come in as raw strings (the {id} segment); cast here
+        // since Laravel's injection does not coerce scalars for controllers.
+        $id = (int) $id;
+
+        if (! isset(self::ENTITIES[$slug])) {
             return response()->json(['success' => false, 'message' => 'Unknown archived entity.'], 404);
         }
 
@@ -77,7 +81,10 @@ class PermanentDeleteController extends Controller
             ], 403);
         }
 
-        [$model, , $label] = self::ENTITIES[$entity];
+        $config = self::ENTITIES[$slug];
+        $model = $config['model'];
+        $label = $config['label'];
+
         $record = $model::onlyTrashed()->find($id);
 
         if (! $record) {
@@ -85,10 +92,10 @@ class PermanentDeleteController extends Controller
         }
 
         try {
-            DB::transaction(function () use ($record, $model, $user, $id, $label, $entity) {
+            DB::transaction(function () use ($record, $model, $user, $id, $label, $slug, $request) {
                 AuditLog::create([
                     'user_id' => $user->id,
-                    'module' => $entity,
+                    'module' => $slug,
                     'action' => 'permanent_delete',
                     'record_id' => $id,
                     'activity_description' => "Permanently deleted an archived {$label}.",

@@ -8,15 +8,20 @@ import {
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
+import SlideOver from '../components/SlideOver'
 import Pagination from '../components/Pagination'
 import Tooltip from '../components/Tooltip'
 import BudgetPlanUploadModal from '../components/BudgetPlanUploadModal'
 import BudgetPlanHistoryModal from '../components/BudgetPlanHistoryModal'
 import { formatCurrency, currencySymbol, convertAmount, getActiveCurrency } from '../utils/formatters'
+import { printSlip } from '../utils/printSlip'
+import { money, SIGNATURE_PRESETS } from '../utils/print'
 import { MIN_INVOICE_AMOUNT, minHint } from '../utils/business'
 import { useBudgets } from '../hooks/useBudgets'
 import { useDepartments } from '../hooks/useDepartments'
 import DeletePermanentButton from '../components/DeletePermanentButton'
+import RetentionCountdown from '../components/RetentionCountdown'
+import BudgetUtilizationLedger from '../components/BudgetUtilizationLedger'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 import { usePermissions } from '../context/PermissionsContext'
 import { useProfile } from '../hooks/useProfile'
@@ -254,6 +259,12 @@ function BudgetHealthCard({ budget, onOpenDetail, onPrint }) {
           <span className="text-[11px] font-bold text-ink tabular-nums">{m.displayPct}%</span>
         </div>
 
+        <button
+          type="button"
+          onClick={() => onOpenDetail(budget)}
+          title="See the transactions behind this figure"
+          className="block w-full text-left cursor-pointer group"
+        >
         <div className="relative h-2.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden shadow-inner">
           <div
             className={`h-full rounded-full transition-all duration-500 ${barColor}`}
@@ -273,6 +284,7 @@ function BudgetHealthCard({ budget, onOpenDetail, onPrint }) {
           <span className="font-medium text-amber-600 dark:text-amber-400">Warning at {m.warningPct}%</span>
           <span>100% (Ceiling)</span>
         </div>
+        </button>
       </div>
 
       {/* Card Actions */}
@@ -282,7 +294,7 @@ function BudgetHealthCard({ budget, onOpenDetail, onPrint }) {
           onClick={() => onOpenDetail(budget)}
           className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline cursor-pointer"
         >
-          View Full Details
+          What Drove This Total
           <ArrowUpRight size={13} />
         </button>
 
@@ -340,6 +352,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
     budgets, meta, stats, loading, saving, error,
     fetchBudgets, fetchStats, createBudget, updateBudget,
     uploadPlan, viewPlan, fetchPlanHistory, viewPlanVersion, approveBudget, rejectBudget, archiveBudget, restoreBudget,
+    fetchUtilization,
   } = useBudgets()
 
   const { departments, fetchDepartments } = useDepartments()
@@ -385,7 +398,8 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
   const [form, setForm] = useState(EMPTY_FORM)
   // Company default fiscal year (Settings) seeds new budgets; falls back to
   // the current year if the setting is outside the allowed range.
-  const { fiscalYear: settingsFiscalYear } = useCompany()
+  const company = useCompany()
+  const { fiscalYear: settingsFiscalYear } = company
   const [serverError, setServerError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const [successVisible, setSuccessVisible] = useState(false)   // drives fade-in / fade-out
@@ -394,6 +408,10 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
   const [dateErrors, setDateErrors] = useState({ start_date: '', end_date: '' })
   const [amountError, setAmountError] = useState('')
   const [detailRecord, setDetailRecord] = useState(null)
+  // Full-screen utilization ledger. The detail modal is fine for a summary but
+  // too narrow for a long transaction list, so the ledger gets its own
+  // full-width view.
+  const [ledgerTarget, setLedgerTarget] = useState(null)
   const [uploadTarget, setUploadTarget] = useState(null) // budget currently attaching a plan (from table/detail)
   const [historyTarget, setHistoryTarget] = useState(null) // budget whose plan version history is open
   const [planFile, setPlanFile] = useState(null) // plan picked inline in the Add Budget modal
@@ -987,56 +1005,65 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
   }
 
   const handlePrint = (b) => {
-    const win = window.open('', '_blank', 'width=800,height=900')
-    if (!win) return
     const m = getBudgetMetrics(b)
-    const rows = [
-      ['Department', b.department_name || '—'],
-      ['Budget Code', b.budget_code],
-      ['Fiscal Year', b.fiscal_year],
-      ['Budget Type', b.budget_type || '—'],
-      ['Allocated Amount', formatCurrency(m.allocated)],
-      ['Used / Spent', formatCurrency(m.used)],
-      ['Remaining Balance', m.remaining < 0 ? `-${formatCurrency(Math.abs(m.remaining))} (Deficit)` : formatCurrency(m.remaining)],
-      ['Utilization Rate', `${m.displayPct}% (${m.healthLabel})`],
-      ['Warning Threshold', `${m.warningPct}%`],
-      ['Budget Plan', b.has_plan ? 'Attached' : 'Not attached'],
-      ['Approval Status', b.status],
-      ['Approved By', b.approved_by_name || '—'],
-      ...(b.remarks ? [['Remarks', b.remarks]] : []),
-    ]
-    win.document.write(`
-      <html>
-        <head>
-          <title>Budget  -  ${b.department_name || ''} FY${b.fiscal_year}</title>
-          <style>
-            * { box-sizing: border-box; }
-            body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #1a1a1a; padding: 48px; }
-            .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1a1a1a; padding-bottom: 20px; margin-bottom: 24px; }
-            .header h1 { margin: 0 0 4px; font-size: 22px; }
-            .header p { margin: 0; color: #666; font-size: 14px; }
-            .status { display: inline-block; padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; background: #f3f3f3; }
-            table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-            td { padding: 10px 4px; border-bottom: 1px solid #eee; font-size: 14px; }
-            td:first-child { color: #666; width: 40%; }
-            td:last-child { font-weight: 600; text-align: right; }
-            .footer { margin-top: 32px; font-size: 12px; color: #999; text-align: center; }
-            @media print { body { padding: 24px; } }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div><h1>Budget Report</h1><p>${b.department_name || ''} &middot; FY${b.fiscal_year}</p></div>
-            <span class="status">${b.status}</span>
-          </div>
-          <table>${rows.map(([label, value]) => `<tr><td>${label}</td><td>${value}</td></tr>`).join('')}</table>
-          <div class="footer">Printed on ${formatDateTime(new Date().toISOString())}</div>
-        </body>
-      </html>
-    `)
-    win.document.close()
-    win.focus()
-    win.print()
+
+    printSlip({
+      company,
+      profile,
+      spec: 'budget',
+      title: 'Budget Report',
+      subtitle: `${b.department_name || 'All Departments'} · FY${b.fiscal_year}`,
+      status: b.status,
+      meta: [
+        ['Budget Code', b.budget_code],
+        ['Fiscal Year', `FY${b.fiscal_year}`],
+        ['Department', b.department_name || '—'],
+      ],
+      groups: [
+        {
+          heading: 'Budget Details',
+          rows: [
+            ['Department', b.department_name || '—', 'span'],
+            ['Budget Code', b.budget_code],
+            ['Fiscal Year', `FY${b.fiscal_year}`],
+            ['Budget Type', b.budget_type || '—'],
+            ['Budget Plan', b.has_plan ? 'Attached' : 'Not attached'],
+            ...(b.remarks ? [['Remarks', b.remarks, 'span']] : []),
+          ],
+        },
+        {
+          heading: 'Utilization',
+          rows: [
+            ['Allocated Amount', money(m.allocated)],
+            ['Used / Spent', money(m.used)],
+            [
+              'Remaining Balance',
+              m.remaining < 0
+                ? `Deficit (${money(Math.abs(m.remaining))})`
+                : money(m.remaining),
+              'total',
+            ],
+            ['Utilization Rate', `${m.displayPct}% (${m.healthLabel})`],
+            ['Warning Threshold', `${m.warningPct}%`],
+          ],
+        },
+        {
+          heading: 'Approval',
+          rows: [
+            ['Approval Status', b.status],
+            ['Approved By', b.approved_by_name || '—'],
+            ...(b.approved_at ? [['Approved At', formatDateTime(b.approved_at)]] : []),
+          ],
+        },
+      ],
+      signatureTitle: 'Prepared, Reviewed & Approved',
+      signatures: SIGNATURE_PRESETS.internal({
+        preparedName: profile?.name,
+        preparedRole: profile?.role,
+        approvedName: b.approved_by_name || null,
+      }),
+      disclaimer: 'Utilization figures reflect expense vouchers posted against this budget as of the time of printing. A budget remains "active" only while today falls within its start and end dates and it has been approved.',
+    })
   }
 
   const totalPages = meta.last_page || 1
@@ -1173,49 +1200,70 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
       {/* ── TAB 1: BUDGET MANAGEMENT & GOVERNANCE ─────────────────────── */}
       {activeTab === 'budgets' && (
         <div className="space-y-4 animate-fadeIn">
-          <div className={`${PANEL} ${PANEL_PAD} flex flex-col gap-3 lg:flex-row lg:items-center`}>
-            <div className="relative flex-1 min-w-0 basis-full">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-              <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by budget name or code..." className={`${INPUT} pl-9`} style={{ ...INPUT_TEXT_STYLE, width: '100%', minWidth: 0 }} autoComplete="off" />
-            </div>
-            <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }} className={INPUT} style={INPUT_TEXT_STYLE}>
-              <option value="all">All Approval States</option>
-              <option value="Draft">Pending</option>
-              <option value="Active">Approved</option>
-              <option value="Cancelled">Rejected</option>
-            </select>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <CalendarRange size={15} className="text-muted shrink-0" />
-              <input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
-                max={dateTo || undefined}
-                aria-label="Filter budget start date from"
-                className={`${INPUT} scheme-light dark:scheme-dark`}
-                style={{ ...INPUT_TEXT_STYLE, width: '9.5rem' }}
-              />
-              <span className="text-xs text-muted">to</span>
-              <input
-                type="date"
-                value={dateTo}
-                onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
-                min={dateFrom || undefined}
-                aria-label="Filter budget end date to"
-                className={`${INPUT} scheme-light dark:scheme-dark`}
-                style={{ ...INPUT_TEXT_STYLE, width: '9.5rem' }}
-              />
-              {hasDateFilter && (
-                <Tooltip label="Clear date filter" align="end">
-                  <button
-                    type="button"
-                    onClick={clearDateFilter}
-                    aria-label="Clear date filter"
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
-                  >
-                    <X size={15} />
-                  </button>
-                </Tooltip>
+          <div className={`${PANEL} ${PANEL_PAD}`}>
+            <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end flex-wrap">
+              {/* Search */}
+              <div className="relative flex-1 min-w-0">
+                <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Search</label>
+                <div className="relative">
+                  <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none z-10" />
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search by budget name or code..."
+                    className={`${INPUT} pl-9 pr-9`}
+                    style={{ ...INPUT_TEXT_STYLE, minWidth: 0 }}
+                    autoComplete="off"
+                  />
+                  {search && (
+                    <button type="button" onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-border hover:text-ink transition-colors duration-150">
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
+              </div>
+              {/* Status */}
+              <div className="w-full sm:w-48 shrink-0">
+                <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Status</label>
+                <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }} className={INPUT} style={INPUT_TEXT_STYLE}>
+                  <option value="all">All Approval States</option>
+                  <option value="Draft">Pending</option>
+                  <option value="Active">Approved</option>
+                  <option value="Cancelled">Rejected</option>
+                </select>
+              </div>
+              {/* Date From */}
+              <div className="shrink-0">
+                <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">From</label>
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
+                  max={dateTo || undefined}
+                  aria-label="Filter budget start date from"
+                  className={`${INPUT} scheme-light dark:scheme-dark`}
+                  style={{ ...INPUT_TEXT_STYLE, width: '9.5rem' }}
+                />
+              </div>
+              {/* Date To */}
+              <div className="shrink-0">
+                <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">To</label>
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
+                  min={dateFrom || undefined}
+                  aria-label="Filter budget end date to"
+                  className={`${INPUT} scheme-light dark:scheme-dark`}
+                  style={{ ...INPUT_TEXT_STYLE, width: '9.5rem' }}
+                />
+              </div>
+              {/* Reset */}
+              {(search || statusFilter !== 'all' || hasDateFilter) && (
+                <div className="shrink-0">
+                  <Button variant="secondary" size="sm" icon={RotateCcw} iconPosition="left" onClick={() => { setSearch(''); setStatusFilter('all'); clearDateFilter(); setPage(1) }}>Reset</Button>
+                </div>
               )}
             </div>
           </div>
@@ -1282,7 +1330,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                           </p>
                         </td>
                         <td className="px-4 py-3.5 whitespace-nowrap"><ApprovalBadge status={b.status} /></td>
-                        <td className="px-4 py-3.5 whitespace-nowrap text-right">
+                        <td className="px-4 py-3.5 text-right">
                           <div className="flex items-center justify-end gap-1.5">
                             {isPending && canApproveBudgets && (
                               <>
@@ -1336,12 +1384,14 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                                 <Info size={15} />
                               </button>
                             </Tooltip>
+                            {!b.deleted_at && (
                             <Tooltip label="Print budget report" align="start">
                               <button type="button" onClick={() => handlePrint(b)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                                 <Printer size={15} />
                               </button>
                             </Tooltip>
-                            {canManageBudgets && b.status !== 'Active' && (
+                            )}
+                            {canManageBudgets && b.status !== 'Active' && !b.deleted_at && (
                               <Tooltip label="Edit budget" align="start">
                                 <button type="button" onClick={() => openEdit(b)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                                   <Pencil size={15} />
@@ -1356,12 +1406,15 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                               </Tooltip>
                             )}
                             {b.deleted_at && (
+                              <>
+                              <RetentionCountdown deletedAt={b.deleted_at} compact />
                               <DeletePermanentButton
                                 endpoint={`/api/budgets/${b.budget_id}/permanent`}
                                 label="budget"
                                 name={b.budget_name || ''}
                                 onDeleted={() => { fetchBudgets(); fetchStats() }}
                               />
+                              </>
                             )}
                           </div>
                         </td>
@@ -1443,61 +1496,81 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
           </div>
 
           {/* Dedicated Tracker Filter Toolbar */}
-          <div className={`${PANEL} ${PANEL_PAD} flex flex-col gap-3 lg:flex-row lg:items-center`}>
-            <div className="relative flex-1 min-w-0 basis-full">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-              <input
-                type="text"
-                value={trackerSearch}
-                onChange={(e) => setTrackerSearch(e.target.value)}
-                placeholder="Search active budgets by name, code, or department..."
-                className={`${INPUT} pl-9`}
-                style={{ ...INPUT_TEXT_STYLE, width: '100%', minWidth: 0 }}
-                autoComplete="off"
-              />
-            </div>
-
-            {/* Department Filter */}
-            <select
-              value={trackerDeptFilter}
-              onChange={(e) => setTrackerDeptFilter(e.target.value)}
-              className={INPUT}
-              style={INPUT_TEXT_STYLE}
-            >
-              <option value="all">All Departments</option>
-              {departments.map((d) => (
-                <option key={d.id} value={String(d.id)}>{d.department_name}</option>
-              ))}
-            </select>
-
-            {/* View Mode Switcher (Cards vs Table) */}
-            <div className="flex items-center rounded-lg border border-border bg-bg p-0.5 shrink-0">
-              <button
-                type="button"
-                onClick={() => setTrackerViewMode('cards')}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                  trackerViewMode === 'cards'
-                    ? 'bg-surface text-primary shadow-sm'
-                    : 'text-muted hover:text-ink'
-                }`}
-                title="Cards Visualizer"
-              >
-                <LayoutGrid size={14} />
-                <span>Cards</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setTrackerViewMode('table')}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                  trackerViewMode === 'table'
-                    ? 'bg-surface text-primary shadow-sm'
-                    : 'text-muted hover:text-ink'
-                }`}
-                title="Table Comparison"
-              >
-                <List size={14} />
-                <span>Table</span>
-              </button>
+          <div className={`${PANEL} ${PANEL_PAD}`}>
+            <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end flex-wrap">
+              {/* Search */}
+              <div className="relative flex-1 min-w-0">
+                <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Search</label>
+                <div className="relative">
+                  <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none z-10" />
+                  <input
+                    type="text"
+                    value={trackerSearch}
+                    onChange={(e) => setTrackerSearch(e.target.value)}
+                    placeholder="Search active budgets by name, code, or department..."
+                    className={`${INPUT} pl-9 pr-9`}
+                    style={{ ...INPUT_TEXT_STYLE, minWidth: 0 }}
+                    autoComplete="off"
+                  />
+                  {trackerSearch && (
+                    <button type="button" onClick={() => setTrackerSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-border hover:text-ink transition-colors duration-150">
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
+              </div>
+              {/* Department Filter */}
+              <div className="w-full sm:w-52 shrink-0">
+                <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Department</label>
+                <select
+                  value={trackerDeptFilter}
+                  onChange={(e) => setTrackerDeptFilter(e.target.value)}
+                  className={INPUT}
+                  style={INPUT_TEXT_STYLE}
+                >
+                  <option value="all">All Departments</option>
+                  {departments.map((d) => (
+                    <option key={d.id} value={String(d.id)}>{d.department_name}</option>
+                  ))}
+                </select>
+              </div>
+              {/* View Mode Switcher (Cards vs Table) */}
+              <div className="shrink-0">
+                <div className="flex items-center rounded-lg border border-border bg-bg p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setTrackerViewMode('cards')}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                      trackerViewMode === 'cards'
+                        ? 'bg-surface text-primary shadow-sm'
+                        : 'text-muted hover:text-ink'
+                    }`}
+                    title="Cards Visualizer"
+                  >
+                    <LayoutGrid size={14} />
+                    <span>Cards</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTrackerViewMode('table')}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                      trackerViewMode === 'table'
+                        ? 'bg-surface text-primary shadow-sm'
+                        : 'text-muted hover:text-ink'
+                    }`}
+                    title="Table Comparison"
+                  >
+                    <List size={14} />
+                    <span>Table</span>
+                  </button>
+                </div>
+              </div>
+              {/* Reset */}
+              {(trackerSearch || trackerDeptFilter !== 'all') && (
+                <div className="shrink-0">
+                  <Button variant="secondary" size="sm" icon={RotateCcw} iconPosition="left" onClick={() => { setTrackerSearch(''); setTrackerDeptFilter('all') }}>Reset</Button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -1560,7 +1633,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                             <td className="px-4 py-3.5 whitespace-nowrap">
                               <TableUtilizationCell budget={b} />
                             </td>
-                            <td className="px-4 py-3.5 whitespace-nowrap text-right">
+                            <td className="px-4 py-3.5 text-right">
                               <div className="flex items-center justify-end gap-1">
                                 <Tooltip label="View full record" align="start">
                                   <button type="button" onClick={() => openDetail(b)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 cursor-pointer">
@@ -2073,16 +2146,18 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
       {/* Detail modal */}
       <Modal
         // Hidden (not unmounted  -  detailRecord itself is untouched) while
-        // the History or Attach-Plan modal is open on top of it. Both of
-        // those are triggered from buttons INSIDE this modal, so without
-        // this they end up stacked behind it rather than in front  -  this
-        // makes Budget Details step out of the way and reappear once
-        // whichever nested modal closes, instead of fixing z-index (both
-        // modals share the same stacking context either way; the real
-        // problem was two modals being visible at once, not draw order).
-        open={!!detailRecord && !historyTarget && !uploadTarget}
+        // the History, Attach-Plan or full-screen Ledger overlay is open on
+        // top of it. Both of those are triggered from buttons INSIDE this
+        // modal, so without this they end up stacked behind it rather than in
+        // front  -  this makes Budget Details step out of the way and reappear
+        // once whichever nested modal closes, instead of fixing z-index (both
+        // overlays share the same stacking context either way; the real
+        // problem was two overlays being visible at once, not draw order).
+        // SlideOver is z-50 vs Modal's z-60, so it genuinely would be behind.
+        open={!!detailRecord && !historyTarget && !uploadTarget && !ledgerTarget}
         onClose={closeDetail}
         title="Budget Details"
+        maxWidth="max-w-4xl"
         footer={
           <>
             <Button variant="secondary" size="md" onClick={closeDetail}>Close</Button>
@@ -2284,6 +2359,26 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                 />
                 <DetailRow label="Warning Threshold" value={`${detailRecord.warning_percentage || 80}%`} />
               </div>
+
+              {/* Explains the "Used / Spent" figure above. `used_amount` is a
+                  denormalized running total, so without this the bar and the
+                  number are an assertion with nothing behind them. */}
+              <div className="px-3 py-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <h4 className="flex items-center gap-1.5 text-xs font-bold text-ink">
+                    <Activity size={13} className="text-primary" />
+                    What Drove This Total
+                  </h4>
+                  <span className="text-[10px] text-muted">Transactions behind the utilization figure</span>
+                </div>
+                <BudgetUtilizationLedger
+                  budgetId={detailRecord.budget_id ?? detailRecord.id}
+                  fetchUtilization={fetchUtilization}
+                  currency={getActiveCurrency()}
+                  previewLimit={6}
+                  onExpand={() => setLedgerTarget(detailRecord)}
+                />
+              </div>
               <div className="px-3 py-2">
                 <DetailRow label="Budget Type" value={detailRecord.budget_type} />
                 <DetailRow
@@ -2317,6 +2412,24 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
           </div>
         )}
       </Modal>
+
+      {/* Full-screen utilization ledger. Rendered outside the detail modal so
+          the table gets the whole viewport instead of a 4xl column. */}
+      <SlideOver
+        open={!!ledgerTarget}
+        onClose={() => setLedgerTarget(null)}
+        widthClass="max-w-full"
+        title={ledgerTarget ? `Utilization Ledger — ${ledgerTarget.budget_name || ledgerTarget.budget_code}` : 'Utilization Ledger'}
+        subtitle={ledgerTarget ? `${ledgerTarget.budget_code} · every expense and payroll run charged against this budget` : null}
+      >
+        {ledgerTarget && (
+          <BudgetUtilizationLedger
+            budgetId={ledgerTarget.budget_id ?? ledgerTarget.id}
+            fetchUtilization={fetchUtilization}
+            currency={getActiveCurrency()}
+          />
+        )}
+      </SlideOver>
     </div>
   )
 }

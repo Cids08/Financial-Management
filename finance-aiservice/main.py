@@ -2,8 +2,9 @@
 AI Advisor microservice.
 
 Owns everything that talks to the LLM for the advisor chat feature —
-prompt construction, the OpenAI-compatible call, and post-processing (em-dash
-stripping). Laravel's RemoteAdvisorEngine calls this over HTTP instead of
+prompt construction, the OpenAI Responses-API call (/v1/responses), and
+post-processing (em-dash stripping). Laravel's RemoteAdvisorEngine calls this
+over HTTP instead of
 calling OpenAI directly. Everything else (conversation history,
 ownership checks, summarization job scheduling) stays in Laravel, since
 those are tightly coupled to the User/database model that has to remain
@@ -44,6 +45,14 @@ RECOMMENDATION_MODEL = os.environ.get("OPENAI_RECOMMENDATION_MODEL", "gpt-5-mini
 # OpenAI only accepts this on reasoning models (gpt-5 family, o3-*, etc.)
 # and rejects it on gpt-4o-mini; the env var is opt-in so either case works.
 REASONING_EFFORT = os.environ.get("OPENAI_REASONING_EFFORT", "").strip()
+# Responses-API reasoning block mirrors the official gpt-5 snippet:
+# standard mode with a summary automatically sized to the response.
+REASONING_MODE = os.environ.get("OPENAI_REASONING_MODE", "standard").strip()
+REASONING_SUMMARY = os.environ.get("OPENAI_REASONING_SUMMARY", "auto").strip()
+# `verbosity` (how expansively the model answers) and `store` (whether the
+# request response is saved in the OpenAI dashboard) match the sample call.
+VERBOSITY = os.environ.get("OPENAI_VERBOSITY", "medium").strip()
+STORE_RESPONSES = os.environ.get("OPENAI_STORE_RESPONSES", "true").strip().lower() in ("1", "true", "yes")
 
 VALID_CATEGORIES = ["Revenue", "Expense", "Cash Flow", "Budget"]
 VALID_PRIORITIES = ["Low", "Medium", "High", "Critical"]
@@ -54,6 +63,28 @@ def _allows_temperature(model: str) -> bool:
     default temperature of 1 and reject any other value with HTTP 400."""
     lowered = model.lower()
     return not lowered.startswith(("gpt-5", "o1", "o3", "o4"))
+
+
+def _build_text_output(json_mode: bool = False) -> dict:
+    """Responses-API `text` block. Verbosity only applies to natural-language
+    output; structured JSON mode keeps just the json_object format."""
+    text = {"format": {"type": "json_object" if json_mode else "text"}}
+    if not json_mode:
+        text["verbosity"] = VERBOSITY
+    return text
+
+
+def _build_reasoning_block() -> Optional[dict]:
+    """Opt-in reasoning config for gpt-5 / o-series models. Mirrors the
+    official OpenAI snippet: standard mode with an auto summary at the
+    configured effort. Skipped entirely when no effort is set."""
+    if not REASONING_EFFORT:
+        return None
+    return {
+        "effort": REASONING_EFFORT,
+        "mode": REASONING_MODE,
+        "summary": REASONING_SUMMARY,
+    }
 
 # Shared secret between Laravel and this service — anyone hitting this
 # service directly without it gets rejected. Set the SAME value in both
@@ -122,6 +153,31 @@ def strip_em_dashes(text: str) -> str:
     return text
 
 
+def strip_echo(text: str, user_message: str) -> str:
+    """
+    Deterministic backstop for the sibling failure the em-dash strip covers:
+    gpt-5 at medium verbosity sometimes OPENS its reply by restating the
+    user's latest message verbatim. If the reply's leading content is exactly
+    that message, cut it so the answer begins immediately with content.
+    """
+    needle = " ".join(user_message.split())
+    probe = " ".join(text.split())
+    if not needle or not probe.startswith(needle) or probe == needle:
+        return text
+
+    raw = text.strip()
+    pos = 0
+    for tok in needle.split():
+        at = raw.find(tok + " ", pos)
+        if at < 0:
+            at = raw.find(tok, pos)
+        if at < 0:
+            return text
+        pos = at + len(tok)
+    rest = raw[pos:].lstrip(" ,.:;!?—–\n\t\r")
+    return rest or text
+
+
 def build_system_prompt(summary: Optional[str], grounding_data: List[dict]) -> str:
     """Ported verbatim from OpenAiAdvisorEngine::systemPrompt()."""
     import json
@@ -181,6 +237,9 @@ def build_system_prompt(summary: Optional[str], grounding_data: List[dict]) -> s
         "- Keep replies short: 1-3 sentences for simple questions, a short paragraph at "
         "most for anything more involved. Don't pad with phrases like 'Consequently' or "
         "restate the question back before answering.\n"
+        "- HARD RULE: never open your reply by repeating, quoting, or paraphrasing the "
+        "user's message or question. Start directly with the answer or reaction itself, "
+        "as if you were continuing a conversation where their message was already said.\n"
         "- If the user sends a greeting, thanks, or small talk unrelated to the data below "
         "(e.g. 'hi', 'thanks'), respond naturally and briefly to THAT. Don't default back "
         "to summarizing forecasts or recommendations unless they actually ask about them.\n\n"
@@ -199,6 +258,19 @@ def build_system_prompt(summary: Optional[str], grounding_data: List[dict]) -> s
         "'wow', 'really?', 'ok good'), respond to that specific reaction directly and briefly. "
         "don't re-explain the whole forecast. Example: if they react to a number being high, "
         "give brief context on why it's high or what it means, not a full recap.\n"
+        "- HARD RULE, applies whenever the user hands the decision back to you, do this "
+        "before anything else: if the user's message is a vague invitation that means 'you "
+        "pick', 'you decide', 'suggest something', 'I dunno, tell me', 'you tell me', "
+        "'anything?', 'what's important?', 'where do I start?', 'idk', 'ano?', 'ikaw na "
+        "bahala', or similar, then YOU lead. Do NOT reply with 'I don't know what you "
+        "mean', do NOT ask them 'what would you like to know about', and do NOT just "
+        "offer a menu of options for them to pick from. Instead, go to the data below and "
+        "pick the ONE most important thing on their plate right now (the highest-priority "
+        "or risk alert recommendation, or the biggest movement in a forecast), then just "
+        "tell them that, concretely, in one or two sentences with the key figure bolded. "
+        "End by offering to go deeper on that same thing. Being decisive here is the whole "
+        "point, the user handed you the floor because they want your judgment, not a "
+        "question thrown back at them.\n"
         "- If the user's message is unclear, garbled, a single stray word, or you genuinely "
         "can't tell what they mean (e.g. 'Admin', random characters, an incomplete sentence), "
         "do NOT invent a joke or unrelated content. Just say briefly that you're not sure you "
@@ -208,6 +280,15 @@ def build_system_prompt(summary: Optional[str], grounding_data: List[dict]) -> s
         "- Check the recent messages below before you answer. If you already gave this same "
         "recommendation or figure earlier in the conversation, don't restate it near-verbatim. "
         "the user will notice and it reads like a glitch.\n"
+        "- HARD RULE: this covers your own filler and deflection lines too, not just the "
+        "numbers. Once you have said a line like 'I don't have that in the data you gave', "
+        "'I can't tell you which model is running', 'same as before', or 'let me know what "
+        "you'd like to look at', NEVER reuse that sentence or its skeleton later, and never "
+        "attach it to a different question just because the wording fits. Those lines are "
+        "conversation-specific and expire the moment you use them. A recurring 'I don't "
+        "have that' no matter what the user asks is the single worst thing you can do here, "
+        "it makes the user think you're only replaying an old answer instead of reading "
+        "their message. Every reply must be written fresh against their latest message.\n"
         "- If the user is asking a follow-up on something already covered, either add something "
         "new (a next step, a different angle, an update) or say plainly that it's the same "
         "guidance as before, e.g. 'Same recommendation as a moment ago, the AR push is still "
@@ -229,12 +310,29 @@ def build_system_prompt(summary: Optional[str], grounding_data: List[dict]) -> s
         "questions, so let's get back to that when you're ready.'\n"
         "- The redirect sentence is rare, not a habit. It should NOT appear in most replies. "
         "Never add it to a normal financial answer just out of caution.\n\n"
+        "If the user asks who or what you are:\n"
+        "- Answer identity questions directly and in one short sentence. Do not pretend the "
+        "question is about company data, and do not answer it in the shape of a data "
+        "refusal like 'I don't have that in the data you gave'. The data below contains no "
+        "information about you, and saying so reads as a glitch.\n"
+        "- Stay non-technical and do not name, confirm, or deny any specific underlying "
+        "model or vendor. If pressed on which model is running, or whether you are a "
+        "particular model, say plainly that you're Alibaton Construction's financial "
+        "assistant and don't go further. That's the whole answer, don't append a "
+        "capability list or offer to walk through forecasts after it.\n"
+        "- Answer it ONCE and move on. Identity is not a recurring topic, and you must never "
+        "bring it up again in a later reply on an unrelated question.\n\n"
         "Content rules:\n"
         "- Only use the data provided below, whether it's a forecast, recommendation, or any "
         "other transaction record. Never invent figures for a category that isn't in the data "
         "below, even if it sounds like something the system would track. If the user asks about "
         "a transaction type with no data below, say plainly that you don't have that data right "
         "now instead of guessing.\n"
+        "- When you have no relevant data, briefly state what you actually have on file (e.g. "
+        "'I don't have any risk alerts or recommendations right now') and offer what you CAN "
+        "help with instead. NEVER ask the user to paste data, upload files, or 'grant access' "
+        "as a workaround - this chat can't ingest anything they'd paste, and that canned line "
+        "makes you look broken. Just answer from the data you were given.\n"
         "- Never approve transactions or guarantee outcomes.\n"
         "- Always communicate forecast uncertainty honestly when it's relevant to the "
         "question asked.\n"
@@ -250,33 +348,68 @@ def build_system_prompt(summary: Optional[str], grounding_data: List[dict]) -> s
     return prompt
 
 
-async def complete(messages: list, max_tokens: int, temperature: float) -> Optional[str]:
+async def complete_responses(
+    model: str,
+    instructions: str,
+    input_messages: list,
+    max_tokens: int,
+    temperature: float = 1.0,
+    json_mode: bool = False,
+) -> Optional[str]:
+    """One OpenAI Responses-API call (/v1/responses) using the same shape as
+    the official gpt-5-mini snippet: text.format + verbosity, opt-in reasoning
+    {effort, mode, summary}, and store. Laravel always gets a single JSON
+    reply from this service, so there's no client to stream to, hence the
+    snippet's `stream`/`include` args are omitted here (the reasoning output
+    budget they'd surface is still accounted for via max_output_tokens)."""
     headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
     if OPENAI_REFERER:
         headers["HTTP-Referer"] = OPENAI_REFERER
     if OPENAI_TITLE:
         headers["X-Title"] = OPENAI_TITLE
     body = {
-        "model": ADVISOR_MODEL,
-        "messages": messages,
-        "max_completion_tokens": max_tokens,
+        "model": model,
+        "input": input_messages,
+        "max_output_tokens": max_tokens,
+        "text": _build_text_output(json_mode=json_mode),
+        "store": STORE_RESPONSES,
     }
-    if _allows_temperature(ADVISOR_MODEL):
+    if instructions:
+        body["instructions"] = instructions
+    if _allows_temperature(model):
         body["temperature"] = temperature
-    if REASONING_EFFORT:
-        body["reasoning_effort"] = REASONING_EFFORT
+    reasoning = _build_reasoning_block()
+    if reasoning:
+        body["reasoning"] = reasoning
 
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.post(f"{OPENAI_BASE_URL}/chat/completions", json=body, headers=headers)
+        async with httpx.AsyncClient(timeout=60) as client:
+            response = await client.post(f"{OPENAI_BASE_URL}/responses", json=body, headers=headers)
 
         if response.status_code >= 400:
             print(f"[ai-advisor] OpenAI request failed: {response.status_code} {response.text}")
             return None
 
         data = response.json()
-        content = data.get("choices", [{}])[0].get("message", {}).get("content")
-        return strip_em_dashes(content) if content is not None else None
+        # Prefer the top-level output_text convenience field, but fall back
+        # to walking the output items: when a reasoning item precedes the
+        # final message, output_text can come back None even for a completed
+        # response, leaving only message.content[].text rows to read.
+        content = data.get("output_text")
+        if content is None:
+            parts = []
+            for item in data.get("output", []):
+                if item.get("type") != "message":
+                    continue
+                for block in item.get("content", []):
+                    if block.get("type") in ("output_text", "text"):
+                        parts.append(block.get("text", ""))
+            content = "".join(parts) or None
+        if content is None:
+            return None
+        # Never rewrite structured JSON (recommendations) — only prose replies
+        # get the em-dash backstop so the JSON shape is never corrupted.
+        return strip_em_dashes(content) if not json_mode else content
     except Exception as e:
         print(f"[ai-advisor] OpenAI request exception: {e}")
         return None
@@ -286,15 +419,22 @@ async def complete(messages: list, max_tokens: int, temperature: float) -> Optio
 async def reply(req: ReplyRequest, x_internal_token: str = Header(default="")):
     verify_internal_token(x_internal_token)
 
-    messages = [{"role": "system", "content": build_system_prompt(req.summary, req.grounding_data)}]
-    for m in req.recent_messages:
-        messages.append({"role": m.role, "content": m.content})
-    messages.append({"role": "user", "content": req.message})
+    instructions = build_system_prompt(req.summary, req.grounding_data)
+    input_messages = [{"role": m.role, "content": m.content} for m in req.recent_messages]
+    input_messages.append({"role": "user", "content": req.message})
 
     # gpt-5-mini consumes its output budget on reasoning even at 'low' effort;
     # at 'medium' a measured call burned ~1700 of 4096 tokens just to answer a
     # short question over the large advisor system prompt. Keep a generous cap.
-    result = await complete(messages, max_tokens=3000, temperature=0.4)
+    result = await complete_responses(
+        ADVISOR_MODEL,
+        instructions,
+        input_messages,
+        max_tokens=3000,
+        temperature=0.4,
+    )
+    if result:
+        result = strip_echo(result, req.message)
     return ReplyResponse(reply=result or "Sorry, I could not generate a response right now.")
 
 
@@ -302,18 +442,14 @@ async def reply(req: ReplyRequest, x_internal_token: str = Header(default="")):
 async def summarize(req: SummarizeRequest, x_internal_token: str = Header(default="")):
     verify_internal_token(x_internal_token)
 
-    result = await complete(
-        [
-            {
-                "role": "system",
-                "content": (
-                    "Summarize this financial-advisor chat in 3-4 factual sentences, "
-                    "preserving any figures, recommendations, or decisions mentioned. "
-                    "Do not add new information. Plain text, no markdown."
-                ),
-            },
-            {"role": "user", "content": req.transcript},
-        ],
+    result = await complete_responses(
+        ADVISOR_MODEL,
+        (
+            "Summarize this financial-advisor chat in 3-4 factual sentences, "
+            "preserving any figures, recommendations, or decisions mentioned. "
+            "Do not add new information. Plain text, no markdown."
+        ),
+        [{"role": "user", "content": req.transcript}],
         max_tokens=800,
         temperature=0,
     )
@@ -325,10 +461,13 @@ def build_recommendation_system_prompt() -> str:
     return (
         "You are a financial analysis assistant for Alibaton Construction Inc.'s "
         "Financial Management System. You will be given a single ARIMA forecast result as "
-        "JSON. Generate 1-2 recommendations based ONLY on the figures given — never invent "
-        "or estimate numbers not provided. Always communicate forecast uncertainty honestly; "
+        "JSON. Generate recommendations based ONLY on the figures given - never invent "
+        "or estimate numbers not provided. Return at most ONE recommendation per category; "
+        "never output two entries for the same category - if you have several insights for one "
+        "category, fold them into a single combined recommendation. Different categories may "
+        "each get their own recommendation. Always communicate forecast uncertainty honestly; "
         "never present the forecast as guaranteed. Avoid definitive financial advice "
-        "(e.g. never say 'you should invest more') — explain why, highlight supporting data, "
+        "(e.g. never say 'you should invest more') - explain why, highlight supporting data, "
         "and discuss possible risks instead.\n\n"
         "Respond with STRICT JSON only, no markdown, no prose outside the JSON, in this exact shape:\n"
         '{"recommendations": [{'
@@ -354,62 +493,61 @@ async def recommendations(req: RecommendationRequest, x_internal_token: str = He
 
     import json as _json
 
-    messages = [
-        {"role": "system", "content": build_recommendation_system_prompt()},
-        {"role": "user", "content": _json.dumps(payload)},
-    ]
-
-    headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
-    if OPENAI_REFERER:
-        headers["HTTP-Referer"] = OPENAI_REFERER
-    if OPENAI_TITLE:
-        headers["X-Title"] = OPENAI_TITLE
-    body = {
-        "model": RECOMMENDATION_MODEL,
-        "messages": messages,
-        "max_completion_tokens": 1500,
-        "response_format": {"type": "json_object"},
-    }
-    if _allows_temperature(RECOMMENDATION_MODEL):
-        body["temperature"] = 0.2
+    raw = await complete_responses(
+        RECOMMENDATION_MODEL,
+        build_recommendation_system_prompt(),
+        # json_object format requires the word "json" to appear in the
+        # INPUT messages (instructions don't count) or OpenAI rejects the
+        # request with a 400.
+        [{"role": "user", "content": f"Forecast result in JSON:\n{_json.dumps(payload)}"}],
+        max_tokens=1500,
+        temperature=0.2,
+        json_mode=True,
+    )
+    if raw is None:
+        return RecommendationsResponse(recommendations=[])
 
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.post(f"{OPENAI_BASE_URL}/chat/completions", json=body, headers=headers)
-
-        if response.status_code >= 400:
-            print(f"[ai-advisor] recommendation request failed: {response.status_code} {response.text}")
-            return RecommendationsResponse(recommendations=[])
-
-        raw = response.json().get("choices", [{}])[0].get("message", {}).get("content")
-        decoded = _json.loads(raw) if raw else None
-
-        if not isinstance(decoded, dict) or not isinstance(decoded.get("recommendations"), list):
-            print(f"[ai-advisor] recommendation response malformed: {raw}")
-            return RecommendationsResponse(recommendations=[])
-
-        # Same defensive filter as the original PHP engine: the model can
-        # still occasionally ignore the prompt's enum constraint, so
-        # anything outside the real DB CHECK constraints is dropped here
-        # rather than causing a failed insert downstream in Laravel.
-        items = []
-        for r in decoded["recommendations"]:
-            if not all(k in r for k in ("type", "priority", "confidence_score", "summary", "recommendation")):
-                continue
-            if r["type"] not in VALID_CATEGORIES or r["priority"] not in VALID_PRIORITIES:
-                continue
-            items.append(RecommendationItem(
-                type=r["type"],
-                priority=r["priority"],
-                confidence_score=float(r["confidence_score"]),
-                summary=r["summary"],
-                recommendation=r["recommendation"],
-            ))
-
-        return RecommendationsResponse(recommendations=items)
-    except Exception as e:
-        print(f"[ai-advisor] recommendation request exception: {e}")
+        decoded = _json.loads(raw)
+    except _json.JSONDecodeError:
+        print(f"[ai-advisor] recommendation response malformed: {raw}")
         return RecommendationsResponse(recommendations=[])
+
+    if not isinstance(decoded, dict) or not isinstance(decoded.get("recommendations"), list):
+        print(f"[ai-advisor] recommendation response malformed: {raw}")
+        return RecommendationsResponse(recommendations=[])
+
+    # Same defensive filter as the original PHP engine: the model can
+    # still occasionally ignore the prompt's enum constraint, so
+    # anything outside the real DB CHECK constraints is dropped here
+    # rather than causing a failed insert downstream in Laravel.
+    items = []
+    for r in decoded["recommendations"]:
+        if not all(k in r for k in ("type", "priority", "confidence_score", "summary", "recommendation")):
+            continue
+        if r["type"] not in VALID_CATEGORIES or r["priority"] not in VALID_PRIORITIES:
+            continue
+        items.append(RecommendationItem(
+            type=r["type"],
+            priority=r["priority"],
+            confidence_score=float(r["confidence_score"]),
+            summary=r["summary"],
+            recommendation=r["recommendation"],
+        ))
+
+    # One recommendation per category: if the model returned several
+    # entries for the same category, keep only the single most
+    # confident one so each forecast ends up with at most one row per
+    # category downstream in Laravel. Different categories stay
+    # separate.
+    seen: dict[str, RecommendationItem] = {}
+    for r in items:
+        existing = seen.get(r.type)
+        if existing is None or r.confidence_score > existing.confidence_score:
+            seen[r.type] = r
+    items = list(seen.values())
+
+    return RecommendationsResponse(recommendations=items)
 
 
 @app.get("/health")

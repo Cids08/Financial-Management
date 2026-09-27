@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Search, BookOpen, Scale, TrendingUp, TrendingDown, Info, ListTree, Layers, Rows3, Loader2, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react'
+import { Search, BookOpen, Scale, TrendingUp, TrendingDown, Info, ExternalLink, ListTree, Layers, Rows3, Loader2, AlertTriangle, ChevronDown, ChevronRight, X, RotateCcw, Filter } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
@@ -8,8 +9,36 @@ import Tooltip from '../components/Tooltip'
 import { formatCurrency } from '../utils/formatters'
 import { usePrivacy } from '../context/PrivacyContext'
 import { apiFetch } from '../utils/api'
+import { DATE_PRESETS, resolveDatePreset } from '../utils/datePresets'
 
 const REFERENCE_TYPES = ['Collections', 'Disbursements', 'Accounts Receivable', 'Accounts Payable', 'Expenses', 'Tax Obligations']
+
+// Maps the raw journal-line reference_type to the module page that owns the
+// source record (mirrors JournalSourceResolver::groupKey on the backend).
+// Journal entries can also reference Budgets and Fixed Asset depreciation.
+const SOURCE_ROUTES = {
+  accountsreceivable: '/transactions/receivable',
+  receivable: '/transactions/receivable',
+  ar: '/transactions/receivable',
+  accountspayable: '/transactions/payable',
+  payable: '/transactions/payable',
+  ap: '/transactions/payable',
+  disbursement: '/transactions/disbursements',
+  dv: '/transactions/disbursements',
+  expense: '/transactions/expenses',
+  collection: '/transactions/collections',
+  budget: '/transactions/budgets',
+  taxobligation: '/transactions/tax-obligations',
+  tax: '/transactions/tax-obligations',
+  fixedasset: '/master-data/fixed-assets',
+  depreciation: '/master-data/fixed-assets',
+}
+
+function sourceRoute(referenceType) {
+  if (!referenceType) return null
+  const clean = String(referenceType).toLowerCase().replace(/[^a-z]/g, '')
+  return SOURCE_ROUTES[clean] || null
+}
 
 function formatSource(source) {
   if (!source) return '—'
@@ -69,58 +98,6 @@ function DetailRow({ label, value }) {
 
 const EMPTY_FILTERS = { search: '', referenceFilter: 'all', accountFilter: 'all', dateFrom: '', dateTo: '', lineFilter: 'all' }
 
-const DATE_PRESETS = [
-  { key: 'all', label: 'All Time' },
-  { key: 'today', label: 'Today' },
-  { key: 'week', label: 'This Week' },
-  { key: 'month', label: 'This Month' },
-  { key: 'quarter', label: 'This Quarter' },
-  { key: 'year', label: 'This Year' },
-  { key: 'custom', label: 'Custom Range' },
-]
-
-const toISODate = (d) => d.toISOString().slice(0, 10)
-
-/** Returns { from, to } (either can be '') for a given preset key, anchored to now. */
-function resolveDatePreset(key) {
-  const now = new Date()
-  const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
-
-  switch (key) {
-    case 'today': {
-      const day = startOfDay(now)
-      return { from: toISODate(day), to: toISODate(day) }
-    }
-    case 'week': {
-      const day = startOfDay(now)
-      const start = new Date(day)
-      start.setDate(day.getDate() - day.getDay()) // Sunday
-      const end = new Date(start)
-      end.setDate(start.getDate() + 6)
-      return { from: toISODate(start), to: toISODate(end) }
-    }
-    case 'month': {
-      const start = new Date(now.getFullYear(), now.getMonth(), 1)
-      const end = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-      return { from: toISODate(start), to: toISODate(end) }
-    }
-    case 'quarter': {
-      const quarterStartMonth = Math.floor(now.getMonth() / 3) * 3
-      const start = new Date(now.getFullYear(), quarterStartMonth, 1)
-      const end = new Date(now.getFullYear(), quarterStartMonth + 3, 0)
-      return { from: toISODate(start), to: toISODate(end) }
-    }
-    case 'year': {
-      const start = new Date(now.getFullYear(), 0, 1)
-      const end = new Date(now.getFullYear(), 11, 31)
-      return { from: toISODate(start), to: toISODate(end) }
-    }
-    case 'all':
-    default:
-      return { from: '', to: '' }
-  }
-}
-
 export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Financial Transactions', 'General Ledger'] }) {
   const [view, setView] = useState('journal') // 'journal' | 'ledger' | 'trial-balance'
   const [search, setSearch] = useState(EMPTY_FILTERS.search)
@@ -146,6 +123,17 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
   const [error, setError] = useState(null)
 
   usePrivacy()
+
+  const navigate = useNavigate()
+
+  // Jump to the original record behind a ledger line, in its own module,
+  // reusing the same router-state highlight mechanism as SearchBar so the
+  // destination page scrolls to + flashes the exact row.
+  const goToSource = (referenceType, referenceId, hint) => {
+    const route = sourceRoute(referenceType)
+    if (!route || referenceId == null) return
+    navigate(route, { state: { highlightId: Number(referenceId), highlightSearch: hint || null } })
+  }
 
   // Debounce free-text search so it doesn't fire a request on every keystroke.
   useEffect(() => {
@@ -237,6 +225,16 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
 
   const grandTotals = meta.grand_totals || { debit: 0, credit: 0, balanced: true, difference: 0 }
 
+  // Filters deliberately changed by the user, for the "N active" badge + Reset.
+  // Quick date presets (Today/Week/...) don't count — only a manual Custom
+  // range does, so the badge appears exactly when the user has fiddled.
+  const activeFilterCount =
+    (search.trim() !== '' ? 1 : 0) +
+    (referenceFilter !== 'all' ? 1 : 0) +
+    (accountFilter !== 'all' ? 1 : 0) +
+    (lineFilter !== 'all' ? 1 : 0) +
+    (datePreset === 'custom' ? 1 : 0)
+
   const applyDatePreset = (key) => {
     setDatePreset(key)
     if (key === 'custom') return // leave dateFrom/dateTo as the user last set them
@@ -322,6 +320,14 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
   }
   const closeDetail = () => setDetailGroup(null)
 
+  // Jump from the detail modal to the original record — the entry's lines
+  // all share the same source document.
+  const openDetailSource = () => {
+    const line = detailGroup?.lines?.find((l) => l.source && l.source.reference_id != null)
+    if (!line) return
+    goToSource(line.source.reference_type, line.source.reference_id, line.source.reference || line.source.name)
+  }
+
   return (
     <div className="space-y-5 animate-fadeIn">
       <Breadcrumb items={crumbs} />
@@ -372,92 +378,175 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
         </div>
       )}
 
-      <div className={`${PANEL} ${PANEL_PAD} flex flex-col gap-3`}>
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-          <div className="relative flex-1 min-w-0 basis-full">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none z-10" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by description or account..."
-              className={SEARCH_INPUT}
-              style={{ ...INPUT_TEXT_STYLE, width: '100%', minWidth: 0 }}
-              autoComplete="off"
-            />
-          </div>
-          <select value={referenceFilter} onChange={(e) => setReferenceFilter(e.target.value)} className={INPUT} style={INPUT_TEXT_STYLE}>
-            <option value="all">All Sources</option>
-            {REFERENCE_TYPES.map((r) => <option key={r} value={r}>{formatSource(r)}</option>)}
-          </select>
-          <select value={accountFilter} onChange={(e) => setAccountFilter(e.target.value)} className={INPUT} style={INPUT_TEXT_STYLE}>
-            <option value="all">All Accounts</option>
-            {accounts.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
-          </select>
-          {lineFilter !== 'all' && (
-            <button
-              type="button"
-              onClick={() => setLineFilter('all')}
-              className="whitespace-nowrap text-xs font-medium text-primary-dark hover:underline"
-            >
-              Clear {lineFilter} filter
-            </button>
-          )}
-        </div>
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-          <select
-            value={datePreset}
-            onChange={(e) => applyDatePreset(e.target.value)}
-            className={INPUT}
-            style={{ ...INPUT_TEXT_STYLE, maxWidth: '11rem' }}
-          >
-            {DATE_PRESETS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
-          </select>
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-muted whitespace-nowrap">From</label>
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={(e) => { setDatePreset('custom'); setDateFrom(e.target.value) }}
-              className={`${INPUT} scheme-light dark:scheme-dark`}
-              style={INPUT_TEXT_STYLE}
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-muted whitespace-nowrap">To</label>
-            <input
-              type="date"
-              value={dateTo}
-              onChange={(e) => { setDatePreset('custom'); setDateTo(e.target.value) }}
-              className={`${INPUT} scheme-light dark:scheme-dark`}
-              style={INPUT_TEXT_STYLE}
-            />
-          </div>
-          <div className="ml-auto flex items-center gap-1 rounded-lg border border-border bg-bg p-1">
+      <div className={`${PANEL} ${PANEL_PAD} space-y-3`}>
+        {/* View tabs (prominent) + active-filter summary */}
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex w-full md:w-auto items-center gap-1 rounded-xl border border-border bg-bg p-1">
             <button
               type="button"
               onClick={() => setView('journal')}
-              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors duration-150 ${view === 'journal' ? 'bg-surface text-ink shadow-sm' : 'text-muted hover:text-ink'}`}
+              className={`flex flex-1 md:flex-none items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition-colors duration-150 ${view === 'journal' ? 'bg-primary text-[#111827] shadow-sm' : 'text-muted hover:text-ink'}`}
             >
-              <Rows3 size={13} /> Journal
+              <Rows3 size={14} /> Journal
             </button>
             <button
               type="button"
               onClick={() => setView('ledger')}
-              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors duration-150 ${view === 'ledger' ? 'bg-surface text-ink shadow-sm' : 'text-muted hover:text-ink'}`}
+              className={`flex flex-1 md:flex-none items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition-colors duration-150 ${view === 'ledger' ? 'bg-primary text-[#111827] shadow-sm' : 'text-muted hover:text-ink'}`}
             >
-              <Layers size={13} /> Ledger
+              <Layers size={14} /> Ledger
             </button>
             <button
               type="button"
               onClick={() => setView('trial-balance')}
-              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors duration-150 ${view === 'trial-balance' ? 'bg-surface text-ink shadow-sm' : 'text-muted hover:text-ink'}`}
+              className={`flex flex-1 md:flex-none items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition-colors duration-150 ${view === 'trial-balance' ? 'bg-primary text-[#111827] shadow-sm' : 'text-muted hover:text-ink'}`}
             >
-              <ListTree size={13} /> Trial Balance
+              <ListTree size={14} /> Trial Balance
             </button>
+          </div>
+
+          <div className="flex items-center justify-between gap-2 md:justify-end">
+            {activeFilterCount > 0 && (
+              <>
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary-dark whitespace-nowrap">
+                  <Filter size={12} /> {activeFilterCount} active filter{activeFilterCount === 1 ? '' : 's'}
+                </span>
+                <Button variant="secondary" size="sm" icon={RotateCcw} iconPosition="left" onClick={resetFilters}>
+                  Reset
+                </Button>
+              </>
+            )}
           </div>
         </div>
 
+        {/* Filter row 1: search, source, account, side */}
+        <div className="flex flex-col gap-2.5 lg:flex-row lg:items-end">
+          <div className="relative flex-1 min-w-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Search</label>
+            <div className="relative">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none z-10" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Description or account..."
+                className={`${SEARCH_INPUT} pr-9`}
+                style={{ ...INPUT_TEXT_STYLE, width: '100%', minWidth: 0 }}
+                autoComplete="off"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch('')}
+                  title="Clear search"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-border hover:text-ink transition-colors duration-150"
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="w-full lg:w-56">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Source</label>
+            <select
+              value={referenceFilter}
+              onChange={(e) => setReferenceFilter(e.target.value)}
+              className={`${INPUT} ${referenceFilter !== 'all' ? 'border-primary/60 bg-primary/5 text-primary-dark font-medium' : ''}`}
+              style={INPUT_TEXT_STYLE}
+            >
+              <option value="all">All Sources</option>
+              {REFERENCE_TYPES.map((r) => <option key={r} value={r}>{formatSource(r)}</option>)}
+            </select>
+          </div>
+
+          <div className="w-full lg:w-64">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Account</label>
+            <select
+              value={accountFilter}
+              onChange={(e) => setAccountFilter(e.target.value)}
+              className={`${INPUT} ${accountFilter !== 'all' ? 'border-primary/60 bg-primary/5 text-primary-dark font-medium' : ''}`}
+              style={INPUT_TEXT_STYLE}
+            >
+              <option value="all">All Accounts</option>
+              {accounts.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
+            </select>
+          </div>
+
+          <div className="w-full lg:w-auto">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Side</label>
+            <div className="flex items-center gap-0.5 rounded-lg border border-border bg-bg p-0.5 h-9">
+              <button
+                type="button"
+                onClick={() => setLineFilter('all')}
+                className={`flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors duration-150 ${lineFilter === 'all' ? 'bg-surface text-ink shadow-sm' : 'text-muted hover:text-ink'}`}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                onClick={() => setLineFilter('debit')}
+                className={`flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors duration-150 ${lineFilter === 'debit' ? 'bg-primary text-[#111827] shadow-sm' : 'text-muted hover:text-ink'}`}
+              >
+                <TrendingUp size={13} /> Debit
+              </button>
+              <button
+                type="button"
+                onClick={() => setLineFilter('credit')}
+                className={`flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors duration-150 ${lineFilter === 'credit' ? 'bg-purple-600 text-white shadow-sm' : 'text-muted hover:text-ink'}`}
+              >
+                <TrendingDown size={13} /> Credit
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Filter row 2: date period */}
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end sm:flex-wrap">
+          <div className="w-full sm:w-44">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Period</label>
+            <select
+              value={datePreset}
+              onChange={(e) => applyDatePreset(e.target.value)}
+              className={`${INPUT} ${datePreset === 'custom' ? 'border-primary/60 bg-primary/5 text-primary-dark font-medium' : ''}`}
+              style={INPUT_TEXT_STYLE}
+            >
+              {DATE_PRESETS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+            </select>
+          </div>
+          <div className="flex items-end gap-2">
+            <div>
+              <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">From</label>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => { setDatePreset('custom'); setDateFrom(e.target.value) }}
+                className={`${INPUT} scheme-light dark:scheme-dark ${datePreset === 'custom' ? 'border-primary/60 bg-primary/5 text-primary-dark font-medium' : ''}`}
+                style={INPUT_TEXT_STYLE}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">To</label>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => { setDatePreset('custom'); setDateTo(e.target.value) }}
+                className={`${INPUT} scheme-light dark:scheme-dark ${datePreset === 'custom' ? 'border-primary/60 bg-primary/5 text-primary-dark font-medium' : ''}`}
+                style={INPUT_TEXT_STYLE}
+              />
+            </div>
+            {datePreset === 'custom' && (
+              <button
+                type="button"
+                onClick={() => { setDatePreset('all'); setDateFrom(''); setDateTo('') }}
+                title="Clear date range"
+                className="mb-0.5 flex h-9 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
+              >
+                <X size={13} /> Clear
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       {loading && (
@@ -524,6 +613,17 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
                           <Info size={15} />
                         </button>
                       </Tooltip>
+                      {sourceRoute(e.reference_type) && e.reference_id != null && (
+                        <Tooltip label="Open original record" position="left">
+                          <button
+                            type="button"
+                            onClick={(ev) => { ev.stopPropagation(); goToSource(e.reference_type, e.reference_id, e.source?.reference || e.source?.name) }}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-primary/10 hover:text-primary-dark transition-colors duration-150 ml-1"
+                          >
+                            <ExternalLink size={15} />
+                          </button>
+                        </Tooltip>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -658,6 +758,16 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
                                 >
                                   <Info size={13} />
                                 </button>
+                                {sourceRoute(line.source?.reference_type) && line.source?.reference_id != null && (
+                                  <button
+                                    type="button"
+                                    title="Open original record"
+                                    onClick={(ev) => { ev.stopPropagation(); goToSource(line.source.reference_type, line.source.reference_id, line.source.reference || line.source.name) }}
+                                    className="flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-primary/10 hover:text-primary-dark transition-colors duration-150 ml-1"
+                                  >
+                                    <ExternalLink size={13} />
+                                  </button>
+                                )}
                               </td>
                             </tr>
                           ))}
@@ -753,7 +863,21 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
         </div>
       )}
 
-      <Modal open={!!detailGroup} onClose={closeDetail} title="Transaction Detail" footer={<Button variant="secondary" size="md" onClick={closeDetail}>Close</Button>}>
+      <Modal
+        open={!!detailGroup}
+        onClose={closeDetail}
+        title="Transaction Detail"
+        footer={
+          <div className="flex items-center gap-2">
+            {detailGroup?.lines?.some((l) => l.source && l.source.reference_id != null) && (
+              <Button variant="primary" size="md" icon={ExternalLink} iconPosition="left" onClick={openDetailSource}>
+                Open Original Record
+              </Button>
+            )}
+            <Button variant="secondary" size="md" onClick={closeDetail}>Close</Button>
+          </div>
+        }
+      >
         {detailLoading && (
           <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted">
             <Loader2 size={16} className="animate-spin" /> Loading…

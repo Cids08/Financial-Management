@@ -6,10 +6,13 @@ import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
 import Pagination from '../components/Pagination'
 import { formatCurrency } from '../utils/formatters'
+import { printSlip } from '../utils/printSlip'
+import { money, SIGNATURE_PRESETS } from '../utils/print'
 import { MIN_INVOICE_AMOUNT, minHint, formatBaseAmount } from '../utils/business'
 import { useAccountsReceivable } from '../hooks/useAccountsReceivable'
 import { apiFetch } from '../utils/api'
 import DeletePermanentButton from '../components/DeletePermanentButton'
+import RetentionCountdown from '../components/RetentionCountdown'
 import { isImageFile, compressImageToUploadable, HOSTED_PDF_MAX_BYTES } from '../utils/fileUpload'
 import { usePermissions } from '../context/PermissionsContext'
 import { useProfileContext } from '../context/ProfileContext'
@@ -308,7 +311,8 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
   } = useAccountsReceivable()
   const { hasPermission } = usePermissions()
   const { profile } = useProfileContext()
-  const { defaultPenaltyRate } = useCompany()
+  const company = useCompany()
+  const { defaultPenaltyRate } = company
   // Admin-only gate for archiving/restoring invoices: in corporate finance systems,
   // destructive status actions (archiving/unarchiving financial records) are restricted
   // strictly to Admin and Super Admin roles. Non-admin users (Staff, Collectors) cannot archive.
@@ -523,65 +527,56 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
   }
 
   const handlePrint = (r) => {
-    const win = window.open('', '_blank', 'width=800,height=900')
-    if (!win) return
-    const rows = [
-      ['Invoice Number', r.invoice_number],
-      ['Customer', customerName(r.customer_id)],
-      ['Collector', collectorName(r.collector_id)],
-      ['Invoice Date', formatDate(r.invoice_date)],
-      ['Due Date', formatDate(r.due_date)],
-      ['Payment Method', r.payment_method],
-      ['Payment Terms', r.payment_terms],
-      ['Purchase Order No.', r.purchase_order_no || '—'],
-      ['Reference No.', r.reference_no || '—'],
-      ['Original Amount', formatCurrency(r.original_amount)],
-      ['Balance', formatCurrency(r.balance)],
-      ...(r.penalty_rate
-        ? isOverdueRecord(r)
-          ? [['Penalty', `${r.penalty_rate}% (${formatCurrency(r.penalty_amount)})`]]
-          : [['Penalty Rate', `${r.penalty_rate}% (applies when overdue)`]]
-        : []),
-      ['Status', r.status],
-      ...(r.remarks ? [['Remarks', r.remarks]] : []),
-    ]
-    win.document.write(`
-      <html>
-        <head>
-          <title>${r.invoice_number}</title>
-          <style>
-            * { box-sizing: border-box; }
-            body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #1a1a1a; padding: 48px; }
-            .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1a1a1a; padding-bottom: 20px; margin-bottom: 24px; }
-            .header h1 { margin: 0 0 4px; font-size: 22px; }
-            .header p { margin: 0; color: #666; font-size: 14px; }
-            .status { display: inline-block; padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; background: #f3f3f3; }
-            table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-            td { padding: 10px 4px; border-bottom: 1px solid #eee; font-size: 14px; }
-            td:first-child { color: #666; width: 40%; }
-            td:last-child { font-weight: 600; text-align: right; }
-            .footer { margin-top: 32px; font-size: 12px; color: #999; text-align: center; }
-            @media print { body { padding: 24px; } }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div>
-              <h1>${r.invoice_number}</h1>
-              <p>${customerName(r.customer_id)}</p>
-            </div>
-            <span class="status">${r.status}</span>
-          </div>
-          <table>
-            ${rows.map(([label, value]) => `<tr><td>${label}</td><td>${value}</td></tr>`).join('')}
-          </table>
-          <div class="footer">Printed on ${formatDateTime(new Date().toISOString())}</div>
-        </body>
-      </html>
-    `)
-    win.document.close()
-    win.focus()
-    win.print()
+    const customer = customerName(r.customer_id)
+
+    printSlip({
+      company,
+      profile,
+      spec: 'invoice',
+      title: `Sales Invoice ${r.invoice_number}`,
+      subtitle: customer,
+      status: r.status,
+      meta: [
+        ['Invoice No.', r.invoice_number],
+        ['Customer', customer],
+        ['Due Date', formatDate(r.due_date)],
+      ],
+      groups: [
+        {
+          heading: 'Customer & Invoice Information',
+          rows: [
+            ['Customer', customer, 'span'],
+            ['Collector', r.collector_id ? collectorName(r.collector_id) : '—', 'span'],
+            ['Invoice Date', formatDate(r.invoice_date)],
+            ['Due Date', formatDate(r.due_date)],
+            ['Payment Terms', r.payment_terms || '—'],
+            ['Payment Method', r.payment_method || '—'],
+            ['Purchase Order No.', r.purchase_order_no || '—'],
+            ['Reference No.', r.reference_no || '—'],
+            ...(r.remarks ? [['Remarks', r.remarks, 'span']] : []),
+          ],
+        },
+        {
+          heading: 'Amounts',
+          rows: [
+            ['Original Amount', money(r.original_amount)],
+            ...(r.penalty_rate
+              ? isOverdueRecord(r)
+                ? [['Penalty', `${r.penalty_rate}% (${money(r.penalty_amount)})`, 'muted']]
+                : [['Penalty Rate', `${r.penalty_rate}% (applies when overdue)`, 'muted']]
+              : []),
+            ['Outstanding Balance', money(r.balance), 'total'],
+          ],
+        },
+      ],
+      signatureTitle: 'Prepared, Approved & Acknowledged',
+      signatures: SIGNATURE_PRESETS.voucher({
+        preparedName: profile?.name,
+        preparedRole: profile?.role,
+        counterpartyLabel: 'Received By (Customer)',
+      }),
+      disclaimer: 'This invoice was generated from the receivable record held in the system. Payment is due on the date shown above; amounts past due are subject to the stated penalty rate.',
+    })
   }
 
   const handleSubmit = async (e) => {
@@ -717,34 +712,72 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
         })}
       </div>
 
-      <div className={`${PANEL} ${PANEL_PAD} flex flex-col gap-3 lg:flex-row lg:items-center`}>
-        <div className="relative flex-1">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by invoice no., customer, or reference..." className={`${INPUT} pl-9`} />
+      <div className={`${PANEL} ${PANEL_PAD}`}>
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end">
+          <div className="relative flex-1 min-w-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Search</label>
+            <div className="relative">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none z-10" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by invoice no., customer, or reference..."
+                className={`${INPUT} pl-9 pr-9`}
+                autoComplete="off"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch('')}
+                  title="Clear search"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-border hover:text-ink transition-colors duration-150"
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="w-full sm:w-56 shrink-0">
+            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Status</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className={INPUT}
+            >
+              <option value="all">All Statuses</option>
+              {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          {(search || statusFilter !== 'all') && (
+            <div className="shrink-0">
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={RotateCcw}
+                iconPosition="left"
+                onClick={() => { setSearch(''); setStatusFilter('all') }}
+              >
+                Reset
+              </Button>
+            </div>
+          )}
         </div>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className={`${INPUT} lg:w-56! shrink-0`}
-        >
-          <option value="all">All Statuses</option>
-          {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
       </div>
 
       <div className={PANEL}>
-        <div className="overflow-x-auto rounded-t-xl">
-          <table className="w-full text-sm">
+        <div className="overflow-hidden rounded-t-xl">
+          <table className="w-full text-sm table-fixed">
             <thead className="bg-surface">
               <tr className="border-b border-border">
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3 whitespace-nowrap">Invoice</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3">Customer / Collector</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3 whitespace-nowrap">Terms / PO</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3 whitespace-nowrap">Due Date</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3 whitespace-nowrap">Original / Balance</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3 whitespace-nowrap">Penalty</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3 whitespace-nowrap">Status</th>
-                <th className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3 whitespace-nowrap min-w-35">Actions</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3 w-[13%] whitespace-nowrap">Invoice</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3 w-[15%] whitespace-nowrap">Customer / Collector</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3 w-[11%] whitespace-nowrap">Terms / PO</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3 w-[10%] whitespace-nowrap">Due Date</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3 w-[13%] whitespace-nowrap">Original / Balance</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3 w-[9%] whitespace-nowrap">Penalty</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3 w-[11%] whitespace-nowrap">Status</th>
+                <th className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3 w-[18%] whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -797,58 +830,76 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                       )
                     ) : <span className="text-muted">—</span>}
                   </td>
-                  <td className="px-3 xl:px-4 py-3.5 whitespace-nowrap min-w-0">
+                  <td className="px-3 xl:px-4 py-3.5 min-w-0">
                     <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[r.status]}`}>{r.status}</span>
                   </td>
-                  <td className="px-3 xl:px-4 py-3.5 whitespace-nowrap text-right min-w-35">
+                  <td className="px-3 xl:px-4 py-3.5 text-right min-w-0">
                     <div className="flex items-center justify-end gap-1">
-                      <Tooltip label="View full record" align="start">
-                        <button type="button" onClick={() => openDetail(r)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                      {/* Active rows keep the full working set. Only ARCHIVED
+                          rows get trimmed to Info + Restore + countdown + purge,
+                          because that's where the wide countdown badge used to
+                          collide with the Status column. */}
+                      <Tooltip label="View full record" align="end">
+                        <button type="button" onClick={() => openDetail(r)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                           <Info size={15} />
                         </button>
                       </Tooltip>
-                      <Tooltip label="Print invoice" align="start">
-                        <button type="button" onClick={() => handlePrint(r)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                          <Printer size={15} />
-                        </button>
-                      </Tooltip>
-                      <Tooltip label={r.has_attachment ? 'View / manage documents' : 'Attach document'} align="start">
-                        <button
-                          type="button"
-                          onClick={() => setDocumentTarget(r)}
-                          className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors duration-150 ${
-                            r.has_attachment
-                              ? 'text-primary-dark hover:bg-primary/10'
-                              : 'text-muted hover:bg-bg hover:text-ink'
-                          }`}
-                        >
-                          <Paperclip size={15} />
-                        </button>
-                      </Tooltip>
-                      {/* Edit hits an ar.manage-gated route  -  hidden for
-                          view-only roles (Collector) and also hidden once a
-                          record is Paid/Cancelled (locked status). */}
-                      {canManage && !locked && (
-                        <Tooltip label="Edit invoice" align="start">
-                          <button type="button" onClick={() => openEdit(r)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                            <Pencil size={15} />
-                          </button>
-                        </Tooltip>
-                      )}
-                      {isAdmin && (r.is_archived || ['Paid', 'Cancelled'].includes(r.status)) && (
-                        <Tooltip label={r.is_archived ? 'Restore invoice' : 'Archive invoice'} align="end">
-                          <button type="button" onClick={() => handleToggleArchive(r.ar_id)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                            {r.is_archived ? <RotateCcw size={15} /> : <Archive size={15} />}
-                          </button>
-                        </Tooltip>
-                      )}
-                      {r.is_archived && (
-                        <DeletePermanentButton
-                          endpoint={`/api/accounts-receivable/${r.ar_id}/permanent`}
-                          label="invoice"
-                          name={r.invoice_number || r.ar_id}
-                          onDeleted={fetchRecords}
-                        />
+
+                      {r.is_archived ? (
+                        <>
+                          {isAdmin && (
+                            <Tooltip label="Restore invoice" align="end">
+                              <button type="button" onClick={() => handleToggleArchive(r.ar_id)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                                <RotateCcw size={15} />
+                              </button>
+                            </Tooltip>
+                          )}
+                          <RetentionCountdown deletedAt={r.deleted_at} compact />
+                          <DeletePermanentButton
+                            endpoint={`/api/accounts-receivable/${r.ar_id}/permanent`}
+                            label="invoice"
+                            name={r.invoice_number || r.ar_id}
+                            onDeleted={fetchRecords}
+                          />
+                        </>
+                      ) : (
+                        <>
+                          <Tooltip label="Print invoice" align="end">
+                            <button type="button" onClick={() => handlePrint(r)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                              <Printer size={15} />
+                            </button>
+                          </Tooltip>
+                          <Tooltip label={r.has_attachment ? 'View / manage documents' : 'Attach document'} align="end">
+                            <button
+                              type="button"
+                              onClick={() => setDocumentTarget(r)}
+                              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors duration-150 ${
+                                r.has_attachment
+                                  ? 'text-primary-dark hover:bg-primary/10'
+                                  : 'text-muted hover:bg-bg hover:text-ink'
+                              }`}
+                            >
+                              <Paperclip size={15} />
+                            </button>
+                          </Tooltip>
+                          {/* Edit hits an ar.manage-gated route  -  hidden for
+                              view-only roles (Collector) and once a record is
+                              Paid/Cancelled (locked status). */}
+                          {canManage && !locked && (
+                            <Tooltip label="Edit invoice" align="end">
+                              <button type="button" onClick={() => openEdit(r)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                                <Pencil size={15} />
+                              </button>
+                            </Tooltip>
+                          )}
+                          {isAdmin && ['Paid', 'Cancelled'].includes(r.status) && (
+                            <Tooltip label="Archive invoice" align="end">
+                              <button type="button" onClick={() => handleToggleArchive(r.ar_id)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                                <Archive size={15} />
+                              </button>
+                            </Tooltip>
+                          )}
+                        </>
                       )}
                     </div>
                   </td>
@@ -1159,6 +1210,15 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
             {detailRecord && (
               <>
                 <Button variant="secondary" size="md" icon={Paperclip} onClick={() => setDocumentTarget(detailRecord)}>Documents</Button>
+                {canManage && !isLocked(detailRecord) && !detailRecord.is_archived && (
+                  <Button variant="secondary" size="md" icon={Pencil} onClick={() => openEdit(detailRecord)}>Edit</Button>
+                )}
+                {/* Archive is the gateway to the retention countdown and the
+                    permanent purge, so it has to stay reachable somewhere even
+                    though the row only offers Restore. */}
+                {isAdmin && !detailRecord.is_archived && ['Paid', 'Cancelled'].includes(detailRecord.status) && (
+                  <Button variant="secondary" size="md" icon={Archive} onClick={() => handleToggleArchive(detailRecord.ar_id)}>Archive</Button>
+                )}
                 <Button variant="primary" size="md" icon={Printer} onClick={() => handlePrint(detailRecord)}>Print Invoice</Button>
               </>
             )}

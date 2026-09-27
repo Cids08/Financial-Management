@@ -38,6 +38,7 @@ class TaxObligationResource extends JsonResource
             'updated_at'        => $this->updated_at?->toIso8601String(),
             'is_archived'       => $this->trashed(),
             'archived_at'       => $this->deleted_at?->toIso8601String(),
+            'deleted_at'       => $this->deleted_at?->toIso8601String(),
             'archived_by'       => $this->deleted_by,
             'archived_by_name'  => $this->whenLoaded('deletedBy', fn () => $this->deletedBy ? trim("{$this->deletedBy->first_name} {$this->deletedBy->last_name}") : null),
             // Both only set by TaxObligationService::list() (one batched
