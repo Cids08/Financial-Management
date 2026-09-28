@@ -58,7 +58,12 @@ class Setting extends Model
      */
     public static function current(): self
     {
-        return static::query()->orderBy('id')->first() ?? static::query()->create([
+        $existing = static::query()->orderBy('id')->first();
+        if ($existing) {
+            return $existing;
+        }
+
+        $payload = [
             'company_name' => config('app.company_name', config('app.name', 'FMS')),
             'tagline' => null,
             'company_address' => null,
@@ -76,6 +81,20 @@ class Setting extends Model
             // kept for 10 years, so archived records that are never restored
             // are purged permanently only after this many days (3650).
             'data_retention_days' => 3650,
-        ]);
+        ];
+
+        try {
+            return static::query()->create($payload);
+        } catch (\Throwable $e) {
+            // Gracefully recover if migrations haven't run yet or data_retention_days column is absent
+            unset($payload['data_retention_days']);
+
+            try {
+                return static::query()->create($payload);
+            } catch (\Throwable $e2) {
+                unset($payload['default_penalty_rate'], $payload['exchange_rates'], $payload['base_currency'], $payload['tagline']);
+                return static::query()->create($payload);
+            }
+        }
     }
 }

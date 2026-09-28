@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Search, Pencil, Archive, RotateCcw, HandCoins, Clock3, Wallet, Info, Printer, CheckCircle2, XCircle, Paperclip, X, RefreshCw, Users, AlertCircle, Lock } from 'lucide-react'
+import { Search, Pencil, Archive, RotateCcw, HandCoins, Clock3, Wallet, Info, Printer, CheckCircle2, XCircle, Paperclip, X, RefreshCw, Users, AlertCircle, Lock, Upload } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
@@ -22,6 +22,7 @@ import { apiFetch } from '../utils/api'
 import { useSearchParams } from 'react-router-dom'
 import { usePrivacy } from '../context/PrivacyContext'
 import { usePermissions } from '../context/PermissionsContext'
+import { compressImageToUploadable, cannotFitHostLimit } from '../utils/fileUpload'
 
 const STATUS_OPTIONS = ['Awaiting Collection', 'Pending', 'Confirmed', 'Cancelled']
 const PAGE_SIZE = 10
@@ -342,6 +343,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
   const [actioning,    setActioning]    = useState(false)
   const [actionError,  setActionError]  = useState('')
   const [proofTarget,  setProofTarget]  = useState(null)
+  const [proofFile,    setProofFile]    = useState(null)
   const [auditLogs,    setAuditLogs]    = useState([])
   const [auditLogsLoading, setAuditLogsLoading] = useState(false)
   const [auditLogsError,   setAuditLogsError]   = useState(null)
@@ -477,6 +479,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
     setFormError('')
     setFieldErrors({})
     setDateErrors({ collection_date: '' })
+    setProofFile(null)
     setModalMode('add')
   }
 
@@ -497,6 +500,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
     setFormError('')
     setFieldErrors({})
     setDateErrors({ collection_date: '' })
+    setProofFile(null)
     setModalMode('add')
   }
 
@@ -533,6 +537,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
   }, [searchParams, setSearchParams])
 
   const openEdit = (c) => {
+    if (!c || ['Confirmed', 'Cancelled'].includes(c.status)) return
     setIsCollectLocked(false)
     setForm({
       ar_id:            c.ar_id ?? '',
@@ -549,10 +554,11 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
     setFormError('')
     setFieldErrors({})
     setDateErrors({ collection_date: '' })
+    setProofFile(null)
     setModalMode(c)
   }
 
-  const closeModal  = () => { setModalMode(null); setIsCollectLocked(false); setFormError(''); setFieldErrors({}); setDateErrors({ collection_date: '' }) }
+  const closeModal  = () => { setModalMode(null); setIsCollectLocked(false); setFormError(''); setFieldErrors({}); setDateErrors({ collection_date: '' }); setProofFile(null) }
   const openDetail  = (c) => {
     setDetailRecord(c)
     setAuditLogs([])
@@ -635,46 +641,95 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
       }
     }
 
+    const isAdd = modalMode === 'add'
+    if (isAdd) {
+      if (!proofFile) {
+        errors.proof = 'Proof of receipt / payment (deposit slip, bank transfer screenshot, or check image) is strictly required before submitting for confirmation.'
+      } else {
+        const hostError = cannotFitHostLimit(proofFile)
+        if (hostError) {
+          errors.proof = hostError
+        }
+      }
+    }
+
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors)
       return
     }
     setFieldErrors({})
     setFormError('')
+    setSubmitting(true)
     try {
-      const isAdd = modalMode === 'add'
-      const payload = {
-        ar_id: arId,
-        collector_id: collectorId,
-        cash_account_id: cashAccId,
-        receipt_number: form.receipt_number.trim(),
-        collection_date: form.collection_date,
-        amount_received: Number(form.amount_received),
-        payment_method: form.payment_method,
-        reference_number: form.reference_number?.trim() || null,
-        remarks: form.remarks?.trim() || null,
-      }
-      // Status is workflow-driven (Pending → Confirmed/Cancelled via action
-      // buttons) — never send it from the form to prevent manual overrides.
-
-      const res = await apiFetch(
-        isAdd ? '/api/collections' : `/api/collections/${modalMode.id}`,
-        { method: isAdd ? 'POST' : 'PUT', body: JSON.stringify(payload) }
-      )
-      const json = await res.json()
-      if (!json.success) {
-        if (json.errors) {
-          const fe = {}
-          for (const [k, v] of Object.entries(json.errors)) {
-            fe[k] = Array.isArray(v) ? v[0] : v
-          }
-          setFieldErrors(fe)
+      if (isAdd) {
+        const formData = new FormData()
+        formData.append('ar_id', String(arId))
+        formData.append('collector_id', String(collectorId))
+        formData.append('cash_account_id', String(cashAccId))
+        formData.append('receipt_number', form.receipt_number.trim())
+        formData.append('collection_date', form.collection_date)
+        formData.append('amount_received', String(form.amount_received))
+        formData.append('payment_method', form.payment_method)
+        if (form.reference_number?.trim()) {
+          formData.append('reference_number', form.reference_number.trim())
         }
-        setFormError(json.errors ? Object.values(json.errors)[0]?.[0] : json.message || 'Something went wrong.')
-        return
+        if (form.remarks?.trim()) {
+          formData.append('remarks', form.remarks.trim())
+        }
+        if (proofFile) {
+          const compressed = await compressImageToUploadable(proofFile)
+          formData.append('proof', compressed)
+        }
+
+        const res = await apiFetch('/api/collections', {
+          method: 'POST',
+          body: formData,
+        })
+        const json = await res.json()
+        if (!json.success) {
+          if (json.errors) {
+            const fe = {}
+            for (const [k, v] of Object.entries(json.errors)) {
+              fe[k] = Array.isArray(v) ? v[0] : v
+            }
+            setFieldErrors(fe)
+          }
+          setFormError(json.errors ? Object.values(json.errors)[0]?.[0] : json.message || 'Something went wrong.')
+          return
+        }
+        closeModal()
+        refetch()
+      } else {
+        const payload = {
+          ar_id: arId,
+          collector_id: collectorId,
+          cash_account_id: cashAccId,
+          receipt_number: form.receipt_number.trim(),
+          collection_date: form.collection_date,
+          amount_received: Number(form.amount_received),
+          payment_method: form.payment_method,
+          reference_number: form.reference_number?.trim() || null,
+          remarks: form.remarks?.trim() || null,
+        }
+        const res = await apiFetch(`/api/collections/${modalMode.id}`, {
+          method: 'PUT',
+          body: JSON.stringify(payload),
+        })
+        const json = await res.json()
+        if (!json.success) {
+          if (json.errors) {
+            const fe = {}
+            for (const [k, v] of Object.entries(json.errors)) {
+              fe[k] = Array.isArray(v) ? v[0] : v
+            }
+            setFieldErrors(fe)
+          }
+          setFormError(json.errors ? Object.values(json.errors)[0]?.[0] : json.message || 'Something went wrong.')
+          return
+        }
+        closeModal()
+        refetch()
       }
-      closeModal()
-      refetch()
     } catch (err) {
       setFormError(err.message || 'Network error.')
     } finally {
@@ -1090,7 +1145,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                         <Tooltip label="Proof of receipt" align="start">
                           <button type="button" onClick={() => setProofTarget(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"><Paperclip size={15} /></button>
                         </Tooltip>
-                        {c.status !== 'Confirmed' && !c.deleted_at && (
+                        {c.status === 'Pending' && !c.deleted_at && (
                           <Tooltip label="Edit collection" align="start">
                             <button type="button" onClick={() => openEdit(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"><Pencil size={15} /></button>
                           </Tooltip>
@@ -1404,6 +1459,67 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
             <input type="text" value={form.remarks} onChange={(e) => setForm((f) => ({ ...f, remarks: e.target.value }))} className={INPUT} placeholder="Optional notes" />
           </div>
 
+          {/* Strictly require Proof of Receipt / Payment before submitting to Awaiting Confirmation */}
+          {modalMode === 'add' && (
+            <div>
+              <label className={LABEL}>
+                Proof of Receipt / Deposit Slip <span className="text-red-500 dark:text-red-400">*</span>
+              </label>
+              <div className={`relative border-2 border-dashed rounded-lg p-3.5 text-center transition-colors ${fieldErrors.proof ? 'border-red-400 bg-red-50/20 dark:border-red-500/30 dark:bg-red-500/10' : proofFile ? 'border-primary/50 bg-primary/5 dark:bg-primary/10' : 'border-border hover:border-primary/50'}`}>
+                {proofFile ? (
+                  <div className="flex items-center justify-between gap-2 px-2 py-1">
+                    <div className="flex items-center gap-2.5 min-w-0 text-left">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <Paperclip size={16} />
+                      </div>
+                      <div className="truncate">
+                        <p className="text-xs font-semibold text-ink truncate">{proofFile.name}</p>
+                        <p className="text-[11px] text-muted">{(proofFile.size / 1024).toFixed(1)} KB • Ready to upload</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setProofFile(null)}
+                      className="p-1 rounded-md text-muted hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
+                      title="Remove file"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="cursor-pointer block">
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png,image/jpeg,image/png,application/pdf"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) {
+                          setProofFile(file)
+                          setFieldErrors((fe) => ({ ...fe, proof: '' }))
+                        }
+                      }}
+                      className="hidden"
+                    />
+                    <Upload size={22} className="mx-auto text-muted mb-1.5" />
+                    <p className="text-xs font-medium text-ink">
+                      Click to upload proof of payment <span className="text-primary underline">or browse</span>
+                    </p>
+                    <p className="text-[11px] text-muted mt-0.5">
+                      Bank deposit slip, transfer screenshot, or check image (PDF, JPG, PNG up to 10MB)
+                    </p>
+                  </label>
+                )}
+              </div>
+              {fieldErrors.proof ? (
+                <p className="mt-1.5 text-xs font-medium text-red-500 dark:text-red-400">{fieldErrors.proof}</p>
+              ) : (
+                <p className="mt-1 text-[11px] text-muted">
+                  Strictly required: Finance mandates verified deposit or payment proof before queuing for confirmation.
+                </p>
+              )}
+            </div>
+          )}
+
           {isEditing && (
             <div className="rounded-lg border border-border bg-bg px-3 py-2.5">
               <p className="text-xs font-medium text-muted mb-1">Record Info (read-only)</p>
@@ -1561,7 +1677,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                 onClick={() => setProofTarget(confirmTarget)}
                 disabled={actioning}
               >
-                View Proof
+                {confirmTarget.has_proof ? 'View Proof' : 'Upload Proof'}
               </Button>
             )}
             <Button
@@ -1569,8 +1685,9 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
               size="md"
               icon={CheckCircle2}
               onClick={handleConfirm}
-              disabled={actioning}
+              disabled={actioning || (confirmTarget && !confirmTarget.has_proof)}
               loading={actioning}
+              title={confirmTarget && !confirmTarget.has_proof ? 'Upload proof before confirming' : ''}
             >
               {actioning ? 'Confirming…' : 'Confirm Collection'}
             </Button>
@@ -1580,6 +1697,29 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
         {confirmTarget && (
           <div className="space-y-4">
             <p className="text-sm text-muted">Confirming this collection will update the invoice balance and credit the cash account. This cannot be undone.</p>
+            {confirmTarget && !confirmTarget.has_proof && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300 flex items-start gap-2.5">
+                <AlertCircle size={18} className="shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-semibold text-amber-900 dark:text-amber-200">Missing Proof of Receipt</p>
+                  <p className="text-amber-800 dark:text-amber-300/90 mt-0.5">
+                    Finance internal controls strictly require an official proof of payment (deposit slip, bank transfer screenshot, or check scan) before confirmation.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const t = confirmTarget
+                      closeConfirm()
+                      setProofTarget(t)
+                    }}
+                    className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-md bg-amber-600 hover:bg-amber-700 text-white shadow-sm transition-colors"
+                  >
+                    <Paperclip size={13} />
+                    Upload Proof of Receipt Now
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="rounded-lg border border-border divide-y divide-border">
               <div className="px-3 py-2">
                 <DetailRow label="Receipt"         value={confirmTarget.receipt_number} />

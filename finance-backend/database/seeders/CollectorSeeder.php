@@ -29,7 +29,7 @@ class CollectorSeeder extends Seeder
             ['employee_no' => 'EMP-0110', 'first_name' => 'Christine', 'last_name' => 'Dizon', 'area' => 'MKT'],
         ];
 
-        foreach ($collectors as $c) {
+        foreach ($collectors as $index => $c) {
             $serviceArea = $serviceAreas->firstWhere('code', $c['area']);
 
             Collector::updateOrCreate(
@@ -38,14 +38,14 @@ class CollectorSeeder extends Seeder
                     'first_name' => $c['first_name'],
                     'last_name' => $c['last_name'],
                     'middle_name' => null,
-                    'phone_number' => fake()->numerify('09## ### ####'),
+                    'phone_number' => sprintf('0917 100 01%02d', $index + 1),
                     'email' => strtolower($c['first_name'] . '.' . $c['last_name']) . '@alibaton.test',
                     'profile_photo' => null,
                     'assigned_area' => $serviceArea?->name,
                     'service_area_id' => $serviceArea?->id,
-                    'commission_rate' => fake()->randomFloat(2, 1.5, 4.0),
-                    'monthly_target' => fake()->randomFloat(2, 150000, 350000),
-                    'status' => fake()->boolean(85) ? 'Active' : 'Inactive',
+                    'commission_rate' => 2.50 + ($index % 3) * 0.75,
+                    'monthly_target' => 150000 + $index * 20000,
+                    'status' => $c['employee_no'] === 'EMP-0110' ? 'Inactive' : 'Active',
                 ]
             );
         }
