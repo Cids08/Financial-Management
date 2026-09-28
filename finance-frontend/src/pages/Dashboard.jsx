@@ -446,6 +446,44 @@ export default function Dashboard() {
     route: cfg.route,
   }))
 
+  // Process cash distribution data: if more than 5 accounts exist, group into
+  // top 4 largest accounts + aggregated "Other Accounts (N)" slice.
+  // This keeps the donut clean, legible, and prevents legend collisions.
+  const rawCashData = chartData?.cash_distribution || []
+  const totalCashBalance = rawCashData.reduce((sum, item) => sum + (Number(item.value) || 0), 0)
+
+  const processedCashDistribution = (() => {
+    if (!rawCashData.length) return []
+    if (rawCashData.length <= 5) {
+      return rawCashData.map((item) => ({
+        ...item,
+        cleanName: item.label.replace(/\s*\([^)]*\)\s*$/, '').trim() || item.label,
+        percent: totalCashBalance > 0 ? Math.round((Number(item.value) / totalCashBalance) * 100) : 0,
+      }))
+    }
+
+    const sorted = [...rawCashData].sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
+    const top = sorted.slice(0, 4)
+    const others = sorted.slice(4)
+    const othersTotal = others.reduce((sum, item) => sum + (Number(item.value) || 0), 0)
+
+    const result = top.map((item) => ({
+      ...item,
+      cleanName: item.label.replace(/\s*\([^)]*\)\s*$/, '').trim() || item.label,
+      percent: totalCashBalance > 0 ? Math.round((Number(item.value) / totalCashBalance) * 100) : 0,
+    }))
+
+    result.push({
+      label: `Other Accounts (${others.length})`,
+      cleanName: `Other Accounts (${others.length})`,
+      value: othersTotal,
+      percent: totalCashBalance > 0 ? Math.round((othersTotal / totalCashBalance) * 100) : 0,
+      isOthers: true,
+    })
+
+    return result
+  })()
+
   return (
     <div className="space-y-5 animate-fadeIn">
       <Breadcrumb items={['Dashboard']} />
@@ -692,33 +730,69 @@ export default function Dashboard() {
               </ResponsiveContainer>
             </ChartCard>
 
-            <ChartCard title="Cash Account Distribution" subtitle="Available cash by account" route="/master-data/cash-accounts" navigate={navigate} empty={!chartData?.cash_distribution?.length} contentClassName="h-52">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={chartData?.cash_distribution}
-                    dataKey="value"
-                    nameKey="label"
-                    cx="50%"
-                    cy="40%"
-                    innerRadius={30}
-                    outerRadius={48}
-                    paddingAngle={2}
-                    strokeWidth={0}
-                  >
-                    {chartData?.cash_distribution?.map((entry, idx) => (
-                      <Cell key={entry.label} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
-                  <Legend
-                    layout="vertical"
-                    align="center"
-                    verticalAlign="bottom"
-                    wrapperStyle={{ fontSize: 10, lineHeight: '1.8', paddingTop: 4 }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
+            <ChartCard
+              title="Cash Account Distribution"
+              subtitle="Available cash by account"
+              route="/master-data/cash-accounts"
+              navigate={navigate}
+              empty={!processedCashDistribution.length}
+            >
+              <div className="flex h-full items-center gap-2">
+                <div className="h-full w-28 shrink-0 sm:w-32">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={processedCashDistribution}
+                        dataKey="value"
+                        nameKey="label"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={28}
+                        outerRadius={44}
+                        paddingAngle={2}
+                        strokeWidth={0}
+                      >
+                        {processedCashDistribution.map((entry, idx) => (
+                          <Cell key={entry.label} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <RechartsTooltip
+                        contentStyle={TOOLTIP_STYLE}
+                        formatter={(value, name) => [
+                          privacyMode ? MASKED : formatCurrency(value),
+                          name,
+                        ]}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="flex flex-1 flex-col justify-center gap-1.5 min-w-0 pr-1">
+                  {processedCashDistribution.map((item, idx) => {
+                    const color = PIE_COLORS[idx % PIE_COLORS.length]
+                    return (
+                      <div
+                        key={item.label}
+                        className="flex items-center justify-between text-xs gap-1.5 min-w-0"
+                        title={`${item.label}: ${privacyMode ? MASKED : formatCurrency(item.value)} (${item.percent}%)`}
+                      >
+                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                          <span
+                            className="h-2 w-2 rounded-full shrink-0"
+                            style={{ backgroundColor: color }}
+                          />
+                          <span className="truncate text-[11px] font-medium text-ink">
+                            {item.cleanName}
+                          </span>
+                        </div>
+                        <span className="shrink-0 text-[10px] font-semibold text-muted">
+                          {item.percent}%
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
             </ChartCard>
 
             <ChartCard title="Expenses by Category" subtitle={String(year)} route={CHART_ROUTES.expense_trend} navigate={navigate} empty={!chartData?.expense_breakdown?.length}>
