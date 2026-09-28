@@ -51,7 +51,7 @@ php artisan storage:link --force 2>/dev/null || true
 
 echo "==> Caching config, routes, views..."
 php artisan config:cache
-php artisan route:cache
+php artisan route:cache || echo "    (route:cache skipped — not all routes are cacheable, continuing without it)"
 php artisan view:cache
 
 echo "==> Starting supervisord..."

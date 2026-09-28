@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Singleton-style settings row for company branding + regional/financial defaults.
@@ -83,18 +84,13 @@ class Setting extends Model
             'data_retention_days' => 3650,
         ];
 
-        try {
-            return static::query()->create($payload);
-        } catch (\Throwable $e) {
-            // Gracefully recover if migrations haven't run yet or data_retention_days column is absent
-            unset($payload['data_retention_days']);
+        // Only fields the current schema actually has. So first-ever-run in a
+        // partially-migrated environment (e.g. data_retention_days migration
+        // not yet applied) still succeeds instead of throwing SQLSTATE[42703].
+        $columns = Schema::getColumnListing('settings');
 
-            try {
-                return static::query()->create($payload);
-            } catch (\Throwable $e2) {
-                unset($payload['default_penalty_rate'], $payload['exchange_rates'], $payload['base_currency'], $payload['tagline']);
-                return static::query()->create($payload);
-            }
-        }
+        return static::query()->create(
+            array_intersect_key($payload, array_flip($columns))
+        );
     }
 }
