@@ -16,6 +16,7 @@ Run alongside the existing forecasting service, on a different port
 
 import os
 import re
+from dataclasses import dataclass
 from typing import List, Optional
 
 import httpx
@@ -94,9 +95,105 @@ def _build_reasoning_block() -> Optional[dict]:
 INTERNAL_TOKEN = os.environ.get("INTERNAL_SERVICE_TOKEN", "")
 
 
+# Every misconfiguration below produced the SAME user-visible string
+# ("Sorry, I could not generate a response right now.") while having three
+# completely different root causes: a bad internal token (401), the service
+# being unreachable (Laravel-side exception), and an upstream OpenRouter
+# failure (HTTP 200 with the fallback text). collect_config_problems() turns
+# that invisible class of bug into something reportable on /health and in the
+# startup log, so a typo in one env var is diagnosable without reading source.
+def collect_config_problems() -> List[str]:
+    """Returns a list of human-readable configuration problems. Empty == healthy.
+
+    Never raises and never returns early: reports every problem at once so a
+    half-configured deploy doesn't have to be fixed one round-trip at a time.
+    """
+    problems: List[str] = []
+
+    if not INTERNAL_TOKEN:
+        problems.append(
+            "INTERNAL_SERVICE_TOKEN is empty. Every /reply, /summarize and "
+            "/recommendations call will be rejected with 401. This is the exact "
+            "bug load_dotenv() above was added to fix, so the env var is most "
+            "likely missing from the platform's environment (not just .env)."
+        )
+    elif len(INTERNAL_TOKEN) < 32:
+        # Not a hard failure, but a weak/placeholder secret is worth surfacing.
+        problems.append(
+            f"INTERNAL_SERVICE_TOKEN is only {len(INTERNAL_TOKEN)} characters; "
+            "it should be a long random string."
+        )
+
+    if not OPENAI_API_KEY:
+        problems.append(
+            "OPENAI_API_KEY is empty. Upstream calls will fail with 401 from "
+            "OpenRouter. Check the key is actually set and not revoked."
+        )
+
+    if not OPENAI_BASE_URL:
+        problems.append("OPENAI_BASE_URL is empty; requests would go nowhere.")
+
+    # gpt-5/o-series reject a non-default temperature outright, so a
+    # non-reasoning model paired with effort set (or vice versa) is a 400.
+    if ADVISOR_MODEL and REASONING_EFFORT and not _allows_temperature(ADVISOR_MODEL):
+        problems.append(
+            f"OPENAI_REASONING_EFFORT is set to {REASONING_EFFORT!r} but "
+            f"OPENAI_ADVISOR_MODEL={ADVISOR_MODEL!r} is a reasoning model. That "
+            "combination is valid; this is listed only because it is the most "
+            "common reason a deploy differs from local."
+        )
+
+    return problems
+
+
+def log_startup_config() -> None:
+    """Prints a one-line config summary plus any problems, at import time.
+
+    Printed rather than raised on purpose: raising here would make the
+    container crash-loop, which also takes /health down and leaves nothing to
+    query for a diagnosis. Loud logs + a still-responding /health is the more
+    debuggable failure mode.
+    """
+    print(
+        f"[ai-advisor] startup: model={ADVISOR_MODEL!r} "
+        f"recommendation_model={RECOMMENDATION_MODEL!r} "
+        f"base_url={OPENAI_BASE_URL!r} "
+        f"reasoning_effort={REASONING_EFFORT or '(unset)'!r} "
+        f"verbosity={VERBOSITY!r} store={STORE_RESPONSES} "
+        f"token_set={bool(INTERNAL_TOKEN)} token_len={len(INTERNAL_TOKEN)} "
+        f"api_key_set={bool(OPENAI_API_KEY)}"
+    )
+    problems = collect_config_problems()
+    if problems:
+        print(f"[ai-advisor] CONFIG PROBLEMS ({len(problems)}):")
+        for problem in problems:
+            print(f"[ai-advisor]   - {problem}")
+    else:
+        print("[ai-advisor] config OK")
+
+
+log_startup_config()
+
+
 def verify_internal_token(x_internal_token: str = Header(default="")):
-    if not INTERNAL_TOKEN or x_internal_token != INTERNAL_TOKEN:
+    # Log the *reason* for a rejection without ever logging the token itself:
+    # "missing" and "mismatched" look identical to the caller (both are a bare
+    # 401) but have completely different fixes, and the hosted investigation
+    # turned on exactly that distinction.
+    if not INTERNAL_TOKEN:
+        print(
+            "[ai-advisor] 401 REJECTED: INTERNAL_SERVICE_TOKEN is empty on this "
+            "service, so no caller can ever authenticate. Set it on the platform."
+        )
         raise HTTPException(status_code=401, detail="Invalid or missing internal service token")
+    if x_internal_token != INTERNAL_TOKEN:
+        print(
+            f"[ai-advisor] 401 REJECTED: token mismatch "
+            f"(received {len(x_internal_token)} chars, expected {len(INTERNAL_TOKEN)}). "
+            "Laravel's AI_ADVISOR_SERVICE_TOKEN must match INTERNAL_SERVICE_TOKEN exactly."
+        )
+        raise HTTPException(status_code=401, detail="Invalid or missing internal service token")
+    return True
 
 
 class Message(BaseModel):
@@ -348,6 +445,42 @@ def build_system_prompt(summary: Optional[str], grounding_data: List[dict]) -> s
     return prompt
 
 
+@dataclass
+class CompletionResult:
+    """Outcome of one upstream call, including *why* it failed.
+
+    Previously complete_responses() returned Optional[str] and every failure
+    mode collapsed to None, which the endpoints then turned into the same
+    fallback sentence. Carrying an explicit reason here is what makes an
+    upstream outage distinguishable from a bad request.
+    """
+
+    text: Optional[str] = None
+    # Short stable slug: missing_api_key, upstream_4xx, upstream_5xx,
+    # timeout, network_error, empty_output, malformed_output
+    reason: Optional[str] = None
+    status: Optional[int] = None
+    # Truncated upstream body, for the log. Never the API key.
+    detail: Optional[str] = None
+
+    @property
+    def ok(self) -> bool:
+        return self.text is not None
+
+    def describe(self) -> str:
+        bits = [f"reason={self.reason or 'unknown'}"]
+        if self.status is not None:
+            bits.append(f"status={self.status}")
+        if self.detail:
+            bits.append(f"detail={self.detail}")
+        return " ".join(bits)
+
+
+def _truncate(text: str, limit: int = 500) -> str:
+    text = " ".join((text or "").split())
+    return text if len(text) <= limit else text[:limit] + "...[truncated]"
+
+
 async def complete_responses(
     model: str,
     instructions: str,
@@ -355,7 +488,7 @@ async def complete_responses(
     max_tokens: int,
     temperature: float = 1.0,
     json_mode: bool = False,
-) -> Optional[str]:
+) -> CompletionResult:
     """One OpenAI Responses-API call (/v1/responses) using the same shape as
     the official gpt-5-mini snippet: text.format + verbosity, opt-in reasoning
     {effort, mode, summary}, and store. Laravel always gets a single JSON
@@ -382,13 +515,34 @@ async def complete_responses(
     if reasoning:
         body["reasoning"] = reasoning
 
+    if not OPENAI_API_KEY:
+        return CompletionResult(
+            reason="missing_api_key",
+            detail="OPENAI_API_KEY is empty on this service.",
+        )
+
     try:
         async with httpx.AsyncClient(timeout=60) as client:
             response = await client.post(f"{OPENAI_BASE_URL}/responses", json=body, headers=headers)
 
         if response.status_code >= 400:
-            print(f"[ai-advisor] OpenAI request failed: {response.status_code} {response.text}")
-            return None
+            # Split 401 (credential/config) from 5xx (provider outage) from
+            # 400 (malformed request) because the first is a deployment bug
+            # and the others are not.
+            if response.status_code == 401:
+                reason = "upstream_401"
+            elif response.status_code == 400:
+                reason = "upstream_400_bad_request"
+            elif response.status_code >= 500:
+                reason = "upstream_5xx"
+            else:
+                reason = f"upstream_{response.status_code}"
+            print(
+                f"[ai-advisor] OpenAI request failed: {response.status_code} "
+                f"model={model} {reason} body={_truncate(response.text)}"
+            )
+            return CompletionResult(reason=reason, status=response.status_code,
+                                    detail=_truncate(response.text))
 
         data = response.json()
         # Prefer the top-level output_text convenience field, but fall back
@@ -406,13 +560,28 @@ async def complete_responses(
                         parts.append(block.get("text", ""))
             content = "".join(parts) or None
         if content is None:
-            return None
+            # Completed but nothing readable: usually max_output_tokens fully
+            # consumed by reasoning, which is a token-budget problem, not a
+            # transport one. Log the incomplete/incomplete_details signal.
+            incomplete = data.get("incomplete_details") or data.get("status") or "unknown"
+            print(
+                f"[ai-advisor] upstream returned no readable text: model={model} "
+                f"status={data.get('status')} incomplete={incomplete} "
+                f"output_types={[i.get('type') for i in data.get('output', [])]}"
+            )
+            return CompletionResult(reason="empty_output", status=response.status_code,
+                                    detail=f"status={data.get('status')} incomplete={incomplete}")
         # Never rewrite structured JSON (recommendations) — only prose replies
         # get the em-dash backstop so the JSON shape is never corrupted.
-        return strip_em_dashes(content) if not json_mode else content
+        return CompletionResult(
+            text=content if json_mode else strip_em_dashes(content)
+        )
+    except httpx.TimeoutException as e:
+        print(f"[ai-advisor] OpenAI request timed out after 60s: {e}")
+        return CompletionResult(reason="timeout", detail=str(e))
     except Exception as e:
-        print(f"[ai-advisor] OpenAI request exception: {e}")
-        return None
+        print(f"[ai-advisor] OpenAI request exception: {type(e).__name__}: {e}")
+        return CompletionResult(reason="network_error", detail=f"{type(e).__name__}: {e}")
 
 
 @app.post("/reply", response_model=ReplyResponse, dependencies=[])
@@ -433,9 +602,19 @@ async def reply(req: ReplyRequest, x_internal_token: str = Header(default="")):
         max_tokens=3000,
         temperature=0.4,
     )
-    if result:
-        result = strip_echo(result, req.message)
-    return ReplyResponse(reply=result or "Sorry, I could not generate a response right now.")
+    if not result.ok:
+        # Return 502 rather than a 200 carrying the fallback sentence. The
+        # chat shows the same sentence either way (RemoteAdvisorEngine falls
+        # back to it on any non-2xx), but a 502 makes Laravel's
+        # `$response->failed()` branch fire, so the failure is recorded in
+        # laravel.log too instead of existing only in this service's stdout.
+        print(f"[ai-advisor] /reply upstream failure: {result.describe()}")
+        raise HTTPException(
+            status_code=502,
+            detail=f"Upstream completion failed ({result.reason}).",
+        )
+    reply_text = strip_echo(result.text, req.message)
+    return ReplyResponse(reply=reply_text)
 
 
 @app.post("/summarize", response_model=SummarizeResponse)
@@ -453,7 +632,12 @@ async def summarize(req: SummarizeRequest, x_internal_token: str = Header(defaul
         max_tokens=800,
         temperature=0,
     )
-    return SummarizeResponse(summary=result)
+    if not result.ok:
+        # Summarization is a background nicety, not the user's request, so this
+        # degrades to None (no summary) rather than failing the caller.
+        print(f"[ai-advisor] /summarize upstream failure: {result.describe()}")
+        return SummarizeResponse(summary=None)
+    return SummarizeResponse(summary=result.text)
 
 
 def build_recommendation_system_prompt() -> str:
@@ -504,17 +688,22 @@ async def recommendations(req: RecommendationRequest, x_internal_token: str = He
         temperature=0.2,
         json_mode=True,
     )
-    if raw is None:
+    if not raw.ok:
+        # Empty list keeps the forecast pipeline working (a forecast with no
+        # recommendations is valid), but the reason is logged so a silent
+        # "the AI never produced anything" is distinguishable from "the model
+        # legitimately returned nothing".
+        print(f"[ai-advisor] /recommendations upstream failure: {raw.describe()}")
         return RecommendationsResponse(recommendations=[])
 
     try:
-        decoded = _json.loads(raw)
+        decoded = _json.loads(raw.text)
     except _json.JSONDecodeError:
-        print(f"[ai-advisor] recommendation response malformed: {raw}")
+        print(f"[ai-advisor] recommendation response malformed: {_truncate(raw.text)}")
         return RecommendationsResponse(recommendations=[])
 
     if not isinstance(decoded, dict) or not isinstance(decoded.get("recommendations"), list):
-        print(f"[ai-advisor] recommendation response malformed: {raw}")
+        print(f"[ai-advisor] recommendation response malformed: {_truncate(raw.text)}")
         return RecommendationsResponse(recommendations=[])
 
     # Same defensive filter as the original PHP engine: the model can
@@ -552,4 +741,29 @@ async def recommendations(req: RecommendationRequest, x_internal_token: str = He
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    """Liveness plus a config report.
+
+    Reports the resolved configuration because this endpoint is the only one
+    reachable without the internal token, and a misconfigured deploy (empty
+    INTERNAL_SERVICE_TOKEN, missing key) is otherwise indistinguishable from a
+    healthy one that merely can't reach OpenRouter. Secrets are reported as
+    booleans/lengths only, never values.
+    """
+    problems = collect_config_problems()
+    return {
+        "status": "ok" if not problems else "degraded",
+        "config": {
+            "advisor_model": ADVISOR_MODEL,
+            "recommendation_model": RECOMMENDATION_MODEL,
+            "base_url": OPENAI_BASE_URL,
+            "reasoning_effort": REASONING_EFFORT or None,
+            "reasoning_mode": REASONING_MODE,
+            "reasoning_summary": REASONING_SUMMARY,
+            "verbosity": VERBOSITY,
+            "store_responses": STORE_RESPONSES,
+            "internal_token_set": bool(INTERNAL_TOKEN),
+            "internal_token_length": len(INTERNAL_TOKEN),
+            "api_key_set": bool(OPENAI_API_KEY),
+        },
+        "problems": problems,
+    }

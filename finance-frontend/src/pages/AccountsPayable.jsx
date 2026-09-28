@@ -27,8 +27,7 @@ import { useSearchParams } from 'react-router-dom'
 
 const PAYMENT_METHODS = ['Bank Transfer', 'Check', 'Cash', 'GCash']
 // Confirmed via pg_get_constraintdef on accounts_payable_status_check  - 
-// same allowed set as accounts_receivable.
-const STATUS_OPTIONS = ['Pending', 'Partially Paid', 'Paid', 'Overdue', 'Cancelled']
+const STATUS_OPTIONS = ['Pending Approval', 'For Payment', 'Partially Paid', 'Paid', 'Overdue', 'Cancelled']
 const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const ACCEPTED_DOCUMENT_TYPES = [...ACCEPTED_IMAGE_TYPES, 'application/pdf']
 const MAX_IMAGE_MB = 8
@@ -47,7 +46,7 @@ const MAX_BILL_DATE = `${new Date().getFullYear() + 5}-12-31`
 const EMPTY_FORM = {
   supplier_id: '', account_id: '', invoice_number: '', invoice_date: '', due_date: '', amount: '',
   payment_method: 'Bank Transfer', billing_address: '', description: '', reference_number: '',
-  status: 'Pending', purchase_order_no: '', penalty_rate: '',
+  status: 'Pending Approval', purchase_order_no: '', penalty_rate: '',
 }
 
 const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
@@ -59,17 +58,36 @@ const INPUT_TEXT_STYLE = { color: 'var(--color-ink, #0f172a)', caretColor: 'var(
 const LABEL = 'block text-xs font-medium text-muted mb-1.5'
 
 const STATUS_STYLES = {
+  'Pending Approval': 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400',
   Pending: 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400',
+  'For Payment': 'bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-400',
+  Approved: 'bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-400',
   'Partially Paid': 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400',
   Paid: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
   Overdue: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
   Cancelled: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
 }
 
-// Mirrors AccountsReceivable.jsx: a bill only counts as overdue (and thus
-// shows its penalty amount) when its status is explicitly 'Overdue'.
+export function getApDisplayStatus(record) {
+  if (!record) return 'Pending Approval'
+  if (record.status === 'Cancelled') return 'Cancelled'
+  const balance = Number(record.remaining_balance ?? record.amount ?? 0)
+  const paid = Number(record.paid_amount ?? 0)
+  if (balance <= 0) return 'Paid'
+  if (record.due_date) {
+    const due = new Date(record.due_date)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    if (due < today) return 'Overdue'
+  }
+  if (paid > 0) return 'Partially Paid'
+  if (!record.approved_by) return 'Pending Approval'
+  return 'For Payment'
+}
+
 function isOverdueBill(record) {
-  return record.status === 'Overdue'
+  if (!record) return false
+  return getApDisplayStatus(record) === 'Overdue'
 }
 
 function getNextReferenceNo(records = []) {
@@ -497,7 +515,10 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
 
   const filtered = useMemo(() => {
     return sourceList.filter((r) => {
-      if (statusFilter !== 'all' && r.status !== statusFilter) return false
+      if (statusFilter !== 'all') {
+        const apStatus = getApDisplayStatus(r)
+        if (apStatus !== statusFilter && r.status !== statusFilter) return false
+      }
       const q = search.toLowerCase()
       if (search
         && !r.invoice_number.toLowerCase().includes(q)
@@ -570,7 +591,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
       billing_address: r.billing_address || '',
       description: r.description || '',
       reference_number: r.reference_number || '',
-      status: r.status,
+      status: getApDisplayStatus(r),
       purchase_order_no: r.purchase_order_no || '',
       penalty_rate: r.penalty_rate != null && Number(r.penalty_rate) > 0 ? String(r.penalty_rate) : '',
     })
@@ -657,10 +678,8 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
           rows: [
             ['Original Amount', money_(r.amount)],
             ['Paid Amount', money_(r.paid_amount)],
-            ...(r.penalty_rate
-              ? isOverdueBill(r)
-                ? [['Penalty', `${r.penalty_rate}% (${money_(r.penalty_amount)})`, 'muted']]
-                : [['Penalty Rate', `${r.penalty_rate}% (applies when overdue)`, 'muted']]
+            ...(r.penalty_rate && isOverdueBill(r)
+              ? [['Penalty', `${r.penalty_rate}% (${money_(r.penalty_amount)})`, 'muted']]
               : []),
             ['Remaining Balance', money_(r.remaining_balance), 'total'],
           ],
@@ -992,7 +1011,12 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                     ) : <span className="text-muted">—</span>}
                   </td>
                   <td className="px-2 py-2 whitespace-nowrap text-left">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[r.status] || 'bg-gray-100 text-muted'}`}>{r.status}</span>
+                    {(() => {
+                      const apStatus = getApDisplayStatus(r)
+                      return (
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[apStatus] || 'bg-gray-100 text-muted'}`}>{apStatus}</span>
+                      )
+                    })()}
                   </td>
                   <td className="px-2.5 py-2 text-right">
                     <div className="flex items-center justify-end gap-1">
@@ -1176,6 +1200,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
               <label className={LABEL}>Supplier <span className="text-red-500 dark:text-red-400">*</span></label>
               <select
                 value={form.supplier_id}
+                disabled={isEditing}
                 onChange={(e) => {
                   const newSupplierId = e.target.value
                   setForm((f) => {
@@ -1188,10 +1213,11 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                     }
                   })
                 }}
-                className={INPUT}
+                className={`${INPUT} ${isEditing ? 'opacity-80 cursor-not-allowed bg-slate-100 dark:bg-slate-800' : ''}`}
               >
                 {suppliers.map((s) => <option key={s.supplier_id} value={s.supplier_id}>{s.supplier_name}</option>)}
               </select>
+              {isEditing && <p className="mt-1 text-[11px] text-muted">Supplier cannot be changed once recorded.</p>}
             </div>
             <div>
               <label className={LABEL}>Invoice Number <span className="text-red-500 dark:text-red-400">*</span></label>
@@ -1412,7 +1438,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
         footer={
           <>
             <Button variant="secondary" size="md" onClick={closeDetail}>Close</Button>
-            {detailRecord && !detailRecord.approved_by && !detailRecord.is_archived && detailRecord.status !== 'Cancelled' && (
+            {detailRecord && canApprove && !detailRecord.approved_by && !detailRecord.is_archived && detailRecord.status !== 'Cancelled' && (
               <>
                 <button
                   type="button"
@@ -1472,26 +1498,28 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                     <p className="text-[11px] text-amber-700 dark:text-amber-300">This bill requires approval before disbursements or payments can proceed.</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    type="button"
-                    disabled={actionBusyId === detailRecord.ap_id}
-                    onClick={() => handleApprove(detailRecord)}
-                    className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow transition-all duration-150 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <CheckCircle2 size={13} className={actionBusyId === detailRecord.ap_id ? 'animate-spin' : ''} />
-                    {actionBusyId === detailRecord.ap_id ? 'Approving…' : 'Approve Bill'}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={actionBusyId === detailRecord.ap_id}
-                    onClick={() => openReject(detailRecord)}
-                    className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-red-200 bg-white hover:bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-surface dark:text-red-400 dark:hover:bg-red-500/10 shadow-sm transition-all duration-150 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <XCircle size={13} />
-                    Reject
-                  </button>
-                </div>
+                {canApprove && (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      disabled={actionBusyId === detailRecord.ap_id}
+                      onClick={() => handleApprove(detailRecord)}
+                      className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow transition-all duration-150 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <CheckCircle2 size={13} className={actionBusyId === detailRecord.ap_id ? 'animate-spin' : ''} />
+                      {actionBusyId === detailRecord.ap_id ? 'Approving…' : 'Approve Bill'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={actionBusyId === detailRecord.ap_id}
+                      onClick={() => openReject(detailRecord)}
+                      className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-lg border border-red-200 bg-white hover:bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-surface dark:text-red-400 dark:hover:bg-red-500/10 shadow-sm transition-all duration-150 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <XCircle size={13} />
+                      Reject
+                    </button>
+                  </div>
+                )}
               </div>
             )}
             <div className="flex items-center justify-between">
@@ -1499,7 +1527,12 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                 <p className="text-sm font-semibold text-ink">{detailRecord.invoice_number}</p>
                 <p className="text-xs text-muted">{detailRecord.supplier_name || supplierName(detailRecord.supplier_id)}</p>
               </div>
-              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[detailRecord.status] || 'bg-gray-100 text-muted'}`}>{detailRecord.status}</span>
+              {(() => {
+                const modalStatus = getApDisplayStatus(detailRecord)
+                return (
+                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[modalStatus] || 'bg-gray-100 text-muted'}`}>{modalStatus}</span>
+                )
+              })()}
             </div>
             <div className="rounded-lg border border-border divide-y divide-border">
               <div className="px-3 py-2">

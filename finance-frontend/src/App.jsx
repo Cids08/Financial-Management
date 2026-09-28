@@ -148,7 +148,10 @@ export default function App() {
 
           {/* Financial Transactions */}
           <Route path="/transactions/receivable" element={
-            <RequirePermission permission="ar.view">
+            // ar.view stays on the Collector role for the API scope only.
+            // ar.manage gates every UI entry point (sidebar, search, direct URL)
+            // so collectors cannot reach the AR page by any path.
+            <RequirePermission permission="ar.manage">
               <AccountsReceivable crumbs={['Financial Transactions', 'Accounts Receivable']} />
             </RequirePermission>
           } />

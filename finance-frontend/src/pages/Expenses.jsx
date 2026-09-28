@@ -950,12 +950,14 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                       {filters.trashed && (
                         <>
                         <RetentionCountdown deletedAt={x.deleted_at} compact />
-                        <DeletePermanentButton
-                          endpoint={`/api/expenses/${x.id}/permanent`}
-                          label="expense"
-                          name={x.description || ''}
-                          onDeleted={refetch}
-                        />
+                        {isAdmin && (
+                          <DeletePermanentButton
+                            endpoint={`/api/expenses/${x.id}/permanent`}
+                            label="expense"
+                            name={x.description || ''}
+                            onDeleted={refetch}
+                          />
+                        )}
                         </>
                       )}
                     </div>

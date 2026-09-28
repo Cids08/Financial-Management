@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FMS Microservices Architecture Diagram</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 25px 15px;
+    }
+    .toolbar {
+      margin-bottom: 20px;
+      display: flex;
+      gap: 12px;
+    }
+    .btn-download {
+      background: #0284c7;
+      color: #ffffff;
+      border: none;
+      padding: 12px 24px;
+      font-size: 15px;
+      font-weight: 700;
+      border-radius: 8px;
+      cursor: pointer;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+      transition: background 0.15s ease, transform 0.1s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn-download:hover {
+      background: #0369a1;
+      transform: translateY(-1px);
+    }
+    .btn-download:active {
+      transform: translateY(0);
+    }
+    .canvas-card {
+      background: #ffffff;
+      padding: 25px 25px 35px 25px;
+      border-radius: 14px;
+      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.06);
+      width: 100%;
+      max-width: 1140px;
+    }
+    svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Toolbar with 1-Click Download Button -->
+  <div class="toolbar">
+    <button id="downloadBtn" class="btn-download" onclick="downloadPNG()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+        <polyline points="7 10 12 15 17 10"></polyline>
+        <line x1="12" y1="15" x2="12" y2="3"></line>
+      </svg>
+      Download High-Resolution PNG
+    </button>
+  </div>
+
+  <div class="canvas-card">
+    <svg id="architectureSvg" viewBox="0 0 1240 680" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <!-- Marker Arrows -->
+        <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#0f172a" />
+        </marker>
+        <marker id="arrow-blue" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#0284c7" />
+        </marker>
+        <marker id="arrow-purple" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#7e22ce" />
+        </marker>
+        <marker id="arrow-amber" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#b45309" />
+        </marker>
+
+        <!-- Drop Shadow -->
+        <filter id="soft-shadow" x="-5%" y="-5%" width="110%" height="115%">
+          <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.04"/>
+        </filter>
+      </defs>
+
+      <!-- White Background for SVG Export -->
+      <rect width="1240" height="680" fill="#ffffff" />
+
+      <!-- ========================================== -->
+      <!-- 1. CLIENT / USER (REACT.JS FRONTEND)       -->
+      <!-- ========================================== -->
+      <g transform="translate(430, 16)">
+        <rect x="0" y="0" width="380" height="64" rx="8" fill="#ffffff" stroke="#0284c7" stroke-width="2" filter="url(#soft-shadow)"/>
+        <text x="190" y="28" text-anchor="middle" font-size="16" font-weight="800" fill="#0f172a">Client / User</text>
+        <text x="190" y="48" text-anchor="middle" font-size="13" font-weight="500" fill="#334155">(React.js Frontend)</text>
+      </g>
+
+      <!-- Arrow: User -> Gateway -->
+      <line x1="620" y1="80" x2="620" y2="108" stroke="#0f172a" stroke-width="2" marker-end="url(#arrow)" />
+
+      <!-- ========================================== -->
+      <!-- 2. NGINX API GATEWAY                       -->
+      <!-- ========================================== -->
+      <g transform="translate(430, 110)">
+        <rect x="0" y="0" width="380" height="62" rx="8" fill="#f8fafc" stroke="#64748b" stroke-width="1.8" filter="url(#soft-shadow)"/>
+        <text x="190" y="27" text-anchor="middle" font-size="16" font-weight="800" fill="#0f172a">Nginx</text>
+        <text x="190" y="46" text-anchor="middle" font-size="13" font-weight="600" fill="#334155">API Gateway</text>
+      </g>
+
+      <!-- ========================================== -->
+      <!-- ARROWS: NGINX -> THE THREE SERVICES        -->
+      <!-- ========================================== -->
+      <!-- Left: Gateway -> Financial Management Service -->
+      <path d="M 620 172 L 620 190 L 255 190 L 255 220" fill="none" stroke="#0f172a" stroke-width="2" marker-end="url(#arrow)"/>
+      <rect x="260" y="196" width="70" height="18" rx="4" fill="#ffffff"/>
+      <text x="295" y="209" text-anchor="middle" font-size="11" font-weight="700" fill="#0f172a">REST API</text>
+
+      <!-- Center: Gateway -> Forecasting Service -->
+      <line x1="620" y1="172" x2="620" y2="220" stroke="#0f172a" stroke-width="2" marker-end="url(#arrow)" />
+      <rect x="625" y="196" width="70" height="18" rx="4" fill="#ffffff"/>
+      <text x="660" y="209" text-anchor="middle" font-size="11" font-weight="700" fill="#0f172a">REST API</text>
+
+      <!-- Right: Gateway -> AI Service -->
+      <path d="M 620 172 L 620 190 L 1025 190 L 1025 220" fill="none" stroke="#0f172a" stroke-width="2" marker-end="url(#arrow)"/>
+      <rect x="955" y="196" width="70" height="18" rx="4" fill="#ffffff"/>
+      <text x="990" y="209" text-anchor="middle" font-size="11" font-weight="700" fill="#0f172a">REST API</text>
+
+      <!-- ========================================== -->
+      <!-- 3. SERVICE 1: FINANCIAL MANAGEMENT SERVICE -->
+      <!-- ========================================== -->
+      <g transform="translate(30, 224)">
+        <!-- Outer Box -->
+        <rect x="0" y="0" width="420" height="280" rx="14" fill="#f0f7ff" stroke="#3b82f6" stroke-width="2" filter="url(#soft-shadow)"/>
+        <text x="210" y="28" text-anchor="middle" font-size="16" font-weight="800" fill="#0f172a">Financial Management Service</text>
+        <text x="210" y="46" text-anchor="middle" font-size="12" font-weight="600" fill="#334155">(Laravel / PHP)</text>
+
+        <!-- Dashed Inner Box: Financial Modules -->
+        <rect x="14" y="60" width="392" height="204" rx="10" fill="none" stroke="#60a5fa" stroke-width="1.5" stroke-dasharray="4 4" />
+        <text x="210" y="78" text-anchor="middle" font-size="11.5" font-weight="800" fill="#1e293b">Financial Modules</text>
+
+        <!-- Row 1 -->
+        <rect x="22" y="90" width="118" height="34" rx="6" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
+        <text x="81" y="104" text-anchor="middle" font-size="9" font-weight="700" fill="#0f172a">Authentication</text>
+        <text x="81" y="116" text-anchor="middle" font-size="8.5" font-weight="600" fill="#334155">&amp; User Management</text>
+
+        <rect x="151" y="90" width="118" height="34" rx="6" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
+        <text x="210" y="105" text-anchor="middle" font-size="9.5" font-weight="700" fill="#0f172a">Accounts</text>
+        <text x="210" y="117" text-anchor="middle" font-size="9" font-weight="600" fill="#334155">Receivable</text>
+
+        <rect x="280" y="90" width="118" height="34" rx="6" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
+        <text x="339" y="111" text-anchor="middle" font-size="9.5" font-weight="700" fill="#0f172a">Collections</text>
+
+        <!-- Row 2 -->
+        <rect x="22" y="132" width="118" height="34" rx="6" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
+        <text x="81" y="147" text-anchor="middle" font-size="9.5" font-weight="700" fill="#0f172a">Accounts</text>
+        <text x="81" y="159" text-anchor="middle" font-size="9" font-weight="600" fill="#334155">Payable</text>
+
+        <rect x="151" y="132" width="118" height="34" rx="6" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
+        <text x="210" y="153" text-anchor="middle" font-size="9.5" font-weight="700" fill="#0f172a">Disbursements</text>
+
+        <rect x="280" y="132" width="118" height="34" rx="6" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
+        <text x="339" y="153" text-anchor="middle" font-size="9.5" font-weight="700" fill="#0f172a">Budget Management</text>
+
+        <!-- Row 3 -->
+        <rect x="22" y="174" width="118" height="34" rx="6" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
+        <text x="81" y="195" text-anchor="middle" font-size="9" font-weight="700" fill="#0f172a">Expense Management</text>
+
+        <rect x="151" y="174" width="118" height="34" rx="6" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
+        <text x="210" y="195" text-anchor="middle" font-size="9.5" font-weight="700" fill="#0f172a">Tax Management</text>
+
+        <rect x="280" y="174" width="118" height="34" rx="6" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
+        <text x="339" y="195" text-anchor="middle" font-size="9.5" font-weight="700" fill="#0f172a">General Ledger</text>
+
+        <!-- Bottom Full Row -->
+        <rect x="22" y="218" width="376" height="34" rx="6" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
+        <text x="210" y="239" text-anchor="middle" font-size="10.5" font-weight="700" fill="#0f172a">Financial Reporting &amp; Dashboard</text>
+      </g>
+
+      <!-- Arrow: Financial Service -> Database -->
+      <line x1="240" y1="504" x2="240" y2="538" stroke="#0f172a" stroke-width="2" marker-end="url(#arrow)" />
+
+      <!-- Cylinder 1: Financial Database -->
+      <g transform="translate(165, 540)">
+        <path d="M 0 14 A 75 14 0 0 1 150 14 L 150 72 A 75 14 0 0 1 0 72 Z" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.8"/>
+        <ellipse cx="75" cy="14" rx="75" ry="14" fill="#bae6fd" stroke="#0284c7" stroke-width="1.8"/>
+        <path d="M 0 32 A 75 12 0 0 0 150 32" fill="none" stroke="#0284c7" stroke-width="1.2"/>
+        <path d="M 0 52 A 75 12 0 0 0 150 52" fill="none" stroke="#0284c7" stroke-width="1.2"/>
+        <text x="75" y="46" text-anchor="middle" font-size="14" font-weight="800" fill="#0369a1">PostgreSQL</text>
+        <text x="75" y="64" text-anchor="middle" font-size="11" font-weight="600" fill="#0f172a">Financial Database</text>
+      </g>
+
+      <!-- ========================================== -->
+      <!-- 4. SERVICE 2: FORECASTING SERVICE          -->
+      <!-- ========================================== -->
+      <g transform="translate(485, 224)">
+        <rect x="0" y="0" width="270" height="280" rx="14" fill="#faf5ff" stroke="#a855f7" stroke-width="2" filter="url(#soft-shadow)"/>
+        <text x="135" y="28" text-anchor="middle" font-size="16" font-weight="800" fill="#0f172a">Forecasting Service</text>
+        <text x="135" y="46" text-anchor="middle" font-size="12" font-weight="600" fill="#334155">(Python / FastAPI)</text>
+
+        <!-- Dashed Inner Box: ARIMA Forecasting -->
+        <rect x="14" y="60" width="242" height="204" rx="10" fill="none" stroke="#c084fc" stroke-width="1.5" stroke-dasharray="4 4" />
+        
+        <text x="135" y="145" text-anchor="middle" font-size="14.5" font-weight="800" fill="#0f172a">ARIMA Forecasting</text>
+        <text x="135" y="170" text-anchor="middle" font-size="11" font-weight="500" fill="#475569">Revenue, Expenses,</text>
+        <text x="135" y="188" text-anchor="middle" font-size="11" font-weight="500" fill="#475569">Cash Flow, etc.</text>
+      </g>
+
+      <!-- Arrow: Forecasting Service -> Database -->
+      <line x1="620" y1="504" x2="620" y2="538" stroke="#0f172a" stroke-width="2" marker-end="url(#arrow)" />
+
+      <!-- Cylinder 2: Forecasting Database -->
+      <g transform="translate(535, 540)">
+        <path d="M 0 14 A 85 14 0 0 1 170 14 L 170 78 A 85 14 0 0 1 0 78 Z" fill="#f3e8ff" stroke="#7e22ce" stroke-width="1.8"/>
+        <ellipse cx="85" cy="14" rx="85" ry="14" fill="#e9d5ff" stroke="#7e22ce" stroke-width="1.8"/>
+        <path d="M 0 34 A 85 12 0 0 0 170 34" fill="none" stroke="#7e22ce" stroke-width="1.2"/>
+        <path d="M 0 54 A 85 12 0 0 0 170 54" fill="none" stroke="#7e22ce" stroke-width="1.2"/>
+        <text x="85" y="44" text-anchor="middle" font-size="13" font-weight="800" fill="#6b21a8">PostgreSQL</text>
+        <text x="85" y="58" text-anchor="middle" font-size="10.5" font-weight="600" fill="#0f172a">Forecasting Database</text>
+        <text x="85" y="71" text-anchor="middle" font-size="8.5" font-weight="500" fill="#475569">(Historical Data &amp;</text>
+        <text x="85" y="82" text-anchor="middle" font-size="8.5" font-weight="500" fill="#475569">Forecast Results)</text>
+      </g>
+
+      <!-- ========================================== -->
+      <!-- 5. SERVICE 3: AI SERVICE                   -->
+      <!-- ========================================== -->
+      <g transform="translate(790, 224)">
+        <rect x="0" y="0" width="270" height="280" rx="14" fill="#fffbeb" stroke="#d97706" stroke-width="2" filter="url(#soft-shadow)"/>
+        <text x="135" y="28" text-anchor="middle" font-size="16" font-weight="800" fill="#0f172a">AI Service</text>
+        <text x="135" y="46" text-anchor="middle" font-size="12" font-weight="600" fill="#334155">(Python / FastAPI)</text>
+
+        <!-- Dashed Inner Box: OpenAI GPT -->
+        <rect x="14" y="60" width="242" height="204" rx="10" fill="none" stroke="#fcd34d" stroke-width="1.5" stroke-dasharray="4 4" />
+        
+        <text x="135" y="145" text-anchor="middle" font-size="14.5" font-weight="800" fill="#0f172a">OpenAI GPT</text>
+        <text x="135" y="170" text-anchor="middle" font-size="11" font-weight="500" fill="#475569">Financial Analysis</text>
+        <text x="135" y="188" text-anchor="middle" font-size="11" font-weight="500" fill="#475569">&amp; Decision Support</text>
+      </g>
+
+      <!-- Arrow: AI Service -> Database -->
+      <line x1="925" y1="504" x2="925" y2="538" stroke="#0f172a" stroke-width="2" marker-end="url(#arrow)" />
+
+      <!-- Cylinder 3: AI Database -->
+      <g transform="translate(840, 540)">
+        <path d="M 0 14 A 85 14 0 0 1 170 14 L 170 78 A 85 14 0 0 1 0 78 Z" fill="#fef3c7" stroke="#b45309" stroke-width="1.8"/>
+        <ellipse cx="85" cy="14" rx="85" ry="14" fill="#fde68a" stroke="#b45309" stroke-width="1.8"/>
+        <path d="M 0 34 A 85 12 0 0 0 170 34" fill="none" stroke="#b45309" stroke-width="1.2"/>
+        <path d="M 0 54 A 85 12 0 0 0 170 54" fill="none" stroke="#b45309" stroke-width="1.2"/>
+        <text x="85" y="44" text-anchor="middle" font-size="13" font-weight="800" fill="#92400e">PostgreSQL</text>
+        <text x="85" y="58" text-anchor="middle" font-size="10.5" font-weight="600" fill="#0f172a">AI Database</text>
+        <text x="85" y="71" text-anchor="middle" font-size="8.5" font-weight="500" fill="#475569">(Prompts, Analyses,</text>
+        <text x="85" y="82" text-anchor="middle" font-size="8.5" font-weight="500" fill="#475569">Recommendations)</text>
+      </g>
+
+      <!-- ========================================== -->
+      <!-- 6. HORIZONTAL INTER-SERVICE REST ARROWS    -->
+      <!-- ========================================== -->
+      
+      <!-- Between Financial Management & Forecasting -->
+      <!-- Top Arrow: Financial -> Forecasting (Financial Data) -->
+      <line x1="450" y1="330" x2="480" y2="330" stroke="#0f172a" stroke-width="1.8" marker-end="url(#arrow)" />
+      <text x="466" y="322" text-anchor="middle" font-size="8.5" font-weight="800" fill="#0f172a">REST API</text>
+      <text x="466" y="342" text-anchor="middle" font-size="7" font-weight="600" fill="#475569">(Financial Data)</text>
+
+      <!-- Bottom Arrow: Forecasting -> Financial (Forecast Results) -->
+      <line x1="485" y1="380" x2="455" y2="380" stroke="#0f172a" stroke-width="1.8" marker-end="url(#arrow)" />
+      <text x="468" y="372" text-anchor="middle" font-size="8.5" font-weight="800" fill="#0f172a">REST API</text>
+      <text x="468" y="392" text-anchor="middle" font-size="7" font-weight="600" fill="#475569">(Forecast Results)</text>
+
+
+      <!-- Between Forecasting & AI Service -->
+      <!-- Top Arrow: Forecasting -> AI Service (Forecast Results) -->
+      <line x1="755" y1="330" x2="785" y2="330" stroke="#0f172a" stroke-width="1.8" marker-end="url(#arrow)" />
+      <text x="770" y="322" text-anchor="middle" font-size="8.5" font-weight="800" fill="#0f172a">REST API</text>
+      <text x="770" y="342" text-anchor="middle" font-size="7" font-weight="600" fill="#475569">(Forecast Results)</text>
+
+      <!-- Bottom Arrow: AI Service -> Forecasting (AI Recommendations) -->
+      <line x1="790" y1="380" x2="760" y2="380" stroke="#0f172a" stroke-width="1.8" marker-end="url(#arrow)" />
+      <text x="772" y="372" text-anchor="middle" font-size="8.5" font-weight="800" fill="#0f172a">REST API</text>
+      <text x="772" y="392" text-anchor="middle" font-size="7" font-weight="600" fill="#475569">(AI Recommendations)</text>
+
+    </svg>
+  </div>
+
+  <canvas id="exportCanvas" style="display:none;"></canvas>
+
+  <script>
+    function downloadPNG() {
+      const svg = document.getElementById('architectureSvg');
+      const canvas = document.getElementById('exportCanvas');
+      const ctx = canvas.getContext('2d');
+
+      // Ultra-HD scale (2.5x)
+      const scale = 2.5;
+      const width = 1240 * scale;
+      const height = 680 * scale;
+
+      canvas.width = width;
+      canvas.height = height;
+
+      const svgData = new XMLSerializer().serializeToString(svg);
+      const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+      const URL = window.URL || window.webkitURL || window;
+      const blobURL = URL.createObjectURL(svgBlob);
+
+      const img = new Image();
+      img.onload = function() {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const pngUrl = canvas.toDataURL('image/png');
+        const downloadLink = document.createElement('a');
+        downloadLink.href = pngUrl;
+        downloadLink.download = 'fms_system_architecture.png';
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+        URL.revokeObjectURL(blobURL);
+      };
+      img.src = blobURL;
+    }
+  </script>
+</body>
+</html>

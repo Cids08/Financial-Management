@@ -26,6 +26,23 @@ class AccountsPayableService
 
     public function list(bool $withArchived = false): Collection
     {
+        // Automatically sync AP bill statuses based on balances and due date:
+        // 1. Fully paid bills -> Paid
+        AccountsPayable::whereNull('deleted_at')
+            ->where('status', '!=', 'Cancelled')
+            ->where('remaining_balance', '<=', 0)
+            ->where('status', '!=', 'Paid')
+            ->update(['status' => 'Paid']);
+
+        // 2. Unpaid bills past due date -> Overdue
+        $today = Carbon::today()->toDateString();
+        AccountsPayable::whereNull('deleted_at')
+            ->where('status', '!=', 'Cancelled')
+            ->where('remaining_balance', '>', 0)
+            ->where('due_date', '<', $today)
+            ->where('status', '!=', 'Overdue')
+            ->update(['status' => 'Overdue']);
+
         $query = AccountsPayable::query()->with(['supplier', 'account', 'creator', 'approver'])->latest('invoice_date');
 
         return $withArchived

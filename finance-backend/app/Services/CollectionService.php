@@ -191,6 +191,15 @@ class CollectionService
         }
 
         return DB::transaction(function () use ($collection, $confirmedBy) {
+            // Separation of duties: whoever RECORDED the collection cannot also
+            // CONFIRM it. This prevents a single admin from creating and
+            // approving their own collection in one step.
+            if ((int) $collection->created_by === (int) $confirmedBy->id) {
+                throw ValidationException::withMessages([
+                    'status' => 'You cannot confirm a collection you recorded yourself. Another authorized user must approve it.',
+                ]);
+            }
+
             /** @var AccountsReceivable $ar */
             $ar = AccountsReceivable::query()->lockForUpdate()->findOrFail($collection->ar_id);
             /** @var CashAccount $cashAccount */

@@ -1,7 +1,18 @@
 import { useEffect } from 'react'
 import { X } from 'lucide-react'
 
-export default function Modal({ open, onClose, title, children, footer, maxWidth = 'max-w-md', blurBackdrop = false }) {
+const SIZE_MAP = {
+  sm: 'max-w-sm',
+  md: 'max-w-md',
+  lg: 'max-w-2xl',
+  xl: 'max-w-4xl',
+  '2xl': 'max-w-5xl',
+  '3xl': 'max-w-6xl',
+}
+
+export default function Modal({ open, onClose, title, children, footer, maxWidth = 'max-w-md', size, blurBackdrop = false }) {
+  const resolvedMaxWidth = size ? (SIZE_MAP[size] || size) : maxWidth
+
   useEffect(() => {
     if (!open) return
     const handleKey = (e) => {
@@ -31,7 +42,7 @@ export default function Modal({ open, onClose, title, children, footer, maxWidth
       <div
         role="dialog"
         aria-modal="true"
-        className={`relative flex w-full ${maxWidth} max-h-[92vh] sm:max-h-[85vh] flex-col
+        className={`relative flex w-full ${resolvedMaxWidth} max-h-[92vh] sm:max-h-[85vh] flex-col
           rounded-t-2xl border border-b-0 border-border bg-surface shadow-dropdown animate-fadeIn
           sm:rounded-xl sm:border-b sm:border-border`}
       >

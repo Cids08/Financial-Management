@@ -60,9 +60,16 @@ export async function enablePush() {
     throw new Error('This browser does not support notifications.')
   }
 
+  if (Notification.permission === 'denied') {
+    throw new Error('Notifications are blocked by your browser. Click the site settings icon in your address bar (next to the URL), change Notifications to "Allow", and reload the page.')
+  }
+
   const permission = await Notification.requestPermission()
   if (permission !== 'granted') {
-    throw new Error('Notification permission was not granted.')
+    if (permission === 'denied') {
+      throw new Error('Notifications are blocked by your browser. Click the site settings icon in your address bar (next to the URL), change Notifications to "Allow", and reload the page.')
+    }
+    throw new Error('Notification permission was dismissed. Please allow notifications when prompted.')
   }
 
   const { vapid_public_key: vapidKey, push_enabled: pushEnabled } = await fetchVapidKey()

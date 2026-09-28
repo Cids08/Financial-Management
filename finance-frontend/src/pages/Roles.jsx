@@ -162,7 +162,7 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
     setPermGateSaving(true)
     setPermGateError('')
     try {
-      const res = await apiFetch('/auth/verify-password', {
+      const res = await apiFetch('/api/auth/verify-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password: permGatePassword }),

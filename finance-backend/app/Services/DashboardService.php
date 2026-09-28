@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\AccountsPayable;
 use App\Models\AccountsReceivable;
 use App\Models\AiRecommendation;
+use App\Models\AuditLog;
 use App\Models\Budget;
 use App\Models\CashAccount;
 use App\Models\Collection as CollectionModel; // aliased — see note in App\Models\Collection
@@ -429,6 +430,164 @@ class DashboardService
                 'route' => '/analytics/forecasting',
             ])
             ->toArray();
+    }
+
+    public function getStaffDashboardData(): array
+    {
+        $today = Carbon::today();
+        $startOfMonth = Carbon::now()->startOfMonth();
+        $endOfMonth = Carbon::now()->endOfMonth();
+
+        // 1. Summary stat cards
+        $summary = [
+            'customers' => Customer::where('status', 'Active')->count(),
+            'suppliers' => Supplier::where('status', 'Active')->count(),
+            'ar_outstanding' => (float) AccountsReceivable::whereNotIn('status', ['Paid', 'Cancelled'])->sum('remaining_balance'),
+            'ap_outstanding' => (float) AccountsPayable::whereNotIn('status', ['Paid', 'Cancelled'])->sum('remaining_balance'),
+            'expenses_this_month' => (float) Expense::whereBetween('expense_date', [$startOfMonth, $endOfMonth])
+                ->where('status', '!=', Expense::STATUS_REJECTED)
+                ->sum('expense_amount'),
+        ];
+
+        // 2. Attention Sections
+        // AR Awaiting Follow-up (Overdue or unpaid receivables, ordered by overdue first)
+        $arAttention = AccountsReceivable::query()
+            ->with('customer:id,customer_name')
+            ->whereNotIn('status', ['Paid', 'Cancelled'])
+            ->where(function ($q) use ($today) {
+                $q->where('due_date', '<=', $today)
+                  ->orWhere('status', 'Overdue')
+                  ->orWhere('remaining_balance', '>', 0);
+            })
+            ->orderByRaw('CASE WHEN due_date <= ? THEN 0 ELSE 1 END', [$today])
+            ->orderBy('due_date', 'asc')
+            ->limit(10)
+            ->get()
+            ->map(fn ($inv) => [
+                'id' => $inv->id,
+                'customer_name' => $inv->customer?->customer_name ?? $inv->invoice_number,
+                'amount' => (float) $inv->remaining_balance,
+                'due_date' => optional($inv->due_date)->format('Y-m-d') ?? (string) $inv->due_date,
+            ])
+            ->values()
+            ->toArray();
+
+        // AP Pending Approval (Bills awaiting approval or pending review)
+        $apQuery = AccountsPayable::query()
+            ->with('supplier:id,supplier_name')
+            ->whereNotIn('status', ['Paid', 'Cancelled'])
+            ->where(function ($q) {
+                $q->whereNull('approved_by')
+                  ->orWhere('status', 'Pending');
+            })
+            ->orderBy('due_date', 'asc')
+            ->limit(10)
+            ->get();
+
+        if ($apQuery->isEmpty()) {
+            // If none awaiting approval, surface unpaid bills approaching due date
+            $apQuery = AccountsPayable::query()
+                ->with('supplier:id,supplier_name')
+                ->whereNotIn('status', ['Paid', 'Cancelled'])
+                ->orderBy('due_date', 'asc')
+                ->limit(10)
+                ->get();
+        }
+
+        $apAttention = $apQuery->map(fn ($bill) => [
+            'id' => $bill->id,
+            'supplier_name' => $bill->supplier?->supplier_name ?? $bill->invoice_number,
+            'amount' => (float) $bill->remaining_balance,
+            'due_date' => optional($bill->due_date)->format('Y-m-d') ?? (string) $bill->due_date,
+        ])->values()->toArray();
+
+        // Expenses Pending Approval
+        $expenseQuery = Expense::query()
+            ->where('status', Expense::STATUS_PENDING)
+            ->orderBy('created_at', 'desc')
+            ->limit(10)
+            ->get();
+
+        if ($expenseQuery->isEmpty()) {
+            $expenseQuery = Expense::query()
+                ->where('status', 'Pending')
+                ->orderBy('created_at', 'desc')
+                ->limit(10)
+                ->get();
+        }
+
+        $expenseAttention = $expenseQuery->map(fn ($exp) => [
+            'id' => $exp->id,
+            'description' => $exp->description ?: "Expense #{$exp->id}",
+            'amount' => (float) $exp->expense_amount,
+            'submitted_at' => optional($exp->created_at)->toIso8601String(),
+        ])->values()->toArray();
+
+        // Disbursements Pending Approval
+        $disbursementAttention = Disbursement::query()
+            ->whereNull('approved_by')
+            ->whereNotIn('status', ['Approved', 'Released', 'Cancelled', 'Rejected'])
+            ->orderBy('created_at', 'desc')
+            ->limit(10)
+            ->get()
+            ->map(fn ($d) => [
+                'id' => $d->id,
+                'reference' => $d->voucher_number ?: "DV-{$d->id}",
+                'amount' => (float) $d->amount_paid,
+                'submitted_at' => optional($d->created_at)->toIso8601String(),
+            ])
+            ->values()
+            ->toArray();
+
+        // Budgets Missing a Plan
+        $budgetAttention = Budget::query()
+            ->where('status', Budget::STATUS_DRAFT)
+            ->whereDoesntHave('supportingDocuments')
+            ->limit(10)
+            ->get()
+            ->map(fn ($b) => [
+                'id' => $b->id,
+                'budget_name' => $b->budget_name,
+                'reason' => 'No budget plan attached',
+            ])
+            ->values()
+            ->toArray();
+
+        // 3. Recent Activity feed
+        $recentLogs = AuditLog::query()
+            ->with('user:id,first_name,last_name')
+            ->latest('created_at')
+            ->limit(15)
+            ->get()
+            ->map(fn ($log) => [
+                'id' => $log->id,
+                'type' => $log->module ?? 'Activity',
+                'description' => $log->activity_description ?? "{$log->action} in {$log->module}",
+                'actor_name' => $log->user ? "{$log->user->first_name} {$log->user->last_name}" : 'System',
+                'created_at' => optional($log->created_at)->toIso8601String(),
+            ]);
+
+        if ($recentLogs->isEmpty()) {
+            $recentLogs = collect($this->getRecentTransactions(10))->map(fn ($tx, $idx) => [
+                'id' => $idx + 1,
+                'type' => $tx['transaction'] ?? 'Transaction',
+                'description' => "{$tx['transaction']}: {$tx['reference']} ({$tx['party']})",
+                'actor_name' => $tx['party'] ?? 'System',
+                'created_at' => $tx['created_at'] ? Carbon::parse($tx['created_at'])->toIso8601String() : now()->toIso8601String(),
+            ]);
+        }
+
+        return [
+            'summary' => $summary,
+            'attention' => [
+                'ar' => $arAttention,
+                'ap' => $apAttention,
+                'expenses' => $expenseAttention,
+                'disbursements' => $disbursementAttention,
+                'budgets' => $budgetAttention,
+            ],
+            'recent_activity' => $recentLogs->values()->toArray(),
+        ];
     }
 
     protected function percentChange(float $previous, float $current): ?float

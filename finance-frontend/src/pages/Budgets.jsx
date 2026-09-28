@@ -358,7 +358,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
   const { departments, fetchDepartments } = useDepartments()
   const { permissions, role } = usePermissions()
   const { profile } = useProfile()
-  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
+  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin' || profile?.role_slug === 'admin' || profile?.role_slug === 'super-admin'
   const canApproveBudgets = hasPermission(permissions, 'budgets.approve') || role === 'super-admin'
   const canManageBudgets = hasPermission(permissions, 'budgets.manage') || role === 'super-admin'
 
@@ -1408,12 +1408,14 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                             {b.deleted_at && (
                               <>
                               <RetentionCountdown deletedAt={b.deleted_at} compact />
-                              <DeletePermanentButton
-                                endpoint={`/api/budgets/${b.budget_id}/permanent`}
-                                label="budget"
-                                name={b.budget_name || ''}
-                                onDeleted={() => { fetchBudgets(); fetchStats() }}
-                              />
+                              {isAdmin && (
+                                <DeletePermanentButton
+                                  endpoint={`/api/budgets/${b.budget_id}/permanent`}
+                                  label="budget"
+                                  name={b.budget_name || ''}
+                                  onDeleted={() => { fetchBudgets(); fetchStats() }}
+                                />
+                              )}
                               </>
                             )}
                           </div>

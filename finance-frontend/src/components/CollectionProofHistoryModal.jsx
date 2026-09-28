@@ -168,7 +168,7 @@ export default function CollectionProofHistoryModal({ open, onClose, collection,
             All proofs attached to receipt{' '}
             <span className="font-medium text-ink">{collection.receipt_number}</span>,
             newest first. {collection.status === 'Pending'
-              ? 'Re-uploading adds a new version rather than replacing the previous one. Accepted formats: PDF, JPG, PNG (max 10MB).'
+              ? 'Re-uploading adds a new version rather than replacing the previous one while awaiting confirmation. Images are auto-compressed to fit server limits (<2MB). Accepted formats: PDF, JPG, PNG.'
               : 'This collection is confirmed and financial journals are posted; proof attachments are locked.'}
           </p>
         )}

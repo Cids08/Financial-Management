@@ -293,7 +293,8 @@ export default function PaymentWizardModal({
                   ref={firstInputRef}
                   value={supplierId}
                   onChange={(e) => setSupplierId(e.target.value)}
-                  className="w-full border border-border bg-surface text-ink rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  disabled={Boolean(preselectedBill)}
+                  className={`w-full border border-border bg-surface text-ink rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 ${Boolean(preselectedBill) ? 'opacity-80 cursor-not-allowed bg-slate-100 dark:bg-slate-800' : ''}`}
                 >
                   <option value="">All Suppliers</option>
                   {suppliers.map((s) => (
@@ -302,6 +303,7 @@ export default function PaymentWizardModal({
                     </option>
                   ))}
                 </select>
+                {Boolean(preselectedBill) && <p className="mt-1 text-[11px] text-muted">Locked to the selected bill's supplier.</p>}
               </div>
 
               {/* Cash Account */}
@@ -530,7 +532,7 @@ export default function PaymentWizardModal({
                   <thead className="bg-bg/60 border-b border-border">
                     <tr>
                       <th className="px-4 py-3 text-left font-semibold text-muted text-xs uppercase tracking-wider">Voucher #</th>
-                      <th className="px-4 py-3 text-left font-semibold text-muted text-xs uppercase tracking-wider">Received By</th>
+                      <th className="px-4 py-3 text-left font-semibold text-muted text-xs uppercase tracking-wider">Disbursed To</th>
                       <th className="px-4 py-3 text-left font-semibold text-muted text-xs uppercase tracking-wider">Invoice</th>
                       <th className="px-4 py-3 text-right font-semibold text-muted text-xs uppercase tracking-wider">Amount</th>
                       <th className="px-4 py-3 text-center font-semibold text-muted text-xs uppercase tracking-wider">Status</th>

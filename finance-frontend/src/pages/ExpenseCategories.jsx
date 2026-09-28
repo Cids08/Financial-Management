@@ -29,7 +29,7 @@ const ACTIVE_STYLES = {
 export default function ExpenseCategories({ title = 'Expense Categories', crumbs = ['Master Data', 'Expense Categories'] }) {
   const { hasPermission } = usePermissions()
   const { profile } = useProfile()
-  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
+  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin' || profile?.role_slug === 'admin' || profile?.role_slug === 'super-admin'
   const canManage = hasPermission('expense-categories.manage')
 
   const {
@@ -228,12 +228,14 @@ export default function ExpenseCategories({ title = 'Expense Categories', crumbs
                         {filters.trashed && (
                           <>
                           <RetentionCountdown deletedAt={c.deleted_at} compact />
-                          <DeletePermanentButton
-                            endpoint={`/api/expense-categories/${c.id}/permanent`}
-                            label="expense category"
-                            name={c.category_name || ''}
-                            onDeleted={refetch}
-                          />
+                          {isAdmin && (
+                            <DeletePermanentButton
+                              endpoint={`/api/expense-categories/${c.id}/permanent`}
+                              label="expense category"
+                              name={c.category_name || ''}
+                              onDeleted={refetch}
+                            />
+                          )}
                           </>
                         )}
                       </div>

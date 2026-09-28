@@ -14,6 +14,7 @@ class Supplier extends Model
     protected $fillable = [
         'supplier_code',
         'supplier_name',
+        'category',
         'contact_person',
         'position',
         'contact_number',
@@ -21,13 +22,18 @@ class Supplier extends Model
         'website',
         'address',
         'tin',
+        'credit_limit',
         'current_balance',
+        'payment_terms',
+        'contract_ref',
+        'contract_expiry',
         'status',
         'default_withholding_type',
         'updated_by',
     ];
 
     protected $casts = [
+        'credit_limit' => 'decimal:2',
         'current_balance' => 'decimal:2',
     ];
 

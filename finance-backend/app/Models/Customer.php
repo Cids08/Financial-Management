@@ -23,6 +23,9 @@ class Customer extends Model
         'industry',
         'credit_limit',
         'current_balance',
+        'payment_terms',
+        'contract_ref',
+        'contract_expiry',
         'status',
         'updated_by',
     ];

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, HandCoins, Clock3, Wallet, Info, Printer, CheckCircle2, XCircle, Paperclip, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Search, Pencil, Archive, RotateCcw, HandCoins, Clock3, Wallet, Info, Printer, CheckCircle2, XCircle, Paperclip, X, RefreshCw, Users, AlertCircle, Lock } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
@@ -15,19 +15,29 @@ import DeletePermanentButton from '../components/DeletePermanentButton'
 import RetentionCountdown from '../components/RetentionCountdown'
 import { formatCurrency } from '../utils/formatters'
 import { printSlip } from '../utils/printSlip'
+import { printDuplicateReceipt } from '../utils/printReceipt'
 import { money, SIGNATURE_PRESETS } from '../utils/print'
 import { MIN_COLLECTION_AMOUNT, minHint, formatBaseAmount } from '../utils/business'
 import { apiFetch } from '../utils/api'
 import { useSearchParams } from 'react-router-dom'
 import { usePrivacy } from '../context/PrivacyContext'
+import { usePermissions } from '../context/PermissionsContext'
 
-const STATUS_OPTIONS = ['Pending', 'Confirmed', 'Cancelled']
+const STATUS_OPTIONS = ['Awaiting Collection', 'Pending', 'Confirmed', 'Cancelled']
 const PAGE_SIZE = 10
 
+const STATUS_LABELS = {
+  'Awaiting Collection': 'Awaiting Collection',
+  Pending:               'Awaiting Confirmation',
+  Confirmed:             'Confirmed',
+  Cancelled:             'Cancelled',
+}
+
 const STATUS_STYLES = {
-  Pending:   'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400',
-  Confirmed: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
-  Cancelled: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
+  Pending:                 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400',
+  'Awaiting Confirmation': 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400',
+  Confirmed:               'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
+  Cancelled:               'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
 }
 
 const PAYMENT_METHODS = ['Cash', 'Check', 'Bank Transfer', 'GCash', 'Credit Card']
@@ -166,6 +176,48 @@ function useLookups() {
 }
 
 // ---------------------------------------------------------------------------
+// Assigned Invoice Queue hook — live-polls AR records that have a collector
+// assigned and are not yet fully paid. Auto-refreshes every 30 s so the
+// queue updates when an admin assigns a new collector on the AR page.
+// ---------------------------------------------------------------------------
+const QUEUE_POLL_MS = 15_000
+const QUEUE_EXCLUDE_STATUSES = new Set(['Paid'])
+
+function useAssignedInvoices() {
+  const [invoices,      setInvoices]      = useState([])
+  const [queueLoading,  setQueueLoading]  = useState(true)
+  const [queueError,    setQueueError]    = useState('')
+  const [lastFetched,   setLastFetched]   = useState(null)
+  const timerRef = useRef(null)
+
+  const fetchQueue = () => {
+    setQueueError('')
+    apiFetch('/api/accounts-receivable?per_page=500')
+      .then((r) => r.json())
+      .then((j) => {
+        if (!j.success) throw new Error(j.message || 'Failed to load invoice queue.')
+        const data = Array.isArray(j.data) ? j.data : j.data?.data ?? []
+        // Only show invoices that have a collector assigned AND are not paid
+        const queue = data.filter(
+          (a) => a.collector_id && !QUEUE_EXCLUDE_STATUSES.has(a.status) && !a.is_archived
+        )
+        setInvoices(queue)
+        setLastFetched(new Date())
+      })
+      .catch((e) => setQueueError(e.message))
+      .finally(() => setQueueLoading(false))
+  }
+
+  useEffect(() => {
+    fetchQueue()
+    timerRef.current = setInterval(fetchQueue, QUEUE_POLL_MS)
+    return () => clearInterval(timerRef.current)
+  }, [])
+
+  return { invoices, queueLoading, queueError, lastFetched, refetchQueue: fetchQueue }
+}
+
+// ---------------------------------------------------------------------------
 // Collections hook
 // ---------------------------------------------------------------------------
 function useCollections() {
@@ -208,14 +260,18 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
   } = useLookups()
 
   const { collections, loading, error, meta, trashed, setTrashed, refetch } = useCollections()
+  const { invoices: assignedInvoices, queueLoading, queueError, lastFetched, refetchQueue } = useAssignedInvoices()
 
-  useCollectionUpdates(refetch)
+  useCollectionUpdates(() => { refetch(); refetchQueue() })
 
   usePrivacy()
 
   const { profile } = useProfile()
   const company = useCompany()
-  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
+  const { hasPermission } = usePermissions()
+  const canConfirm = hasPermission('collections.confirm')
+  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin' || profile?.role_slug === 'admin' || profile?.role_slug === 'super-admin'
+  const canViewAuditLogs = isAdmin || hasPermission('audit-logs.view') || hasPermission('audit_logs.view')
   const isCollectorUser = profile?.role_slug === 'collector' || profile?.role?.toLowerCase() === 'collector'
   const userCollectorId = profile?.collector_id ? String(profile.collector_id) : null
 
@@ -227,9 +283,13 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
     return arRecords
   }, [arRecords, isCollectorUser, userCollectorId])
 
-  const [search,       setSearch]       = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [modalMode,    setModalMode]    = useState(null)
+  const [search,          setSearch]          = useState('')
+  const [statusFilter,    setStatusFilter]    = useState('all')
+  const [collectorFilter, setCollectorFilter] = useState('all')
+  const [sortBy,          setSortBy]          = useState('date') // 'date' | 'collector' | 'amount'
+  const [sortDir,         setSortDir]         = useState('desc') // 'asc' | 'desc'
+  const [modalMode,       setModalMode]       = useState(null)
+  const [isCollectLocked, setIsCollectLocked] = useState(false)
   const [form,         setForm]         = useState(EMPTY_FORM)
   const [formError,    setFormError]    = useState('')
   const [fieldErrors,  setFieldErrors]  = useState({})
@@ -238,7 +298,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
 
   // Auto-populate first options as soon as lookups finish loading if currently adding
   useEffect(() => {
-    if (modalMode === 'add') {
+    if (modalMode === 'add' && !isCollectLocked) {
       const defaultArId = (isCollectorUser && userCollectorId)
         ? (availableArRecords[0]?._key ?? '')
         : (arRecords[0]?._key ?? '')
@@ -255,7 +315,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
         cash_account_id: (f.cash_account_id && f.cash_account_id !== 'undefined') ? f.cash_account_id : (cashAccounts[0]?._key ?? ''),
       }))
     }
-  }, [arRecords, availableArRecords, collectors, cashAccounts, modalMode, isCollectorUser, userCollectorId])
+  }, [arRecords, availableArRecords, collectors, cashAccounts, modalMode, isCollectLocked, isCollectorUser, userCollectorId])
 
   const validateDate = (field, value) => {
     if (!value) {
@@ -288,6 +348,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
 
   const filtered = useMemo(() => collections.filter((c) => {
     if (statusFilter !== 'all' && c.status !== statusFilter) return false
+    if (collectorFilter !== 'all' && String(c.collector_id) !== String(collectorFilter)) return false
     const info = arInfo(c.ar_id)
     const q    = search.toLowerCase()
     if (search &&
@@ -296,10 +357,64 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
       !collectorName(c.collector_id)?.toLowerCase().includes(q)
     ) return false
     return true
-  }), [collections, search, statusFilter, arRecords, collectors])
+  }), [collections, search, statusFilter, collectorFilter, arRecords, collectors])
+
+  // Queue rows prepended to the main table — only visible when no status
+  // filter (or when explicitly filtering for 'Awaiting Collection') and not trashed.
+  // Each item is tagged _isQueue so the table can render it with an Awaiting badge + Collect button.
+  const mergedRows = useMemo(() => {
+    if (trashed) return filtered
+    if (statusFilter !== 'all' && statusFilter !== 'Awaiting Collection') return filtered
+
+    const q = search.toLowerCase()
+    const queueRows = assignedInvoices
+      .filter((ar) => {
+        if (isCollectorUser && userCollectorId && String(ar.collector_id) !== String(userCollectorId)) {
+          return false
+        }
+        if (collectorFilter !== 'all' && String(ar.collector_id) !== String(collectorFilter)) {
+          return false
+        }
+        const bal = Number(ar.balance ?? ar.remaining_balance ?? 0)
+        if (bal <= 0) return false // fully paid — skip
+        if (!search) return true
+        return (
+          ar.invoice_number?.toLowerCase().includes(q) ||
+          ar.customer_name?.toLowerCase().includes(q) ||
+          (ar.collector_name || collectorName(ar.collector_id))?.toLowerCase().includes(q)
+        )
+      })
+      .map((ar) => ({ ...ar, _isQueue: true, _qKey: `q-${ar.ar_id ?? ar.id}` }))
+
+    let list = statusFilter === 'Awaiting Collection' ? queueRows : [...queueRows, ...filtered]
+
+    if (sortBy === 'collector') {
+      list.sort((a, b) => {
+        const nameA = (a.collector_name || collectorName(a.collector_id) || '').toLowerCase()
+        const nameB = (b.collector_name || collectorName(b.collector_id) || '').toLowerCase()
+        return sortDir === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA)
+      })
+    } else if (sortBy === 'amount') {
+      list.sort((a, b) => {
+        const amtA = Number(a._isQueue ? (a.balance ?? a.remaining_balance ?? 0) : (a.amount_received ?? 0))
+        const amtB = Number(b._isQueue ? (b.balance ?? b.remaining_balance ?? 0) : (b.amount_received ?? 0))
+        return sortDir === 'asc' ? amtA - amtB : amtB - amtA
+      })
+    } else if (sortBy === 'date') {
+      list.sort((a, b) => {
+        // Keep queue items prominent at the top unless sorting explicitly
+        if (a._isQueue !== b._isQueue) return a._isQueue ? -1 : 1
+        const dateA = a._isQueue ? (a.due_date || a.invoice_date || '') : (a.collection_date || '')
+        const dateB = b._isQueue ? (b.due_date || b.invoice_date || '') : (b.collection_date || '')
+        return sortDir === 'asc' ? dateA.localeCompare(dateB) : dateB.localeCompare(dateA)
+      })
+    }
+
+    return list
+  }, [assignedInvoices, filtered, statusFilter, collectorFilter, sortBy, sortDir, trashed, search, collectors, isCollectorUser, userCollectorId])
 
   const [page, setPage] = useState(1)
-  useEffect(() => { setPage(1) }, [search, statusFilter, trashed])
+  useEffect(() => { setPage(1) }, [search, statusFilter, collectorFilter, sortBy, sortDir, trashed])
 
   // Global search / General Ledger jump navigates here with a highlightId
   // (and, since this table is filtered client-side over the fetched page, a
@@ -313,21 +428,36 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
     setPage(1)
   }, [highlightSearch])
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-  const paginated  = useMemo(() => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [filtered, page])
-  const rangeStart = filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
-  const rangeEnd   = Math.min(page * PAGE_SIZE, filtered.length)
+  const totalPages = Math.max(1, Math.ceil(mergedRows.length / PAGE_SIZE))
+  const paginated  = useMemo(() => mergedRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [mergedRows, page])
+  const rangeStart = mergedRows.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
+  const rangeEnd   = Math.min(page * PAGE_SIZE, mergedRows.length)
 
-  const stats = useMemo(() => ({
-    total:     collections.length,
-    collected: collections.filter((c) => c.status === 'Confirmed').reduce((s, c) => s + c.amount_received, 0),
-    pending:   collections.filter((c) => c.status === 'Pending').length,
-  }), [collections])
+  const stats = useMemo(() => {
+    const awaitingCount = assignedInvoices.filter((ar) => {
+      if (isCollectorUser && userCollectorId && String(ar.collector_id) !== String(userCollectorId)) return false
+      if (collectorFilter !== 'all' && String(ar.collector_id) !== String(collectorFilter)) return false
+      return Number(ar.balance ?? ar.remaining_balance ?? 0) > 0
+    }).length
+
+    const relevantCollections = collections.filter((c) => {
+      if (collectorFilter !== 'all' && String(c.collector_id) !== String(collectorFilter)) return false
+      return true
+    })
+
+    return {
+      total:     relevantCollections.length,
+      awaiting:  awaitingCount,
+      collected: relevantCollections.filter((c) => c.status === 'Confirmed').reduce((s, c) => s + c.amount_received, 0),
+      pending:   relevantCollections.filter((c) => c.status === 'Pending').length,
+    }
+  }, [collections, assignedInvoices, isCollectorUser, userCollectorId, collectorFilter])
 
   // -------------------------------------------------------------------------
   // Modal helpers
   // -------------------------------------------------------------------------
   const openAdd = () => {
+    setIsCollectLocked(false)
     const defaultArId = (isCollectorUser && userCollectorId)
       ? (availableArRecords[0]?._key ?? '')
       : (arRecords[0]?._key ?? '')
@@ -350,19 +480,60 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
     setModalMode('add')
   }
 
-  // Deep-link from the dashboard's "New Transaction" menu: /?new=1 opens
-  // the create form directly, then the param is stripped so a refresh
-  // doesn't re-open it.
+  // Pre-fills the Add Collection form directly from an assigned AR invoice row.
+  // The invoice and collector are locked to prevent accidental alterations.
+  const openCollect = (ar) => {
+    const bal = Number(ar.balance ?? ar.remaining_balance ?? 0)
+    setIsCollectLocked(true)
+    setForm({
+      ...EMPTY_FORM,
+      ar_id:            String(ar.ar_id ?? ar.id ?? ''),
+      collector_id:     String(ar.collector_id ?? ''),
+      cash_account_id:  cashAccounts[0]?._key ?? '',
+      reference_number: getNextReferenceNo(collections),
+      collection_date:  new Date().toISOString().split('T')[0],
+      amount_received:  bal > 0 ? String(bal) : '',
+    })
+    setFormError('')
+    setFieldErrors({})
+    setDateErrors({ collection_date: '' })
+    setModalMode('add')
+  }
+
+  // Deep-link handling:
+  // 1. /?new=1 opens the create form directly
+  // 2. /?status=Awaiting+Collection (or Pending, Confirmed) sets the status filter
+  // 3. /?search=... sets the search query
   const [searchParams, setSearchParams] = useSearchParams()
   useEffect(() => {
-    if (searchParams.get('new') !== '1') return
-    openAdd()
+    let shouldUpdateParams = false
     const next = new URLSearchParams(searchParams)
-    next.delete('new')
-    setSearchParams(next, { replace: true })
+
+    if (searchParams.get('new') === '1') {
+      openAdd()
+      next.delete('new')
+      shouldUpdateParams = true
+    }
+
+    const statusParam = searchParams.get('status')
+    if (statusParam) {
+      if (statusParam === 'Awaiting Confirmation') setStatusFilter('Pending')
+      else setStatusFilter(statusParam)
+      setTrashed(false)
+    }
+
+    const searchParam = searchParams.get('search')
+    if (searchParam) {
+      setSearch(searchParam)
+    }
+
+    if (shouldUpdateParams) {
+      setSearchParams(next, { replace: true })
+    }
   }, [searchParams, setSearchParams])
 
   const openEdit = (c) => {
+    setIsCollectLocked(false)
     setForm({
       ar_id:            c.ar_id ?? '',
       collector_id:     c.collector_id ?? '',
@@ -381,11 +552,15 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
     setModalMode(c)
   }
 
-  const closeModal  = () => { setModalMode(null); setFormError(''); setFieldErrors({}); setDateErrors({ collection_date: '' }) }
+  const closeModal  = () => { setModalMode(null); setIsCollectLocked(false); setFormError(''); setFieldErrors({}); setDateErrors({ collection_date: '' }) }
   const openDetail  = (c) => {
     setDetailRecord(c)
     setAuditLogs([])
     setAuditLogsError(null)
+    if (!canViewAuditLogs) {
+      setAuditLogsLoading(false)
+      return
+    }
     setAuditLogsLoading(true)
     apiFetch(`/api/audit-logs?module=Collections&record_id=${c.id}`)
       .then((res) => res.json())
@@ -398,7 +573,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
   }
   const closeDetail = () => { setDetailRecord(null); setAuditLogs([]); setAuditLogsError(null) }
   const openConfirm = (c) => { setConfirmTarget(c); setActionError('') }
-  const closeConfirm= () => { setConfirmTarget(null); setActionError('') }
+  const closeConfirm = () => { setConfirmTarget(null); setActionError('') }
   const openCancel  = (c) => { setCancelTarget(c); setCancelRemarks(''); setActionError('') }
   const closeCancel = () => { setCancelTarget(null); setCancelRemarks(''); setActionError('') }
 
@@ -479,9 +654,8 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
         reference_number: form.reference_number?.trim() || null,
         remarks: form.remarks?.trim() || null,
       }
-      if (!isAdd && form.status) {
-        payload.status = form.status
-      }
+      // Status is workflow-driven (Pending → Confirmed/Cancelled via action
+      // buttons) — never send it from the form to prevent manual overrides.
 
       const res = await apiFetch(
         isAdd ? '/api/collections' : `/api/collections/${modalMode.id}`,
@@ -566,60 +740,32 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
   }
 
   // -------------------------------------------------------------------------
-  // Print
+  // Print (BIR-compliant 2-Up Duplicate Receipt: Customer Copy + Collector Copy)
   // -------------------------------------------------------------------------
   const handlePrint = (c) => {
     const info = arInfo(c.ar_id)
-    const customer = info?.customer_name || '—'
+    const customer = c.customer_name || info?.customer_name || '—'
+    const collector = c.collector_name || collectorName(c.collector_id) || profile?.name
+    const invoiceNo = c.invoice_number || info?.invoice_number || '—'
+    const accName = c.cash_account_name || accountName(c.cash_account_id) || '—'
 
-    printSlip({
+    printDuplicateReceipt({
       company,
       profile,
-      spec: 'receipt',
-      title: `Official Receipt ${c.receipt_number}`,
-      subtitle: customer,
-      status: c.status,
-      meta: [
-        ['OR Number', c.receipt_number],
-        ['Customer', customer],
-        ['Collection Date', formatDate(c.collection_date)],
-      ],
-      groups: [
-        {
-          heading: 'Receipt Details',
-          rows: [
-            ['Customer', customer, 'span'],
-            ['Collector', c.collector_name || collectorName(c.collector_id), 'span'],
-            ['Invoice', c.invoice_number || info?.invoice_number || '—', 'span'],
-            ['Collection Date', formatDate(c.collection_date)],
-            ['Payment Method', c.payment_method || '—'],
-            ['Deposited To', c.cash_account_name || accountName(c.cash_account_id), 'span'],
-            ['Reference No.', c.reference_number || '—'],
-            ...(c.remarks ? [['Remarks', c.remarks, 'span']] : []),
-          ],
-        },
-        {
-          heading: 'Amount',
-          rows: [
-            ['Amount Received', money(c.amount_received), 'total'],
-          ],
-        },
-      ],
-      signatureTitle: 'Received, Prepared & Verified',
-      signatures: SIGNATURE_PRESETS.voucher({
-        preparedName: c.collector_name || profile?.name,
-        preparedRole: 'Collector',
-        counterpartyLabel: 'Received By (Customer)',
-      }),
-      disclaimer: 'This receipt acknowledges the amount received above and reflects the collection record held in the system. Retain for your records; official receipts are re-printable from the Collections module.',
+      collection: c,
+      customerName: customer,
+      collectorName: collector,
+      invoiceNumber: invoiceNo,
+      accountName: accName,
     })
   }
 
   const statCards = [
-    { key: 'total',     label: 'Total Collections', value: stats.total,                  icon: HandCoins, iconBg: 'bg-primary/15',                        iconColor: 'text-primary-dark',                          isActive: statusFilter === 'all'       && !trashed, onClick: () => { setStatusFilter('all');       setTrashed(false) } },
-    { key: 'collected', label: 'Confirmed Amount',  value: formatCurrency(stats.collected), icon: Wallet,    iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: statusFilter === 'Confirmed'  && !trashed, onClick: () => { setStatusFilter('Confirmed'); setTrashed(false) } },
-    { key: 'pending',   label: 'Pending',           value: stats.pending,                  icon: Clock3,    iconBg: 'bg-amber-50 dark:bg-amber-500/10',     iconColor: 'text-amber-600 dark:text-amber-400',     isActive: statusFilter === 'Pending'   && !trashed, onClick: () => { setStatusFilter('Pending');   setTrashed(false) } },
-    { key: 'archived',  label: 'Archived',          value: '—',                            icon: Archive,   iconBg: 'bg-slate-100 dark:bg-slate-800',       iconColor: 'text-slate-500 dark:text-slate-400',     isActive: trashed,                                  onClick: () => { setTrashed(true); setStatusFilter('all') } },
+    { key: 'total',     label: 'All Records',          value: stats.total + stats.awaiting,                  icon: HandCoins, iconBg: 'bg-primary/15',                        iconColor: 'text-primary-dark',                          isActive: statusFilter === 'all'                 && !trashed, onClick: () => { setStatusFilter('all');                 setTrashed(false) } },
+    { key: 'awaiting',  label: 'Awaiting Collection',  value: stats.awaiting,                             icon: Users,     iconBg: 'bg-violet-50 dark:bg-violet-500/10',     iconColor: 'text-violet-600 dark:text-violet-400',     isActive: statusFilter === 'Awaiting Collection' && !trashed, onClick: () => { setStatusFilter('Awaiting Collection'); setTrashed(false) } },
+    { key: 'collected', label: 'Confirmed Amount',     value: formatCurrency(stats.collected),              icon: Wallet,    iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: statusFilter === 'Confirmed'            && !trashed, onClick: () => { setStatusFilter('Confirmed');           setTrashed(false) } },
+    { key: 'pending',   label: 'Awaiting Confirmation', value: stats.pending,                             icon: Clock3,    iconBg: 'bg-amber-50 dark:bg-amber-500/10',     iconColor: 'text-amber-600 dark:text-amber-400',     isActive: statusFilter === 'Pending'             && !trashed, onClick: () => { setStatusFilter('Pending');             setTrashed(false) } },
+    { key: 'archived',  label: 'Archived',             value: '—',                                        icon: Archive,   iconBg: 'bg-slate-100 dark:bg-slate-800',       iconColor: 'text-slate-500 dark:text-slate-400',     isActive: trashed,                                            onClick: () => { setTrashed(true);                   setStatusFilter('all') } },
   ]
 
   const isModalOpen = modalMode !== null
@@ -632,11 +778,14 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-ink">{title}</h1>
-          <p className="mt-1 text-xs text-muted">Record customer payments received against outstanding invoices.</p>
+          <p className="mt-1 text-xs text-muted">Customer collections automatically synced from assigned accounts receivable invoices.</p>
         </div>
-        <Button variant="primary" size="sm" icon={Plus} onClick={openAdd}>
-          Add Collection
-        </Button>
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border border-border bg-surface text-muted shadow-sm">
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            Live Synced
+          </span>
+        </div>
       </div>
 
       {lookupErrors.length > 0 && (
@@ -651,7 +800,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
       )}
 
       {/* Stat cards */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {statCards.map((card) => {
           const Icon = card.icon
           return (
@@ -699,7 +848,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
               )}
             </div>
           </div>
-          <div className="w-full sm:w-56 shrink-0">
+          <div className="w-full sm:w-48 shrink-0">
             <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Status</label>
             <select
               value={statusFilter}
@@ -707,22 +856,49 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
               className={INPUT}
             >
               <option value="all">All Statuses</option>
-              {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+              {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{STATUS_LABELS[s] || s}</option>)}
             </select>
           </div>
-          {(search || statusFilter !== 'all') && (
-            <div className="shrink-0">
+          {!isCollectorUser && (
+            <div className="w-full sm:w-52 shrink-0">
+              <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Collector</label>
+              <select
+                value={collectorFilter}
+                onChange={(e) => setCollectorFilter(e.target.value)}
+                className={INPUT}
+              >
+                <option value="all">All Collectors</option>
+                {collectors.map((col) => (
+                  <option key={col._key} value={col._key}>
+                    {col.first_name} {col.last_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={RefreshCw}
+              iconPosition="left"
+              onClick={() => { refetch(); refetchQueue() }}
+              title="Refresh collections and assigned invoice queue"
+            >
+              Refresh
+            </Button>
+            {(search || statusFilter !== 'all' || collectorFilter !== 'all') && (
               <Button
                 variant="secondary"
                 size="sm"
                 icon={RotateCcw}
                 iconPosition="left"
-                onClick={() => { setSearch(''); setStatusFilter('all') }}
+                onClick={() => { setSearch(''); setStatusFilter('all'); setCollectorFilter('all') }}
               >
                 Reset
               </Button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
@@ -732,10 +908,46 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
           <table className="w-full text-sm">
             <thead className="bg-surface">
               <tr className="border-b border-border">
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Receipt</th>
+                <th
+                  onClick={() => {
+                    if (sortBy === 'date') setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+                    else { setSortBy('date'); setSortDir('desc') }
+                  }}
+                  className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap cursor-pointer hover:text-ink transition-colors select-none"
+                  title="Click to sort by date"
+                >
+                  <div className="inline-flex items-center gap-1">
+                    <span>Receipt / Date</span>
+                    {sortBy === 'date' && <span className="text-primary font-bold">{sortDir === 'asc' ? '↑' : '↓'}</span>}
+                  </div>
+                </th>
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Invoice / Customer</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Collector</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Amount</th>
+                <th
+                  onClick={() => {
+                    if (sortBy === 'collector') setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+                    else { setSortBy('collector'); setSortDir('asc') }
+                  }}
+                  className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap cursor-pointer hover:text-ink transition-colors select-none"
+                  title="Click to sort by collector"
+                >
+                  <div className="inline-flex items-center gap-1">
+                    <span>Collector</span>
+                    {sortBy === 'collector' && <span className="text-primary font-bold">{sortDir === 'asc' ? '↑' : '↓'}</span>}
+                  </div>
+                </th>
+                <th
+                  onClick={() => {
+                    if (sortBy === 'amount') setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+                    else { setSortBy('amount'); setSortDir('desc') }
+                  }}
+                  className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap cursor-pointer hover:text-ink transition-colors select-none"
+                  title="Click to sort by amount"
+                >
+                  <div className="inline-flex items-center gap-1">
+                    <span>Amount</span>
+                    {sortBy === 'amount' && <span className="text-primary font-bold">{sortDir === 'asc' ? '↑' : '↓'}</span>}
+                  </div>
+                </th>
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Status</th>
                 <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Actions</th>
               </tr>
@@ -743,9 +955,67 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
             <tbody>
               {loading ? (
                 <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">Loading collections…</td></tr>
-              ) : filtered.length === 0 ? (
+              ) : mergedRows.length === 0 ? (
                 <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">No collections match your filters.</td></tr>
-              ) : paginated.map((c) => {
+              ) : paginated.map((row) => {
+                // ── Queue row (AR invoice awaiting collection) ─────────────
+                if (row._isQueue) {
+                  // The Awaiting Collection queue is the collector's work list —
+                  // invoices assigned to them that haven't been collected yet.
+                  // Admins use the main Pending/Confirmed list to approve;
+                  // showing the queue to admins just adds noise.
+                  if (isAdmin) return null
+                  const ar = row
+                  const bal = Number(ar.balance ?? ar.remaining_balance ?? 0)
+                  const isOverdue = ar.due_date && new Date(ar.due_date) < new Date()
+                  return (
+                    <tr key={ar._qKey} className="border-b border-border last:border-0 bg-violet-50/20 dark:bg-violet-500/[0.04] hover:bg-violet-50/40 dark:hover:bg-violet-500/[0.08] transition-colors duration-150">
+                      <td className="px-4 py-3.5">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-300">
+                          Pending Collection
+                        </span>
+                        <p className="text-xs text-muted mt-1">
+                          {isOverdue
+                            ? <span className="text-red-500 dark:text-red-400 font-medium">Due {formatDate(ar.due_date)} · Overdue</span>
+                            : ar.due_date ? `Due ${formatDate(ar.due_date)}` : 'No due date'}
+                        </p>
+                      </td>
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        <p className="font-medium text-ink">{ar.invoice_number}</p>
+                        <p className="text-xs text-muted">{ar.customer_name ?? '—'}</p>
+                      </td>
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1.5 text-sm text-ink">
+                          <span className="inline-block h-2 w-2 rounded-full bg-emerald-400 shrink-0" />
+                          {ar.collector_name || collectorName(ar.collector_id)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3.5 whitespace-nowrap font-semibold tabular-nums">
+                        <span className={isOverdue ? 'text-red-500 dark:text-red-400' : 'text-ink'}>
+                          {formatCurrency(bal)}
+                        </span>
+                        <p className="text-[10px] text-muted font-normal">balance to collect</p>
+                      </td>
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-400">
+                          Awaiting Collection
+                        </span>
+                      </td>
+                      <td className="px-4 py-3.5 text-right">
+                        <button
+                          type="button"
+                          onClick={() => openCollect(ar)}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-dark active:scale-95 transition-all duration-150 shadow-sm"
+                        >
+                          <HandCoins size={13} />
+                          Collect
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                }
+                // ── Regular collection row ─────────────────────────────────
+                const c = row
                 const info = arInfo(c.ar_id)
                 return (
                   <tr key={c.id} data-row-id={c.id} className={`border-b border-border last:border-0 transition-colors duration-150 ${highlightedId === c.id ? 'bg-primary/10' : 'hover:bg-bg'}`}>
@@ -771,11 +1041,44 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                     <td className="px-4 py-3.5 whitespace-nowrap font-medium tabular-nums text-ink">{formatCurrency(c.amount_received)}</td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[c.status] ?? 'bg-slate-100 text-slate-600'}`}>
-                        {c.status}
+                        {STATUS_LABELS[c.status] || c.status}
                       </span>
                     </td>
                     <td className="px-4 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-1">
+                        {c.status === 'Pending' && canConfirm && (
+                          <div className="flex items-center gap-1 mr-1 pr-1 border-r border-border shrink-0">
+                            {profile?.id && c.created_by && Number(c.created_by) === Number(profile.id) ? (
+                              <Tooltip label="Separation of duties: You cannot confirm a collection you recorded yourself.">
+                                <button
+                                  type="button"
+                                  disabled
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-emerald-600/50 text-white cursor-not-allowed opacity-60 shrink-0"
+                                >
+                                  <Lock size={13} strokeWidth={2.25} />
+                                  Confirm
+                                </button>
+                              </Tooltip>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => openConfirm(c)}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-sm transition-all duration-150 active:scale-95 shrink-0"
+                              >
+                                <CheckCircle2 size={13} strokeWidth={2.25} />
+                                Confirm
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => openCancel(c)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20 shadow-sm transition-all duration-150 active:scale-95 shrink-0"
+                            >
+                              <XCircle size={13} strokeWidth={2.25} />
+                              Reject
+                            </button>
+                          </div>
+                        )}
                         <Tooltip label="View full record" align="start">
                           <button type="button" onClick={() => openDetail(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"><Info size={15} /></button>
                         </Tooltip>
@@ -787,16 +1090,6 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                         <Tooltip label="Proof of receipt" align="start">
                           <button type="button" onClick={() => setProofTarget(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"><Paperclip size={15} /></button>
                         </Tooltip>
-                        {c.status === 'Pending' && (
-                          <Tooltip label="Confirm collection" align="start">
-                            <button type="button" onClick={() => openConfirm(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-400 transition-colors duration-150"><CheckCircle2 size={15} /></button>
-                          </Tooltip>
-                        )}
-                        {c.status === 'Pending' && (
-                          <Tooltip label="Cancel collection" align="start">
-                            <button type="button" onClick={() => openCancel(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400 transition-colors duration-150"><XCircle size={15} /></button>
-                          </Tooltip>
-                        )}
                         {c.status !== 'Confirmed' && !c.deleted_at && (
                           <Tooltip label="Edit collection" align="start">
                             <button type="button" onClick={() => openEdit(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"><Pencil size={15} /></button>
@@ -812,12 +1105,14 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                         {c.deleted_at && (
                           <>
                           <RetentionCountdown deletedAt={c.deleted_at} compact />
-                          <DeletePermanentButton
-                            endpoint={`/api/collections/${c.id}/permanent`}
-                            label="collection"
-                            name={c.customer_name || ''}
-                            onDeleted={refetch}
-                          />
+                          {isAdmin && (
+                            <DeletePermanentButton
+                              endpoint={`/api/collections/${c.id}/permanent`}
+                              label="collection"
+                              name={c.customer_name || ''}
+                              onDeleted={refetch}
+                            />
+                          )}
                           </>
                         )}
                       </div>
@@ -829,13 +1124,13 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
           </table>
         </div>
 
-        {!loading && filtered.length > 0 && (
+        {!loading && mergedRows.length > 0 && (
           <Pagination
             page={page}
             totalPages={totalPages}
             onPageChange={setPage}
-            total={filtered.length}
-            label="collections"
+            total={mergedRows.length}
+            label="records"
             showRange
             rangeStart={rangeStart}
             rangeEnd={rangeEnd}
@@ -866,6 +1161,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
               <label className={LABEL}>Invoice <span className="text-red-500 dark:text-red-400">*</span></label>
               <select
                 value={form.ar_id}
+                disabled={isCollectLocked || (modalMode !== null && modalMode !== 'add')}
                 onChange={(e) => {
                   const arId = e.target.value
                   const selectedAr = arInfo(arId)
@@ -878,18 +1174,21 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                   }))
                   setFieldErrors((fe) => ({ ...fe, ar_id: '', collector_id: '' }))
                 }}
-                className={`${INPUT} ${fieldErrors.ar_id ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${(isCollectLocked || (modalMode !== null && modalMode !== 'add')) ? 'opacity-70 cursor-not-allowed bg-slate-100 dark:bg-slate-800' : ''} ${fieldErrors.ar_id ? 'border-red-400 dark:border-red-500' : ''}`}
               >
                 <option value="">Select invoice…</option>
                 {availableArRecords.map((a) => {
                   const bal = a.balance ?? a.remaining_balance
                   return (
                     <option key={a._key} value={a._key}>
-                      {a.invoice_number}  -  {a.customer_name} {bal !== undefined ? `(Bal: ${formatBaseAmount(bal)})` : ''}
+                      {a.invoice_number} — {a.customer_name} {bal !== undefined ? `(Bal: ${formatBaseAmount(bal)})` : ''}
                     </option>
                   )
                 })}
               </select>
+              {(isCollectLocked || (modalMode !== null && modalMode !== 'add')) && (
+                <p className="mt-1 text-[11px] text-muted">Locked to selected invoice.</p>
+              )}
               {fieldErrors.ar_id && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.ar_id}</p>}
             </div>
 
@@ -898,9 +1197,9 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
               <label className={LABEL}>Collector <span className="text-red-500 dark:text-red-400">*</span></label>
               <select
                 value={form.collector_id}
-                disabled={isCollectorUser && !!userCollectorId}
+                disabled={isCollectLocked || (isCollectorUser && !!userCollectorId)}
                 onChange={(e) => { setForm((f) => ({ ...f, collector_id: e.target.value })); setFieldErrors((fe) => ({ ...fe, collector_id: '' })) }}
-                className={`${INPUT} ${isCollectorUser && userCollectorId ? 'opacity-70 cursor-not-allowed bg-slate-100 dark:bg-slate-800' : ''} ${fieldErrors.collector_id ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${(isCollectLocked || (isCollectorUser && userCollectorId)) ? 'opacity-70 cursor-not-allowed bg-slate-100 dark:bg-slate-800' : ''} ${fieldErrors.collector_id ? 'border-red-400 dark:border-red-500' : ''}`}
               >
                 <option value="">Select collector…</option>
                 {collectors.map((c) => (
@@ -909,9 +1208,11 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                   </option>
                 ))}
               </select>
-              {isCollectorUser && userCollectorId && (
+              {isCollectLocked ? (
+                <p className="mt-1 text-[11px] text-muted">Locked to assigned collector.</p>
+              ) : (isCollectorUser && userCollectorId) ? (
                 <p className="mt-1 text-[11px] text-muted">Auto-locked to your collector profile.</p>
-              )}
+              ) : null}
               {fieldErrors.collector_id && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.collector_id}</p>}
             </div>
           </div>
@@ -1082,16 +1383,21 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
             </div>
           </div>
 
-          <div>
-            <label className={LABEL}>Status</label>
-            <select value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))} className={INPUT}
-              disabled={isEditing && modalMode?.status === 'Confirmed'}>
-              {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-            {isEditing && modalMode?.status === 'Confirmed' && (
-              <p className="mt-1 text-xs text-muted">Confirmed collections cannot be edited directly.</p>
-            )}
-          </div>
+          {/* Status is workflow-driven — always Pending on create,
+              changed only via the Confirm / Cancel action buttons.
+              Show it as a read-only badge when editing so the user
+              can see the current state without being able to override it. */}
+          {isEditing && (
+            <div>
+              <label className={LABEL}>Status</label>
+              <div className="flex items-center gap-2 h-9">
+                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[form.status] ?? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>
+                  {STATUS_LABELS[form.status] || form.status}
+                </span>
+                <span className="text-[11px] text-muted">Controlled by Confirm / Cancel actions.</span>
+              </div>
+            </div>
+          )}
 
           <div>
             <label className={LABEL}>Remarks</label>
@@ -1145,7 +1451,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                 <p className="text-sm font-semibold text-ink">{detailRecord.receipt_number}</p>
                 <p className="text-xs text-muted">{arInfo(detailRecord.ar_id)?.customer_name}</p>
               </div>
-              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[detailRecord.status] ?? 'bg-slate-100 text-slate-600'}`}>{detailRecord.status}</span>
+              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[detailRecord.status] ?? 'bg-slate-100 text-slate-600'}`}>{STATUS_LABELS[detailRecord.status] || detailRecord.status}</span>
             </div>
 
             {/* Proof of Receipt preview banner in details */}
@@ -1201,41 +1507,43 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
               </div>
             </div>
 
-            {/* Related Activity & Audit Trail */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <p className="text-xs font-semibold text-ink">Related Activity & Audit Trail</p>
-                <span className="text-[11px] text-muted">
-                  {auditLogsLoading ? 'Loading…' : `${auditLogs.length} event${auditLogs.length === 1 ? '' : 's'}`}
-                </span>
-              </div>
-              <div className="rounded-lg border border-border divide-y divide-border max-h-48 overflow-y-auto bg-slate-50/50 dark:bg-slate-900/30">
-                {auditLogsLoading && (
-                  <p className="px-3 py-3 text-xs text-muted text-center">Loading audit history…</p>
-                )}
-                {!auditLogsLoading && auditLogsError && (
-                  <p className="px-3 py-3 text-xs text-red-500 text-center">{auditLogsError}</p>
-                )}
-                {!auditLogsLoading && !auditLogsError && auditLogs.length === 0 && (
-                  <p className="px-3 py-3 text-xs text-muted text-center">No audit logs recorded for this collection.</p>
-                )}
-                {!auditLogsLoading && !auditLogsError && auditLogs.map((log) => (
-                  <div key={log.id} className="px-3 py-2 text-xs">
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="font-medium text-ink leading-relaxed">
-                        {log.activity_description || log.action}
-                      </span>
-                      <span className="text-[11px] text-muted shrink-0 tabular-nums">
-                        {formatDateTime(log.created_at)}
-                      </span>
+            {/* Related Activity & Audit Trail (Admin / users with audit-logs permission only) */}
+            {canViewAuditLogs && (
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <p className="text-xs font-semibold text-ink">Related Activity & Audit Trail</p>
+                  <span className="text-[11px] text-muted">
+                    {auditLogsLoading ? 'Loading…' : `${auditLogs.length} event${auditLogs.length === 1 ? '' : 's'}`}
+                  </span>
+                </div>
+                <div className="rounded-lg border border-border divide-y divide-border max-h-48 overflow-y-auto bg-slate-50/50 dark:bg-slate-900/30">
+                  {auditLogsLoading && (
+                    <p className="px-3 py-3 text-xs text-muted text-center">Loading audit history…</p>
+                  )}
+                  {!auditLogsLoading && auditLogsError && (
+                    <p className="px-3 py-3 text-xs text-red-500 text-center">{auditLogsError}</p>
+                  )}
+                  {!auditLogsLoading && !auditLogsError && auditLogs.length === 0 && (
+                    <p className="px-3 py-3 text-xs text-muted text-center">No audit logs recorded for this collection.</p>
+                  )}
+                  {!auditLogsLoading && !auditLogsError && auditLogs.map((log) => (
+                    <div key={log.id} className="px-3 py-2 text-xs">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="font-medium text-ink leading-relaxed">
+                          {log.activity_description || log.action}
+                        </span>
+                        <span className="text-[11px] text-muted shrink-0 tabular-nums">
+                          {formatDateTime(log.created_at)}
+                        </span>
+                      </div>
+                      {log.user_name && (
+                        <p className="text-[11px] text-muted mt-0.5">by <span className="font-medium text-ink">{log.user_name}</span></p>
+                      )}
                     </div>
-                    {log.user_name && (
-                      <p className="text-[11px] text-muted mt-0.5">by <span className="font-medium text-ink">{log.user_name}</span></p>
-                    )}
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
       </Modal>
@@ -1256,7 +1564,14 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                 View Proof
               </Button>
             )}
-            <Button variant="primary"   size="md" onClick={handleConfirm} disabled={actioning}>
+            <Button
+              variant="success"
+              size="md"
+              icon={CheckCircle2}
+              onClick={handleConfirm}
+              disabled={actioning}
+              loading={actioning}
+            >
               {actioning ? 'Confirming…' : 'Confirm Collection'}
             </Button>
           </>
@@ -1290,7 +1605,14 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
         footer={
           <>
             <Button variant="secondary" size="md" onClick={closeCancel} disabled={actioning}>Back</Button>
-            <Button variant="danger"    size="md" onClick={handleCancel} disabled={actioning}>
+            <Button
+              variant="danger"
+              size="md"
+              icon={XCircle}
+              onClick={handleCancel}
+              disabled={actioning}
+              loading={actioning}
+            >
               {actioning ? 'Cancelling…' : 'Cancel Collection'}
             </Button>
           </>

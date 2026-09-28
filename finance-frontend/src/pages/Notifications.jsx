@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bell, BellOff, Check, CheckCheck, Trash2, Loader2, BellPlus, Search, RotateCcw, X } from 'lucide-react'
+import { Bell, BellOff, Check, CheckCheck, Trash2, Loader2, BellPlus, Search, RotateCcw, X, Monitor, Shield, AlertCircle } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Pagination from '../components/Pagination'
 import Button from '../components/Button'
 import Tooltip from '../components/Tooltip'
+import Modal from '../components/Modal'
 import { useNotificationsContext } from '../context/NotificationsContext'
 import { notificationTypeMeta, NOTIFICATION_MODULES, NOTIFICATION_SEVERITIES } from '../utils/notificationTypes'
 import { enablePush, disablePush, getBrowserSubscriptionState, fetchVapidKey } from '../utils/pushNotifications'
@@ -59,6 +60,7 @@ export default function Notifications({ title = 'Notifications', crumbs = ['Noti
   const [pushSubscribed, setPushSubscribed] = useState(false)
   const [pushBusy, setPushBusy] = useState(false)
   const [pushNotice, setPushNotice] = useState('')
+  const [showPushModal, setShowPushModal] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -96,7 +98,8 @@ export default function Notifications({ title = 'Notifications', crumbs = ['Noti
     await deleteNotification(id)
   }
 
-  const handleEnablePush = async () => {
+  const handleConfirmEnablePush = async () => {
+    setShowPushModal(false)
     setPushBusy(true)
     setPushNotice('')
     try {
@@ -215,7 +218,7 @@ export default function Notifications({ title = 'Notifications', crumbs = ['Noti
               {pushBusy ? <Loader2 size={14} className="animate-spin" /> : 'Disable'}
             </Button>
           ) : (
-            <Button variant="primary" size="sm" icon={BellPlus} onClick={handleEnablePush} disabled={pushBusy || !pushServerEnabled}>
+            <Button variant="primary" size="sm" icon={BellPlus} onClick={() => setShowPushModal(true)} disabled={pushBusy || !pushServerEnabled}>
               {pushBusy ? <Loader2 size={14} className="animate-spin" /> : 'Enable push'}
             </Button>
           )}
@@ -303,6 +306,66 @@ export default function Notifications({ title = 'Notifications', crumbs = ['Noti
 
         <Pagination page={page} totalPages={totalPages} onPageChange={setPage} total={meta.total} label="notifications" bordered />
       </div>
+
+      {/* Push notification opt-in disclosure & warning modal */}
+      <Modal
+        open={showPushModal}
+        onClose={() => setShowPushModal(false)}
+        title="Enable Desktop Push Notifications"
+        maxWidth="max-w-lg"
+        footer={
+          <>
+            <Button variant="secondary" size="md" onClick={() => setShowPushModal(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" size="md" icon={BellPlus} onClick={handleConfirmEnablePush}>
+              Continue & Enable
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4 py-1 text-sm text-ink">
+          <p className="text-muted text-xs leading-relaxed">
+            Desktop push notifications allow this system to alert you about important financial events in real time, even when this browser tab is minimized or in the background.
+          </p>
+
+          <div className="space-y-2.5 rounded-lg border border-border bg-bg/50 p-3 text-xs">
+            <div className="flex items-start gap-2.5">
+              <Bell size={15} className="text-primary mt-0.5 shrink-0" />
+              <div>
+                <p className="font-semibold text-ink">What notifications will you receive?</p>
+                <p className="text-muted mt-0.5">Critical approval requests, payment confirmations, overdue collections, and urgent system alerts.</p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-2.5">
+              <Monitor size={15} className="text-primary mt-0.5 shrink-0" />
+              <div>
+                <p className="font-semibold text-ink">Device-Specific</p>
+                <p className="text-muted mt-0.5">Push alerts will be registered exclusively for this specific browser and device. They will not appear on other computers unless enabled there too.</p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-2.5">
+              <Shield size={15} className="text-primary mt-0.5 shrink-0" />
+              <div>
+                <p className="font-semibold text-ink">Privacy & Screen Discretion</p>
+                <p className="text-muted mt-0.5">Desktop banners honor your Privacy Mode settings so sensitive monetary figures can remain masked if you work in shared spaces.</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-500/20 dark:bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-300">
+            <div className="flex items-start gap-2">
+              <AlertCircle size={15} className="shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+              <div>
+                <span className="font-semibold">Browser Permission Required:</span>
+                <p className="mt-0.5">When you click <strong>Continue & Enable</strong>, your web browser will display a permission prompt. Please click <strong>"Allow"</strong> to activate alerts.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

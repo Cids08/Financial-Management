@@ -106,7 +106,11 @@ export const menuData = [
     label: 'Financial Transactions',
     icon: ArrowLeftRight,
     children: [
-      { id: 'ar', label: 'Accounts Receivable', icon: FileText, path: '/transactions/receivable', permission: 'ar.view' },
+      // ar.view is intentionally kept on the Collector role for the API
+      // (/api/accounts-receivable scopes to their assigned invoices).
+      // The sidebar link uses ar.manage so collectors don't see this page —
+      // they work with AR exclusively through the Collections queue.
+      { id: 'ar', label: 'Accounts Receivable', icon: FileText, path: '/transactions/receivable', permission: 'ar.manage' },
       { id: 'collections', label: 'Collections', icon: HandCoins, path: '/transactions/collections', permission: 'collections.view' },
       { id: 'ap', label: 'Accounts Payable', icon: FileMinus, path: '/transactions/payable', permission: 'ap.view' },
       // Split back out from Disbursements  -  Disbursements is payments

@@ -14,8 +14,18 @@ import {
 } from 'lucide-react'
 import { apiFetch } from '../utils/api'
 import { currencySymbol } from '../utils/formatters'
-import { escapeHtml } from '../utils/print'
+import {
+  escapeHtml,
+  money,
+  buildHeader,
+  buildFooter,
+  buildSignatureBlock,
+  buildDocument,
+  printDocument,
+  printTimestamp,
+} from '../utils/print'
 import { useCompany } from '../context/CompanyContext'
+import { useProfile } from '../hooks/useProfile'
 
 // ---------------------------------------------------------------------------
 // Helpers: Number to Words (Currency)
@@ -90,6 +100,7 @@ export default function DisbursementPrintModal({
   disbursementId,
 }) {
   const company = useCompany()
+  const { profile } = useProfile()
   const [activeTab, setActiveTab] = useState('voucher') // 'voucher' | 'bir2307'
   const [voucherSubView, setVoucherSubView] = useState('voucher') // 'voucher' | 'check'
 
@@ -152,9 +163,6 @@ export default function DisbursementPrintModal({
   // Print Handlers
   // -------------------------------------------------------------------------
   const printVoucher = () => {
-    const win = window.open('', '_blank', 'width=900,height=1000')
-    if (!win) return
-
     const v = voucherData?.voucher || {}
     const s = voucherData?.supplier || {}
     const bill = voucherData?.bill || {}
@@ -163,198 +171,197 @@ export default function DisbursementPrintModal({
     const entries = voucherData?.accounting_entries || []
     const isCheck = v.payment_method === 'Check' || v.payment_method === "Manager's Check"
 
-    const coName = company?.name || 'FINANCIAL MANAGEMENT SYSTEM INC.'
-    const coAddr = company?.address || '100 Ayala Avenue, Makati City, Metro Manila'
-    const coTel = company?.phone || '+63 (2) 8888-0000'
+    const title = isCheck ? 'Check Disbursement Voucher' : 'Disbursement Voucher'
+    const status = v.status || 'Released'
 
-    win.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Disbursement Voucher ${escapeHtml(v.voucher_number || '')}</title>
-          <style>
-            /* 'voucher' PAGE_SPEC: signing room at the foot, no running footer. */
-            @page { size: A4 portrait; margin: 15mm 15mm 18mm 15mm; }
-            * { box-sizing: border-box; }
-            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; color: #111827; margin: 0; padding: 12px; font-size: 13px; line-height: 1.4; }
-            .header-table { width: 100%; border-bottom: 2px solid #111827; padding-bottom: 12px; margin-bottom: 16px; }
-            .company-name { font-size: 18px; font-weight: 800; text-transform: uppercase; color: #1e3a8a; }
-            .company-sub { font-size: 11px; color: #4b5563; }
-            .doc-title { font-size: 16px; font-weight: 800; text-align: right; text-transform: uppercase; color: #111827; }
-            .meta-grid { width: 100%; margin-bottom: 16px; border-collapse: collapse; }
-            .meta-grid td { padding: 5px 8px; border: 1px solid #e5e7eb; font-size: 12px; }
-            .meta-label { background: #f9fafb; font-weight: 600; color: #4b5563; width: 22%; }
-            .section-heading { font-size: 12px; font-weight: 700; text-transform: uppercase; margin: 16px 0 6px 0; color: #374151; border-bottom: 1px solid #d1d5db; padding-bottom: 3px; }
-            .table-custom { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
-            .table-custom th { background: #f3f4f6; border: 1px solid #d1d5db; padding: 6px 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; text-align: left; }
-            .table-custom td { border: 1px solid #e5e7eb; padding: 6px 8px; font-size: 12px; }
-            .table-custom td.num { text-align: right; font-family: monospace; }
-            .check-card { border: 2px dashed #9ca3af; border-radius: 8px; padding: 16px; margin-bottom: 20px; background: #fafafa; }
-            .check-header { display: flex; justify-content: space-between; border-bottom: 1px solid #9ca3af; padding-bottom: 8px; margin-bottom: 12px; }
-            .check-amount-words { font-weight: 700; text-transform: uppercase; font-size: 12px; border-bottom: 1px solid #111827; padding-bottom: 2px; }
-            .sig-table { width: 100%; border-collapse: collapse; margin-top: 24px; }
-            .sig-table td { width: 25%; border: 1px solid #d1d5db; padding: 12px 8px; vertical-align: top; font-size: 11px; }
-            .sig-title { font-weight: 700; color: #4b5563; margin-bottom: 28px; text-transform: uppercase; font-size: 10px; }
-            .sig-name { font-weight: 700; color: #111827; border-top: 1px solid #111827; padding-top: 4px; text-align: center; }
-            .sig-date { font-size: 10px; color: #6b7280; text-align: center; margin-top: 2px; }
-            .sig-position { font-size: 10px; color: #6b7280; text-align: center; margin-top: 1px; }
-            /* Keep the printed voucher/BIR sheet intact: repeat column
-               headings after a break and never split a single row. */
-            thead { display: table-header-group; }
-            tr, .signature-block, .certification { break-inside: avoid; page-break-inside: avoid; }
-            @media print {
-              .no-print { display: none; }
-              * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            }
-          </style>
-        </head>
-        <body>
-          <table class="header-table">
-            <tr>
-              <td>
-                <div class="company-name">${escapeHtml(coName)}</div>
-                <div class="company-sub">${escapeHtml(coAddr)} &middot; Tel: ${escapeHtml(coTel)}</div>
-              </td>
-              <td style="text-align: right;">
-                <div class="doc-title">${isCheck ? 'Check Disbursement Voucher' : 'Disbursement Voucher'}</div>
-                <div style="font-size: 14px; font-weight: 700; color: #1e3a8a; margin-top: 4px;"># ${escapeHtml(v.voucher_number || '-')}</div>
-                <div style="font-size: 11px; color: #6b7280;">Date: ${escapeHtml(v.payment_date || '-')}</div>
-              </td>
-            </tr>
-          </table>
+    // Header meta
+    const headerMeta = [
+      ['Voucher Number', v.voucher_number || '-'],
+      ['Payment Date', v.payment_date || '-'],
+      ['Payment Method', v.payment_method || '-'],
+      ['Reference No.', v.reference_number || '-'],
+      ['Status', status],
+    ]
 
-          ${isCheck ? `
-            <div class="check-card">
-              <div class="check-header">
-                <div>
-                  <div style="font-weight: 800; font-size: 14px; color: #1e3a8a;">${escapeHtml(cash.bank_name || 'BANK CHECK')}</div>
-                  <div style="font-size: 10px; color: #6b7280;">Acct: ${escapeHtml(cash.account_number || '-')} &middot; ${escapeHtml(cash.account_name || '')}</div>
-                </div>
-                <div style="text-align: right;">
-                  <div style="font-size: 10px; color: #6b7280;">CHECK DATE</div>
-                  <div style="font-weight: 700;">${escapeHtml(v.payment_date || '-')}</div>
-                </div>
-              </div>
-              <table style="width: 100%; margin-bottom: 8px;">
-                <tr>
-                  <td style="width: 80px; font-weight: 700; font-size: 11px; color: #4b5563;">PAY TO THE ORDER OF</td>
-                  <td style="border-bottom: 1px solid #111827; font-weight: 800; font-size: 13px; color: #111827; padding-left: 8px;">
-                    ${escapeHtml(v.payee || '-')}
-                  </td>
-                  <td style="width: 130px; text-align: right; font-family: monospace; font-size: 14px; font-weight: 800; border: 1px solid #111827; padding: 4px 8px; background: #fff;">
-                    ${fmt(v.amount_paid)}
-                  </td>
-                </tr>
-              </table>
-              <div style="margin-top: 6px;">
-                <span style="font-size: 10px; color: #6b7280; font-weight: 600;">AMOUNT IN WORDS:</span>
-                <div class="check-amount-words">${formatAmountInWords(v.amount_paid)}</div>
-              </div>
-              <div style="margin-top: 12px; font-size: 9px; color: #9ca3af; text-align: center; letter-spacing: 2px;">
-                ====================== DO NOT WRITE BELOW THIS LINE ======================
-              </div>
-            </div>
-          ` : ''}
+    const headerHtml = buildHeader({
+      company,
+      title,
+      subtitle: `Voucher #${v.voucher_number || '-'} · Disbursed To: ${v.payee || '-'}`,
+      status,
+      meta: headerMeta,
+      preparedBy: sig.prepared_by || profile?.name || 'Accounting Staff',
+      preparedRole: sig.prepared_by_position || 'Accounting Staff',
+    })
 
-          <div class="section-heading">Disbursement & Recipient Information</div>
-          <table class="meta-grid">
-            <tr>
-              <td class="meta-label">Received By:</td>
-              <td style="font-weight: 700; color: #111827;">${escapeHtml(v.payee || '-')}</td>
-              <td class="meta-label">Payment Method:</td>
-              <td style="font-weight: 600;">${escapeHtml(v.payment_method || '-')}</td>
-            </tr>
-            <tr>
-              <td class="meta-label">Supplier TIN:</td>
-              <td>${escapeHtml(s.tin || '-')}</td>
-              <td class="meta-label">Cash Account:</td>
-              <td>${escapeHtml(cash.account_name || '-')} (${escapeHtml(cash.bank_name || '')})</td>
-            </tr>
-            <tr>
-              <td class="meta-label">Supplier Address:</td>
-              <td>${escapeHtml(s.address || '-')}</td>
-              <td class="meta-label">Reference Number:</td>
-              <td style="font-family: monospace;">${escapeHtml(v.reference_number || '-')}</td>
-            </tr>
-            <tr>
-              <td class="meta-label">Related AP Bill:</td>
-              <td>${bill.invoice_number ? `${escapeHtml(bill.invoice_number)} (Due: ${escapeHtml(bill.due_date || '-')})` : '- (Direct / Payroll)'}</td>
-              <td class="meta-label">Total Amount Paid:</td>
-              <td style="font-weight: 800; color: #1e3a8a; font-family: monospace; font-size: 13px;">${fmt(v.amount_paid)}</td>
-            </tr>
-            <tr>
-              <td class="meta-label">Remarks / Purpose:</td>
-              <td colspan="3">${escapeHtml(v.remarks || bill.description || 'Settlement of approved expenditure')}</td>
-            </tr>
-          </table>
-
-          <div class="section-heading">Accounting Entry Distribution (General Ledger)</div>
-          <table class="table-custom">
-            <thead>
-              <tr>
-                <th style="width: 15%;">Account Code</th>
-                <th style="width: 45%;">Account Title</th>
-                <th style="width: 20%; text-align: right;">Debit ({currencySymbol()})</th>
-                <th style="width: 20%; text-align: right;">Credit ({currencySymbol()})</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${entries.map((e) => `
-                <tr>
-                  <td style="font-family: monospace; font-weight: 600;">${escapeHtml(e.account_code)}</td>
-                  <td>${escapeHtml(e.account_name)} ${e.remarks ? `<span style="font-size: 10px; color: #6b7280;">(${escapeHtml(e.remarks)})</span>` : ''}</td>
-                  <td class="num">${e.debit > 0 ? fmt(e.debit) : '-'}</td>
-                  <td class="num">${e.credit > 0 ? fmt(e.credit) : '-'}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-            <tfoot>
-              <tr style="background: #f9fafb; font-weight: 800;">
-                <td colspan="2" style="text-align: right; text-transform: uppercase;">Total Balanced Distribution</td>
-                <td class="num" style="border-top: 2px solid #111827; border-bottom: 3px double #111827;">${fmt(entries.reduce((a, b) => a + (b.debit || 0), 0))}</td>
-                <td class="num" style="border-top: 2px solid #111827; border-bottom: 3px double #111827;">${fmt(entries.reduce((a, b) => a + (b.credit || 0), 0))}</td>
-              </tr>
-            </tfoot>
-          </table>
-
-          <table class="sig-table">
-            <tr>
-              <td>
-                <div class="sig-title">Prepared By</div>
-                <div class="sig-name">${escapeHtml(sig.prepared_by || 'Accounting Staff')}</div>
-                <div class="sig-position">${escapeHtml(sig.prepared_by_position || 'Accounting Staff')}</div>
-                <div class="sig-date">Date: ${escapeHtml(sig.prepared_at || v.payment_date || '-')}</div>
-              </td>
-              <td>
-                <div class="sig-title">Checked / Verified By</div>
-                <div class="sig-name">Finance Manager</div>
-                <div class="sig-position">${escapeHtml(sig.verified_by_position || 'Finance Manager')}</div>
-                <div class="sig-date">Date: _______________</div>
-              </td>
-              <td>
-                <div class="sig-title">Approved By</div>
-                <div class="sig-name">${escapeHtml(sig.approved_by || 'Finance Director')}</div>
-                <div class="sig-position">${escapeHtml(sig.approved_by_position || 'Finance Officer')}</div>
-                <div class="sig-date">Date: ${escapeHtml(sig.approved_at || '-')}</div>
-              </td>
-              <td>
-                <div class="sig-title">Received By</div>
-                <div class="sig-name">Signature / Printed Name</div>
-                <div class="sig-date">OR# / Date: ____________</div>
-              </td>
-            </tr>
-          </table>
-
-          <div style="margin-top: 24px; text-align: center; font-size: 10px; color: #9ca3af;">
-            System-generated Disbursement Voucher &middot; Printed on ${new Date().toLocaleString('en-PH')}
+    // Check visualization if Check
+    const checkCardHtml = isCheck ? `
+      <div style="border: 2px dashed #0f2744; border-radius: 6px; padding: 12px 16px; margin: 4mm 0 6mm; background: #f8fafc;">
+        <div style="display: flex; justify-content: space-between; border-bottom: 1.5px solid #0f2744; padding-bottom: 6px; margin-bottom: 10px;">
+          <div>
+            <div style="font-weight: 800; font-size: 11pt; color: #0f2744;">${escapeHtml(cash.bank_name || 'BANK CHECK')}</div>
+            <div style="font-size: 8pt; color: #64748b;">Acct: ${escapeHtml(cash.account_number || '-')} &middot; ${escapeHtml(cash.account_name || '')}</div>
           </div>
-        </body>
-      </html>
-    `)
+          <div style="text-align: right;">
+            <div style="font-size: 7.5pt; color: #64748b; font-weight: 700; text-transform: uppercase;">CHECK DATE</div>
+            <div style="font-weight: 700; font-size: 10pt;">${escapeHtml(v.payment_date || '-')}</div>
+          </div>
+        </div>
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 8px;">
+          <tr>
+            <td style="width: 110px; font-weight: 700; font-size: 8.5pt; color: #475569;">PAY TO THE ORDER OF:</td>
+            <td style="border-bottom: 1.5px solid #0f2744; font-weight: 800; font-size: 11pt; color: #0f2744; padding-left: 8px;">
+              ${escapeHtml(v.payee || '-')}
+            </td>
+            <td style="width: 140px; text-align: right; font-family: monospace; font-size: 11pt; font-weight: 800; border: 1.5px solid #0f2744; padding: 4px 8px; background: #fff; color: #0f2744;">
+              ${money(v.amount_paid)}
+            </td>
+          </tr>
+        </table>
+        <div style="margin-top: 6px;">
+          <span style="font-size: 7.5pt; color: #64748b; font-weight: 700; text-transform: uppercase;">AMOUNT IN WORDS:</span>
+          <div style="font-weight: 700; text-transform: uppercase; font-size: 8.5pt; border-bottom: 1px solid #cbd5e1; padding-bottom: 2px; color: #1e293b;">
+            ${escapeHtml(formatAmountInWords(v.amount_paid))}
+          </div>
+        </div>
+      </div>
+    ` : ''
 
-    win.document.close()
-    win.focus()
-    win.print()
+    // Details table using .pf-kv
+    const detailsHtml = `
+      <table class="pf-kv">
+        <tr class="pf-section"><td colspan="2">Disbursement &amp; Recipient Details</td></tr>
+        <tr>
+          <td class="pf-k">Disbursed To</td>
+          <td class="pf-v" style="color: #0f2744; font-size: 10pt;">${escapeHtml(v.payee || '-')}</td>
+        </tr>
+        <tr>
+          <td class="pf-k">Payment Method</td>
+          <td class="pf-v">${escapeHtml(v.payment_method || '-')}</td>
+        </tr>
+        <tr>
+          <td class="pf-k">Cash Account</td>
+          <td class="pf-v">${escapeHtml(cash.account_name || '-')} ${cash.bank_name ? `(${escapeHtml(cash.bank_name)})` : ''}</td>
+        </tr>
+        <tr>
+          <td class="pf-k">Supplier TIN / Address</td>
+          <td class="pf-v">${escapeHtml(s.tin || '—')} &nbsp;·&nbsp; ${escapeHtml(s.address || '—')}</td>
+        </tr>
+        <tr>
+          <td class="pf-k">Reference / Check No.</td>
+          <td class="pf-v font-mono">${escapeHtml(v.reference_number || '—')}</td>
+        </tr>
+        <tr>
+          <td class="pf-k">Related AP Bill</td>
+          <td class="pf-v">${bill.invoice_number ? `${escapeHtml(bill.invoice_number)} (Due: ${escapeHtml(bill.due_date || '-')})` : 'Direct / Payroll Settlement'}</td>
+        </tr>
+        <tr>
+          <td class="pf-k">Remarks / Particulars</td>
+          <td class="pf-v pf-span">${escapeHtml(v.remarks || bill.description || 'Settlement of approved disbursement voucher')}</td>
+        </tr>
+        <tr class="pf-total">
+          <td class="pf-k">Total Disbursed Amount</td>
+          <td class="pf-v">${money(v.amount_paid)}</td>
+        </tr>
+      </table>
+    `
+
+    // General Ledger table using .pf-grid
+    const totalDebit = entries.reduce((s, e) => s + (e.debit || 0), 0)
+    const totalCredit = entries.reduce((s, e) => s + (e.credit || 0), 0)
+    const ledgerHtml = `
+      <div style="margin-top: 5mm;">
+        <div style="font-size: 8.5pt; font-weight: 700; color: #0f2744; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2mm;">
+          Double-Entry Accounting Distribution (General Ledger)
+        </div>
+        <table class="pf-grid">
+          <thead>
+            <tr>
+              <th style="width: 18%;">Account Code</th>
+              <th style="width: 46%;">Account Title</th>
+              <th style="width: 18%; text-align: right;">Debit (${currencySymbol()})</th>
+              <th style="width: 18%; text-align: right;">Credit (${currencySymbol()})</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${entries.length > 0 ? entries.map((e) => `
+              <tr>
+                <td style="font-family: monospace; font-weight: 600;">${escapeHtml(e.account_code)}</td>
+                <td>${escapeHtml(e.account_name)} ${e.remarks ? `<span style="font-size: 7.5pt; color: #64748b;">(${escapeHtml(e.remarks)})</span>` : ''}</td>
+                <td class="pf-num">${e.debit > 0 ? money(e.debit) : '—'}</td>
+                <td class="pf-num">${e.credit > 0 ? money(e.credit) : '—'}</td>
+              </tr>
+            `).join('') : `
+              <tr>
+                <td colspan="4" class="pf-empty">No accounting entries recorded.</td>
+              </tr>
+            `}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="2" style="text-align: right; text-transform: uppercase;">Total Balanced Distribution</td>
+              <td class="pf-num">${money(totalDebit)}</td>
+              <td class="pf-num">${money(totalCredit)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    `
+
+    // Signature Block using buildSignatureBlock
+    const sigHtml = buildSignatureBlock({
+      title: 'Disbursement Signatories & Acknowledgement',
+      blocks: [
+        {
+          label: 'Prepared By',
+          name: sig.prepared_by || profile?.name || 'Accounting Staff',
+          role: sig.prepared_by_position || 'Accounting Staff',
+          date: `Date: ${sig.prepared_at || v.payment_date || printTimestamp().split(',')[0]}`,
+        },
+        {
+          label: 'Checked / Verified By',
+          name: sig.verified_by_position || 'Finance Manager',
+          role: 'Internal Audit & Clearance',
+          date: 'Date: ____________________',
+        },
+        {
+          label: 'Approved By',
+          name: sig.approved_by || 'Finance Officer',
+          role: sig.approved_by_position || 'Finance Officer',
+          date: `Date: ${sig.approved_at || printTimestamp().split(',')[0]}`,
+        },
+        {
+          label: 'Disbursed To',
+          name: v.payee || 'Authorized Payee / Beneficiary',
+          role: 'Signature Over Printed Name',
+          line: 'OR# / Date: ____________________',
+        },
+      ],
+      disclaimer: 'This document certifies the official release of enterprise funds and subsequent posting to the General Ledger. The beneficiary signature confirms receipt of the net disbursement amount.'
+    })
+
+    const footerHtml = buildFooter({
+      company,
+      note: 'OFFICIAL DISBURSEMENT VOUCHER',
+      detail: `Voucher #${v.voucher_number || '-'} · ${v.payment_method || 'Disbursement'}`
+    })
+
+    const bodyHtml = `
+      ${headerHtml}
+      ${checkCardHtml}
+      ${detailsHtml}
+      ${ledgerHtml}
+      ${sigHtml}
+      ${footerHtml}
+    `
+
+    const docHtml = buildDocument({
+      title,
+      body: bodyHtml,
+      company,
+      spec: 'voucher',
+    })
+
+    printDocument({ html: docHtml, logoUrl: company?.logoUrl })
   }
 
   const printBir2307 = () => {
@@ -538,7 +545,7 @@ export default function DisbursementPrintModal({
                 Disbursement Documents &amp; Tax Certification
               </h2>
               <p className="text-xs text-muted">
-                Voucher {v.voucher_number || '-'} &middot; Received By: {v.payee || '-'}
+                Voucher {v.voucher_number || '-'} &middot; Disbursed To: {v.payee || '-'}
               </p>
             </div>
           </div>
@@ -788,9 +795,9 @@ export default function DisbursementPrintModal({
                   <div className="text-muted text-[10px]">{voucherData?.signatories?.approved_at || '-'}</div>
                 </div>
                 <div className="p-3 bg-surface rounded-lg border border-border text-xs">
-                  <div className="text-muted font-semibold uppercase text-[10px]">Received By</div>
+                  <div className="text-muted font-semibold uppercase text-[10px]">Disbursed To</div>
                   <div className="font-bold text-ink mt-1">{v.payee || 'Recipient'}</div>
-                  <div className="text-muted text-[10px]">Pending Acknowledgment</div>
+                  <div className="text-muted text-[10px]">Acknowledged Beneficiary</div>
                 </div>
               </div>
             </div>

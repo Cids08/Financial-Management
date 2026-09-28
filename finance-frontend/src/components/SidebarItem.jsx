@@ -48,17 +48,13 @@ export default function SidebarItem({ item, collapsed, onNavigate, onLogoutClick
   if (hasChildren) {
     return (
       <li className="pt-3 mt-2 border-t border-sidebar-border first:mt-0 first:pt-0 first:border-t-0">
-        {!collapsed ? (
+        {!collapsed && (
           <p
             className={`px-3 pb-1 text-xs font-semibold uppercase tracking-wide truncate
               ${isChildActive ? 'text-primary-dark' : 'text-sidebar-muted'}`}
           >
             {item.label}
           </p>
-        ) : (
-          <div className="flex items-center justify-center py-1" title={item.label}>
-            <Icon size={19} className="shrink-0 text-sidebar-muted" strokeWidth={1.8} />
-          </div>
         )}
 
         <ul className="space-y-1">

@@ -32,6 +32,13 @@ class FixedAssetController extends Controller
             'archived' => $request->boolean('archived'),
         ]);
 
+        $baseQuery = FixedAsset::query();
+        $totalAssets = (clone $baseQuery)->count();
+        $grossCost = (float) (clone $baseQuery)->sum('purchase_cost');
+        $accumDep = (float) (clone $baseQuery)->sum('accumulated_depreciation');
+        $netBookVal = (float) (clone $baseQuery)->sum('book_value');
+        $underMaintenance = (clone $baseQuery)->where('status', 'Under Maintenance')->count();
+
         return response()->json([
             'success' => true,
             'message' => '',
@@ -41,6 +48,13 @@ class FixedAssetController extends Controller
                 'last_page'    => $paginated->lastPage(),
                 'per_page'     => $paginated->perPage(),
                 'total'        => $paginated->total(),
+                'summary'      => [
+                    'total_assets'                   => $totalAssets,
+                    'gross_historical_cost'          => $grossCost,
+                    'total_accumulated_depreciation' => $accumDep,
+                    'net_book_value'                 => $netBookVal,
+                    'under_maintenance'              => $underMaintenance,
+                ],
             ],
         ]);
     }

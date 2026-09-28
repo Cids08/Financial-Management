@@ -53,12 +53,14 @@ export function useAccountSecurity() {
   const [twoFAEnabled, setTwoFAEnabled] = useState(false)
   const [twoFABusy, setTwoFABusy] = useState(false)
   const [twoFAError, setTwoFAError] = useState('')
+  const [twoFAInitialLoading, setTwoFAInitialLoading] = useState(true)
 
   // Reads the real 2FA status from the backend on mount. Without this,
   // twoFAEnabled just stays at its useState(false) default on every fresh
   // page load, regardless of what's actually stored on the user  -  the bug
   // where the toggle appeared to reset to "off" after a refresh.
   const fetchTwoFAStatus = useCallback(async () => {
+    setTwoFAInitialLoading(true)
     try {
       const res = await apiFetch('/api/settings/2fa')
       const json = await res.json()
@@ -67,6 +69,8 @@ export function useAccountSecurity() {
       }
     } catch {
       // Non-fatal  -  toggle just falls back to its default state.
+    } finally {
+      setTwoFAInitialLoading(false)
     }
   }, [])
 
@@ -221,6 +225,7 @@ export function useAccountSecurity() {
     twoFAEnabled,
     twoFABusy,
     twoFAError,
+    twoFAInitialLoading,
     initiateTwoFactor,
     confirmTwoFactor,
     disableTwoFactor,

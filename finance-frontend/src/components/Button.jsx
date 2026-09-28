@@ -43,6 +43,9 @@ const variantStyles = {
   danger: `bg-red-600 text-white shadow-sm
     hover:bg-red-700 hover:-translate-y-0.5 hover:shadow-md
     active:translate-y-0 active:bg-red-800`,
+  success: `bg-emerald-600 text-white shadow-sm
+    hover:bg-emerald-700 hover:-translate-y-0.5 hover:shadow-md
+    active:translate-y-0 active:bg-emerald-800`,
   outline: `bg-transparent text-primary-dark border border-primary/40
     hover:bg-primary/10 hover:border-primary/70 active:bg-primary/15`,
 }

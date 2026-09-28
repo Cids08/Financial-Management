@@ -290,7 +290,7 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
   usePrivacy()
 
   const { profile } = useProfile()
-  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
+  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin' || profile?.role_slug === 'admin' || profile?.role_slug === 'super-admin'
 
   // Global search (SearchBar.jsx) navigates here with a highlightId (and,
   // since this table's `search` filter is server-side/debounced inside
@@ -590,12 +590,14 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
                         {showArchived && (
                           <>
                           <RetentionCountdown deletedAt={c.deleted_at} compact />
-                          <DeletePermanentButton
-                            endpoint={`/api/collectors/${c.collector_id}/permanent`}
-                            label="collector"
-                            name={`${c.first_name} ${c.last_name}`}
-                            onDeleted={refetch}
-                          />
+                          {isAdmin && (
+                            <DeletePermanentButton
+                              endpoint={`/api/collectors/${c.collector_id}/permanent`}
+                              label="collector"
+                              name={`${c.first_name} ${c.last_name}`}
+                              onDeleted={refetch}
+                            />
+                          )}
                           </>
                         )}
                       </div>

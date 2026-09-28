@@ -10,6 +10,7 @@ use App\Support\TwoFactor\TotpService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -57,13 +58,32 @@ class AccountSecurityService
             now()->addMinutes(self::SETUP_CODE_TTL_MINUTES)
         );
 
-        Mail::to($user->email)->send(new TwoFactorCodeMail(
-            code: $code,
-            expiresInMinutes: self::SETUP_CODE_TTL_MINUTES,
-            mailSubject: 'Your verification code',
-            heading: 'Confirm your identity',
-            subtext: 'Enter this code to enable two-factor authentication on your account.',
-        ));
+        try {
+            Mail::to($user->email)->send(new TwoFactorCodeMail(
+                code: $code,
+                expiresInMinutes: self::SETUP_CODE_TTL_MINUTES,
+                mailSubject: 'Your verification code',
+                heading: 'Confirm your identity',
+                subtext: 'Enter this code to enable two-factor authentication on your account.',
+            ));
+        } catch (\Throwable $e) {
+            Log::error("2FA email delivery failed: {$e->getMessage()}", [
+                'user_id' => $user->id,
+                'email'   => $user->email,
+            ]);
+
+            // If running in local development, log code to laravel.log so testing is not blocked
+            // when external SMTP relays (e.g. Brevo) reject local ISP IPs with 525 Unauthorized IP.
+            if (app()->isLocal()) {
+                Log::info("=================================================================");
+                Log::info("2FA Setup Verification Code for {$user->email}: [ {$code} ]");
+                Log::info("=================================================================");
+            } else {
+                throw ValidationException::withMessages([
+                    'two_factor' => ['Unable to send the verification code to your email. Please check your mail server configuration or contact your system administrator.'],
+                ]);
+            }
+        }
 
         return [
             'maskedEmail' => $this->maskEmail($user->email),

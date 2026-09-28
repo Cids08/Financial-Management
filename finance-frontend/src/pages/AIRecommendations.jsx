@@ -59,7 +59,7 @@ function forecastLabel(r) {
 export default function AIRecommendations({ title = 'AI Financial Recommendations', crumbs = ['Analytics', 'AI Financial Recommendations'] }) {
   const { recommendations, loading, error, fetchRecommendations, archiveRecommendation, restoreRecommendation } = useAiRecommendations()
   const { profile } = useProfile()
-  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
+  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin' || profile?.role_slug === 'admin' || profile?.role_slug === 'super-admin'
 
   useEffect(() => {
     fetchRecommendations()
@@ -347,12 +347,14 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
                       {r.is_archived && (
                         <>
                         <RetentionCountdown deletedAt={r.deleted_at} compact />
-                        <DeletePermanentButton
-                          endpoint={`/api/ai-recommendations/${r.recommendation_id}/permanent`}
-                          label="AI recommendation"
-                          name={r.recommendation_type || ''}
-                          onDeleted={fetchRecommendations}
-                        />
+                        {isAdmin && (
+                          <DeletePermanentButton
+                            endpoint={`/api/ai-recommendations/${r.recommendation_id}/permanent`}
+                            label="AI recommendation"
+                            name={r.recommendation_type || ''}
+                            onDeleted={fetchRecommendations}
+                          />
+                        )}
                         </>
                       )}
                     </div>

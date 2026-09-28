@@ -24,7 +24,7 @@ import AccountsReceivableDocumentModal from '../components/AccountsReceivableDoc
 import StatementOfAccountModal from '../components/StatementOfAccountModal'
 
 const PAYMENT_METHODS = ['Bank Transfer', 'Check', 'Cash', 'Credit Card', 'GCash']
-const STATUS_OPTIONS = ['Pending', 'Partially Paid', 'Paid', 'Overdue', 'Cancelled']
+const STATUS_OPTIONS = ['For Collection', 'Partially Paid', 'Paid', 'Overdue', 'Cancelled']
 const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const ACCEPTED_DOCUMENT_TYPES = [...ACCEPTED_IMAGE_TYPES, 'application/pdf']
 const MAX_IMAGE_MB = 8
@@ -36,7 +36,7 @@ const PAGE_SIZE = 10
 // NOTE: this is a UX-layer guard only; authoritative enforcement lives in Laravel.
 const LOCKED_STATUSES = ['Paid', 'Cancelled']
 
-const EMPTY_FORM = { customer_id: '', collector_id: '', invoice_number: '', invoice_date: '', due_date: '', original_amount: '', balance: '', payment_method: 'Bank Transfer', payment_terms: 'Net 30', purchase_order_no: '', reference_no: '', penalty_rate: '', remarks: '', status: 'Pending' }
+const EMPTY_FORM = { customer_id: '', collector_id: '', invoice_number: '', invoice_date: '', due_date: '', original_amount: '', balance: '', payment_method: 'Bank Transfer', payment_terms: 'Net 30', purchase_order_no: '', reference_no: '', penalty_rate: '', remarks: '', status: 'For Collection' }
 
 const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
 const PANEL_PAD = 'p-4'
@@ -46,6 +46,7 @@ const INPUT = `w-full h-9 px-3 rounded-lg border border-border bg-bg text-sm tex
 const LABEL = 'block text-xs font-medium text-muted mb-1.5'
 
 const STATUS_STYLES = {
+  'For Collection': 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400',
   Pending: 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400',
   'Partially Paid': 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400',
   Paid: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
@@ -53,12 +54,29 @@ const STATUS_STYLES = {
   Cancelled: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
 }
 
+export function getArDisplayStatus(record) {
+  if (!record) return 'For Collection'
+  if (record.status === 'Cancelled') return 'Cancelled'
+  const balance = Number(record.remaining_balance ?? record.balance ?? 0)
+  const paid = Number(record.paid_amount ?? (record.original_amount != null && record.balance != null ? Math.max(0, record.original_amount - record.balance) : 0))
+  if (balance <= 0) return 'Paid'
+  if (record.due_date) {
+    const due = new Date(record.due_date)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    if (due < today) return 'Overdue'
+  }
+  if (paid > 0) return 'Partially Paid'
+  return 'For Collection'
+}
+
 function isLocked(record) {
-  return LOCKED_STATUSES.includes(record.status)
+  const currentStatus = getArDisplayStatus(record)
+  return LOCKED_STATUSES.includes(currentStatus) || LOCKED_STATUSES.includes(record.status)
 }
 
 function isOverdueRecord(record) {
-  return record.status === 'Overdue'
+  return getArDisplayStatus(record) === 'Overdue'
 }
 
 function getNextReferenceNo(records = []) {
@@ -316,7 +334,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
   // Admin-only gate for archiving/restoring invoices: in corporate finance systems,
   // destructive status actions (archiving/unarchiving financial records) are restricted
   // strictly to Admin and Super Admin roles. Non-admin users (Staff, Collectors) cannot archive.
-  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
+  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin' || profile?.role_slug === 'admin' || profile?.role_slug === 'super-admin'
   const canManage = hasPermission('ar.manage')
   const customers = useLookup('/api/customers')
   const users = useLookup('/api/users')
@@ -406,7 +424,14 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
     return records.filter((r) => {
       if (!showArchived && r.is_archived) return false
       if (showArchived && !r.is_archived) return false
-      if (statusFilter !== 'all' && r.status !== statusFilter) return false
+      if (statusFilter !== 'all') {
+        const arStatus = getArDisplayStatus(r)
+        if (statusFilter === 'For Collection') {
+          if (arStatus !== 'For Collection' && r.status !== 'Pending' && r.status !== 'For Collection') return false
+        } else {
+          if (arStatus !== statusFilter && r.status !== statusFilter) return false
+        }
+      }
       const q = search.toLowerCase()
       if (search && !r.invoice_number.toLowerCase().includes(q) && !customerName(r.customer_id).toLowerCase().includes(q) && !(r.reference_no || '').toLowerCase().includes(q)) {
         return false
@@ -435,8 +460,8 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
     const active = records.filter((r) => !r.is_archived)
     return {
       total: active.length,
-      outstanding: active.reduce((sum, r) => sum + r.balance, 0),
-      overdue: active.filter((r) => r.status === 'Overdue').length,
+      outstanding: active.reduce((sum, r) => sum + (r.balance ?? r.remaining_balance ?? 0), 0),
+      overdue: active.filter((r) => getArDisplayStatus(r) === 'Overdue').length,
       archived: records.filter((r) => r.is_archived).length,
     }
   }, [records])
@@ -475,7 +500,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
     // locked records (see isLocked/LOCKED_STATUSES above), but guard here
     // too in case openEdit is ever wired up elsewhere.
     if (isLocked(r)) return
-    setForm({ customer_id: r.customer_id, collector_id: r.collector_id || '', invoice_number: r.invoice_number, invoice_date: r.invoice_date, due_date: r.due_date, original_amount: r.original_amount, balance: r.balance, payment_method: r.payment_method, payment_terms: r.payment_terms, purchase_order_no: r.purchase_order_no, reference_no: r.reference_no, penalty_rate: r.penalty_rate, remarks: r.remarks, status: r.status })
+    setForm({ customer_id: r.customer_id, collector_id: r.collector_id || '', invoice_number: r.invoice_number, invoice_date: r.invoice_date, due_date: r.due_date, original_amount: r.original_amount, balance: r.balance, payment_method: r.payment_method, payment_terms: r.payment_terms, purchase_order_no: r.purchase_order_no, reference_no: r.reference_no, penalty_rate: r.penalty_rate, remarks: r.remarks, status: getArDisplayStatus(r) })
     setFieldErrors({})
     setServerError('')
     setDateErrors({ invoice_date: '', due_date: '' })
@@ -560,10 +585,8 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
           heading: 'Amounts',
           rows: [
             ['Original Amount', money(r.original_amount)],
-            ...(r.penalty_rate
-              ? isOverdueRecord(r)
-                ? [['Penalty', `${r.penalty_rate}% (${money(r.penalty_amount)})`, 'muted']]
-                : [['Penalty Rate', `${r.penalty_rate}% (applies when overdue)`, 'muted']]
+            ...(r.penalty_rate && isOverdueRecord(r)
+              ? [['Penalty', `${r.penalty_rate}% (${money(r.penalty_amount)})`, 'muted']]
               : []),
             ['Outstanding Balance', money(r.balance), 'total'],
           ],
@@ -831,7 +854,12 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                     ) : <span className="text-muted">—</span>}
                   </td>
                   <td className="px-3 xl:px-4 py-3.5 min-w-0">
-                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[r.status]}`}>{r.status}</span>
+                    {(() => {
+                      const arStatus = getArDisplayStatus(r)
+                      return (
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[arStatus] || STATUS_STYLES['For Collection']}`}>{arStatus}</span>
+                      )
+                    })()}
                   </td>
                   <td className="px-3 xl:px-4 py-3.5 text-right min-w-0">
                     <div className="flex items-center justify-end gap-1">
@@ -855,12 +883,14 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                             </Tooltip>
                           )}
                           <RetentionCountdown deletedAt={r.deleted_at} compact />
-                          <DeletePermanentButton
-                            endpoint={`/api/accounts-receivable/${r.ar_id}/permanent`}
-                            label="invoice"
-                            name={r.invoice_number || r.ar_id}
-                            onDeleted={fetchRecords}
-                          />
+                          {isAdmin && (
+                            <DeletePermanentButton
+                              endpoint={`/api/accounts-receivable/${r.ar_id}/permanent`}
+                              label="invoice"
+                              name={r.invoice_number || r.ar_id}
+                              onDeleted={fetchRecords}
+                            />
+                          )}
                         </>
                       ) : (
                         <>
@@ -967,12 +997,14 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
               <label className={LABEL}>Customer <span className="text-red-500 dark:text-red-400">*</span></label>
               <select
                 value={form.customer_id}
+                disabled={isEditing}
                 onChange={(e) => { setForm((f) => ({ ...f, customer_id: e.target.value })); setFieldErrors((fe) => ({ ...fe, customer_id: '' })) }}
-                className={`${INPUT} ${fieldErrors.customer_id ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${isEditing ? 'opacity-80 cursor-not-allowed bg-slate-100 dark:bg-slate-800' : ''} ${fieldErrors.customer_id ? 'border-red-400 dark:border-red-500' : ''}`}
               >
                 <option value="">Select customer</option>
                 {customers.map((c) => <option key={c.customer_id} value={c.customer_id}>{c.customer_name}</option>)}
               </select>
+              {isEditing && <p className="mt-1 text-[11px] text-muted">Customer cannot be changed once recorded.</p>}
               {fieldErrors.customer_id && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.customer_id}</p>}
             </div>
             <div>
@@ -1232,7 +1264,14 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                 <p className="text-sm font-semibold text-ink">{detailRecord.invoice_number}</p>
                 <p className="text-xs text-muted">{customerName(detailRecord.customer_id)}</p>
               </div>
-              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[detailRecord.status]}`}>{detailRecord.status}</span>
+              {(() => {
+                const detailStatus = getArDisplayStatus(detailRecord)
+                return (
+                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[detailStatus] || STATUS_STYLES['For Collection']}`}>
+                    {detailStatus}
+                  </span>
+                )
+              })()}
             </div>
 
             <div className="rounded-lg border border-border divide-y divide-border">

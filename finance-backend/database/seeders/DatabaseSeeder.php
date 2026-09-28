@@ -20,6 +20,7 @@ class DatabaseSeeder extends Seeder
             ServiceAreaSeeder::class,
             CustomerSeeder::class,
             SupplierSeeder::class,
+            FixedAssetSeeder::class,
 
             // 3. Accounting Structure & Accounts
             ChartOfAccountSeeder::class,

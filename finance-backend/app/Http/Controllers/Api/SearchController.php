@@ -257,7 +257,12 @@ class SearchController extends Controller
                 'type' => 'ar',
                 'label' => 'Accounts Receivable',
                 'route' => '/transactions/receivable',
-                'permission' => 'ar.view',
+                // ar.view is granted to the Collector role for the API scope,
+                // but the sidebar and this search result use ar.manage so that
+                // collectors cannot navigate to the AR module page. Collectors
+                // access their assigned invoices exclusively through the
+                // Collections queue — not the AR module.
+                'permission' => 'ar.manage',
                 // AccountsReceivable has no scopeSearch() on the model —
                 // mirrors AccountsReceivableService::list()'s existing
                 // inline search clause exactly (invoice_number,

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Search, BookOpen, Scale, TrendingUp, TrendingDown, Info, ExternalLink, ListTree, Layers, Rows3, Loader2, AlertTriangle, ChevronDown, ChevronRight, X, RotateCcw, Filter } from 'lucide-react'
+import { Search, BookOpen, Scale, TrendingUp, TrendingDown, Info, ExternalLink, ListTree, Layers, Rows3, Loader2, AlertTriangle, ChevronDown, ChevronRight, X, RotateCcw, Filter, Printer, Download } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
@@ -10,6 +10,9 @@ import { formatCurrency } from '../utils/formatters'
 import { usePrivacy } from '../context/PrivacyContext'
 import { apiFetch } from '../utils/api'
 import { DATE_PRESETS, resolveDatePreset } from '../utils/datePresets'
+import { useCompany } from '../context/CompanyContext'
+import { useProfileContext } from '../context/ProfileContext'
+import { buildHeader, buildFooter, buildSignatureBlock, buildDocument, printDocument, downloadCsv, printTimestamp, escapeHtml } from '../utils/print'
 
 const REFERENCE_TYPES = ['Collections', 'Disbursements', 'Accounts Receivable', 'Accounts Payable', 'Expenses', 'Tax Obligations']
 
@@ -121,8 +124,12 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
   const [collapsedAccounts, setCollapsedAccounts] = useState(() => new Set())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [printing, setPrinting] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   usePrivacy()
+  const company = useCompany()
+  const { profile } = useProfileContext()
 
   const navigate = useNavigate()
 
@@ -328,6 +335,508 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
     goToSource(line.source.reference_type, line.source.reference_id, line.source.reference || line.source.name)
   }
 
+  const handlePrint = async () => {
+    setPrinting(true)
+    try {
+      const periodLabel = dateFrom && dateTo
+        ? `${formatDate(dateFrom)} to ${formatDate(dateTo)}`
+        : dateFrom
+          ? `From ${formatDate(dateFrom)}`
+          : dateTo
+            ? `Up to ${formatDate(dateTo)}`
+            : 'All Recorded Periods to Date'
+
+    const activePresetObj = DATE_PRESETS.find((p) => p.key === datePreset)
+    const presetName = datePreset === 'custom' ? 'Custom Date Range' : (activePresetObj?.label || 'All Periods')
+    const selectedAccountObj = accountFilter !== 'all' ? accounts.find((a) => String(a.id) === String(accountFilter)) : null
+    const selectedAccountLabel = selectedAccountObj ? selectedAccountObj.label : null
+
+    if (view === 'journal') {
+      let printLines = lines
+      if (meta.total > lines.length) {
+        try {
+          const params = new URLSearchParams(filterParams)
+          params.set('per_page', '200')
+          const res = await apiFetch(`/api/general-ledger/lines?${params.toString()}`)
+          const json = await res.json()
+          if (json.data && json.data.length > 0) printLines = json.data
+        } catch (err) {
+          console.warn('[print] could not fetch unpaginated lines:', err)
+        }
+      }
+
+      const rowsHtml = printLines.map((line) => `
+        <tr>
+          <td style="white-space:nowrap">${formatDate(line.transaction_date)}</td>
+          <td style="font-family:monospace;font-weight:600">${escapeHtml(line.account_code || '')}</td>
+          <td>${escapeHtml(line.account_name || '')}</td>
+          <td>${escapeHtml(line.description || '—')}</td>
+          <td>${escapeHtml(line.source?.label || line.reference_type || '—')}${line.source?.reference ? ` <span style="color:#64748b;font-size:8pt">(${escapeHtml(line.source.reference)})</span>` : ''}</td>
+          <td class="pf-num">${line.debit ? formatCurrency(line.debit) : '—'}</td>
+          <td class="pf-num">${line.credit ? formatCurrency(line.credit) : '—'}</td>
+        </tr>
+      `).join('')
+
+      const headerHtml = buildHeader({
+        company,
+        title: selectedAccountLabel ? `GENERAL JOURNAL — ${selectedAccountLabel.toUpperCase()}` : 'GENERAL JOURNAL',
+        subtitle: selectedAccountLabel
+          ? `Official Chronological Register for Account: ${selectedAccountLabel}`
+          : 'Official Chronological Register of Transactions (Book of Accounts)',
+        preparedBy: profile?.name,
+        preparedRole: profile?.role?.name || 'Finance Officer',
+        meta: [
+          ['Period', periodLabel],
+          ['Date Filter', presetName],
+          ...(selectedAccountLabel ? [['Account', selectedAccountLabel]] : []),
+          ...(referenceFilter !== 'all' ? [['Source', formatSource(referenceFilter)]] : []),
+          ['Total Lines', String(printLines.length)],
+          ['Journal Status', grandTotals.balanced ? 'BALANCED' : 'OUT OF BALANCE'],
+        ],
+      })
+
+      const footerHtml = buildFooter({
+        company,
+        note: 'Official Book of Accounts  ·  Strictly Confidential',
+        detail: `General Journal  ·  Period: ${periodLabel}`,
+      })
+
+      const sigBlock = buildSignatureBlock({
+        preset: 'report',
+        title: 'Official Journal Approvals & Audit Certification',
+        preparedName: profile?.name || 'Accounting Staff',
+        preparedRole: profile?.role?.name || 'Finance Officer',
+        approvedName: 'Finance Manager / CFO',
+      })
+
+      const bodyHtml = `
+        ${headerHtml}
+        <table class="pf-grid">
+          <thead>
+            <tr>
+              <th style="width:13%">Date</th>
+              <th style="width:12%">Account Code</th>
+              <th style="width:20%">Account Title</th>
+              <th>Description / Remarks</th>
+              <th style="width:16%">Source / Ref</th>
+              <th style="width:12%;text-align:right">Debit</th>
+              <th style="width:12%;text-align:right">Credit</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml || '<tr><td colspan="7" class="pf-empty">No journal transactions match the selected period.</td></tr>'}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="5" style="text-align:right;font-weight:700">GRAND TOTALS:</td>
+              <td class="pf-num">${formatCurrency(grandTotals.debit)}</td>
+              <td class="pf-num">${formatCurrency(grandTotals.credit)}</td>
+            </tr>
+          </tfoot>
+        </table>
+        ${sigBlock}
+        ${footerHtml}
+      `
+
+      const doc = buildDocument({
+        title: 'General Journal',
+        body: bodyHtml,
+        company,
+        orientation: 'landscape',
+        density: 'compact',
+        margin: 12,
+      })
+
+      printDocument({ html: doc, logoUrl: company?.logoUrl })
+      return
+    }
+
+    if (view === 'ledger') {
+      const accountsHtml = ledgerData.accounts.map((acc) => {
+        const linesHtml = acc.lines?.map((l) => `
+          <tr>
+            <td style="white-space:nowrap">${formatDate(l.transaction_date)}</td>
+            <td style="font-family:monospace">${escapeHtml(l.transaction_no || '—')}</td>
+            <td>${escapeHtml(l.description || '—')}</td>
+            <td>${escapeHtml(l.source?.label || '—')}${l.source?.reference ? ` (${escapeHtml(l.source.reference)})` : ''}</td>
+            <td class="pf-num">${l.debit ? formatCurrency(l.debit) : '—'}</td>
+            <td class="pf-num">${l.credit ? formatCurrency(l.credit) : '—'}</td>
+            <td class="pf-num" style="font-weight:600">${formatCurrency(Math.abs(l.running_balance))} ${l.running_balance > 0 ? 'Dr' : l.running_balance < 0 ? 'Cr' : ''}</td>
+          </tr>
+        `).join('') || '<tr><td colspan="7" class="pf-empty">No postings in this period.</td></tr>'
+
+        return `
+          <div style="margin-top:6mm;break-inside:avoid;page-break-inside:avoid;">
+            <div style="background:#f1f5f9;border:1px solid #cbd5e1;padding:2mm 3mm;display:flex;justify-content:space-between;align-items:center;">
+              <div>
+                <strong style="color:#0f2744;font-size:9.5pt">${escapeHtml(acc.account_code)} — ${escapeHtml(acc.account_name)}</strong>
+                <span style="color:#64748b;font-size:8pt;margin-left:3mm">(${escapeHtml(acc.account_type || 'General Ledger Account')})</span>
+              </div>
+              <div style="font-size:8.5pt">
+                <span style="color:#64748b">Opening:</span> <strong>${formatCurrency(Math.abs(acc.opening_balance))} ${acc.opening_balance > 0 ? 'Dr' : acc.opening_balance < 0 ? 'Cr' : ''}</strong>
+                <span style="color:#cbd5e1;margin:0 2mm">|</span>
+                <span style="color:#64748b">Closing:</span> <strong style="color:#0f2744">${formatCurrency(Math.abs(acc.balance))} ${acc.balance > 0 ? 'Dr' : acc.balance < 0 ? 'Cr' : ''}</strong>
+              </div>
+            </div>
+            <table class="pf-grid" style="margin-top:0">
+              <thead>
+                <tr>
+                  <th style="width:12%">Date</th>
+                  <th style="width:14%">Trans No.</th>
+                  <th>Description</th>
+                  <th style="width:18%">Source / Ref</th>
+                  <th style="width:12%;text-align:right">Debit</th>
+                  <th style="width:12%;text-align:right">Credit</th>
+                  <th style="width:14%;text-align:right">Balance</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${linesHtml}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colspan="4" style="text-align:right;font-weight:700">Account Postings Total:</td>
+                  <td class="pf-num">${formatCurrency(acc.total_debit)}</td>
+                  <td class="pf-num">${formatCurrency(acc.total_credit)}</td>
+                  <td class="pf-num">${formatCurrency(Math.abs(acc.balance))} ${acc.balance > 0 ? 'Dr' : acc.balance < 0 ? 'Cr' : ''}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        `
+      }).join('')
+
+      const headerHtml = buildHeader({
+        company,
+        title: selectedAccountLabel ? `GENERAL LEDGER — ${selectedAccountLabel.toUpperCase()}` : 'GENERAL LEDGER',
+        subtitle: selectedAccountLabel
+          ? `Official Account Ledger & Postings for Account: ${selectedAccountLabel}`
+          : 'Official Book of Accounts — Individual Account Ledgers & Running Balances',
+        preparedBy: profile?.name,
+        preparedRole: profile?.role?.name || 'Finance Officer',
+        meta: [
+          ['Period', periodLabel],
+          ['Date Filter', presetName],
+          ...(selectedAccountLabel ? [['Account', selectedAccountLabel]] : []),
+          ['Active Accounts', String(ledgerData.accounts.length)],
+          ['Ledger Status', Math.abs(ledgerData.totals.balance) < 0.005 ? 'BALANCED' : 'OUT OF BALANCE'],
+        ],
+      })
+
+      const footerHtml = buildFooter({
+        company,
+        note: 'Official Book of Accounts  ·  Strictly Confidential',
+        detail: selectedAccountLabel
+          ? `General Ledger  ·  Account: ${selectedAccountLabel}  ·  Period: ${periodLabel}`
+          : `General Ledger  ·  Period: ${periodLabel}`,
+      })
+
+      const sigBlock = buildSignatureBlock({
+        preset: 'report',
+        title: 'General Ledger Audit Certification & Management Signatures',
+        preparedName: profile?.name || 'Accounting Staff',
+        preparedRole: profile?.role?.name || 'Finance Officer',
+        approvedName: 'Finance Manager / CFO',
+      })
+
+      const bodyHtml = `
+        ${headerHtml}
+        ${accountsHtml || '<div class="pf-empty">No ledger accounts match the selected period.</div>'}
+        <div style="margin-top:6mm;background:#f8fafc;border:1.5px solid #0f2744;padding:3mm 4mm;display:flex;justify-content:space-between;align-items:center;break-inside:avoid;">
+          <strong style="color:#0f2744;font-size:10pt">LEDGER GRAND TOTALS:</strong>
+          <div style="font-size:9pt;font-variant-numeric:tabular-nums">
+            <span style="margin-right:4mm"><strong>Total Dr:</strong> ${formatCurrency(ledgerData.totals.debit)}</span>
+            <span style="margin-right:4mm"><strong>Total Cr:</strong> ${formatCurrency(ledgerData.totals.credit)}</span>
+            <span style="color:${Math.abs(ledgerData.totals.balance) < 0.005 ? '#166534' : '#991b1b'};font-weight:700">
+              ${Math.abs(ledgerData.totals.balance) < 0.005 ? 'PERFECTLY BALANCED' : formatCurrency(Math.abs(ledgerData.totals.balance)) + ' OFF'}
+            </span>
+          </div>
+        </div>
+        ${sigBlock}
+        ${footerHtml}
+      `
+
+      const doc = buildDocument({
+        title: 'General Ledger',
+        body: bodyHtml,
+        company,
+        orientation: 'landscape',
+        density: 'compact',
+        margin: 12,
+      })
+
+      printDocument({ html: doc, logoUrl: company?.logoUrl })
+      return
+    }
+
+    if (view === 'trial-balance') {
+      const rowsHtml = trialBalance.map((row) => {
+        const net = Number(row.net_balance || 0)
+        return `
+          <tr>
+            <td style="font-family:monospace;font-weight:600">${escapeHtml(row.account_code)}</td>
+            <td>${escapeHtml(row.account_name)}</td>
+            <td class="pf-num">${row.total_debit ? formatCurrency(row.total_debit) : '—'}</td>
+            <td class="pf-num">${row.total_credit ? formatCurrency(row.total_credit) : '—'}</td>
+            <td class="pf-num" style="font-weight:600;color:${net > 0 ? '#166534' : net < 0 ? '#6b21a8' : '#334155'}">
+              ${net === 0 ? '—' : formatCurrency(Math.abs(net)) + (net > 0 ? ' Dr' : ' Cr')}
+            </td>
+          </tr>
+        `
+      }).join('')
+
+      const isBalanced = Math.abs(trialTotals.debit - trialTotals.credit) < 0.005
+
+      const headerHtml = buildHeader({
+        company,
+        title: 'TRIAL BALANCE SHEET',
+        subtitle: 'Verification of Double-Entry General Ledger Accounts',
+        preparedBy: profile?.name,
+        preparedRole: profile?.role?.name || 'Finance Officer',
+        meta: [
+          ['Period / As Of', periodLabel],
+          ['Date Filter', presetName],
+          ['Total Accounts', String(trialBalance.length)],
+          ['Trial Balance Status', isBalanced ? 'BALANCED' : 'OUT OF BALANCE'],
+        ],
+      })
+
+      const footerHtml = buildFooter({
+        company,
+        note: 'Statutory Financial Verification  ·  Strictly Confidential',
+        detail: `Trial Balance  ·  Period: ${periodLabel}`,
+      })
+
+      const sigBlock = buildSignatureBlock({
+        preset: 'report',
+        title: 'Official Trial Balance Certifications & Approvals',
+        preparedName: profile?.name || 'Accounting Staff',
+        preparedRole: profile?.role?.name || 'Finance Officer',
+        approvedName: 'Finance Manager / CFO',
+      })
+
+      const bodyHtml = `
+        ${headerHtml}
+        <table class="pf-grid">
+          <thead>
+            <tr>
+              <th style="width:18%">Account Code</th>
+              <th>Account Title</th>
+              <th style="width:20%;text-align:right">Total Debit</th>
+              <th style="width:20%;text-align:right">Total Credit</th>
+              <th style="width:20%;text-align:right">Net Balance</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml || '<tr><td colspan="5" class="pf-empty">No accounts with activity found for this period.</td></tr>'}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="2" style="text-align:right;font-weight:700">TRIAL BALANCE TOTALS:</td>
+              <td class="pf-num">${formatCurrency(trialTotals.debit)}</td>
+              <td class="pf-num">${formatCurrency(trialTotals.credit)}</td>
+              <td class="pf-num" style="font-weight:700;color:${isBalanced ? '#166534' : '#991b1b'}">
+                ${isBalanced ? 'BALANCED (₱0.00)' : formatCurrency(Math.abs(trialTotals.debit - trialTotals.credit)) + ' DIFFERENCE'}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+
+        <div class="pf-certification">
+          <div class="pf-certification-title">Official Certification</div>
+          I hereby certify that this Trial Balance reflects a true and complete summary of all General Ledger account debit and credit balances for the specified period (<strong>${escapeHtml(periodLabel)}</strong>), and that the books of accounts are in balance in accordance with Philippine Financial Reporting Standards (PFRS).
+        </div>
+
+        ${sigBlock}
+        ${footerHtml}
+      `
+
+      const doc = buildDocument({
+        title: 'Trial Balance',
+        body: bodyHtml,
+        company,
+        orientation: 'portrait',
+        density: 'normal',
+        margin: 14,
+      })
+
+      printDocument({ html: doc, logoUrl: company?.logoUrl })
+    }
+    } catch (err) {
+      console.error('[print] error generating print document:', err)
+    } finally {
+      setTimeout(() => setPrinting(false), 500)
+    }
+  }
+
+  const handleExportCsv = async () => {
+    setExporting(true)
+    try {
+      const today = new Date().toISOString().slice(0, 10)
+      const rangeSuffix = dateFrom || dateTo ? `_${dateFrom || 'start'}_to_${dateTo || 'now'}` : `_${today}`
+      const selectedAccountObj = accountFilter !== 'all' ? accounts.find((a) => String(a.id) === String(accountFilter)) : null
+      const selectedAccountLabel = selectedAccountObj ? selectedAccountObj.label : null
+      const accountSuffix = selectedAccountObj ? `_${selectedAccountObj.label.replace(/[^a-zA-Z0-9]/g, '_')}` : ''
+      const periodLabel = dateFrom && dateTo
+        ? `${formatDate(dateFrom)} to ${formatDate(dateTo)}`
+        : dateFrom
+          ? `From ${formatDate(dateFrom)}`
+          : dateTo
+            ? `Up to ${formatDate(dateTo)}`
+            : 'All Recorded Periods to Date'
+
+    if (view === 'journal') {
+      let exportLines = lines
+      if (meta.total > lines.length) {
+        try {
+          const params = new URLSearchParams(filterParams)
+          params.set('per_page', '200')
+          const res = await apiFetch(`/api/general-ledger/lines?${params.toString()}`)
+          const json = await res.json()
+          if (json.data && json.data.length > 0) exportLines = json.data
+        } catch {
+          // fall back to lines
+        }
+      }
+
+      const rows = [
+        ['Date', 'Account Code', 'Account Name', 'Description', 'Source Module', 'Source Name', 'Reference No', 'Debit (PHP)', 'Credit (PHP)'],
+        ...exportLines.map((l) => [
+          l.transaction_date || '',
+          l.account_code || '',
+          l.account_name || '',
+          l.description || '',
+          l.source?.label || l.reference_type || '',
+          l.source?.name || '',
+          l.source?.reference || '',
+          l.debit || 0,
+          l.credit || 0,
+        ]),
+        ['GRAND TOTALS', '', '', '', '', '', '', grandTotals.debit, grandTotals.credit],
+      ]
+
+      downloadCsv({
+        filename: `general-journal${rangeSuffix}${accountSuffix}.csv`,
+        provenance: [
+          ['Report', selectedAccountLabel ? `General Journal — ${selectedAccountLabel}` : 'General Journal (Official Register)'],
+          ['Company', company?.name || 'Financial Management System'],
+          ['Period', periodLabel],
+          ...(selectedAccountLabel ? [['Account', selectedAccountLabel]] : []),
+          ...(referenceFilter !== 'all' ? [['Source', formatSource(referenceFilter)]] : []),
+          ['Generated By', profile?.name || 'Accounting Staff'],
+          ['Generated At', printTimestamp()],
+          ['Status', grandTotals.balanced ? 'BALANCED' : 'OUT OF BALANCE'],
+          ['Total Rows', String(exportLines.length)],
+        ],
+        rows,
+      })
+      return
+    }
+
+    if (view === 'ledger') {
+      const rows = [
+        ['Account Code', 'Account Name', 'Account Type', 'Date', 'Transaction No', 'Description', 'Source', 'Reference', 'Debit (PHP)', 'Credit (PHP)', 'Running Balance (PHP)'],
+      ]
+
+      ledgerData.accounts.forEach((acc) => {
+        rows.push([
+          acc.account_code,
+          acc.account_name,
+          acc.account_type || '',
+          'OPENING BALANCE',
+          '',
+          'Balance brought forward',
+          '',
+          '',
+          '',
+          '',
+          acc.opening_balance || 0,
+        ])
+        acc.lines?.forEach((l) => {
+          rows.push([
+            acc.account_code,
+            acc.account_name,
+            acc.account_type || '',
+            l.transaction_date || '',
+            l.transaction_no || '',
+            l.description || '',
+            l.source?.label || '',
+            l.source?.reference || '',
+            l.debit || 0,
+            l.credit || 0,
+            l.running_balance || 0,
+          ])
+        })
+        rows.push([
+          acc.account_code,
+          acc.account_name,
+          acc.account_type || '',
+          'CLOSING BALANCE',
+          '',
+          'Ending Balance',
+          '',
+          '',
+          acc.total_debit || 0,
+          acc.total_credit || 0,
+          acc.balance || 0,
+        ])
+        rows.push([])
+      })
+
+      downloadCsv({
+        filename: `general-ledger${rangeSuffix}.csv`,
+        provenance: [
+          ['Report', 'General Ledger (Book of Accounts)'],
+          ['Company', company?.name || 'Financial Management System'],
+          ['Period', periodLabel],
+          ['Generated By', profile?.name || 'Accounting Staff'],
+          ['Generated At', printTimestamp()],
+          ['Total Accounts', String(ledgerData.accounts.length)],
+        ],
+        rows,
+      })
+      return
+    }
+
+    if (view === 'trial-balance') {
+      const isBalanced = Math.abs(trialTotals.debit - trialTotals.credit) < 0.005
+      const rows = [
+        ['Account Code', 'Account Title', 'Total Debit (PHP)', 'Total Credit (PHP)', 'Net Balance (PHP)', 'Balance Type'],
+        ...trialBalance.map((row) => {
+          const net = Number(row.net_balance || 0)
+          return [
+            row.account_code || '',
+            row.account_name || '',
+            row.total_debit || 0,
+            row.total_credit || 0,
+            Math.abs(net),
+            net > 0 ? 'Debit' : net < 0 ? 'Credit' : 'Zero',
+          ]
+        }),
+        ['TRIAL BALANCE TOTALS', '', trialTotals.debit, trialTotals.credit, isBalanced ? 0 : Math.abs(trialTotals.debit - trialTotals.credit), isBalanced ? 'BALANCED' : 'OUT OF BALANCE'],
+      ]
+
+      downloadCsv({
+        filename: `trial-balance${rangeSuffix}.csv`,
+        provenance: [
+          ['Report', 'Trial Balance Sheet'],
+          ['Company', company?.name || 'Financial Management System'],
+          ['Period / As Of', periodLabel],
+          ['Generated By', profile?.name || 'Accounting Staff'],
+          ['Generated At', printTimestamp()],
+          ['Status', isBalanced ? 'BALANCED' : 'OUT OF BALANCE'],
+          ['Total Accounts', String(trialBalance.length)],
+        ],
+        rows,
+      })
+    }
+    } catch (err) {
+      console.error('[export] error generating CSV:', err)
+    } finally {
+      setTimeout(() => setExporting(false), 400)
+    }
+  }
+
   return (
     <div className="space-y-5 animate-fadeIn">
       <Breadcrumb items={crumbs} />
@@ -405,7 +914,7 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
             </button>
           </div>
 
-          <div className="flex items-center justify-between gap-2 md:justify-end">
+          <div className="flex flex-wrap items-center justify-between gap-2 md:justify-end">
             {activeFilterCount > 0 && (
               <>
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary-dark whitespace-nowrap">
@@ -416,6 +925,33 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
                 </Button>
               </>
             )}
+
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={Download}
+                iconPosition="left"
+                onClick={handleExportCsv}
+                loading={exporting}
+                disabled={loading || exporting || printing}
+                title="Export active view to CSV (Excel compatible)"
+              >
+                {exporting ? 'Exporting…' : 'Export CSV'}
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                icon={Printer}
+                iconPosition="left"
+                onClick={handlePrint}
+                loading={printing}
+                disabled={loading || printing || exporting}
+                title="Print official document for current view and period"
+              >
+                {printing ? 'Preparing…' : `Print ${view === 'journal' ? 'Journal' : view === 'ledger' ? 'Ledger' : 'Trial Balance'}`}
+              </Button>
+            </div>
           </div>
         </div>
 

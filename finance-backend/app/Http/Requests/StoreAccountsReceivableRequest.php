@@ -12,7 +12,7 @@ class StoreAccountsReceivableRequest extends FormRequest
      * DB default is 'Pending' — adjust this list if your actual
      * business statuses differ.
      */
-    protected const STATUSES = ['Pending', 'Partially Paid', 'Paid', 'Overdue', 'Cancelled'];
+    protected const STATUSES = ['Pending', 'For Collection', 'Partially Paid', 'Paid', 'Overdue', 'Cancelled'];
 
     protected const PAYMENT_METHODS = ['Bank Transfer', 'Check', 'Cash', 'Credit Card', 'GCash'];
 

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, Users as UsersIcon, UserCheck, UserX, Mail, Phone, Eye, EyeOff, Wallet, Briefcase, Hash, X } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, Users as UsersIcon, UserCheck, UserX, Mail, Phone, Eye, EyeOff, Wallet, Briefcase, Hash, X, FileText, Calendar } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
@@ -8,8 +8,9 @@ import Tooltip from '../components/Tooltip'
 import { apiFetch } from '../utils/api'
 import { useCompany } from '../context/CompanyContext'
 import { useHighlightRow } from '../hooks/useHighlightRow'
-import { formatCurrency } from '../utils/formatters'
+import { formatCurrency, formatDate } from '../utils/formatters'
 import { usePermissions } from '../context/PermissionsContext'
+import { useProfile } from '../hooks/useProfile'
 import AddressSelector from '../components/AddressSelector'
 import DeletePermanentButton from '../components/DeletePermanentButton'
 import RetentionCountdown from '../components/RetentionCountdown'
@@ -29,13 +30,20 @@ function maskEmail(value) {
   return '•'.repeat(10)
 }
 
-// Trimmed to exactly the fields this form should collect. Credit Limit
-// and Status are no longer set here  -  they keep whatever the backend
-// defaults to on create (credit_limit: 0, status: 'Active', per the
-// customers migration) and are left untouched on edit (StoreCustomer/
-// UpdateCustomerRequest both still accept them as 'sometimes', so not
-// sending them just means the existing/default value stands).
-const EMPTY_FORM = { customer_name: '', address: '', contact_person: '', position: '', contact_number: '', tin: '', email: '', industry: '', credit_limit: '0' }
+const EMPTY_FORM = {
+  customer_name: '',
+  address: '',
+  contact_person: '',
+  position: '',
+  contact_number: '',
+  tin: '',
+  email: '',
+  industry: '',
+  credit_limit: '0',
+  payment_terms: 'Net 30',
+  contract_ref: '',
+  contract_expiry: '',
+}
 
 const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
 const PANEL_PAD = 'p-4'
@@ -53,9 +61,11 @@ const STATUS_STYLES = {
 
 export default function Customers({ title = 'Customers', crumbs = ['Master Data', 'Customers'] }) {
   // Role-agnostic gate matching the backend: collector has customers.view
-  // (for lookup) but not customers.manage, so Add/Edit/Archive must not
+  // (for lookup) but not customers.manage, so Add/Edit must not
   // render for them — backend would 403 those endpoints anyway.
   const { hasPermission } = usePermissions()
+  const { profile } = useProfile()
+  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin' || profile?.role_slug === 'admin' || profile?.role_slug === 'super-admin'
   const canManage = hasPermission('customers.manage')
   const { currency } = useCompany()
   const [customers, setCustomers] = useState([])
@@ -196,6 +206,9 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
       email: c.email,
       industry: c.industry || '',
       credit_limit: String(c.credit_limit ?? 0),
+      payment_terms: c.payment_terms || 'Net 30',
+      contract_ref: c.contract_ref || '',
+      contract_expiry: c.contract_expiry || '',
     })
     setFormError('')
     setFieldErrors({})
@@ -245,12 +258,13 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
     }
   }
 
-  const statCards = [
+  const allStatCards = [
     { key: 'total', label: 'Total Customers', value: stats.total, icon: UsersIcon, iconBg: 'bg-primary/15', iconColor: 'text-primary-dark', isActive: statusFilter === 'all' && !showArchived, onClick: () => { updateFilter(setStatusFilter)('all'); setShowArchived(false) } },
     { key: 'active', label: 'Active', value: stats.active, icon: UserCheck, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: statusFilter === 'Active' && !showArchived, onClick: () => { updateFilter(setStatusFilter)('Active'); setShowArchived(false) } },
     { key: 'inactive', label: 'Inactive', value: stats.inactive, icon: UserX, iconBg: 'bg-red-50 dark:bg-red-500/10', iconColor: 'text-red-600 dark:text-red-400', isActive: statusFilter === 'Inactive' && !showArchived, onClick: () => { updateFilter(setStatusFilter)('Inactive'); setShowArchived(false) } },
     { key: 'archived', label: 'Archived', value: stats.archived, icon: Archive, iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-500 dark:text-slate-400', isActive: showArchived, onClick: () => { setShowArchived(true); setPage(1) } },
   ]
+  const statCards = canManage ? allStatCards : allStatCards.filter((card) => card.key !== 'archived')
 
   const isModalOpen = modalMode !== null
   const isEditing = modalMode !== null && modalMode !== 'add'
@@ -267,7 +281,7 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
         {canManage && <Button variant="primary" size="sm" icon={Plus} onClick={openAdd}>Add Customer</Button>}
       </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className={`grid grid-cols-2 gap-3 ${canManage ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
         {statCards.map((card) => {
           const Icon = card.icon
           return (
@@ -321,20 +335,26 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
               <tr className="border-b border-border">
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Company</th>
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Contact</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Industry</th>
-                <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Balance / Limit</th>
+                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Industry & Agreement</th>
+                <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Credit Limit & Balance</th>
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Status</th>
-                <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Actions</th>
+                {(canManage || showArchived) && (
+                  <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Actions</th>
+                )}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">Loading customers…</td></tr>
+                <tr><td colSpan={canManage || showArchived ? 6 : 5} className="px-4 py-10 text-center text-sm text-muted">Loading customers…</td></tr>
               ) : customers.length === 0 ? (
-                <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">No customers match your filters.</td></tr>
+                <tr><td colSpan={canManage || showArchived ? 6 : 5} className="px-4 py-10 text-center text-sm text-muted">No customers match your filters.</td></tr>
               ) : (
                 customers.map((c) => {
                   const revealed = revealedIds.has(c.customer_id)
+                  const balance = Number(c.current_balance || 0)
+                  const limit = Number(c.credit_limit || 0)
+                  const pct = limit > 0 ? Math.min(100, Math.round((balance / limit) * 100)) : 0
+
                   return (
                     <tr
                       key={c.customer_id}
@@ -371,48 +391,80 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
                           </button>
                         </div>
                       </td>
-                      <td className="px-4 py-3.5 whitespace-nowrap text-muted">
-                        {c.industry || '—'}
+                      <td className="px-4 py-3.5">
+                        <p className="font-medium text-ink">{c.industry || 'General Client'}</p>
+                        {(c.contract_ref || c.payment_terms) && (
+                          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+                            {c.contract_ref && (
+                              <span className="font-mono text-[11px] font-semibold text-ink flex items-center gap-1 bg-surface px-1.5 py-0.5 rounded border border-border">
+                                <FileText size={10} className="text-primary shrink-0" /> {c.contract_ref}
+                              </span>
+                            )}
+                            <span className="text-[11px] text-muted font-medium">Terms: {c.payment_terms || 'Net 30'}</span>
+                            {c.contract_expiry && (
+                              <span className="text-[10px] text-muted flex items-center gap-1">
+                                <Calendar size={10} className="shrink-0" /> Exp: {formatDate(c.contract_expiry)}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3.5 whitespace-nowrap text-right">
-                        <p className={`font-medium ${Number(c.current_balance) > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-ink'}`}>
-                          {formatCurrency(c.current_balance, currency)}
+                        <p className={`font-medium ${balance > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-ink'}`}>
+                          {formatCurrency(balance, currency)}
                         </p>
-                        <p className="text-xs text-muted">of {formatCurrency(c.credit_limit, currency)} limit</p>
+                        <p className="text-xs text-muted">
+                          {limit > 0 ? `Limit: ${formatCurrency(limit, currency)}` : 'No credit limit'}
+                        </p>
+                        {limit > 0 && (
+                          <div className="mt-1 flex items-center justify-end gap-1.5">
+                            <div className="w-16 h-1.5 bg-border rounded-full overflow-hidden">
+                              <div
+                                className={`h-full transition-all duration-300 ${pct > 90 ? 'bg-red-500' : pct > 75 ? 'bg-amber-500' : 'bg-primary'}`}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                            <span className="text-[10px] text-muted font-medium tabular-nums">{pct}%</span>
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3.5 whitespace-nowrap">
                         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[c.status]}`}>{c.status}</span>
                       </td>
-                      <td className="px-4 py-3.5 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          {canManage && !c.is_archived && (
-                            <Tooltip label="Edit customer" align="start">
-                              <button type="button" onClick={() => openEdit(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                                <Pencil size={15} />
-                              </button>
-                            </Tooltip>
-                          )}
-                          {canManage && (
-                            <Tooltip label={c.is_archived ? 'Restore customer' : 'Archive customer'} align="end">
-                              <button type="button" onClick={() => toggleArchive(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                                {c.is_archived ? <RotateCcw size={15} /> : <Archive size={15} />}
-                              </button>
-                            </Tooltip>
-                          )}
-                          {c.is_archived && (
-                            <>
-                            <RetentionCountdown deletedAt={c.deleted_at} compact />
-                            <DeletePermanentButton
-                              endpoint={`/api/customers/${c.customer_id}/permanent`}
-                              label="customer"
-                              name={c.customer_name}
-                              onDeleted={() => { fetchCustomers(); fetchStats() }}
-                              onError={(m) => setLoadError(m)}
-                            />
-                            </>
-                          )}
-                        </div>
-                      </td>
+                      {(canManage || showArchived) && (
+                        <td className="px-4 py-3.5 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            {canManage && !c.is_archived && (
+                              <Tooltip label="Edit customer" align="start">
+                                <button type="button" onClick={() => openEdit(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                                  <Pencil size={15} />
+                                </button>
+                              </Tooltip>
+                            )}
+                            {isAdmin && (
+                              <Tooltip label={c.is_archived ? 'Restore customer' : 'Archive customer'} align="end">
+                                <button type="button" onClick={() => toggleArchive(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                                  {c.is_archived ? <RotateCcw size={15} /> : <Archive size={15} />}
+                                </button>
+                              </Tooltip>
+                            )}
+                            {c.is_archived && (
+                              <>
+                              <RetentionCountdown deletedAt={c.deleted_at} compact />
+                              {isAdmin && (
+                                <DeletePermanentButton
+                                  endpoint={`/api/customers/${c.customer_id}/permanent`}
+                                  label="customer"
+                                  name={c.customer_name}
+                                  onDeleted={() => { fetchCustomers(); fetchStats() }}
+                                  onError={(m) => setLoadError(m)}
+                                />
+                              )}
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   )
                 })
@@ -488,6 +540,48 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
           <div>
             <label className={LABEL}>Industry/Business Type</label>
             <input type="text" value={form.industry} onChange={(e) => setForm((f) => ({ ...f, industry: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="Construction Supplies" />
+          </div>
+          <div className="rounded-lg border border-border/80 bg-bg/50 p-3 space-y-3">
+            <p className="text-xs font-semibold text-ink uppercase tracking-wider flex items-center gap-1.5">
+              <FileText size={13} className="text-primary" />
+              Contract & Agreement Terms
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={LABEL}>Payment Terms</label>
+                <select value={form.payment_terms} onChange={(e) => setForm((f) => ({ ...f, payment_terms: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE}>
+                  <option value="Net 15">Net 15 Days</option>
+                  <option value="Net 30">Net 30 Days (Standard)</option>
+                  <option value="Net 45">Net 45 Days</option>
+                  <option value="Net 60">Net 60 Days</option>
+                  <option value="Progressive Billing">Progressive Billing</option>
+                  <option value="COD">COD (Cash On Delivery)</option>
+                </select>
+                <p className="mt-1 text-[10.5px] text-muted">Invoice credit term for customer billing.</p>
+              </div>
+              <div>
+                <label className={LABEL}>Contract Expiry / Project End</label>
+                <input
+                  type="date"
+                  value={form.contract_expiry}
+                  onChange={(e) => setForm((f) => ({ ...f, contract_expiry: e.target.value }))}
+                  className={INPUT}
+                  style={INPUT_TEXT_STYLE}
+                />
+              </div>
+            </div>
+            <div>
+              <label className={LABEL}>Master Service Agreement (MSA) / Blanket Agreement No.</label>
+              <input
+                type="text"
+                value={form.contract_ref}
+                onChange={(e) => setForm((f) => ({ ...f, contract_ref: e.target.value }))}
+                className={INPUT}
+                style={INPUT_TEXT_STYLE}
+                placeholder="e.g. MSA-2026-DT-012 or Master Lease Agreement"
+              />
+              <p className="mt-1 text-[10.5px] text-muted">Umbrella contract governing all project sites, rental rate sheets, and credit ceilings.</p>
+            </div>
           </div>
           <div>
             <label className={LABEL}>Credit Limit</label>

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Search, Plus, Pencil, Archive, RotateCcw, Truck, UserCheck, UserX, Mail, Phone, Eye, EyeOff, Globe, Briefcase, Hash, X } from 'lucide-react'
+import { Search, Plus, Pencil, Archive, RotateCcw, Truck, UserCheck, UserX, Mail, Phone, Eye, EyeOff, Globe, Briefcase, Hash, X, FileText, Layers, Calendar } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
@@ -7,10 +7,11 @@ import Pagination from '../components/Pagination'
 import Tooltip from '../components/Tooltip'
 import { apiFetch } from '../utils/api'
 import { useCompany } from '../context/CompanyContext'
+import { usePermissions } from '../context/PermissionsContext'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 import DeletePermanentButton from '../components/DeletePermanentButton'
 import RetentionCountdown from '../components/RetentionCountdown'
-import { formatCurrency } from '../utils/formatters'
+import { formatCurrency, formatDate } from '../utils/formatters'
 import { useProfile } from '../hooks/useProfile'
 import AddressSelector from '../components/AddressSelector'
 
@@ -29,7 +30,23 @@ function maskEmail(value) {
   return '•'.repeat(10)
 }
 
-const EMPTY_FORM = { supplier_name: '', contact_person: '', position: '', contact_number: '', tin: '', email: '', website: '', address: '', status: 'Active', default_withholding_type: '' }
+const EMPTY_FORM = {
+  supplier_name: '',
+  category: '',
+  contact_person: '',
+  position: '',
+  contact_number: '',
+  tin: '',
+  email: '',
+  website: '',
+  address: '',
+  credit_limit: '0',
+  payment_terms: 'Net 30',
+  contract_ref: '',
+  contract_expiry: '',
+  status: 'Active',
+  default_withholding_type: '',
+}
 
 const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
 const PANEL_PAD = 'p-4'
@@ -44,8 +61,10 @@ const STATUS_STYLES = {
 }
 
 export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data', 'Suppliers'] }) {
+  const { hasPermission } = usePermissions()
   const { profile } = useProfile()
-  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
+  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin' || profile?.role_slug === 'admin' || profile?.role_slug === 'super-admin'
+  const canManage = hasPermission ? (hasPermission('suppliers.manage') || isAdmin || profile?.role === 'Staff' || profile?.role_slug === 'staff') : true
   const { currency } = useCompany()
   const [suppliers, setSuppliers] = useState([])
   const [stats, setStats] = useState({ total: 0, active: 0, inactive: 0, archived: 0 })
@@ -162,6 +181,7 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
   const openEdit = (s) => {
     setForm({
       supplier_name: s.supplier_name,
+      category: s.category || '',
       contact_person: s.contact_person,
       position: s.position || '',
       contact_number: s.contact_number || '',
@@ -169,6 +189,10 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
       email: s.email,
       website: s.website || '',
       address: s.address || '',
+      credit_limit: s.credit_limit != null ? String(s.credit_limit) : '0',
+      payment_terms: s.payment_terms || 'Net 30',
+      contract_ref: s.contract_ref || '',
+      contract_expiry: s.contract_expiry || '',
       status: s.status,
       default_withholding_type: s.default_withholding_type || '',
     })
@@ -304,8 +328,8 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
             <thead className="bg-surface">
               <tr className="border-b border-border">
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Supplier</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Contact</th>
-                <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Balance Owed</th>
+                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Contact & Agreement</th>
+                <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Credit Line & Balance</th>
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Status</th>
                 <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Actions</th>
               </tr>
@@ -318,6 +342,11 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
               ) : (
                 suppliers.slice((page - 1) * PER_PAGE, page * PER_PAGE).map((s) => {
                   const revealed = revealedIds.has(s.supplier_id)
+                  const hasCreditLimit = Number(s.credit_limit) > 0
+                  const balance = Number(s.current_balance || 0)
+                  const limit = Number(s.credit_limit || 0)
+                  const pct = hasCreditLimit ? Math.min(100, Math.round((balance / limit) * 100)) : 0
+
                   return (
                     <tr
                       key={s.supplier_id}
@@ -328,11 +357,16 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
                       <td className="px-4 py-3.5">
                         <p className="font-medium text-ink">{s.supplier_name}</p>
                         <p className="text-xs text-muted truncate max-w-55">{s.address}</p>
+                        {s.category && (
+                          <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10.5px] font-medium bg-primary/10 text-primary-dark mt-1">
+                            <Layers size={10} className="shrink-0" /> {s.category}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3.5">
                         <div className="flex items-start gap-1.5">
                           <div className="min-w-0">
-                            <p className="text-ink">{s.contact_person}</p>
+                            <p className="text-ink font-medium">{s.contact_person}</p>
                             {s.position && (
                               <p className="text-xs text-muted flex items-center gap-1"><Briefcase size={11} className="shrink-0" /> {s.position}</p>
                             )}
@@ -343,6 +377,21 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
                                 <span className="flex items-center gap-1"><Hash size={11} className="shrink-0" /> TIN: {revealed ? s.tin : maskValue(s.tin)}</span>
                               )}
                             </div>
+                            {(s.contract_ref || s.payment_terms) && (
+                              <div className="mt-1.5 pt-1.5 border-t border-border/60 text-xs flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                                {s.contract_ref && (
+                                  <span className="font-mono text-[11px] font-semibold text-ink flex items-center gap-1 bg-surface px-1.5 py-0.5 rounded border border-border">
+                                    <FileText size={10} className="text-primary shrink-0" /> {s.contract_ref}
+                                  </span>
+                                )}
+                                <span className="text-[11px] text-muted font-medium">Terms: {s.payment_terms || 'Net 30'}</span>
+                                {s.contract_expiry && (
+                                  <span className="text-[10px] text-muted flex items-center gap-1">
+                                    <Calendar size={10} className="shrink-0" /> Exp: {formatDate(s.contract_expiry)}
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </div>
                           <button
                             type="button"
@@ -355,9 +404,23 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
                         </div>
                       </td>
                       <td className="px-4 py-3.5 whitespace-nowrap text-right">
-                        <p className={`font-medium ${Number(s.current_balance) > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-ink'}`}>
-                          {formatCurrency(s.current_balance, currency)}
+                        <p className={`font-medium ${balance > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-ink'}`}>
+                          {formatCurrency(balance, currency)}
                         </p>
+                        <p className="text-xs text-muted">
+                          {hasCreditLimit ? `Line: ${formatCurrency(limit, currency)}` : 'No credit line'}
+                        </p>
+                        {hasCreditLimit && (
+                          <div className="mt-1 flex items-center justify-end gap-1.5">
+                            <div className="w-16 h-1.5 bg-border rounded-full overflow-hidden">
+                              <div
+                                className={`h-full transition-all duration-300 ${pct > 90 ? 'bg-red-500' : pct > 75 ? 'bg-amber-500' : 'bg-primary'}`}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                            <span className="text-[10px] text-muted font-medium tabular-nums">{pct}%</span>
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3.5 whitespace-nowrap">
                         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[s.status]}`}>{s.status}</span>
@@ -365,28 +428,38 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
                       <td className="px-4 py-3.5 text-right">
                         <div className="flex items-center justify-end gap-1">
                           {!s.is_archived && (
-                          <Tooltip label="Edit supplier" align="start">
-                            <button type="button" onClick={() => openEdit(s)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                              <Pencil size={15} />
-                            </button>
-                          </Tooltip>
+                            <Tooltip label="Edit supplier" align="start">
+                              <button
+                                type="button"
+                                onClick={() => openEdit(s)}
+                                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
+                              >
+                                <Pencil size={15} />
+                              </button>
+                            </Tooltip>
                           )}
                           {isAdmin && (
                             <Tooltip label={s.is_archived ? 'Restore supplier' : 'Archive supplier'} align="end">
-                              <button type="button" onClick={() => toggleArchive(s)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                              <button
+                                type="button"
+                                onClick={() => toggleArchive(s)}
+                                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
+                              >
                                 {s.is_archived ? <RotateCcw size={15} /> : <Archive size={15} />}
                               </button>
                             </Tooltip>
                           )}
                           {s.is_archived && (
                             <>
-                            <RetentionCountdown deletedAt={s.deleted_at} compact />
-                            <DeletePermanentButton
-                              endpoint={`/api/suppliers/${s.supplier_id}/permanent`}
-                              label="supplier"
-                              name={s.supplier_name || ''}
-                              onDeleted={() => { fetchSuppliers(); fetchStats() }}
-                            />
+                              <RetentionCountdown deletedAt={s.deleted_at} compact />
+                              {isAdmin && (
+                                <DeletePermanentButton
+                                  endpoint={`/api/suppliers/${s.supplier_id}/permanent`}
+                                  label="supplier"
+                                  name={s.supplier_name || ''}
+                                  onDeleted={() => { fetchSuppliers(); fetchStats() }}
+                                />
+                              )}
                             </>
                           )}
                         </div>
@@ -428,20 +501,77 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
           {formError && (
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{formError}</div>
           )}
-          <div>
-            <label className={LABEL}>Supplier Name <span className="text-red-500">*</span></label>
-            <input type="text" value={form.supplier_name} onChange={(e) => { setForm((f) => ({ ...f, supplier_name: e.target.value })); setFieldErrors((fe) => ({ ...fe, supplier_name: '' })) }} className={`${INPUT} ${fieldErrors.supplier_name ? 'border-red-400 dark:border-red-500' : ''}`} placeholder="Northgate Supplies Inc." />
-            {fieldErrors.supplier_name && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.supplier_name}</p>}
-          </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Contact Person <span className="text-red-500">*</span></label>
-              <input type="text" value={form.contact_person} onChange={(e) => { setForm((f) => ({ ...f, contact_person: e.target.value })); setFieldErrors((fe) => ({ ...fe, contact_person: '' })) }} className={`${INPUT} ${fieldErrors.contact_person ? 'border-red-400 dark:border-red-500' : ''}`} placeholder="Rico Alvarado" />
-              {fieldErrors.contact_person && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.contact_person}</p>}
+              <label className={LABEL}>Supplier Name <span className="text-red-500">*</span></label>
+              <input type="text" value={form.supplier_name} onChange={(e) => { setForm((f) => ({ ...f, supplier_name: e.target.value })); setFieldErrors((fe) => ({ ...fe, supplier_name: '' })) }} className={`${INPUT} ${fieldErrors.supplier_name ? 'border-red-400 dark:border-red-500' : ''}`} placeholder="Coastal Steel Traders" />
+              {fieldErrors.supplier_name && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.supplier_name}</p>}
             </div>
             <div>
-              <label className={LABEL}>Position</label>
-              <input type="text" value={form.position} onChange={(e) => setForm((f) => ({ ...f, position: e.target.value }))} className={INPUT} placeholder="Sales Manager" />
+              <label className={LABEL}>Category / Goods Supplied</label>
+              <input type="text" value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))} className={INPUT} placeholder="e.g. Heavy Equipment Spare Parts" list="supplier-category-suggestions" />
+              <datalist id="supplier-category-suggestions">
+                <option value="Diesel Fuel & Lubricants" />
+                <option value="Heavy Equipment Spare Parts" />
+                <option value="Fleet Consumables & Tires" />
+                <option value="Heavy Hauling & Subcontracting" />
+                <option value="Hydraulic Maintenance & Repairs" />
+                <option value="Office & Administrative" />
+              </datalist>
+            </div>
+          </div>
+          <div className="rounded-lg border border-border/80 bg-bg/50 p-3 space-y-3">
+            <p className="text-xs font-semibold text-ink uppercase tracking-wider flex items-center gap-1.5">
+              <FileText size={13} className="text-primary" />
+              Contract & Credit Terms
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={LABEL}>Supplier Credit Line Granted (₱)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.credit_limit}
+                  onChange={(e) => setForm((f) => ({ ...f, credit_limit: e.target.value }))}
+                  className={INPUT}
+                  placeholder="500000.00"
+                />
+                <p className="mt-1 text-[10.5px] text-muted">Maximum credit extended to us before order hold.</p>
+              </div>
+              <div>
+                <label className={LABEL}>Payment Terms</label>
+                <select value={form.payment_terms} onChange={(e) => setForm((f) => ({ ...f, payment_terms: e.target.value }))} className={INPUT}>
+                  <option value="Net 15">Net 15 Days</option>
+                  <option value="Net 30">Net 30 Days (Standard)</option>
+                  <option value="Net 45">Net 45 Days</option>
+                  <option value="Net 60">Net 60 Days</option>
+                  <option value="COD">COD (Cash On Delivery)</option>
+                  <option value="Advance Payment">Advance Payment</option>
+                </select>
+                <p className="mt-1 text-[10.5px] text-muted">Bill due date rule in Accounts Payable.</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={LABEL}>Contract / Agreement Ref No.</label>
+                <input
+                  type="text"
+                  value={form.contract_ref}
+                  onChange={(e) => setForm((f) => ({ ...f, contract_ref: e.target.value }))}
+                  className={INPUT}
+                  placeholder="e.g. CTR-2026-CST-08"
+                />
+              </div>
+              <div>
+                <label className={LABEL}>Contract Expiry Date</label>
+                <input
+                  type="date"
+                  value={form.contract_expiry}
+                  onChange={(e) => setForm((f) => ({ ...f, contract_expiry: e.target.value }))}
+                  className={INPUT}
+                />
+              </div>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">

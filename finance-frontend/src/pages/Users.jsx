@@ -327,7 +327,7 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
   // Current signed-in user  -  lets the edit modal lock the Role field when
   // editing your own account, since the backend rejects self role-changes.
   const { profile } = useProfile()
-  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
+  const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin' || profile?.role_slug === 'admin' || profile?.role_slug === 'super-admin'
   // Only a Super Admin can assign/edit the Super Admin role  -  backend
   // enforces it (UserService::guardAgainstUnauthorizedSuperAdminAssignment),
   // this keeps the option off the screen for everyone else too, and hides
@@ -591,7 +591,7 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
     setGateSaving(true)
     setGateError('')
     try {
-      const res = await apiFetch('/auth/verify-password', {
+      const res = await apiFetch('/api/auth/verify-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password: gatePassword }),
@@ -831,12 +831,14 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
                         {u.is_archived && (
                           <>
                           <RetentionCountdown deletedAt={u.deleted_at} compact />
-                          <DeletePermanentButton
-                            endpoint={`/api/users/${u.user_id}/permanent`}
-                            label="user"
-                            name={`${u.first_name} ${u.last_name}`}
-                            onDeleted={refetch}
-                          />
+                          {isAdmin && (
+                            <DeletePermanentButton
+                              endpoint={`/api/users/${u.user_id}/permanent`}
+                              label="user"
+                              name={`${u.first_name} ${u.last_name}`}
+                              onDeleted={refetch}
+                            />
+                          )}
                           </>
                         )}
                       </div>

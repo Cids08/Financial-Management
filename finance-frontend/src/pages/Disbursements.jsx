@@ -403,7 +403,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
     e.preventDefault()
     const errors = {}
     if (!dForm.ap_id) errors.ap_id = 'Please select a related bill.'
-    if (!dForm.payee.trim()) errors.payee = 'Received By is required.'
+    if (!dForm.payee.trim()) errors.payee = 'Disbursed To is required.'
     if (!dForm.cash_account_id) errors.cash_account_id = 'Please select a cash account.'
     if (!dForm.payment_date) {
       errors.payment_date = 'Payment date is required.'
@@ -626,7 +626,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                 type="text"
                 value={dSearch}
                 onChange={(e) => setDSearch(e.target.value)}
-                placeholder="Search by voucher, received by, or reference..."
+                placeholder="Search by voucher, disbursed to, or reference..."
                 className={`${INPUT} pl-9 pr-9`}
                 style={{ ...INPUT_TEXT_STYLE, minWidth: 0 }}
                 autoComplete="off"
@@ -695,7 +695,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
           <table className="w-full text-sm">
             <thead className="bg-surface">
               <tr className="border-b border-border">
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-3 py-3">Received By</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-3 py-3">Disbursed To</th>
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3">Source</th>
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3">Reference / Dept</th>
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 whitespace-nowrap">Payment Date</th>
@@ -1031,15 +1031,17 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
               />
             </div>
             <div>
-              <label className={LABEL}>Received By <span className="text-red-500 dark:text-red-400">*</span></label>
+              <label className={LABEL}>Disbursed To <span className="text-red-500 dark:text-red-400">*</span></label>
               <input
                 type="text"
                 value={dForm.payee}
-                onChange={(e) => { setDForm((f) => ({ ...f, payee: e.target.value })); setFieldErrors((fe) => ({ ...fe, payee: '' })) }}
-                className={`${INPUT} ${fieldErrors.payee ? 'border-red-400 dark:border-red-500' : ''}`}
+                disabled
+                readOnly
+                className={`${INPUT} opacity-80 cursor-not-allowed bg-slate-100 dark:bg-slate-800 text-ink dark:text-ink font-medium`}
                 style={INPUT_TEXT_STYLE}
-                placeholder="Northgate Supplies Inc."
+                placeholder="Auto-filled from selected bill"
               />
+              <p className="mt-1 text-[11px] text-muted">Locked to the approved bill's supplier name.</p>
               {fieldErrors.payee && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.payee}</p>}
             </div>
           </div>

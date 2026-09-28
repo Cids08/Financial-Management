@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Users2,
@@ -13,12 +13,15 @@ import {
   FileWarning,
   Send,
   PiggyBank,
+  Download,
 } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
+import Button from '../components/Button'
 import Tooltip from '../components/Tooltip'
 import { formatCurrency } from '../utils/formatters'
 import { useStaffDashboard } from '../hooks/useStaffDashboard'
 import { usePrivacy } from '../context/PrivacyContext'
+import { apiFetch } from '../utils/api'
 
 const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
 const PANEL_PAD = 'p-4'
@@ -41,17 +44,22 @@ function formatDateTime(iso) {
   return new Date(iso).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 }
 
-function StatCard({ label, value, icon: Icon, iconBg, iconColor, loading }) {
+function StatCard({ label, value, icon: Icon, iconBg, iconColor, loading, onClick }) {
   return (
-    <div className={`${PANEL} ${PANEL_PAD} flex items-center gap-3`}>
-      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${iconBg}`}>
+    <button
+      type="button"
+      onClick={onClick}
+      className={`${PANEL} ${PANEL_PAD} flex items-center gap-3 text-left transition-all duration-150
+        hover:border-primary/40 hover:bg-primary/5 active:scale-[0.99] cursor-pointer w-full group focus:outline-none`}
+    >
+      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${iconBg} transition-transform duration-150 group-hover:scale-105`}>
         <Icon size={18} className={iconColor} />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-xs text-muted truncate">{label}</p>
+        <p className="text-xs text-muted group-hover:text-ink truncate transition-colors">{label}</p>
         <p className="text-lg font-bold text-ink truncate">{loading ? '—' : value}</p>
       </div>
-    </div>
+    </button>
   )
 }
 
@@ -108,21 +116,58 @@ export default function StaffDashboard({ title = 'Dashboard', crumbs = ['Dashboa
   const attention = data?.attention || {}
   const recentActivity = data?.recent_activity || []
 
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState(null)
+
+  const handleExport = async () => {
+    setExporting(true)
+    setExportError(null)
+    try {
+      const res = await apiFetch('/api/dashboard/export')
+      if (!res.ok) throw new Error('Export request failed')
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `staff-dashboard-summary-${new Date().toISOString().slice(0, 10)}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      setExportError('Could not export the dashboard summary. Please try again.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const statCards = [
-    { key: 'customers', label: 'Customers', value: summary?.customers ?? '—', icon: Users2, iconBg: 'bg-primary/15', iconColor: 'text-primary-dark' },
-    { key: 'suppliers', label: 'Suppliers', value: summary?.suppliers ?? '—', icon: Building2, iconBg: 'bg-blue-50 dark:bg-blue-500/10', iconColor: 'text-blue-600 dark:text-blue-400' },
-    { key: 'ar', label: 'AR Outstanding', value: summary?.ar_outstanding != null ? formatCurrency(summary.ar_outstanding) : '—', icon: Wallet, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400' },
-    { key: 'ap', label: 'AP Outstanding', value: summary?.ap_outstanding != null ? formatCurrency(summary.ap_outstanding) : '—', icon: Receipt, iconBg: 'bg-amber-50 dark:bg-amber-500/10', iconColor: 'text-amber-600 dark:text-amber-400' },
-    { key: 'expenses', label: 'Expenses This Month', value: summary?.expenses_this_month != null ? formatCurrency(summary.expenses_this_month) : '—', icon: TrendingDown, iconBg: 'bg-red-50 dark:bg-red-500/10', iconColor: 'text-red-600 dark:text-red-400' },
+    { key: 'customers', label: 'Customers', value: summary?.customers ?? '—', icon: Users2, iconBg: 'bg-primary/15', iconColor: 'text-primary-dark', to: '/master-data/customers' },
+    { key: 'suppliers', label: 'Suppliers', value: summary?.suppliers ?? '—', icon: Building2, iconBg: 'bg-blue-50 dark:bg-blue-500/10', iconColor: 'text-blue-600 dark:text-blue-400', to: '/master-data/suppliers' },
+    { key: 'ar', label: 'AR Outstanding', value: summary?.ar_outstanding != null ? formatCurrency(summary.ar_outstanding) : '—', icon: Wallet, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', to: '/transactions/receivable' },
+    { key: 'ap', label: 'AP Outstanding', value: summary?.ap_outstanding != null ? formatCurrency(summary.ap_outstanding) : '—', icon: Receipt, iconBg: 'bg-amber-50 dark:bg-amber-500/10', iconColor: 'text-amber-600 dark:text-amber-400', to: '/transactions/payable' },
+    { key: 'expenses', label: 'Expenses This Month', value: summary?.expenses_this_month != null ? formatCurrency(summary.expenses_this_month) : '—', icon: TrendingDown, iconBg: 'bg-red-50 dark:bg-red-500/10', iconColor: 'text-red-600 dark:text-red-400', to: '/transactions/expenses' },
   ]
 
   return (
     <div className="space-y-5 animate-fadeIn">
       <Breadcrumb items={crumbs} />
 
-      <div>
-        <h1 className="text-xl font-bold tracking-tight text-ink">{title}</h1>
-        <p className="mt-1 text-xs text-muted">Your day-to-day overview.</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight text-ink">{title}</h1>
+          <p className="mt-1 text-xs text-muted">Your day-to-day overview.</p>
+          {exportError && (
+            <p className="mt-1 flex items-center gap-1 text-xs text-red-600 dark:text-red-400">
+              <AlertTriangle size={12} className="shrink-0" /> {exportError}
+            </p>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" size="sm" icon={Download} onClick={handleExport} disabled={exporting}>
+            {exporting ? 'Exporting…' : 'Export'}
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -133,8 +178,8 @@ export default function StaffDashboard({ title = 'Dashboard', crumbs = ['Dashboa
 
       {/* Summary stat cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        {statCards.map(({ key, ...card }) => (
-          <StatCard key={key} {...card} loading={loading} />
+        {statCards.map(({ key, to, ...card }) => (
+          <StatCard key={key} {...card} loading={loading} onClick={() => navigate(to)} />
         ))}
       </div>
 

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   User, Mail, Phone, Briefcase, Camera, Save, X, Upload, Trash2, AlertCircle,
   Lock, ShieldCheck, Smartphone, Monitor, LogOut, Eye, EyeOff, CheckCircle2,
-  AlertTriangle, UserX, KeyRound, Clock, CalendarRange, Copy, Download, RefreshCw,
+  AlertTriangle, UserX, KeyRound, Clock, CalendarRange, Copy, Download, RefreshCw, Loader2,
 } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
@@ -505,21 +505,64 @@ export default function Profile() {
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={handleToggle2FA}
-            disabled={security.twoFABusy}
-            role="switch"
-            aria-checked={security.twoFAEnabled}
-            className={`relative h-6 w-11 shrink-0 rounded-full border transition-colors duration-200 disabled:opacity-60
-              ${security.twoFAEnabled ? 'bg-primary border-primary' : 'bg-transparent border-border'}`}
-          >
-            <span
-              className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full shadow-sm transition-transform duration-200
-                ${security.twoFAEnabled ? 'translate-x-5 bg-white' : 'translate-x-0 bg-muted'}`}
-            />
-          </button>
+          <div className="flex items-center gap-2.5 shrink-0">
+            {security.twoFABusy && (
+              <span className="flex items-center gap-1.5 text-xs font-semibold text-primary animate-pulse">
+                <Loader2 size={13} className="animate-spin text-primary shrink-0" />
+                {security.twoFAEnabled ? 'Opening...' : 'Generating code...'}
+              </span>
+            )}
+            {security.twoFAInitialLoading && !security.twoFABusy && (
+              <span className="flex items-center gap-1 text-xs text-muted">
+                <Loader2 size={12} className="animate-spin text-muted" />
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={handleToggle2FA}
+              disabled={security.twoFABusy || security.twoFAInitialLoading}
+              role="switch"
+              aria-checked={security.twoFAEnabled}
+              aria-label="Toggle Two-Factor Authentication"
+              title={
+                security.twoFABusy
+                  ? 'Please wait, processing...'
+                  : security.twoFAEnabled
+                  ? 'Click to disable Two-Factor Authentication'
+                  : 'Click to enable Two-Factor Authentication'
+              }
+              className={`relative h-6 w-11 shrink-0 rounded-full border transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/40
+                ${security.twoFABusy ? 'cursor-wait opacity-90 ring-2 ring-primary/40' : 'cursor-pointer'}
+                ${security.twoFAEnabled ? 'bg-primary border-primary' : 'bg-slate-200 dark:bg-slate-800 border-border'}`}
+            >
+              <span
+                className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full shadow-sm transition-transform duration-200 flex items-center justify-center
+                  ${security.twoFAEnabled ? 'translate-x-5 bg-white text-primary' : 'translate-x-0 bg-white dark:bg-slate-400 text-slate-700'}
+                  ${security.twoFABusy ? 'shadow-md ring-1 ring-primary/30' : ''}`}
+              >
+                {security.twoFABusy ? (
+                  <Loader2 size={12} className="animate-spin text-primary shrink-0" />
+                ) : null}
+              </span>
+            </button>
+          </div>
         </div>
+
+        {/* Real-time feedback banner while initiating */}
+        {security.twoFABusy && !security.twoFAEnabled && (
+          <div className="mt-3 flex items-center gap-2 rounded-lg border border-primary/25 bg-primary/10 px-3 py-2 text-xs text-primary-dark font-medium animate-fadeIn">
+            <Loader2 size={14} className="animate-spin shrink-0 text-primary" />
+            <span>Generating your 2FA verification key and sending the 6-digit code to your email... Please wait a moment.</span>
+          </div>
+        )}
+
+        {/* Error notification if initiating or toggling failed */}
+        {security.twoFAError && !twoFAModalOpen && !disable2FAModalOpen && (
+          <div className="mt-3 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400 animate-fadeIn">
+            <AlertTriangle size={14} className="shrink-0" />
+            <span>{security.twoFAError}</span>
+          </div>
+        )}
 
         {security.twoFAEnabled && (
           <div className="mt-4 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-xs text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400">

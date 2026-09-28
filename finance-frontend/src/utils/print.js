@@ -124,9 +124,9 @@ export const resolvePageSpec = (specOrOptions) => {
     if (!spec) {
       throw new Error(`[print] unknown PAGE_SPEC "${specOrOptions}"`)
     }
-    return { paper: 'A4', ...spec }
+    return { paper: 'auto', ...spec }
   }
-  return { paper: 'A4', orientation: 'portrait', margin: 14, density: 'normal', footerSpace: true, ...(specOrOptions || {}) }
+  return { paper: 'auto', orientation: 'portrait', margin: 14, density: 'normal', footerSpace: true, ...(specOrOptions || {}) }
 }
 
 /** Normalises a number-or-object margin into a CSS @page margin value. */
@@ -139,8 +139,12 @@ const marginCss = (margin) => {
 /**
  * The shared print stylesheet.
  *
+ * Supports universal paper adaptability (Letter / Short Bond 8.5x11, A4,
+ * and Legal / Long Bond / Folio 8.5x13/14). When paper is 'auto', size specifies
+ * the orientation only so the printer driver/tray selects any paper size cleanly.
+ *
  * @param {object} opts
- * @param {'A4'|'Letter'} opts.paper  Paper size (A4 is the PH default here).
+ * @param {'auto'|'A4'|'Letter'|'legal'} opts.paper  Paper size ('auto' allows any tray paper).
  * @param {'portrait'|'landscape'} opts.orientation
  * @param {number|{top,right,bottom,left}} opts.margin  Page margin in mm.
  * @param {string} opts.density  'compact' tightens table padding for the
@@ -149,7 +153,7 @@ const marginCss = (margin) => {
  *                                    running footer can't overlap it.
  */
 export const printStyles = ({
-  paper = 'A4',
+  paper = 'auto',
   orientation = 'portrait',
   margin = 14,
   density = 'normal',
@@ -161,8 +165,13 @@ export const printStyles = ({
   // The running footer is ~6mm tall including its rule and padding.
   const footerPad = footerSpace ? 'padding-bottom: 9mm;' : ''
 
+  // When paper is 'auto' (the default), specify orientation only (e.g. `size: landscape;`)
+  // so the browser and printer driver smoothly adapt to whatever paper is loaded in the
+  // tray (Letter/Short, A4, or Legal/Long) without clipping or driver mismatch prompts.
+  const sizeRule = paper && paper !== 'auto' ? `${paper} ${orientation}` : orientation
+
   return `
-@page { size: ${paper} ${orientation}; margin: ${marginCss(margin)}; }
+@page { size: ${sizeRule}; margin: ${marginCss(margin)}; }
 
 *, *::before, *::after { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
@@ -634,19 +643,20 @@ export const buildDocument = ({
   density,
   footerSpace,
 } = {}) => {
-  const page = resolvePageSpec(
-    // An explicit spec name wins; otherwise build from whatever overrides
-    // the caller supplied so existing call sites keep working.
-    spec
-      ? resolvePageSpec(spec)
-      : {
-          ...(paper !== undefined && { paper }),
-          ...(orientation !== undefined && { orientation }),
-          ...(margin !== undefined && { margin }),
-          ...(density !== undefined && { density }),
-          ...(footerSpace !== undefined && { footerSpace }),
-        }
-  )
+  const base = spec ? resolvePageSpec(spec) : {}
+  const page = {
+    paper: 'auto',
+    orientation: 'portrait',
+    margin: 14,
+    density: 'normal',
+    footerSpace: true,
+    ...base,
+    ...(paper !== undefined && { paper }),
+    ...(orientation !== undefined && { orientation }),
+    ...(margin !== undefined && { margin }),
+    ...(density !== undefined && { density }),
+    ...(footerSpace !== undefined && { footerSpace }),
+  }
 
   return `<!DOCTYPE html>
 <html>

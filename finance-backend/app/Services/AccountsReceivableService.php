@@ -32,6 +32,23 @@ class AccountsReceivableService
      */
     public function list(array $filters = []): Collection
     {
+        // Automatically sync statuses based on real collections and due dates:
+        // 1. Fully paid invoices -> Paid
+        AccountsReceivable::whereNull('deleted_at')
+            ->where('status', '!=', 'Cancelled')
+            ->where('remaining_balance', '<=', 0)
+            ->where('status', '!=', 'Paid')
+            ->update(['status' => 'Paid']);
+
+        // 2. Unpaid invoices past due date -> Overdue
+        $today = Carbon::today()->toDateString();
+        AccountsReceivable::whereNull('deleted_at')
+            ->where('status', '!=', 'Cancelled')
+            ->where('remaining_balance', '>', 0)
+            ->where('due_date', '<', $today)
+            ->where('status', '!=', 'Overdue')
+            ->update(['status' => 'Overdue']);
+
         $query = AccountsReceivable::query()->with(['customer', 'collector']);
 
         // Soft-deleted rows are excluded by default via SoftDeletes' global
@@ -43,7 +60,11 @@ class AccountsReceivableService
         }
 
         if (! empty($filters['status']) && $filters['status'] !== 'all') {
-            $query->where('status', $filters['status']);
+            if ($filters['status'] === 'For Collection' || $filters['status'] === 'Pending') {
+                $query->whereIn('status', ['Pending', 'For Collection']);
+            } else {
+                $query->where('status', $filters['status']);
+            }
         }
 
         if (array_key_exists('collector_id', $filters) && $filters['collector_id'] !== null) {
@@ -79,6 +100,9 @@ class AccountsReceivableService
                 ? $data['reference_no']
                 : self::generateReferenceNo();
 
+            $paidAmount = max(0, $data['original_amount'] - $balance);
+            $status = $this->resolveArStatus($data['status'] ?? null, (float) $balance, (float) $paidAmount, $data['due_date'] ?? null);
+
             $ar = AccountsReceivable::create([
                 'customer_id' => $data['customer_id'],
                 'collector_id' => $data['collector_id'] ?? null,
@@ -86,7 +110,7 @@ class AccountsReceivableService
                 'invoice_date' => $data['invoice_date'],
                 'due_date' => $data['due_date'],
                 'original_amount' => $data['original_amount'],
-                'paid_amount' => max(0, $data['original_amount'] - $balance),
+                'paid_amount' => $paidAmount,
                 'remaining_balance' => $balance,
                 'payment_method' => $data['payment_method'] ?? null,
                 'payment_terms' => $data['payment_terms'] ?? null,
@@ -95,7 +119,7 @@ class AccountsReceivableService
                 'penalty_rate' => $penaltyRate,
                 'penalty_amount' => $penaltyAmount,
                 'remarks' => $data['remarks'] ?? null,
-                'status' => $data['status'],
+                'status' => $status,
                 'created_by' => $actor->id,
                 'is_archived' => false,
             ]);
@@ -134,6 +158,9 @@ class AccountsReceivableService
                 ? round(($data['original_amount'] * $penaltyRate) / 100, 2)
                 : 0;
 
+            $paidAmount = max(0, $data['original_amount'] - $balance);
+            $status = $this->resolveArStatus($data['status'] ?? $ar->status, (float) $balance, (float) $paidAmount, $data['due_date'] ?? $ar->due_date);
+
             $ar->update([
                 'customer_id' => $data['customer_id'],
                 'collector_id' => array_key_exists('collector_id', $data) ? $data['collector_id'] : $ar->collector_id,
@@ -141,7 +168,7 @@ class AccountsReceivableService
                 'invoice_date' => $data['invoice_date'],
                 'due_date' => $data['due_date'],
                 'original_amount' => $data['original_amount'],
-                'paid_amount' => max(0, $data['original_amount'] - $balance),
+                'paid_amount' => $paidAmount,
                 'remaining_balance' => $balance,
                 'payment_method' => $data['payment_method'] ?? null,
                 'payment_terms' => $data['payment_terms'] ?? null,
@@ -150,7 +177,7 @@ class AccountsReceivableService
                 'penalty_rate' => $penaltyRate,
                 'penalty_amount' => $penaltyAmount,
                 'remarks' => $data['remarks'] ?? null,
-                'status' => $data['status'],
+                'status' => $status,
             ]);
 
             // Reconcile the posted AR/revenue journal to the new invoice amount
@@ -172,6 +199,26 @@ class AccountsReceivableService
 
             return $ar->load(['customer', 'collector']);
         });
+    }
+
+    /**
+     * Automatically derives AR status based on collection settlement and due date.
+     */
+    private function resolveArStatus(?string $requestedStatus, float $remainingBalance, float $paidAmount, ?string $dueDate): string
+    {
+        if ($requestedStatus === 'Cancelled') {
+            return 'Cancelled';
+        }
+        if ($remainingBalance <= 0) {
+            return 'Paid';
+        }
+        if ($dueDate && Carbon::parse($dueDate)->isPast()) {
+            return 'Overdue';
+        }
+        if ($paidAmount > 0) {
+            return 'Partially Paid';
+        }
+        return 'Pending';
     }
 
     /* ---------------------------------------------------------------------- */

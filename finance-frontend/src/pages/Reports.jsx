@@ -599,6 +599,7 @@ function agingRowHtml(label, r) {
 export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
   const [activeReport, setActiveReport] = useState('income-statement')
   const [exporting, setExporting] = useState(false)
+  const [exportingActive, setExportingActive] = useState(false)
 
   // Filter modes: 'preset' | 'year' | 'custom'
   const [filterMode, setFilterMode] = useState('preset')
@@ -1154,38 +1155,43 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
   }
 
   const handleExportActive = async () => {
-    const { title: reportTitle, table } = REPORT_BUILDERS[activeReport]
-    await preloadImage(company?.logoUrl)
-    const generatedAt = new Date().toLocaleString('en-PH', {
-      year: 'numeric', month: 'short', day: 'numeric',
-      hour: '2-digit', minute: '2-digit',
-    })
-    const generatedDate = new Date().toLocaleDateString('en-PH', {
-      year: 'numeric', month: 'short', day: 'numeric',
-    })
-    const sub = isComparing
-      ? `Period: ${activePeriodLabel} (Compared to ${appliedFilters.compareMode === 'prior_year' ? 'Prior Year' : 'Prior Period'})`
-      : `Period: ${activePeriodLabel}`
+    setExportingActive(true)
+    try {
+      const { title: reportTitle, table } = REPORT_BUILDERS[activeReport]
+      await preloadImage(company?.logoUrl)
+      const generatedAt = new Date().toLocaleString('en-PH', {
+        year: 'numeric', month: 'short', day: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      })
+      const generatedDate = new Date().toLocaleDateString('en-PH', {
+        year: 'numeric', month: 'short', day: 'numeric',
+      })
+      const sub = isComparing
+        ? `Period: ${activePeriodLabel} (Compared to ${appliedFilters.compareMode === 'prior_year' ? 'Prior Year' : 'Prior Period'})`
+        : `Period: ${activePeriodLabel}`
 
-    const pageHtml = `
-      <div class="report-page">
-        <div class="report-page-top">
-          ${buildDocHeader(company, reportTitle, sub, generatedAt, currentUserName, currentUserRole)}
-          <div class="report-table-wrapper">
-            ${table()}
+      const pageHtml = `
+        <div class="report-page">
+          <div class="report-page-top">
+            ${buildDocHeader(company, reportTitle, sub, generatedAt, currentUserName, currentUserRole)}
+            <div class="report-table-wrapper">
+              ${table()}
+            </div>
+          </div>
+          <div class="report-page-bottom">
+            ${buildSignatureBlock(currentUserName, currentUserRole, generatedDate)}
+            <div class="doc-footer">
+              <span class="footer-brand">${company?.name ?? 'Financial Management System'} · Transaction Core</span>
+              <span class="footer-conf">CONFIDENTIAL · Official Statement</span>
+              <span>Generated: ${generatedAt}</span>
+            </div>
           </div>
         </div>
-        <div class="report-page-bottom">
-          ${buildSignatureBlock(currentUserName, currentUserRole, generatedDate)}
-          <div class="doc-footer">
-            <span class="footer-brand">${company?.name ?? 'Financial Management System'} · Transaction Core</span>
-            <span class="footer-conf">CONFIDENTIAL · Official Statement</span>
-            <span>Generated: ${generatedAt}</span>
-          </div>
-        </div>
-      </div>
-    `
-    printReport(reportTitle, sub, pageHtml, company)
+      `
+      printReport(reportTitle, sub, pageHtml, company)
+    } finally {
+      setExportingActive(false)
+    }
   }
 
   const handleExportAll = async () => {
@@ -1386,7 +1392,9 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
               size="sm"
               icon={Download}
               onClick={handleExportAll}
+              loading={exporting}
               disabled={exporting}
+              title="Print complete 5-part financial report package"
             >
               {exporting ? 'Preparing…' : 'Export All'}
             </Button>
@@ -1435,10 +1443,19 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
           <button
             type="button"
             onClick={handleExportActive}
-            disabled={isActiveLoading}
-            className="ml-auto flex items-center gap-1 text-xs font-medium text-primary-dark hover:underline disabled:opacity-40 disabled:pointer-events-none"
+            disabled={isActiveLoading || exportingActive}
+            className="ml-auto flex items-center gap-1.5 text-xs font-semibold text-primary-dark hover:underline disabled:opacity-40 disabled:pointer-events-none"
+            title="Print or export currently active statement"
           >
-            <Download size={12} /> Export this report
+            {exportingActive ? (
+              <>
+                <Loader2 size={13} className="animate-spin" /> Preparing…
+              </>
+            ) : (
+              <>
+                <Download size={13} /> Export this report
+              </>
+            )}
           </button>
         </div>
 

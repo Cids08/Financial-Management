@@ -6,6 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Services\DashboardChartService;
 use App\Services\DashboardService;
 use Barryvdh\DomPDF\Facade\Pdf;
+use App\Models\AccountsReceivable;
+use App\Models\Collection;
+use App\Models\Collector;
 use App\Models\Setting;
 use App\Support\FileStorage;
 use Illuminate\Support\Str;
@@ -37,6 +40,19 @@ class DashboardController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        $user = $request->user();
+        $isStaff = strtolower($user?->role?->name ?? '') === 'staff';
+
+        $staffData = $this->dashboardService->getStaffDashboardData();
+
+        if ($isStaff) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Staff dashboard data retrieved successfully.',
+                'data' => $staffData,
+            ]);
+        }
+
         $year = $this->resolveYear($request);
 
         $data = [
@@ -50,6 +66,11 @@ class DashboardController extends Controller
             'notifications' => $this->dashboardService->getNotifications(),
             'ai_insights' => $this->dashboardService->getAiInsights(),
             'forecast_summary' => $this->dashboardService->getForecastSummary(),
+
+            // Also provide staff keys so testing or previewing StaffDashboard never fails
+            'summary' => $staffData['summary'],
+            'attention' => $staffData['attention'],
+            'recent_activity' => $staffData['recent_activity'],
         ];
 
         return response()->json([
@@ -97,6 +118,22 @@ class DashboardController extends Controller
         $settings = Setting::first();
         $currency = $settings?->currency ?: 'PHP';
         $user = $request->user();
+        if ($user) {
+            $user->loadMissing(['role', 'collector']);
+        }
+
+        $isCollector = strtolower($user?->role?->name ?? '') === 'collector'
+            || $user?->collector !== null
+            || ($user ? Collector::where('user_id', $user->id)->exists() : false);
+
+        if ($isCollector) {
+            return $this->exportCollectorPdf($request, $user, $year, $settings, $currency);
+        }
+
+        $isStaff = strtolower($user?->role?->name ?? '') === 'staff';
+        if ($isStaff) {
+            return $this->exportStaffPdf($request, $user, $year, $settings, $currency);
+        }
 
         $data = [
             'generated_at' => now(),
@@ -133,6 +170,148 @@ class DashboardController extends Controller
             ->setPaper('a4', 'portrait');
 
         $filename = 'dashboard-summary-' . $year . '-' . now()->format('m-d') . '.pdf';
+
+        return $pdf->download($filename);
+    }
+
+    /**
+     * Exports a tailored collector dashboard & performance summary PDF
+     * for the given calendar year.
+     */
+    private function exportCollectorPdf(Request $request, $user, int $year, ?Setting $settings, string $currency): Response
+    {
+        $collector = $user->collector
+            ?? Collector::where('user_id', $user->id)->first()
+            ?? Collector::where('email', $user->email)->first();
+
+        $collectorId = $collector?->id;
+
+        // Assigned AR query
+        $arQuery = AccountsReceivable::query()
+            ->with('customer')
+            ->when($collectorId, fn ($q) => $q->where('collector_id', $collectorId))
+            ->whereNull('deleted_at');
+
+        $assignedInvoices = (clone $arQuery)->get();
+
+        $outstandingBalance = (float) (clone $arQuery)
+            ->whereNotIn('status', ['Paid', 'Cancelled'])
+            ->sum('remaining_balance');
+
+        $overdueInvoices = (clone $arQuery)
+            ->where(function ($q) {
+                $q->where('status', 'Overdue')
+                    ->orWhere(function ($sub) {
+                        $sub->whereNotIn('status', ['Paid', 'Cancelled'])
+                            ->where('due_date', '<', now()->toDateString());
+                    });
+            })
+            ->get();
+
+        $overdueCount = $overdueInvoices->count();
+        $overdueAmount = (float) $overdueInvoices->sum('remaining_balance');
+
+        // Collections query for selected year
+        $collectionsQuery = Collection::query()
+            ->with(['accountsReceivable.customer', 'cashAccount'])
+            ->when($collectorId, fn ($q) => $q->where('collector_id', $collectorId))
+            ->whereYear('collection_date', $year)
+            ->whereNull('deleted_at');
+
+        $yearCollections = (clone $collectionsQuery)
+            ->orderByDesc('collection_date')
+            ->get();
+
+        $confirmedCollections = $yearCollections->where('status', Collection::STATUS_CONFIRMED);
+        $totalCollected = (float) $confirmedCollections->sum('amount_received');
+        $confirmedCount = $confirmedCollections->count();
+
+        $pendingCollections = $yearCollections->where('status', Collection::STATUS_PENDING);
+        $totalPending = (float) $pendingCollections->sum('amount_received');
+        $pendingCount = $pendingCollections->count();
+
+        // Invoices needing attention / to collect
+        $invoicesToCollect = (clone $arQuery)
+            ->whereNotIn('status', ['Paid', 'Cancelled'])
+            ->orderBy('due_date', 'asc')
+            ->take(25)
+            ->get();
+
+        $data = [
+            'generated_at' => now(),
+            'selected_year' => $year,
+            'company' => [
+                'name' => $settings?->company_name ?: config('app.name', 'FMS'),
+                'address' => $settings?->company_address,
+                'phone' => $settings?->phone,
+                'email' => $settings?->email,
+                'tin' => $settings?->tin,
+                'logo_data_uri' => FileStorage::inlineDataUri($settings?->company_logo),
+            ],
+            'currency' => $currency,
+            'period_end' => $year === (int) now()->year
+                ? now()->format('j F Y')
+                : '31 December ' . $year,
+            'collector' => [
+                'name' => $collector ? trim("{$collector->first_name} {$collector->last_name}") : trim("{$user->first_name} {$user->last_name}"),
+                'employee_no' => $collector?->employee_no ?? '—',
+                'assigned_area' => $collector?->assigned_area ?? $collector?->serviceArea?->area_name ?? 'All Assigned Accounts',
+                'email' => $collector?->email ?? $user->email,
+                'phone' => $collector?->phone_number ?? '—',
+                'target' => $collector?->monthly_target,
+            ],
+            'stats' => [
+                'total_collected' => $totalCollected,
+                'confirmed_count' => $confirmedCount,
+                'total_pending' => $totalPending,
+                'pending_count' => $pendingCount,
+                'outstanding_balance' => $outstandingBalance,
+                'overdue_count' => $overdueCount,
+                'overdue_amount' => $overdueAmount,
+                'total_assigned_count' => $assignedInvoices->count(),
+            ],
+            'invoices_to_collect' => $invoicesToCollect,
+            'recent_collections' => $yearCollections->take(30),
+        ];
+
+        $pdf = Pdf::loadView('pdf.collector-dashboard-summary', $data)
+            ->setPaper('a4', 'portrait');
+
+        $filename = 'collector-dashboard-summary-' . $year . '-' . now()->format('m-d') . '.pdf';
+
+        return $pdf->download($filename);
+    }
+
+    /**
+     * Exports a tailored staff operational dashboard summary PDF.
+     */
+    private function exportStaffPdf(Request $request, $user, int $year, ?Setting $settings, string $currency): Response
+    {
+        $staffData = $this->dashboardService->getStaffDashboardData();
+
+        $data = [
+            'generated_at' => now(),
+            'selected_year' => $year,
+            'company' => [
+                'name' => $settings?->company_name ?: config('app.name', 'FMS'),
+                'address' => $settings?->company_address,
+                'phone' => $settings?->phone,
+                'email' => $settings?->email,
+                'tin' => $settings?->tin,
+                'logo_data_uri' => FileStorage::inlineDataUri($settings?->company_logo),
+            ],
+            'currency' => $currency,
+            'generated_by' => $user ? trim("{$user->first_name} {$user->last_name}") : null,
+            'generated_by_role' => $user?->relationLoaded('role') ? ($user->role?->name ? Str::headline($user->role->name) : null) : null,
+            'summary' => $staffData['summary'],
+            'attention' => $staffData['attention'],
+            'recent_activity' => $staffData['recent_activity'],
+        ];
+
+        $pdf = Pdf::loadView('pdf.staff-dashboard-summary', $data)
+            ->setPaper('a4', 'portrait');
+
+        $filename = 'staff-dashboard-summary-' . now()->format('Y-m-d') . '.pdf';
 
         return $pdf->download($filename);
     }

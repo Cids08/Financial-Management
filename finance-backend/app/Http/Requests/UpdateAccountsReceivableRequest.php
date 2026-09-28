@@ -7,7 +7,7 @@ use Illuminate\Validation\Rule;
 
 class UpdateAccountsReceivableRequest extends FormRequest
 {
-    protected const STATUSES = ['Pending', 'Partially Paid', 'Paid', 'Overdue', 'Cancelled'];
+    protected const STATUSES = ['Pending', 'For Collection', 'Partially Paid', 'Paid', 'Overdue', 'Cancelled'];
 
     protected const PAYMENT_METHODS = ['Bank Transfer', 'Check', 'Cash', 'Credit Card', 'GCash'];
 

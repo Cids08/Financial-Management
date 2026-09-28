@@ -26,6 +26,9 @@ class UpdateCustomerRequest extends FormRequest
             'address' => ['nullable', 'string'],
             'industry' => ['nullable', 'string', 'max:255'],
             'credit_limit' => ['sometimes', 'numeric', 'min:0'],
+            'payment_terms' => ['nullable', 'string', 'max:100'],
+            'contract_ref' => ['nullable', 'string', 'max:100'],
+            'contract_expiry' => ['nullable', 'date'],
             'status' => ['sometimes', Rule::in(['Active', 'Inactive'])],
         ];
     }

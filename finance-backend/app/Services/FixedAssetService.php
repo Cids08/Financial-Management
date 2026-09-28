@@ -80,11 +80,15 @@ class FixedAssetService
                 'is_active' => true,
             ]
         );
+
+        if (FixedAsset::withTrashed()->count() === 0) {
+            (new \Database\Seeders\FixedAssetSeeder())->run();
+        }
     }
 
     protected static function seedInitialAssets(): void
     {
-        $adminId = User::whereHas('role', fn ($q) => $q->whereIn('role_name', ['Admin', 'Super Admin', 'admin', 'super-admin']))->value('id')
+        $adminId = User::whereHas('role', fn ($q) => $q->whereIn('name', ['admin', 'super-admin'])->orWhereIn('display_name', ['Admin', 'Super Admin']))->value('id')
             ?? User::first()?->id;
 
         $deptId = DB::table('departments')->value('id');
