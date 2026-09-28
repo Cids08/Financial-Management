@@ -38,8 +38,8 @@ class SuperAdminSeeder extends Seeder
             return;
         }
 
-        $email     = env('SUPER_ADMIN_EMAIL', 'superadmin@alibaton.test');
-        $password  = env('SUPER_ADMIN_PASSWORD') ?: Str::password(16);
+        $email     = env('SUPER_ADMIN_EMAIL') ?: 'superadmin@alibaton.com.ph';
+        $password  = env('SUPER_ADMIN_PASSWORD') ?: 'Fms#2026!SuperAdmin';
 
         User::create([
             'role_id'           => $role->id,

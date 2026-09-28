@@ -22,30 +22,32 @@ fi
 echo "==> DB_CONNECTION=${DB_CONNECTION:-auto} DB_HOST=${DB_HOST:-(none)} DB_DATABASE=${DB_DATABASE:-(unset)}"
 php artisan tinker --execute="echo '==> Laravel will use the [' . config('database.default') . '] connection' . PHP_EOL;"
 
-# Full wipe: set APP_RESET_ON_BOOT=true in HostForge before deploying to
-# drop every table, re-migrate from scratch, and re-seed the base auth
-# data (roles/permissions + super admin). Numbering restarts; super admin
-# becomes user #1 (SA-0001), so the next employee is EMP-00002.
-# Set it back to false after the reset deploy, or keep it unset.
+# Full wipe & re-seed for defense / deployment:
+# Set APP_RESET_ON_BOOT=true in HostForge before deploying to drop every table,
+# re-migrate from scratch, and seed the entire defense dataset (10+ master records,
+# 6 months of historical transactions for ARIMA AI forecasting).
+# Set it back to false after the deploy, or keep it unset.
 if [ "${APP_RESET_ON_BOOT:-false}" = "true" ]; then
-    echo "==> APP_RESET_ON_BOOT=true — wiping and re-creating database..."
+    echo "==> APP_RESET_ON_BOOT=true — wiping and re-creating database with complete defense dataset..."
     php artisan migrate:fresh --force
-    php artisan db:seed --class=RolesAndPermissionsSeeder --force
-    php artisan db:seed --class=SuperAdminSeeder --force
-    php artisan db:seed --class=TitleSeeder --force
-    echo "==> Database reset complete."
+    php artisan db:seed --force
+    echo "==> Fresh database reset & full seeding complete."
+elif [ "${APP_SEED_ON_BOOT:-false}" = "true" ]; then
+    echo "==> APP_SEED_ON_BOOT=true — running migrations and seeding full defense dataset..."
+    php artisan migrate --force
+    php artisan db:seed --force
+    echo "==> Database seeding complete."
 else
     echo "==> Running migrations..."
     php artisan migrate --force
+    echo "==> Ensuring core auth & permissions (idempotent)..."
+    php artisan db:seed --class=RolesAndPermissionsSeeder --force
+    php artisan db:seed --class=SuperAdminSeeder --force
+    php artisan db:seed --class=TitleSeeder --force
 fi
 
 echo "==> Creating storage link..."
 php artisan storage:link --force 2>/dev/null || true
-
-echo "==> Seeding roles & permissions (idempotent)..."
-php artisan db:seed --class=RolesAndPermissionsSeeder --force
-php artisan db:seed --class=SuperAdminSeeder --force
-php artisan db:seed --class=TitleSeeder --force
 
 echo "==> Caching config, routes, views..."
 php artisan config:cache

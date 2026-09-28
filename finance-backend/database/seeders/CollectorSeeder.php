@@ -25,6 +25,8 @@ class CollectorSeeder extends Seeder
             ['employee_no' => 'EMP-0106', 'first_name' => 'Grace', 'last_name' => 'Villanueva', 'area' => 'MRK'],
             ['employee_no' => 'EMP-0107', 'first_name' => 'Paolo', 'last_name' => 'Cruz', 'area' => 'TGG'],
             ['employee_no' => 'EMP-0108', 'first_name' => 'Divina', 'last_name' => 'Aquino', 'area' => 'QC'],
+            ['employee_no' => 'EMP-0109', 'first_name' => 'Gabriel', 'last_name' => 'Ocampo', 'area' => 'MNL'],
+            ['employee_no' => 'EMP-0110', 'first_name' => 'Christine', 'last_name' => 'Dizon', 'area' => 'MKT'],
         ];
 
         foreach ($collectors as $c) {
