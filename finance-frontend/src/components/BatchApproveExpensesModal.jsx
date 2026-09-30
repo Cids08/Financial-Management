@@ -434,7 +434,7 @@ export default function BatchApproveExpensesModal({
               </div>
 
               {proposalError && (
-                <div className="flex items-start gap-2 p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg text-rose-700 dark:text-rose-400 text-xs sm:text-sm">
+                <div className="flex items-start gap-2 p-3 bg-status-danger-bg border border-status-danger-border rounded-lg text-status-danger text-xs sm:text-sm">
                   <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
                   {proposalError}
                 </div>
@@ -482,18 +482,18 @@ export default function BatchApproveExpensesModal({
 
               {/* Withheld notice  -  exactly like AP Payment Wizard */}
               {(totals.attachment_missing_count ?? 0) > 0 && (
-                <div className="flex items-start gap-2.5 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-800 dark:text-amber-300">
-                  <Paperclip className="w-4 h-4 mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                <div className="flex items-start gap-2.5 p-3 bg-status-warning-bg border border-status-warning-border rounded-lg text-status-warning">
+                  <Paperclip className="w-4 h-4 mt-0.5 shrink-0 text-status-warning" />
                   <div className="text-sm">
-                    <p className="font-semibold text-amber-800 dark:text-amber-300">
+                    <p className="font-semibold text-status-warning">
                       {totals.attachment_missing_count} pending expense{totals.attachment_missing_count === 1 ? '' : 's'} withheld  -  missing supporting receipt
                     </p>
-                    <p className="text-amber-700 dark:text-amber-400/90 mt-0.5 text-xs">
+                    <p className="text-status-warning mt-0.5 text-xs">
                       Company policy (<em>"No Document, No Payment"</em>) requires an attached receipt document before an expense can be approved.
                       Attach the receipt on the Expenses page, then re-run the wizard.
                     </p>
                     {(totals.withheld_expenses ?? []).length > 0 && (
-                      <p className="text-amber-600 dark:text-amber-400 mt-1 text-xs font-mono">
+                      <p className="text-status-warning mt-1 text-xs font-mono">
                         Withheld: {totals.withheld_expenses.join(', ')}
                       </p>
                     )}
@@ -535,7 +535,7 @@ export default function BatchApproveExpensesModal({
                           <tr
                             key={x.id}
                             onClick={() => toggleRow(x.id)}
-                            className={`cursor-pointer hover:bg-bg/60 transition-colors ${isChecked ? 'bg-emerald-500/10 dark:bg-emerald-500/15' : ''}`}
+                            className={`cursor-pointer hover:bg-bg/60 transition-colors ${isChecked ? 'bg-primary/10' : ''}`}
                           >
                             <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
                               <input
@@ -563,11 +563,11 @@ export default function BatchApproveExpensesModal({
                             <td className="px-3 py-3 text-right font-mono font-semibold text-ink whitespace-nowrap">
                               {formatCurrency(x.expense_amount)}
                               {x.is_over_budget && (
-                                <span className="ml-1 inline-flex items-center px-1 py-0.5 rounded text-[9px] font-semibold bg-red-500/10 text-red-600 dark:text-red-400">Over</span>
+                                <span className="ml-1 inline-flex items-center px-1 py-0.5 rounded text-[9px] font-semibold bg-status-danger-bg text-status-danger">Over</span>
                               )}
                             </td>
                             <td className="px-3 py-3 text-center">
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-full bg-status-success-bg text-status-success border border-status-success-border">
                                 <CheckCircle className="w-3 h-3" />
                                 Verified
                               </span>
@@ -592,7 +592,7 @@ export default function BatchApproveExpensesModal({
               )}
 
               {execError && (
-                <div className="flex items-start gap-2 p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg text-rose-700 dark:text-rose-400 text-xs sm:text-sm">
+                <div className="flex items-start gap-2 p-3 bg-status-danger-bg border border-status-danger-border rounded-lg text-status-danger text-xs sm:text-sm">
                   <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
                   {execError}
                 </div>
@@ -639,19 +639,19 @@ export default function BatchApproveExpensesModal({
                       </thead>
                       <tbody className="divide-y divide-border">
                         {cashImpact.map((c, i) => (
-                          <tr key={i} className={c.isOverdrawn ? 'bg-rose-500/10' : ''}>
+                          <tr key={i} className={c.isOverdrawn ? 'bg-status-danger-bg' : ''}>
                             <td className="px-4 py-2.5 font-medium text-ink">
                               {c.account_name}
                               {c.bank_name && <span className="text-muted text-xs ml-1">· {c.bank_name}</span>}
                             </td>
-                            <td className="px-4 py-2.5 text-right font-mono font-semibold text-rose-600 dark:text-rose-400">{formatCurrency(c.total)}</td>
+                            <td className="px-4 py-2.5 text-right font-mono font-semibold text-ink">{formatCurrency(c.total)}</td>
                             <td className="px-4 py-2.5 text-right">
                               {c.isOverdrawn ? (
-                                <span className="inline-flex items-center gap-1 text-[10px] bg-rose-500/20 text-rose-600 dark:text-rose-400 px-2 py-0.5 rounded-full font-semibold">
+                                <span className="inline-flex items-center gap-1 text-[10px] bg-status-danger-bg text-status-danger px-2 py-0.5 rounded-full font-semibold">
                                   <AlertTriangle size={11} /> OVERDRAFT
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center text-[10px] bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-full font-semibold">
+                                <span className="inline-flex items-center text-[10px] bg-status-success-bg text-status-success px-2 py-0.5 rounded-full font-semibold">
                                   SUFFICIENT FUNDS
                                 </span>
                               )}
@@ -680,13 +680,13 @@ export default function BatchApproveExpensesModal({
                       </thead>
                       <tbody className="divide-y divide-border">
                         {budgetImpact.map((b, i) => (
-                          <tr key={i} className={b.isOverBudget ? 'bg-rose-500/10' : ''}>
+                          <tr key={i} className={b.isOverBudget ? 'bg-status-danger-bg' : ''}>
                             <td className="px-4 py-2.5 font-medium text-ink">{b.budget_name}</td>
                             <td className="px-4 py-2.5 text-right font-mono text-muted">{formatCurrency(b.remaining_amount)}</td>
-                            <td className="px-4 py-2.5 text-right font-mono font-semibold text-rose-600 dark:text-rose-400">{formatCurrency(b.total)}</td>
-                            <td className={`px-4 py-2.5 text-right font-mono font-bold ${b.isOverBudget ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                            <td className="px-4 py-2.5 text-right font-mono font-semibold text-ink">{formatCurrency(b.total)}</td>
+                            <td className={`px-4 py-2.5 text-right font-mono font-bold ${b.isOverBudget ? 'text-status-danger' : 'text-status-success'}`}>
                               {formatCurrency(b.after)}
-                              {b.isOverBudget && <span className="ml-1 text-[9px] bg-rose-500/20 text-rose-600 dark:text-rose-400 px-1 py-0.5 rounded font-semibold">OVER</span>}
+                              {b.isOverBudget && <span className="ml-1 text-[9px] bg-status-danger-bg text-status-danger px-1 py-0.5 rounded font-semibold">OVER</span>}
                             </td>
                           </tr>
                         ))}
@@ -697,7 +697,7 @@ export default function BatchApproveExpensesModal({
               )}
 
               {(hasOverdraft || hasOverBudget) && (
-                <div className="flex items-start gap-2 p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg text-rose-700 dark:text-rose-400 text-xs sm:text-sm">
+                <div className="flex items-start gap-2 p-3 bg-status-danger-bg border border-status-danger-border rounded-lg text-status-danger text-xs sm:text-sm">
                   <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
                   <span>
                     {hasOverdraft && 'One or more cash accounts will be overdrawn. '}
@@ -708,7 +708,7 @@ export default function BatchApproveExpensesModal({
               )}
 
               {execError && (
-                <div className="flex items-start gap-2 p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg text-rose-700 dark:text-rose-400 text-xs sm:text-sm">
+                <div className="flex items-start gap-2 p-3 bg-status-danger-bg border border-status-danger-border rounded-lg text-status-danger text-xs sm:text-sm">
                   <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
                   {execError}
                 </div>
@@ -721,7 +721,7 @@ export default function BatchApproveExpensesModal({
           ================================================================ */}
           {step === 3 && (
             <div className="max-w-md mx-auto space-y-6 text-center py-4">
-              <div className="w-16 h-16 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto">
+              <div className="w-16 h-16 bg-status-success-bg text-status-success rounded-full flex items-center justify-center mx-auto">
                 <CheckCircle className="w-9 h-9" />
               </div>
               <div>

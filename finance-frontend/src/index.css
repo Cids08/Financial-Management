@@ -3,143 +3,398 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --color-primary: #F4B400;
-  --color-primary-dark: #D89C00;
-  --color-primary-light: #FDE7B0;
-
-  /* main surface tokens (light defaults) */
-  --color-ink: #111827;
-  --color-bg: #F9FAFB;
-  --color-surface: #FFFFFF;
-  --color-border: #E5E7EB;
-  --color-muted: #6B7280;
-
-  /* sidebar tokens — separate from `ink` so it can invert independently */
-  --color-sidebar: #FFFFFF;
-  --color-sidebar-ink: #111827;
-  --color-sidebar-muted: #6B7280;
-  --color-sidebar-border: #E5E7EB;
-  --color-sidebar-hover: #F3F4F6;
-
+  --color-primary: #f4b400;
+  --color-primary-dark: #856000;
+  --color-primary-hover: #ffc62b;
+  --color-primary-light: #fff6d6;
+  --color-brand-50: #fffbea;
+  --color-brand-100: #fff3c4;
+  --color-brand-200: #ffe58a;
+  --color-brand-300: #ffd24d;
+  --color-brand-400: #ffc21a;
+  --color-brand-500: #f4b400;
+  --color-brand-600: #b88400;
+  --color-brand-700: #856000;
+  --color-brand-800: #694b00;
+  --color-brand-900: #513a00;
+  --color-brand-950: #2a1e00;
+  --color-status-success: #047857;
+  --color-status-success-bg: #ecfdf5;
+  --color-status-success-border: #a7f3d0;
+  --color-status-warning: #92400e;
+  --color-status-warning-bg: #fffbeb;
+  --color-status-warning-border: #fcd34d;
+  --color-status-info: #1d4ed8;
+  --color-status-info-bg: #eff6ff;
+  --color-status-info-border: #bfdbfe;
+  --color-status-danger: #b91c1c;
+  --color-status-danger-bg: #fef2f2;
+  --color-status-danger-border: #fecaca;
+  --color-status-neutral: #525252;
+  --color-status-neutral-bg: #f5f5f5;
+  --color-status-neutral-border: #d4d4d4;
+  --color-status-success-solid: #047857;
+  --color-status-danger-solid: #b91c1c;
+  --color-ink: #171717;
+  --color-bg: #f7f7f7;
+  --color-surface: #ffffff;
+  --color-border: #e5e5e5;
+  --color-muted: #737373;
+  --color-sidebar: #111111;
+  --color-sidebar-ink: #ffffff;
+  --color-sidebar-muted: #a3a3a3;
+  --color-sidebar-border: #2b2b2b;
+  --color-sidebar-hover: #242424;
   --font-sans: "Inter", system-ui, sans-serif;
-
-  --shadow-card: 0 1px 2px 0 rgba(17, 24, 39, 0.04), 0 1px 3px 0 rgba(17, 24, 39, 0.06);
-  --shadow-header: 0 1px 3px 0 rgba(17, 24, 39, 0.08);
-  --shadow-dropdown: 0 10px 25px -5px rgba(17, 24, 39, 0.1), 0 8px 10px -6px rgba(17, 24, 39, 0.06);
-
-  --animate-fadeIn: fadeIn 0.15s ease-out;
+  --ease-in-out-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+  --shadow-card: 0 2px 8px -4px rgb(0 0 0 / 0.08);
+  --shadow-header: 0 1px 0 rgb(0 0 0 / 0.05);
+  --shadow-dropdown: 0 20px 50px -12px rgb(0 0 0 / 0.18), 0 4px 12px -4px rgb(0 0 0 / 0.06);
+  --animate-fadeIn: fadeIn 0.2s ease-out;
   --animate-slideIn: slideIn 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   --animate-waveY: waveY 0.8s ease-in-out infinite;
 }
 
-/* Dark mode overrides — same variable names, new values.
-   Every utility already built on var(--color-ink) etc. re-renders automatically. */
+/* Legacy decorative utilities stay in the gold/monochrome brand palette.
+   Status badges and feedback use the separate status-* tokens above so
+   business meaning never depends on a decorative module color. */
+@theme inline {
+  --color-orange-50: var(--color-brand-50);
+  --color-orange-100: var(--color-brand-100);
+  --color-orange-200: var(--color-brand-200);
+  --color-orange-300: var(--color-brand-300);
+  --color-orange-400: var(--color-brand-400);
+  --color-orange-500: var(--color-brand-500);
+  --color-orange-600: var(--color-brand-600);
+  --color-orange-700: var(--color-brand-700);
+  --color-orange-800: var(--color-brand-800);
+  --color-orange-900: var(--color-brand-900);
+  --color-orange-950: var(--color-brand-950);
+  --color-slate-50: var(--color-neutral-50);
+  --color-slate-100: var(--color-neutral-100);
+  --color-slate-200: var(--color-neutral-200);
+  --color-slate-300: var(--color-neutral-300);
+  --color-slate-400: var(--color-neutral-400);
+  --color-slate-500: var(--color-neutral-500);
+  --color-slate-600: var(--color-neutral-600);
+  --color-slate-700: var(--color-neutral-700);
+  --color-slate-800: var(--color-neutral-800);
+  --color-slate-900: var(--color-neutral-900);
+  --color-slate-950: var(--color-neutral-950);
+  --color-gray-50: var(--color-neutral-50);
+  --color-gray-100: var(--color-neutral-100);
+  --color-gray-200: var(--color-neutral-200);
+  --color-gray-300: var(--color-neutral-300);
+  --color-gray-400: var(--color-neutral-400);
+  --color-gray-500: var(--color-neutral-500);
+  --color-gray-600: var(--color-neutral-600);
+  --color-gray-700: var(--color-neutral-700);
+  --color-gray-800: var(--color-neutral-800);
+  --color-gray-900: var(--color-neutral-900);
+  --color-gray-950: var(--color-neutral-950);
+  --color-zinc-50: var(--color-neutral-50);
+  --color-zinc-100: var(--color-neutral-100);
+  --color-zinc-200: var(--color-neutral-200);
+  --color-zinc-300: var(--color-neutral-300);
+  --color-zinc-400: var(--color-neutral-400);
+  --color-zinc-500: var(--color-neutral-500);
+  --color-zinc-600: var(--color-neutral-600);
+  --color-zinc-700: var(--color-neutral-700);
+  --color-zinc-800: var(--color-neutral-800);
+  --color-zinc-900: var(--color-neutral-900);
+  --color-zinc-950: var(--color-neutral-950);
+  --color-stone-50: var(--color-neutral-50);
+  --color-stone-100: var(--color-neutral-100);
+  --color-stone-200: var(--color-neutral-200);
+  --color-stone-300: var(--color-neutral-300);
+  --color-stone-400: var(--color-neutral-400);
+  --color-stone-500: var(--color-neutral-500);
+  --color-stone-600: var(--color-neutral-600);
+  --color-stone-700: var(--color-neutral-700);
+  --color-stone-800: var(--color-neutral-800);
+  --color-stone-900: var(--color-neutral-900);
+  --color-stone-950: var(--color-neutral-950);
+  --color-red-50: var(--color-brand-50);
+  --color-red-100: var(--color-brand-100);
+  --color-red-200: var(--color-brand-200);
+  --color-red-300: var(--color-brand-300);
+  --color-red-400: var(--color-brand-400);
+  --color-red-500: var(--color-brand-500);
+  --color-red-600: var(--color-brand-700);
+  --color-red-700: var(--color-brand-700);
+  --color-red-800: var(--color-brand-800);
+  --color-red-900: var(--color-brand-900);
+  --color-red-950: var(--color-brand-950);
+  --color-rose-50: var(--color-brand-50);
+  --color-rose-100: var(--color-brand-100);
+  --color-rose-200: var(--color-brand-200);
+  --color-rose-300: var(--color-brand-300);
+  --color-rose-400: var(--color-brand-400);
+  --color-rose-500: var(--color-brand-500);
+  --color-rose-600: var(--color-brand-700);
+  --color-rose-700: var(--color-brand-700);
+  --color-rose-800: var(--color-brand-800);
+  --color-rose-900: var(--color-brand-900);
+  --color-rose-950: var(--color-brand-950);
+  --color-amber-50: var(--color-brand-50);
+  --color-amber-100: var(--color-brand-100);
+  --color-amber-200: var(--color-brand-200);
+  --color-amber-300: var(--color-brand-300);
+  --color-amber-400: var(--color-brand-400);
+  --color-amber-500: var(--color-brand-500);
+  --color-amber-600: var(--color-brand-700);
+  --color-amber-700: var(--color-brand-700);
+  --color-amber-800: var(--color-brand-800);
+  --color-amber-900: var(--color-brand-900);
+  --color-amber-950: var(--color-brand-950);
+  --color-yellow-50: var(--color-brand-50);
+  --color-yellow-100: var(--color-brand-100);
+  --color-yellow-200: var(--color-brand-200);
+  --color-yellow-300: var(--color-brand-300);
+  --color-yellow-400: var(--color-brand-400);
+  --color-yellow-500: var(--color-brand-500);
+  --color-yellow-600: var(--color-brand-700);
+  --color-yellow-700: var(--color-brand-700);
+  --color-yellow-800: var(--color-brand-800);
+  --color-yellow-900: var(--color-brand-900);
+  --color-yellow-950: var(--color-brand-950);
+  --color-lime-50: var(--color-neutral-50);
+  --color-lime-100: var(--color-neutral-100);
+  --color-lime-200: var(--color-neutral-200);
+  --color-lime-300: var(--color-neutral-300);
+  --color-lime-400: var(--color-neutral-400);
+  --color-lime-500: var(--color-neutral-500);
+  --color-lime-600: var(--color-neutral-600);
+  --color-lime-700: var(--color-neutral-700);
+  --color-lime-800: var(--color-neutral-800);
+  --color-lime-900: var(--color-neutral-900);
+  --color-lime-950: var(--color-neutral-950);
+  --color-green-50: var(--color-neutral-50);
+  --color-green-100: var(--color-neutral-100);
+  --color-green-200: var(--color-neutral-200);
+  --color-green-300: var(--color-neutral-300);
+  --color-green-400: var(--color-neutral-400);
+  --color-green-500: var(--color-neutral-500);
+  --color-green-600: var(--color-neutral-600);
+  --color-green-700: var(--color-neutral-700);
+  --color-green-800: var(--color-neutral-800);
+  --color-green-900: var(--color-neutral-900);
+  --color-green-950: var(--color-neutral-950);
+  --color-emerald-50: var(--color-neutral-50);
+  --color-emerald-100: var(--color-neutral-100);
+  --color-emerald-200: var(--color-neutral-200);
+  --color-emerald-300: var(--color-neutral-300);
+  --color-emerald-400: var(--color-neutral-400);
+  --color-emerald-500: var(--color-neutral-500);
+  --color-emerald-600: var(--color-neutral-600);
+  --color-emerald-700: var(--color-neutral-700);
+  --color-emerald-800: var(--color-neutral-800);
+  --color-emerald-900: var(--color-neutral-900);
+  --color-emerald-950: var(--color-neutral-950);
+  --color-teal-50: var(--color-neutral-50);
+  --color-teal-100: var(--color-neutral-100);
+  --color-teal-200: var(--color-neutral-200);
+  --color-teal-300: var(--color-neutral-300);
+  --color-teal-400: var(--color-neutral-400);
+  --color-teal-500: var(--color-neutral-500);
+  --color-teal-600: var(--color-neutral-600);
+  --color-teal-700: var(--color-neutral-700);
+  --color-teal-800: var(--color-neutral-800);
+  --color-teal-900: var(--color-neutral-900);
+  --color-teal-950: var(--color-neutral-950);
+  --color-cyan-50: var(--color-neutral-50);
+  --color-cyan-100: var(--color-neutral-100);
+  --color-cyan-200: var(--color-neutral-200);
+  --color-cyan-300: var(--color-neutral-300);
+  --color-cyan-400: var(--color-neutral-400);
+  --color-cyan-500: var(--color-neutral-500);
+  --color-cyan-600: var(--color-neutral-600);
+  --color-cyan-700: var(--color-neutral-700);
+  --color-cyan-800: var(--color-neutral-800);
+  --color-cyan-900: var(--color-neutral-900);
+  --color-cyan-950: var(--color-neutral-950);
+  --color-sky-50: var(--color-neutral-50);
+  --color-sky-100: var(--color-neutral-100);
+  --color-sky-200: var(--color-neutral-200);
+  --color-sky-300: var(--color-neutral-300);
+  --color-sky-400: var(--color-neutral-400);
+  --color-sky-500: var(--color-neutral-500);
+  --color-sky-600: var(--color-neutral-600);
+  --color-sky-700: var(--color-neutral-700);
+  --color-sky-800: var(--color-neutral-800);
+  --color-sky-900: var(--color-neutral-900);
+  --color-sky-950: var(--color-neutral-950);
+  --color-blue-50: var(--color-neutral-50);
+  --color-blue-100: var(--color-neutral-100);
+  --color-blue-200: var(--color-neutral-200);
+  --color-blue-300: var(--color-neutral-300);
+  --color-blue-400: var(--color-neutral-400);
+  --color-blue-500: var(--color-neutral-500);
+  --color-blue-600: var(--color-neutral-600);
+  --color-blue-700: var(--color-neutral-700);
+  --color-blue-800: var(--color-neutral-800);
+  --color-blue-900: var(--color-neutral-900);
+  --color-blue-950: var(--color-neutral-950);
+  --color-indigo-50: var(--color-neutral-50);
+  --color-indigo-100: var(--color-neutral-100);
+  --color-indigo-200: var(--color-neutral-200);
+  --color-indigo-300: var(--color-neutral-300);
+  --color-indigo-400: var(--color-neutral-400);
+  --color-indigo-500: var(--color-neutral-500);
+  --color-indigo-600: var(--color-neutral-600);
+  --color-indigo-700: var(--color-neutral-700);
+  --color-indigo-800: var(--color-neutral-800);
+  --color-indigo-900: var(--color-neutral-900);
+  --color-indigo-950: var(--color-neutral-950);
+  --color-violet-50: var(--color-neutral-50);
+  --color-violet-100: var(--color-neutral-100);
+  --color-violet-200: var(--color-neutral-200);
+  --color-violet-300: var(--color-neutral-300);
+  --color-violet-400: var(--color-neutral-400);
+  --color-violet-500: var(--color-neutral-500);
+  --color-violet-600: var(--color-neutral-600);
+  --color-violet-700: var(--color-neutral-700);
+  --color-violet-800: var(--color-neutral-800);
+  --color-violet-900: var(--color-neutral-900);
+  --color-violet-950: var(--color-neutral-950);
+  --color-purple-50: var(--color-neutral-50);
+  --color-purple-100: var(--color-neutral-100);
+  --color-purple-200: var(--color-neutral-200);
+  --color-purple-300: var(--color-neutral-300);
+  --color-purple-400: var(--color-neutral-400);
+  --color-purple-500: var(--color-neutral-500);
+  --color-purple-600: var(--color-neutral-600);
+  --color-purple-700: var(--color-neutral-700);
+  --color-purple-800: var(--color-neutral-800);
+  --color-purple-900: var(--color-neutral-900);
+  --color-purple-950: var(--color-neutral-950);
+  --color-fuchsia-50: var(--color-neutral-50);
+  --color-fuchsia-100: var(--color-neutral-100);
+  --color-fuchsia-200: var(--color-neutral-200);
+  --color-fuchsia-300: var(--color-neutral-300);
+  --color-fuchsia-400: var(--color-neutral-400);
+  --color-fuchsia-500: var(--color-neutral-500);
+  --color-fuchsia-600: var(--color-neutral-600);
+  --color-fuchsia-700: var(--color-neutral-700);
+  --color-fuchsia-800: var(--color-neutral-800);
+  --color-fuchsia-900: var(--color-neutral-900);
+  --color-fuchsia-950: var(--color-neutral-950);
+  --color-pink-50: var(--color-neutral-50);
+  --color-pink-100: var(--color-neutral-100);
+  --color-pink-200: var(--color-neutral-200);
+  --color-pink-300: var(--color-neutral-300);
+  --color-pink-400: var(--color-neutral-400);
+  --color-pink-500: var(--color-neutral-500);
+  --color-pink-600: var(--color-neutral-600);
+  --color-pink-700: var(--color-neutral-700);
+  --color-pink-800: var(--color-neutral-800);
+  --color-pink-900: var(--color-neutral-900);
+  --color-pink-950: var(--color-neutral-950);
+}
+
 .dark {
-  --color-ink: #F1F5F9;
-  --color-bg: #020617;
-  --color-surface: #0F172A;
-  --color-border: #334155;
-  --color-muted: #94A3B8;
+  --color-primary-dark: #ffd166;
+  --color-primary-light: #2b230f;
+  --color-status-success: #6ee7b7;
+  --color-status-success-bg: #102c24;
+  --color-status-success-border: #245744;
+  --color-status-warning: #fcd34d;
+  --color-status-warning-bg: #302510;
+  --color-status-warning-border: #695024;
+  --color-status-info: #93c5fd;
+  --color-status-info-bg: #15253d;
+  --color-status-info-border: #2d4c76;
+  --color-status-danger: #fca5a5;
+  --color-status-danger-bg: #361c1c;
+  --color-status-danger-border: #713535;
+  --color-status-neutral: #d4d4d4;
+  --color-status-neutral-bg: #262626;
+  --color-status-neutral-border: #525252;
+  --color-ink: #f5f5f5;
+  --color-bg: #0b0b0b;
+  --color-surface: #171717;
+  --color-border: #303030;
+  --color-muted: #a3a3a3;
+  --shadow-card: 0 2px 8px -4px rgb(0 0 0 / 0.3);
+  --shadow-header: 0 1px 0 rgb(255 255 255 / 0.06);
+  --shadow-dropdown: 0 20px 50px -12px rgb(0 0 0 / 0.6), 0 4px 12px -4px rgb(0 0 0 / 0.3);
+}
 
-  /* sidebar stays dark navy in dark mode */
-  --color-sidebar: #0F172A;
-  --color-sidebar-ink: #F1F5F9;
-  --color-sidebar-muted: #94A3B8;
-  --color-sidebar-border: #1E293B;
-  --color-sidebar-hover: #1E293B;
+@layer base {
+  html { scroll-behavior: smooth; scrollbar-gutter: stable; color-scheme: light; }
+  html.dark { color-scheme: dark; }
+  body {
+    @apply bg-bg text-ink font-sans antialiased;
+    margin: 0;
+    min-width: 320px;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+  button:not(:disabled), [role="button"]:not([aria-disabled="true"]) { cursor: pointer; }
+  ::selection { background: var(--color-primary); color: #111111; }
+  :focus-visible { outline: 2px solid var(--color-primary); outline-offset: 3px; }
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus-visible,
+  select:focus-visible, textarea:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+  input, select, textarea { accent-color: var(--color-primary); }
+  input::placeholder, textarea::placeholder { color: var(--color-muted); opacity: 0.8; }
+  select option { background-color: var(--color-surface); color: var(--color-ink); }
+  input[type="number"] { -moz-appearance: textfield; }
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+}
 
-  --shadow-card: 0 1px 2px 0 rgba(0, 0, 0, 0.3), 0 1px 3px 0 rgba(0, 0, 0, 0.4);
-  --shadow-header: 0 1px 3px 0 rgba(0, 0, 0, 0.4);
-  --shadow-dropdown: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
+@layer components {
+  .workspace-content h1 {
+    font-size: clamp(1.375rem, 1.1rem + 0.7vw, 1.875rem);
+    letter-spacing: -0.04em;
+    line-height: 1.25;
+  }
+  .workspace-content :where(thead) { background-color: var(--color-bg); }
+  .workspace-content :where(thead th) {
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+    letter-spacing: 0.055em;
+    font-size: 0.6875rem;
+  }
+  .workspace-content :where(tbody td) { font-variant-numeric: tabular-nums; }
+  /* Keep existing wide data tables scrollable within the page on phones. */
+  .workspace-content :where(div.overflow-hidden):has(> table) { overflow-x: auto; }
+  .workspace-content :where(.shadow-card) { border-radius: 1rem; }
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-muted); }
+.scrollbar-none::-webkit-scrollbar { display: none; }
+.scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+
+.recharts-legend-item-text, .recharts-tooltip-item {
+  color: var(--color-ink) !important;
 }
 
 @keyframes fadeIn {
-  0% { opacity: 0; transform: translateY(-4px); }
-  100% { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
 }
-
 @keyframes slideIn {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(0); }
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
 }
-
 @keyframes waveY {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-4px); }
 }
 
-html {
-  scroll-behavior: smooth;
-}
-
-body {
-  @apply bg-bg text-ink antialiased;
-  transition: background-color 0.2s ease, color 0.2s ease;
-}
-
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  @apply bg-border rounded-full;
-}
-::-webkit-scrollbar-thumb:hover {
-  @apply bg-muted;
-}
-
-*:focus-visible {
-  outline: 2px solid #F4B400;
-  outline-offset: 2px;
-}
-
-/* Prevent double outline on form inputs that manage their own borders and focus rings */
-input:focus,
-input:focus-visible,
-textarea:focus,
-textarea:focus-visible,
-select:focus,
-select:focus-visible {
-  outline: none !important;
-  outline-offset: 0 !important;
-}
-
-.scrollbar-none::-webkit-scrollbar { display: none; }
-.scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
-
-/* Hide native spinner arrows on number inputs — not useful for financial
-   amount fields and adds visual clutter. Fields still accept numeric input
-   and keyboard up/down if needed. */
-input[type="number"]::-webkit-inner-spin-button,
-input[type="number"]::-webkit-outer-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-input[type="number"] {
-  -moz-appearance: textfield;
-}
-
-/* Ensure all native select options, dates, and form controls respect
-   dark mode tokens and browser color-scheme automatically */
-select option {
-  background-color: var(--color-surface);
-  color: var(--color-ink);
-}
-
-/* Equivalent to Tailwind's scheme-light dark:scheme-dark, applied globally
-   so every single input, date picker, select, and textarea automatically
-   follows the active theme without needing the utility class on every element */
-input,
-select,
-textarea {
-  color-scheme: light;
-}
-
-.dark input,
-.dark select,
-.dark textarea {
-  color-scheme: dark;
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

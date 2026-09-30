@@ -30,22 +30,19 @@ function ModernSpinner({ size, className = '' }) {
 }
 
 const variantStyles = {
-  primary: `bg-primary text-[#111827] shadow-sm
-    hover:bg-primary-dark hover:-translate-y-0.5 hover:shadow-md
+  primary: `bg-primary text-black border border-transparent shadow-sm
+    hover:bg-primary-hover hover:shadow-md
     active:translate-y-0 active:shadow-sm`,
   secondary: `bg-surface text-ink border border-border shadow-sm
-    hover:bg-bg hover:-translate-y-0.5 hover:shadow-md
+    hover:bg-bg hover:border-muted/40
     active:translate-y-0 active:shadow-sm active:bg-border/50`,
   ghost: 'bg-transparent text-muted hover:bg-bg hover:text-ink',
-  dark: `bg-slate-900 text-white shadow-sm
-    hover:bg-slate-800 hover:-translate-y-0.5 hover:shadow-md
-    active:translate-y-0 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white`,
-  danger: `bg-red-600 text-white shadow-sm
-    hover:bg-red-700 hover:-translate-y-0.5 hover:shadow-md
-    active:translate-y-0 active:bg-red-800`,
-  success: `bg-emerald-600 text-white shadow-sm
-    hover:bg-emerald-700 hover:-translate-y-0.5 hover:shadow-md
-    active:translate-y-0 active:bg-emerald-800`,
+  dark: `bg-ink text-surface border border-transparent shadow-sm
+    hover:opacity-85 active:opacity-95`,
+  danger: `bg-status-danger-solid text-white border border-transparent shadow-sm
+    hover:brightness-90 active:brightness-95`,
+  success: `bg-status-success-solid text-white border border-transparent shadow-sm
+    hover:brightness-90 active:brightness-95`,
   outline: `bg-transparent text-primary-dark border border-primary/40
     hover:bg-primary/10 hover:border-primary/70 active:bg-primary/15`,
 }
@@ -100,9 +97,9 @@ const Button = forwardRef(function Button(
       type={type}
       disabled={isDisabled}
       aria-busy={loading || undefined}
-      className={`inline-flex items-center justify-center font-semibold rounded-lg
+      className={`inline-flex items-center justify-center font-semibold rounded-xl
         transition-all duration-150 ease-in-out-smooth
-        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1
+        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface
         disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none disabled:hover:translate-y-0
         active:scale-[0.98]
         ${fullWidth ? 'w-full' : ''}

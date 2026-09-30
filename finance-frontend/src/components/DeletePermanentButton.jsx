@@ -48,7 +48,7 @@ export default function DeletePermanentButton({ endpoint, label = 'record', name
           type="button"
           onClick={() => { setError(''); setOpen(true) }}
           aria-label={`Permanently delete ${label}`}
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400 transition-colors duration-150"
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-status-danger-bg hover:text-status-danger transition-colors duration-150"
         >
           <Trash2 size={15} />
         </button>
@@ -74,7 +74,7 @@ export default function DeletePermanentButton({ endpoint, label = 'record', name
           This action cannot be undone. If you might need the record again, choose Restore instead.
         </p>
         {error && (
-          <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{error}</div>
+          <div className="mt-3 rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{error}</div>
         )}
       </Modal>
     </>

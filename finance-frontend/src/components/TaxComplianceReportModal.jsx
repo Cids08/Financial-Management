@@ -465,7 +465,7 @@ export default function TaxComplianceReportModal({ open, onClose }) {
         )}
 
         {error && (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+          <div className="rounded-lg border border-status-danger-border bg-status-danger-bg p-3 text-xs text-status-danger">
             {error}
           </div>
         )}
@@ -484,19 +484,19 @@ export default function TaxComplianceReportModal({ open, onClose }) {
                   {formatCurrencyRaw(totals.assessed)}
                 </span>
               </div>
-              <div className="p-2.5 rounded-lg border border-emerald-200 bg-emerald-50/50 dark:border-emerald-500/20 dark:bg-emerald-500/5">
-                <span className="text-[11px] text-emerald-600 dark:text-emerald-400 block">
+              <div className="p-2.5 rounded-lg border border-status-success-border bg-status-success-bg">
+                <span className="text-[11px] text-status-success block">
                   Remitted (Paid)
                 </span>
-                <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400 truncate block">
+                <span className="text-sm font-bold text-status-success truncate block">
                   {formatCurrencyRaw(totals.paid)}
                 </span>
               </div>
-              <div className="p-2.5 rounded-lg border border-red-200 bg-red-50/50 dark:border-red-500/20 dark:bg-red-500/5">
-                <span className="text-[11px] text-red-600 dark:text-red-400 block">
+              <div className="p-2.5 rounded-lg border border-status-warning-border bg-status-warning-bg">
+                <span className="text-[11px] text-status-warning block">
                   Outstanding
                 </span>
-                <span className="text-sm font-bold text-red-600 dark:text-red-400 truncate block">
+                <span className="text-sm font-bold text-status-warning truncate block">
                   {formatCurrencyRaw(totals.outstanding)}
                 </span>
               </div>
@@ -538,10 +538,10 @@ export default function TaxComplianceReportModal({ open, onClose }) {
                           <span
                             className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${
                               o.status === 'Paid'
-                                ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400'
+                                ? 'bg-status-success-bg text-status-success'
                                 : o.status === 'Overdue'
-                                ? 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400'
-                                : 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400'
+                                ? 'bg-status-danger-bg text-status-danger'
+                                : 'bg-status-warning-bg text-status-warning'
                             }`}
                           >
                             {o.status}

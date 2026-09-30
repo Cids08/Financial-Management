@@ -593,7 +593,7 @@ export default function DisbursementPrintModal({
               <p className="text-sm font-medium">Loading document and accounting entries…</p>
             </div>
           ) : error ? (
-            <div className="p-4 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-xl text-rose-700 dark:text-rose-400 text-sm flex items-center gap-3">
+            <div className="p-4 bg-status-danger-bg border border-status-danger-border rounded-xl text-status-danger text-sm flex items-center gap-3">
               <AlertCircle className="w-5 h-5 shrink-0" />
               {error}
             </div>
@@ -716,7 +716,7 @@ export default function DisbursementPrintModal({
                       </span>
                       <span className="text-muted">
                         Net Cash Paid Out (actual amount received by recipient):
-                        <span className="font-bold text-emerald-600 dark:text-emerald-400"> {fmt(netPaid)}</span>
+                        <span className="font-bold text-status-success"> {fmt(netPaid)}</span>
                       </span>
                     </div>
                   )}
@@ -729,7 +729,7 @@ export default function DisbursementPrintModal({
                   <h3 className="text-sm font-bold text-ink uppercase tracking-wide">
                     Double-Entry Accounting Distribution (General Ledger)
                   </h3>
-                  <span className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                  <span className="text-xs text-status-success font-semibold flex items-center gap-1">
                     <ShieldCheck className="w-3.5 h-3.5" /> Balanced Entry
                   </span>
                 </div>
@@ -807,8 +807,8 @@ export default function DisbursementPrintModal({
             /* ============================================================= */
             <div className="space-y-5">
               {/* Configuration bar */}
-              <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl space-y-3">
-                <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 text-sm font-bold">
+              <div className="p-4 bg-primary/10 border border-primary/30 rounded-xl space-y-3">
+                <div className="flex items-center gap-2 text-primary-dark dark:text-primary text-sm font-bold">
                   <Receipt className="w-4 h-4" />
                   Philippine Withholding Tax Classification (EWT / CWT)
                 </div>
@@ -854,13 +854,13 @@ export default function DisbursementPrintModal({
                   <div className="text-xs text-muted font-medium">Withholding Rate</div>
                   <div className="text-base font-bold text-primary-dark dark:text-primary">{overrideRate}%</div>
                 </div>
-                <div className="p-3 bg-rose-50 dark:bg-rose-500/10 rounded-xl border border-rose-200 dark:border-rose-500/20">
-                  <div className="text-xs text-rose-600 dark:text-rose-400 font-medium">Tax Withheld (Form 2307)</div>
-                  <div className="text-base font-bold text-rose-700 dark:text-rose-400 font-mono">{fmt(taxWithheld)}</div>
+                <div className="p-3 bg-surface rounded-xl border border-border">
+                  <div className="text-xs text-ink font-medium">Tax Withheld (Form 2307)</div>
+                  <div className="text-base font-bold text-ink font-mono">{fmt(taxWithheld)}</div>
                 </div>
-                <div className="p-3 bg-emerald-50 dark:bg-emerald-500/10 rounded-xl border border-emerald-200 dark:border-emerald-500/20">
-                  <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">Net Disbursed Amount</div>
-                  <div className="text-base font-bold text-emerald-700 dark:text-emerald-400 font-mono">{fmt(netAmount)}</div>
+                <div className="p-3 bg-surface rounded-xl border border-border">
+                  <div className="text-xs text-ink font-medium">Net Disbursed Amount</div>
+                  <div className="text-base font-bold text-ink font-mono">{fmt(netAmount)}</div>
                 </div>
               </div>
 
@@ -908,7 +908,7 @@ export default function DisbursementPrintModal({
                         <td className="px-3 py-2 text-center font-mono font-bold text-primary-dark dark:text-primary">{selectedAtc}</td>
                         <td className="px-3 py-2 text-right font-mono text-ink">{fmt(grossIncome)}</td>
                         <td className="px-3 py-2 text-center font-bold text-ink">{overrideRate}%</td>
-                        <td className="px-3 py-2 text-right font-mono font-bold text-rose-700 dark:text-rose-400">{fmt(taxWithheld)}</td>
+                        <td className="px-3 py-2 text-right font-mono font-bold text-ink">{fmt(taxWithheld)}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -947,7 +947,7 @@ export default function DisbursementPrintModal({
                 type="button"
                 disabled={loading || !birData}
                 onClick={printBir2307}
-                className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg transition-colors shadow-sm"
+                className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-primary hover:bg-primary-dark disabled:opacity-50 text-black rounded-lg transition-colors shadow-sm"
               >
                 <Printer className="w-4 h-4" />
                 Print BIR Form 2307

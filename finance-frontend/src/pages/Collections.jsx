@@ -35,10 +35,10 @@ const STATUS_LABELS = {
 }
 
 const STATUS_STYLES = {
-  Pending:                 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400',
-  'Awaiting Confirmation': 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400',
-  Confirmed:               'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
-  Cancelled:               'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
+  Pending:                 'bg-status-warning-bg text-status-warning',
+  'Awaiting Confirmation': 'bg-status-warning-bg text-status-warning',
+  Confirmed:               'bg-status-success-bg text-status-success',
+  Cancelled:               'bg-status-neutral-bg text-status-neutral',
 }
 
 const PAYMENT_METHODS = ['Cash', 'Check', 'Bank Transfer', 'GCash', 'Credit Card']
@@ -837,19 +837,19 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
         </div>
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border border-border bg-surface text-muted shadow-sm">
-            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="h-2 w-2 rounded-full bg-status-success animate-pulse" />
             Live Synced
           </span>
         </div>
       </div>
 
       {lookupErrors.length > 0 && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+        <div className="rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2 text-xs text-status-warning">
           Some dropdowns may be incomplete: {lookupErrors.join(' · ')}
         </div>
       )}
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+        <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">
           {error}
         </div>
       )}
@@ -1031,7 +1031,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                         </span>
                         <p className="text-xs text-muted mt-1">
                           {isOverdue
-                            ? <span className="text-red-500 dark:text-red-400 font-medium">Due {formatDate(ar.due_date)} · Overdue</span>
+                            ? <span className="text-status-danger font-medium">Due {formatDate(ar.due_date)} · Overdue</span>
                             : ar.due_date ? `Due ${formatDate(ar.due_date)}` : 'No due date'}
                         </p>
                       </td>
@@ -1046,7 +1046,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                         </span>
                       </td>
                       <td className="px-4 py-3.5 whitespace-nowrap font-semibold tabular-nums">
-                        <span className={isOverdue ? 'text-red-500 dark:text-red-400' : 'text-ink'}>
+                        <span className={isOverdue ? 'text-status-danger' : 'text-ink'}>
                           {formatCurrency(bal)}
                         </span>
                         <p className="text-[10px] text-muted font-normal">balance to collect</p>
@@ -1207,13 +1207,13 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           {formError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{formError}</div>
+            <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{formError}</div>
           )}
 
           <div className="grid grid-cols-2 gap-3">
             {/* Invoice  -  uses _key (= ar_id) as option value */}
             <div>
-              <label className={LABEL}>Invoice <span className="text-red-500 dark:text-red-400">*</span></label>
+              <label className={LABEL}>Invoice <span className="text-status-danger">*</span></label>
               <select
                 value={form.ar_id}
                 disabled={isCollectLocked || (modalMode !== null && modalMode !== 'add')}
@@ -1229,7 +1229,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                   }))
                   setFieldErrors((fe) => ({ ...fe, ar_id: '', collector_id: '' }))
                 }}
-                className={`${INPUT} ${(isCollectLocked || (modalMode !== null && modalMode !== 'add')) ? 'opacity-70 cursor-not-allowed bg-slate-100 dark:bg-slate-800' : ''} ${fieldErrors.ar_id ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${(isCollectLocked || (modalMode !== null && modalMode !== 'add')) ? 'opacity-70 cursor-not-allowed bg-slate-100 dark:bg-slate-800' : ''} ${fieldErrors.ar_id ? 'border-status-danger-border' : ''}`}
               >
                 <option value="">Select invoice…</option>
                 {availableArRecords.map((a) => {
@@ -1244,17 +1244,17 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
               {(isCollectLocked || (modalMode !== null && modalMode !== 'add')) && (
                 <p className="mt-1 text-[11px] text-muted">Locked to selected invoice.</p>
               )}
-              {fieldErrors.ar_id && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.ar_id}</p>}
+              {fieldErrors.ar_id && <p className="mt-1 text-xs text-status-danger">{fieldErrors.ar_id}</p>}
             </div>
 
             {/* Collector  -  uses _key (= collector_id) as option value */}
             <div>
-              <label className={LABEL}>Collector <span className="text-red-500 dark:text-red-400">*</span></label>
+              <label className={LABEL}>Collector <span className="text-status-danger">*</span></label>
               <select
                 value={form.collector_id}
                 disabled={isCollectLocked || (isCollectorUser && !!userCollectorId)}
                 onChange={(e) => { setForm((f) => ({ ...f, collector_id: e.target.value })); setFieldErrors((fe) => ({ ...fe, collector_id: '' })) }}
-                className={`${INPUT} ${(isCollectLocked || (isCollectorUser && userCollectorId)) ? 'opacity-70 cursor-not-allowed bg-slate-100 dark:bg-slate-800' : ''} ${fieldErrors.collector_id ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${(isCollectLocked || (isCollectorUser && userCollectorId)) ? 'opacity-70 cursor-not-allowed bg-slate-100 dark:bg-slate-800' : ''} ${fieldErrors.collector_id ? 'border-status-danger-border' : ''}`}
               >
                 <option value="">Select collector…</option>
                 {collectors.map((c) => (
@@ -1268,24 +1268,24 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
               ) : (isCollectorUser && userCollectorId) ? (
                 <p className="mt-1 text-[11px] text-muted">Auto-locked to your collector profile.</p>
               ) : null}
-              {fieldErrors.collector_id && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.collector_id}</p>}
+              {fieldErrors.collector_id && <p className="mt-1 text-xs text-status-danger">{fieldErrors.collector_id}</p>}
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Receipt Number <span className="text-red-500 dark:text-red-400">*</span></label>
+              <label className={LABEL}>Receipt Number <span className="text-status-danger">*</span></label>
               <input
                 type="text"
                 value={form.receipt_number}
                 onChange={(e) => { setForm((f) => ({ ...f, receipt_number: e.target.value })); setFieldErrors((fe) => ({ ...fe, receipt_number: '' })) }}
-                className={`${INPUT} ${fieldErrors.receipt_number ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${fieldErrors.receipt_number ? 'border-status-danger-border' : ''}`}
                 placeholder="OR-10021"
               />
-              {fieldErrors.receipt_number && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.receipt_number}</p>}
+              {fieldErrors.receipt_number && <p className="mt-1 text-xs text-status-danger">{fieldErrors.receipt_number}</p>}
             </div>
             <div>
-              <label className={LABEL}>Collection Date <span className="text-red-500 dark:text-red-400">*</span></label>
+              <label className={LABEL}>Collection Date <span className="text-status-danger">*</span></label>
               <input
                 type="date"
                 min="2017-01-01"
@@ -1293,9 +1293,9 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                 value={form.collection_date}
                 onChange={(e) => { setForm((f) => ({ ...f, collection_date: e.target.value })); setFieldErrors((fe) => ({ ...fe, collection_date: '' })) }}
                 onBlur={(e) => validateDate('collection_date', e.target.value)}
-                className={`${INPUT} scheme-light dark:scheme-dark ${dateErrors.collection_date || fieldErrors.collection_date ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} scheme-light dark:scheme-dark ${dateErrors.collection_date || fieldErrors.collection_date ? 'border-status-danger-border' : ''}`}
               />
-              {(dateErrors.collection_date || fieldErrors.collection_date) && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{dateErrors.collection_date || fieldErrors.collection_date}</p>}
+              {(dateErrors.collection_date || fieldErrors.collection_date) && <p className="mt-1 text-xs text-status-danger">{dateErrors.collection_date || fieldErrors.collection_date}</p>}
             </div>
           </div>
 
@@ -1307,7 +1307,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                 return (
                   <>
                     <div className="flex items-center justify-between mb-1.5">
-                      <label className="block text-xs font-medium text-muted">Amount Received <span className="text-red-500 dark:text-red-400">*</span></label>
+                      <label className="block text-xs font-medium text-muted">Amount Received <span className="text-status-danger">*</span></label>
                       {currentBal !== null && (
                         <div className="flex items-center gap-2">
                           <span className="text-[11px] text-muted">
@@ -1350,10 +1350,10 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                           }))
                         }
                       }}
-                      className={`${INPUT} ${fieldErrors.amount_received ? 'border-red-400 dark:border-red-500' : ''}`}
+                      className={`${INPUT} ${fieldErrors.amount_received ? 'border-status-danger-border' : ''}`}
                       placeholder={minHint(MIN_COLLECTION_AMOUNT)}
                     />
-                    {fieldErrors.amount_received && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.amount_received}</p>}
+                    {fieldErrors.amount_received && <p className="mt-1 text-xs text-status-danger">{fieldErrors.amount_received}</p>}
                   </>
                 )
               })()}
@@ -1369,11 +1369,11 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
           <div className="grid grid-cols-2 gap-3">
             {/* Cash account  -  uses _key (= id) as option value */}
             <div>
-              <label className={LABEL}>Deposit To (Cash Account) <span className="text-red-500 dark:text-red-400">*</span></label>
+              <label className={LABEL}>Deposit To (Cash Account) <span className="text-status-danger">*</span></label>
               <select
                 value={form.cash_account_id}
                 onChange={(e) => { setForm((f) => ({ ...f, cash_account_id: e.target.value })); setFieldErrors((fe) => ({ ...fe, cash_account_id: '' })) }}
-                className={`${INPUT} ${fieldErrors.cash_account_id ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${fieldErrors.cash_account_id ? 'border-status-danger-border' : ''}`}
               >
                 <option value="">Select account…</option>
                 {cashAccounts.map((a) => (
@@ -1382,9 +1382,9 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                   </option>
                 ))}
               </select>
-              {fieldErrors.cash_account_id && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.cash_account_id}</p>}
+              {fieldErrors.cash_account_id && <p className="mt-1 text-xs text-status-danger">{fieldErrors.cash_account_id}</p>}
               {cashAccounts.length === 0 && (
-                <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                <p className="mt-1 text-xs text-status-warning">
                   No cash accounts found. Please add a cash account in Master Data &gt; Cash Accounts first.
                 </p>
               )}
@@ -1427,11 +1427,11 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                     setFieldErrors((fe) => ({ ...fe, reference_number: '' }))
                   }
                 }}
-                className={`${INPUT} ${fieldErrors.reference_number ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${fieldErrors.reference_number ? 'border-status-danger-border' : ''}`}
                 placeholder="REF-COL-001"
               />
               {fieldErrors.reference_number && (
-                <p className="mt-1 text-xs text-red-500 dark:text-red-400">
+                <p className="mt-1 text-xs text-status-danger">
                   {fieldErrors.reference_number}
                 </p>
               )}
@@ -1463,9 +1463,9 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
           {modalMode === 'add' && (
             <div>
               <label className={LABEL}>
-                Proof of Receipt / Deposit Slip <span className="text-red-500 dark:text-red-400">*</span>
+                Proof of Receipt / Deposit Slip <span className="text-status-danger">*</span>
               </label>
-              <div className={`relative border-2 border-dashed rounded-lg p-3.5 text-center transition-colors ${fieldErrors.proof ? 'border-red-400 bg-red-50/20 dark:border-red-500/30 dark:bg-red-500/10' : proofFile ? 'border-primary/50 bg-primary/5 dark:bg-primary/10' : 'border-border hover:border-primary/50'}`}>
+              <div className={`relative border-2 border-dashed rounded-lg p-3.5 text-center transition-colors ${fieldErrors.proof ? 'border-status-danger-border bg-status-danger-bg' : proofFile ? 'border-primary/50 bg-primary/5 dark:bg-primary/10' : 'border-border hover:border-primary/50'}`}>
                 {proofFile ? (
                   <div className="flex items-center justify-between gap-2 px-2 py-1">
                     <div className="flex items-center gap-2.5 min-w-0 text-left">
@@ -1511,7 +1511,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                 )}
               </div>
               {fieldErrors.proof ? (
-                <p className="mt-1.5 text-xs font-medium text-red-500 dark:text-red-400">{fieldErrors.proof}</p>
+                <p className="mt-1.5 text-xs font-medium text-status-danger">{fieldErrors.proof}</p>
               ) : (
                 <p className="mt-1 text-[11px] text-muted">
                   Strictly required: Finance mandates verified deposit or payment proof before queuing for confirmation.
@@ -1637,7 +1637,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                     <p className="px-3 py-3 text-xs text-muted text-center">Loading audit history…</p>
                   )}
                   {!auditLogsLoading && auditLogsError && (
-                    <p className="px-3 py-3 text-xs text-red-500 text-center">{auditLogsError}</p>
+                    <p className="px-3 py-3 text-xs text-status-danger text-center">{auditLogsError}</p>
                   )}
                   {!auditLogsLoading && !auditLogsError && auditLogs.length === 0 && (
                     <p className="px-3 py-3 text-xs text-muted text-center">No audit logs recorded for this collection.</p>
@@ -1698,11 +1698,11 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
           <div className="space-y-4">
             <p className="text-sm text-muted">Confirming this collection will update the invoice balance and credit the cash account. This cannot be undone.</p>
             {confirmTarget && !confirmTarget.has_proof && (
-              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300 flex items-start gap-2.5">
-                <AlertCircle size={18} className="shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+              <div className="rounded-lg border border-status-warning-border bg-status-warning-bg p-3 text-xs text-status-warning flex items-start gap-2.5">
+                <AlertCircle size={18} className="shrink-0 text-status-warning mt-0.5" />
                 <div className="flex-1">
-                  <p className="font-semibold text-amber-900 dark:text-amber-200">Missing Proof of Receipt</p>
-                  <p className="text-amber-800 dark:text-amber-300/90 mt-0.5">
+                  <p className="font-semibold text-status-warning">Missing Proof of Receipt</p>
+                  <p className="text-status-warning mt-0.5">
                     Finance internal controls strictly require an official proof of payment (deposit slip, bank transfer screenshot, or check scan) before confirmation.
                   </p>
                   <button
@@ -1734,7 +1734,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
               </div>
             </div>
             {actionError && (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{actionError}</div>
+              <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{actionError}</div>
             )}
           </div>
         )}
@@ -1775,7 +1775,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                 className={INPUT} placeholder="e.g. Duplicate entry, incorrect amount..." maxLength={500} />
             </div>
             {actionError && (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{actionError}</div>
+              <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{actionError}</div>
             )}
           </div>
         )}

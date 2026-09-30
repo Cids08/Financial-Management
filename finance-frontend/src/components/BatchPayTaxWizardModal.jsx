@@ -65,8 +65,8 @@ const LABEL_CLASS = 'block text-xs font-medium text-muted mb-1.5'
 
 const GROUP_STYLES = {
   all: '',
-  Overdue: 'text-red-600 dark:text-red-400',
-  Pending: 'text-amber-600 dark:text-amber-400',
+  Overdue: 'text-status-danger',
+  Pending: 'text-status-warning',
 }
 
 const STEPS = ['Select Obligations', 'Payment Details']
@@ -326,7 +326,7 @@ export default function BatchPayTaxWizardModal({
       title={
         <div className="flex items-center justify-between gap-4 w-full">
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary-dark dark:text-primary">
               <Layers size={18} />
             </div>
             <div>
@@ -346,9 +346,9 @@ export default function BatchPayTaxWizardModal({
                 <span
                   className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors
                     ${i === step
-                      ? 'bg-emerald-600 text-white'
+                      ? 'bg-primary text-black'
                       : i < step
-                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400'
+                        ? 'bg-status-success-bg text-status-success'
                         : 'bg-bg text-muted'}`}
                 >
                   {i < step ? <CheckCircle2 size={12} /> : <span className="tabular-nums">{i + 1}</span>}
@@ -411,7 +411,7 @@ export default function BatchPayTaxWizardModal({
     >
       <form onSubmit={handleSubmit} className="space-y-4 text-xs">
         {error && (
-          <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
+          <div className="flex items-start gap-2 rounded-lg border border-status-danger-border bg-status-danger-bg p-3 text-xs text-status-danger">
             <AlertTriangle size={15} className="mt-0.5 shrink-0" />
             <div className="flex-1">{error}</div>
           </div>
@@ -430,13 +430,13 @@ export default function BatchPayTaxWizardModal({
                     onClick={() => setGroup(key)}
                     className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold border transition-colors duration-150
                       ${active
-                        ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                        ? 'border-primary/30 bg-primary/10 text-primary-dark dark:text-primary'
                         : 'border-border bg-surface text-muted hover:bg-bg hover:text-ink'}`}
                   >
                     <span className={!active && key !== 'all' ? GROUP_STYLES[key] : ''}>
                       {key === 'all' ? 'All' : key}
                     </span>
-                    <span className={`tabular-nums ${active ? 'text-emerald-700 dark:text-emerald-400' : 'text-muted'}`}>
+                    <span className={`tabular-nums ${active ? 'text-primary-dark dark:text-primary' : 'text-muted'}`}>
                       {groupCounts[key]}
                     </span>
                   </button>
@@ -495,7 +495,7 @@ export default function BatchPayTaxWizardModal({
                       <label
                         key={o.tax_id}
                         className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors duration-100 select-none
-                          ${isSelected ? 'bg-emerald-50/60 dark:bg-emerald-500/10' : 'hover:bg-bg'}`}
+                          ${isSelected ? 'bg-primary/10' : 'hover:bg-bg'}`}
                       >
                         <input
                           type="checkbox"
@@ -514,7 +514,7 @@ export default function BatchPayTaxWizardModal({
                           <span className="font-semibold tabular-nums text-ink">
                             {formatCurrency(o.amount)}
                           </span>
-                          <span className={`text-[10px] ${remaining < 0 ? 'text-red-500 font-medium' : 'text-muted'}`}>
+                          <span className={`text-[10px] ${remaining < 0 ? 'text-status-danger font-medium' : 'text-muted'}`}>
                             {remaining < 0 ? `${Math.abs(remaining)}d overdue` : remaining === 0 ? 'Due today' : `Due in ${remaining}d`}
                           </span>
                         </span>
@@ -527,11 +527,11 @@ export default function BatchPayTaxWizardModal({
 
             {/* Live running total already in footer; show a compact strip too */}
             {selectedList.length > 0 && (
-              <div className="flex items-center justify-between rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-2">
-                <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+              <div className="flex items-center justify-between rounded-lg bg-status-success-bg border border-status-success-border px-3 py-2">
+                <span className="font-semibold text-status-success">
                   {selectedList.length} obligation{selectedList.length === 1 ? '' : 's'} ready to settle
                 </span>
-                <span className="font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
+                <span className="font-bold tabular-nums text-status-success">
                   {formatCurrency(totalAmount)}
                 </span>
               </div>
@@ -543,7 +543,7 @@ export default function BatchPayTaxWizardModal({
             <div className="rounded-lg border border-border bg-surface overflow-hidden">
               <div className="flex items-center justify-between px-3 py-2 bg-bg/50 border-b border-border">
                 <span className="font-semibold text-ink">Pending for Payment ({selectedList.length})</span>
-                <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(totalAmount)}</span>
+                <span className="font-bold text-status-warning">{formatCurrency(totalAmount)}</span>
               </div>
               <div className="max-h-32 overflow-y-auto divide-y divide-border">
                 {selectedList.map((o) => (
@@ -564,10 +564,10 @@ export default function BatchPayTaxWizardModal({
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-xs font-medium text-muted">
-                  Pay From Cash / Bank Account <span className="text-red-500">*</span>
+                  Pay From Cash / Bank Account <span className="text-status-danger">*</span>
                 </label>
                 {selectedAccount && (
-                  <span className={`text-[11px] font-semibold tabular-nums ${isOverdrawn ? 'text-red-500' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                  <span className={`text-[11px] font-semibold tabular-nums ${isOverdrawn ? 'text-status-danger' : 'text-status-success'}`}>
                     {isOverdrawn ? 'Insufficient available funds' : 'Funds available'}
                   </span>
                 )}
@@ -579,7 +579,7 @@ export default function BatchPayTaxWizardModal({
                   setFieldErrors((prev) => ({ ...prev, cash_account_id: '' }))
                 }}
                 disabled={submitting || loadingAccounts}
-                className={`${INPUT_CLASS} ${fieldErrors.cash_account_id ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
+                className={`${INPUT_CLASS} ${fieldErrors.cash_account_id ? 'border-status-danger-border focus:border-status-danger focus:ring-status-danger/20' : ''}`}
               >
                 <option value="">-- Select Cash or Bank Account --</option>
                 {cashAccounts.map((acc) => (
@@ -589,10 +589,10 @@ export default function BatchPayTaxWizardModal({
                 ))}
               </select>
               {fieldErrors.cash_account_id && (
-                <p className="mt-1 text-[11px] text-red-500">{fieldErrors.cash_account_id}</p>
+                <p className="mt-1 text-[11px] text-status-danger">{fieldErrors.cash_account_id}</p>
               )}
               {isOverdrawn && (
-                <p className="mt-1 text-[11px] font-medium text-red-500">
+                <p className="mt-1 text-[11px] font-medium text-status-danger">
                   Warning: The selected account does not have enough funds to cover this batch payment of {formatCurrency(totalAmount)}.
                 </p>
               )}
@@ -602,7 +602,7 @@ export default function BatchPayTaxWizardModal({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className={LABEL_CLASS}>
-                  Payment Date <span className="text-red-500">*</span>
+                  Payment Date <span className="text-status-danger">*</span>
                 </label>
                 <input
                   type="date"
@@ -612,22 +612,22 @@ export default function BatchPayTaxWizardModal({
                     setFieldErrors((prev) => ({ ...prev, payment_date: '' }))
                   }}
                   disabled={submitting}
-                  className={`${INPUT_CLASS} scheme-light dark:scheme-dark ${fieldErrors.payment_date ? 'border-red-500' : ''}`}
+                  className={`${INPUT_CLASS} scheme-light dark:scheme-dark ${fieldErrors.payment_date ? 'border-status-danger-border' : ''}`}
                 />
                 {fieldErrors.payment_date && (
-                  <p className="mt-1 text-[11px] text-red-500">{fieldErrors.payment_date}</p>
+                  <p className="mt-1 text-[11px] text-status-danger">{fieldErrors.payment_date}</p>
                 )}
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="block text-xs font-medium text-muted">
-                    Reference / Confirmation No. <span className="text-red-500">*</span>
+                    Reference / Confirmation No. <span className="text-status-danger">*</span>
                   </label>
                   <button
                     type="button"
                     onClick={handleGenerateRef}
-                    className="inline-flex items-center gap-1 text-[11px] text-primary-dark hover:underline"
+                    className="inline-flex items-center gap-1 text-[11px] text-primary-dark dark:text-primary hover:underline"
                   >
                     <Sparkles size={11} /> Auto-generate
                   </button>
@@ -641,10 +641,10 @@ export default function BatchPayTaxWizardModal({
                   }}
                   placeholder="e.g. BIR-BATCH-260910-4821 or Bank Ref"
                   disabled={submitting}
-                  className={`${INPUT_CLASS} ${fieldErrors.reference_number ? 'border-red-500' : ''}`}
+                  className={`${INPUT_CLASS} ${fieldErrors.reference_number ? 'border-status-danger-border' : ''}`}
                 />
                 {fieldErrors.reference_number && (
-                  <p className="mt-1 text-[11px] text-red-500">{fieldErrors.reference_number}</p>
+                  <p className="mt-1 text-[11px] text-status-danger">{fieldErrors.reference_number}</p>
                 )}
               </div>
             </div>
@@ -652,7 +652,7 @@ export default function BatchPayTaxWizardModal({
             {/* Shared Proof of Payment Upload */}
             <div>
               <label className={LABEL_CLASS}>
-                Official Proof of Payment (Shared across batch) <span className="text-red-500">*</span>
+                Official Proof of Payment (Shared across batch) <span className="text-status-danger">*</span>
               </label>
               <input
                 ref={fileInputRef}
@@ -670,23 +670,23 @@ export default function BatchPayTaxWizardModal({
                   onDrop={(e) => { e.preventDefault(); setDragActive(false); handleFileSelect(e.dataTransfer.files?.[0]) }}
                   onClick={() => fileInputRef.current?.click()}
                   className={`flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-4 text-center cursor-pointer transition-colors duration-150
-                    ${dragActive ? 'border-primary bg-primary/5' : fieldErrors.document ? 'border-red-400 bg-red-50/30' : 'border-border bg-surface hover:bg-bg'}`}
+                    ${dragActive ? 'border-primary bg-primary/5' : fieldErrors.document ? 'border-status-danger-border bg-status-danger-bg' : 'border-border bg-surface hover:bg-bg'}`}
                 >
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary-dark mb-2">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary-dark dark:text-primary mb-2">
                     <UploadCloud size={18} />
                   </div>
                   <p className="font-semibold text-ink text-xs">
                     Upload BIR Confirmation Slip or Bank Deposit / Transfer Receipt
                   </p>
                   <p className="text-[11px] text-muted mt-0.5">
-                    Drag and drop here, or <span className="text-primary-dark underline">browse file</span>
+                    Drag and drop here, or <span className="text-primary-dark dark:text-primary underline">browse file</span>
                   </p>
                   <p className="text-[10px] text-muted mt-1">PDF, JPG, JPEG, PNG up to {MAX_SIZE_MB}MB</p>
                 </div>
               ) : (
                 <div className="flex items-center justify-between rounded-xl border border-border bg-surface p-3">
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary-dark dark:text-primary">
                       <FileText size={16} />
                     </div>
                     <div className="min-w-0">
@@ -705,7 +705,7 @@ export default function BatchPayTaxWizardModal({
                 </div>
               )}
               {fieldErrors.document && (
-                <p className="mt-1 text-[11px] text-red-500">{fieldErrors.document}</p>
+                <p className="mt-1 text-[11px] text-status-danger">{fieldErrors.document}</p>
               )}
             </div>
 

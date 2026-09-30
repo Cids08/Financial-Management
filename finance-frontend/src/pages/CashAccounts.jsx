@@ -25,8 +25,8 @@ const INPUT = `w-full h-9 px-3 rounded-lg border border-border bg-bg text-sm tex
 const LABEL = 'block text-xs font-medium text-muted mb-1.5'
 
 const STATUS_STYLES = {
-  Active: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
-  Inactive: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
+  Active: 'bg-status-success-bg text-status-success',
+  Inactive: 'bg-status-neutral-bg text-status-neutral',
 }
 
 const TYPE_ICON = {
@@ -161,7 +161,7 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{error}</div>
+        <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{error}</div>
       )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -352,7 +352,7 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           {formError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{formError}</div>
+            <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{formError}</div>
           )}
           {isEditing && (
             <div className="rounded-lg border border-border bg-bg px-3 py-2 text-xs text-muted">
@@ -396,10 +396,10 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
                     setBalanceError('')
                   }
                 }}
-                className={`${INPUT} ${balanceError ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${balanceError ? 'border-status-danger-border' : ''}`}
                 placeholder="0.00"
               />
-              {balanceError && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{balanceError}</p>}
+              {balanceError && <p className="mt-1 text-xs text-status-danger">{balanceError}</p>}
             </div>
           </div>
           <div>

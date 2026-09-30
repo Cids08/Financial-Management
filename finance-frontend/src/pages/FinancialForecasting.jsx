@@ -51,8 +51,17 @@ const LOW_ERROR_THRESHOLD = 8
 // case for this dataset, not a hypothetical edge case.
 const MAPE_WARNING_THRESHOLD = 50
 
-const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
-const PANEL_PAD = 'p-4'
+const PANEL = 'rounded-2xl border border-border bg-surface shadow-card'
+const PANEL_PAD = 'p-4 sm:p-5'
+const CHART_TICK = { fontSize: 10, fill: 'var(--color-muted)' }
+const CHART_TOOLTIP = {
+  backgroundColor: 'var(--color-surface)',
+  border: '1px solid var(--color-border)',
+  borderRadius: 12,
+  color: 'var(--color-ink)',
+  fontSize: 12,
+  boxShadow: '0 8px 24px rgb(0 0 0 / 0.1)',
+}
 
 // `[color-scheme:light] dark:[color-scheme:dark]` is the part that
 // actually fixes dark mode here: <select> popups and the <input
@@ -309,7 +318,7 @@ const GenerateForecastModal = memo(function GenerateForecastModal({ open, onClos
     <Modal open={open} onClose={onClose} title="Generate New Forecast" footer={footer}>
       <div className="space-y-4">
         {error && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{error}</div>
+          <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{error}</div>
         )}
 
         {phase !== 'result' && (
@@ -369,13 +378,13 @@ const GenerateForecastModal = memo(function GenerateForecastModal({ open, onClos
             <div className="h-52 w-full rounded-lg border border-border bg-bg p-2">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={result.series} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-                  <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} width={40} />
-                  <RechartsTooltip formatter={(value) => formatCurrency(value)} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                  <XAxis dataKey="label" tick={CHART_TICK} />
+                  <YAxis tick={CHART_TICK} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} width={40} />
+                  <RechartsTooltip contentStyle={CHART_TOOLTIP} formatter={(value) => formatCurrency(value)} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Line type="monotone" dataKey="historical" name="Historical" stroke="#2563eb" strokeWidth={2} dot={false} connectNulls />
-                  <Line type="monotone" dataKey="predicted" name="Predicted" stroke="#d97706" strokeWidth={2} strokeDasharray="5 4" dot={false} connectNulls />
+                  <Line type="monotone" dataKey="historical" name="Historical" stroke="var(--color-ink)" strokeWidth={2} dot={false} connectNulls />
+                  <Line type="monotone" dataKey="predicted" name="Predicted" stroke="#f4b400" strokeWidth={2} strokeDasharray="5 4" dot={false} connectNulls />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -396,7 +405,7 @@ const GenerateForecastModal = memo(function GenerateForecastModal({ open, onClos
             </div>
 
             {isMapeUnreliable(result.mape) && (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400 flex items-start gap-2">
+              <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger flex items-start gap-2">
                 <AlertTriangle size={14} className="shrink-0 mt-0.5" />
                 <span>
                   This forecast's error margin is unusually high, likely due to a sharp jump or near-zero
@@ -441,7 +450,7 @@ const ForecastDetailModal = memo(function ForecastDetailModal({ forecastId, onCl
     <Modal open={!!forecastId} onClose={onClose} title="Forecast Trend" footer={<Button variant="secondary" size="md" onClick={onClose}>Close</Button>}>
       {loading && <p className="text-sm text-muted py-6 text-center">Loading forecast…</p>}
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{error}</div>
+        <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{error}</div>
       )}
       {!loading && forecast && (
         <div className="space-y-4">
@@ -456,13 +465,13 @@ const ForecastDetailModal = memo(function ForecastDetailModal({ forecastId, onCl
           <div className="h-56 w-full rounded-lg border border-border bg-bg p-2">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={forecast.series} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-                <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} width={40} />
-                <RechartsTooltip formatter={(value) => formatCurrency(value)} />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                <XAxis dataKey="label" tick={CHART_TICK} />
+                <YAxis tick={CHART_TICK} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} width={40} />
+                <RechartsTooltip contentStyle={CHART_TOOLTIP} formatter={(value) => formatCurrency(value)} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Line type="monotone" dataKey="historical" name="Historical" stroke="#2563eb" strokeWidth={2} dot={false} connectNulls />
-                <Line type="monotone" dataKey="predicted" name="Predicted" stroke="#d97706" strokeWidth={2} strokeDasharray="5 4" dot={false} connectNulls />
+                <Line type="monotone" dataKey="historical" name="Historical" stroke="var(--color-ink)" strokeWidth={2} dot={false} connectNulls />
+                <Line type="monotone" dataKey="predicted" name="Predicted" stroke="#f4b400" strokeWidth={2} strokeDasharray="5 4" dot={false} connectNulls />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -483,7 +492,7 @@ const ForecastDetailModal = memo(function ForecastDetailModal({ forecastId, onCl
           </div>
 
           {isMapeUnreliable(forecast.mape) && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400 flex items-start gap-2">
+            <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger flex items-start gap-2">
               <AlertTriangle size={14} className="shrink-0 mt-0.5" />
               <span>
                 This forecast's error margin is unusually high, likely due to a sharp jump or near-zero
@@ -621,13 +630,14 @@ export default function FinancialForecasting({ title = 'Financial Forecasting', 
   const handleRestore = useCallback((f) => { restoreForecast(f.forecast_id) }, [restoreForecast])
 
   return (
-    <div className="space-y-5 animate-fadeIn">
+    <div className="space-y-6 animate-fadeIn">
       <Breadcrumb items={crumbs} />
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-ink">{title}</h1>
-          <p className="mt-1 text-xs text-muted">
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-dark">Plan with perspective</p>
+          <h1 className="text-2xl font-bold tracking-tight text-ink sm:text-3xl">{title}</h1>
+          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted">
             ARIMA-based projections trained on posted Collections, Disbursements, and Expenses. Lower MAPE means the model tracked historical actuals more closely.
           </p>
         </div>
@@ -635,7 +645,7 @@ export default function FinancialForecasting({ title = 'Financial Forecasting', 
       </div>
 
       {forecastsError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+        <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">
           {forecastsError}
         </div>
       )}

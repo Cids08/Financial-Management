@@ -157,7 +157,7 @@ function ExpenseScanUpload({ onScanned, onFileSelected, onClear }) {
       <div className="flex items-center gap-2">
         <ScanLine size={15} className="text-primary-dark shrink-0" />
         <p className="text-xs font-semibold text-ink">
-          Official Receipt / Proof <span className="text-red-500 dark:text-red-400">*</span>
+          Official Receipt / Proof <span className="text-status-danger">*</span>
           <span className="font-normal text-muted ml-1">Upload receipt photo or PDF to auto-fill</span>
         </p>
       </div>
@@ -199,7 +199,7 @@ function ExpenseScanUpload({ onScanned, onFileSelected, onClear }) {
               </p>
             )}
             {status === 'done' && (
-              <p className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+              <p className="flex items-center gap-1.5 text-xs text-status-success font-medium">
                 <CheckCircle2 size={13} /> {preview === 'pdf' ? 'PDF verified & fields filled below  -  please review' : 'Fields filled below  -  please review before saving'}
               </p>
             )}
@@ -210,7 +210,7 @@ function ExpenseScanUpload({ onScanned, onFileSelected, onClear }) {
         </div>
       )}
 
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && <p className="text-xs text-status-danger">{error}</p>}
     </div>
   )
 }
@@ -225,9 +225,9 @@ const LABEL = 'block text-xs font-medium text-muted mb-1.5'
 
 const CATEGORY_STYLES = 'bg-primary/10 text-primary-dark dark:bg-primary/15'
 const STATUS_STYLES = {
-  Pending: 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400',
-  Approved: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400',
-  Rejected: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
+  Pending: 'bg-status-warning-bg text-status-warning',
+  Approved: 'bg-status-success-bg text-status-success',
+  Rejected: 'bg-status-danger-bg text-status-danger',
 }
 
 // Tax obligations use their own status set  -  the DB column is only ever
@@ -235,9 +235,9 @@ const STATUS_STYLES = {
 // TaxObligation::derivedStatus()), so it isn't the same vocabulary as
 // an expense's Pending/Approved/Rejected above.
 const TAX_STATUS_STYLES = {
-  Pending: 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400',
-  Paid: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400',
-  Overdue: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
+  Pending: 'bg-status-warning-bg text-status-warning',
+  Paid: 'bg-status-success-bg text-status-success',
+  Overdue: 'bg-status-danger-bg text-status-danger',
 }
 
 const CURRENT_MONTH_LABEL = new Date().toLocaleDateString('en-US', { month: 'short' })
@@ -788,13 +788,13 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
       </div>
 
       {listError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{listError}</div>
+        <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{listError}</div>
       )}
       {mutateError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{mutateError}</div>
+        <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{mutateError}</div>
       )}
       {receiptNotice && (
-        <div className="flex items-start justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+        <div className="flex items-start justify-between gap-3 rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2 text-xs text-status-warning">
           <span className="flex items-center gap-2"><AlertTriangle size={13} className="shrink-0" /> {receiptNotice}</span>
           <button type="button" onClick={() => setReceiptNotice('')} className="shrink-0 font-medium underline">Dismiss</button>
         </div>
@@ -843,7 +843,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                   <td className="px-2.5 py-3 whitespace-nowrap font-medium tabular-nums text-ink text-xs sm:text-sm">
                     {formatCurrency(x.expense_amount)}
                     {x.is_over_budget && (
-                      <span className="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400">Over</span>
+                      <span className="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-status-danger-bg text-status-danger">Over</span>
                     )}
                   </td>
                   <td className="px-2.5 py-3 whitespace-nowrap">
@@ -994,7 +994,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           {formError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{formError}</div>
+            <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{formError}</div>
           )}
 
           {!isEditing && (
@@ -1012,14 +1012,14 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                 }}
               />
               {fieldErrors.receipt && (
-                <p className="text-xs text-red-500 dark:text-red-400 -mt-2">{fieldErrors.receipt}</p>
+                <p className="text-xs text-status-danger -mt-2">{fieldErrors.receipt}</p>
               )}
             </>
           )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Budget <span className="text-red-500 dark:text-red-400">*</span></label>
+              <label className={LABEL}>Budget <span className="text-status-danger">*</span></label>
               <select
                 value={form.budget_id}
                 onChange={(e) => {
@@ -1037,7 +1037,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                     return next
                   })
                 }}
-                className={`${INPUT} ${fieldErrors.budget_id ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${fieldErrors.budget_id ? 'border-status-danger-border' : ''}`}
                 style={INPUT_TEXT_STYLE}
               >
                 <option value="">Select budget</option>
@@ -1055,14 +1055,14 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                   )
                 })}
               </select>
-              {fieldErrors.budget_id && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.budget_id}</p>}
+              {fieldErrors.budget_id && <p className="mt-1 text-xs text-status-danger">{fieldErrors.budget_id}</p>}
             </div>
             <div>
-              <label className={LABEL}>Category <span className="text-red-500 dark:text-red-400">*</span></label>
+              <label className={LABEL}>Category <span className="text-status-danger">*</span></label>
               <select
                 value={form.expense_category_id}
                 onChange={(e) => { setForm((f) => ({ ...f, expense_category_id: e.target.value })); setFieldErrors((fe) => ({ ...fe, expense_category_id: '' })) }}
-                className={`${INPUT} ${fieldErrors.expense_category_id ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${fieldErrors.expense_category_id ? 'border-status-danger-border' : ''}`}
                 style={INPUT_TEXT_STYLE}
               >
                 <option value="">Select category</option>
@@ -1072,7 +1072,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                   </option>
                 ))}
               </select>
-              {fieldErrors.expense_category_id && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.expense_category_id}</p>}
+              {fieldErrors.expense_category_id && <p className="mt-1 text-xs text-status-danger">{fieldErrors.expense_category_id}</p>}
             </div>
           </div>
 
@@ -1089,43 +1089,43 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-muted">Budget Status:</span>
-                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${b.status === 'Active' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400' : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400'}`}>
+                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${b.status === 'Active' ? 'bg-status-success-bg text-status-success' : 'bg-status-warning-bg text-status-warning'}`}>
                     {b.status}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-muted">Budget Balance Status:</span>
                   {state.isDepleted ? (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400">
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-status-danger-bg text-status-danger">
                       Depleted (No funds available)
                     </span>
                   ) : state.isLow ? (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-status-warning-bg text-status-warning">
                       Low Balance Warning
                     </span>
                   ) : (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400">
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-status-success-bg text-status-success">
                       Sufficient Balance
                     </span>
                   )}
                 </div>
 
                 {state.isDepleted && (
-                  <div className="flex items-start gap-1.5 text-[11px] text-rose-700 dark:text-rose-400 font-medium pt-0.5">
+                  <div className="flex items-start gap-1.5 text-[11px] text-status-danger font-medium pt-0.5">
                     <AlertTriangle size={13} className="shrink-0 mt-0.5" />
                     <span>Cannot select this budget: Budget funds are exhausted. Please select an active budget with available funds.</span>
                   </div>
                 )}
 
                 {!state.isDepleted && state.isLow && !isExceeded && (
-                  <div className="flex items-start gap-1.5 text-[11px] text-amber-700 dark:text-amber-400 font-medium pt-0.5">
+                  <div className="flex items-start gap-1.5 text-[11px] text-status-warning font-medium pt-0.5">
                     <AlertTriangle size={13} className="shrink-0 mt-0.5" />
                     <span>Warning: This budget has low remaining balance. Please review this expense carefully.</span>
                   </div>
                 )}
 
                 {isExceeded && Number(form.expense_amount) > 0 && (
-                  <div className="flex items-start gap-1.5 text-[11px] text-rose-700 dark:text-rose-400 font-medium pt-0.5">
+                  <div className="flex items-start gap-1.5 text-[11px] text-status-danger font-medium pt-0.5">
                     <AlertTriangle size={13} className="shrink-0 mt-0.5" />
                     <span>Warning: Expense amount exceeds the budget's available balance. Expenses exceeding available funds cannot be approved.</span>
                   </div>
@@ -1134,20 +1134,20 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
             )
           })()}
           <div>
-            <label className={LABEL}>Description <span className="text-red-500 dark:text-red-400">*</span></label>
+            <label className={LABEL}>Description <span className="text-status-danger">*</span></label>
             <input
               type="text"
               value={form.description}
               onChange={(e) => { setForm((f) => ({ ...f, description: e.target.value })); setFieldErrors((fe) => ({ ...fe, description: '' })) }}
-              className={`${INPUT} ${fieldErrors.description ? 'border-red-400 dark:border-red-500' : ''}`}
+              className={`${INPUT} ${fieldErrors.description ? 'border-status-danger-border' : ''}`}
               style={INPUT_TEXT_STYLE}
               placeholder="What this expense was for"
             />
-            {fieldErrors.description && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.description}</p>}
+            {fieldErrors.description && <p className="mt-1 text-xs text-status-danger">{fieldErrors.description}</p>}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Expense Date <span className="text-red-500 dark:text-red-400">*</span></label>
+              <label className={LABEL}>Expense Date <span className="text-status-danger">*</span></label>
               <input
                 type="date"
                 min="2017-01-01"
@@ -1155,13 +1155,13 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                 value={form.expense_date}
                 onChange={(e) => { setForm((f) => ({ ...f, expense_date: e.target.value })); setFieldErrors((fe) => ({ ...fe, expense_date: '' })) }}
                 onBlur={(e) => validateDate('expense_date', e.target.value)}
-                className={`${INPUT} scheme-light dark:scheme-dark ${dateErrors.expense_date || fieldErrors.expense_date ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} scheme-light dark:scheme-dark ${dateErrors.expense_date || fieldErrors.expense_date ? 'border-status-danger-border' : ''}`}
                 style={INPUT_TEXT_STYLE}
               />
-              {(dateErrors.expense_date || fieldErrors.expense_date) && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{dateErrors.expense_date || fieldErrors.expense_date}</p>}
+              {(dateErrors.expense_date || fieldErrors.expense_date) && <p className="mt-1 text-xs text-status-danger">{dateErrors.expense_date || fieldErrors.expense_date}</p>}
             </div>
             <div>
-              <label className={LABEL}>Amount <span className="text-red-500 dark:text-red-400">*</span></label>
+              <label className={LABEL}>Amount <span className="text-status-danger">*</span></label>
               <input
                 type="number"
                 min={MIN_COLLECTION_AMOUNT}
@@ -1189,16 +1189,16 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                     }
                   }
                 }}
-                className={`${INPUT} ${fieldErrors.expense_amount ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${fieldErrors.expense_amount ? 'border-status-danger-border' : ''}`}
                 style={INPUT_TEXT_STYLE}
                 placeholder={minHint(MIN_COLLECTION_AMOUNT)}
               />
-              {fieldErrors.expense_amount && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.expense_amount}</p>}
+              {fieldErrors.expense_amount && <p className="mt-1 text-xs text-status-danger">{fieldErrors.expense_amount}</p>}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Payment Cash Account <span className="text-red-500 dark:text-red-400">*</span></label>
+              <label className={LABEL}>Payment Cash Account <span className="text-status-danger">*</span></label>
               <select
                 value={form.cash_account_id}
                 onChange={(e) => {
@@ -1220,7 +1220,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                     setFieldErrors((fe) => ({ ...fe, expense_amount: '' }))
                   }
                 }}
-                className={`${INPUT} ${fieldErrors.cash_account_id ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${fieldErrors.cash_account_id ? 'border-status-danger-border' : ''}`}
                 style={INPUT_TEXT_STYLE}
               >
                 <option value="">Select cash account...</option>
@@ -1230,7 +1230,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                   </option>
                 ))}
               </select>
-              {fieldErrors.cash_account_id && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.cash_account_id}</p>}
+              {fieldErrors.cash_account_id && <p className="mt-1 text-xs text-status-danger">{fieldErrors.cash_account_id}</p>}
             </div>
             <div>
               <label className={LABEL}>Receipt Number</label>
@@ -1243,8 +1243,8 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
             if (selectedAcc) {
               if (Number(selectedAcc.current_balance) <= 0) {
                 return (
-                  <div className="rounded-lg border border-red-200 bg-red-50 dark:border-red-500/30 dark:bg-red-500/10 p-3 text-xs text-red-800 dark:text-red-300 flex items-start gap-2.5">
-                    <AlertTriangle size={16} className="shrink-0 mt-0.5 text-red-600 dark:text-red-400" />
+                  <div className="rounded-lg border border-status-danger-border bg-status-danger-bg p-3 text-xs text-status-danger flex items-start gap-2.5">
+                    <AlertTriangle size={16} className="shrink-0 mt-0.5 text-status-danger" />
                     <div>
                       <span className="font-semibold">Account Has Zero Balance:</span> <strong>{selectedAcc.account_name}</strong> currently has no available funds for transactions. Please select another account.
                     </div>
@@ -1253,8 +1253,8 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
               }
               if (enteredAmt > 0 && enteredAmt > Number(selectedAcc.current_balance)) {
                 return (
-                  <div className="rounded-lg border border-red-200 bg-red-50 dark:border-red-500/30 dark:bg-red-500/10 p-3 text-xs text-red-800 dark:text-red-300 flex items-start gap-2.5">
-                    <AlertTriangle size={16} className="shrink-0 mt-0.5 text-red-600 dark:text-red-400" />
+                  <div className="rounded-lg border border-status-danger-border bg-status-danger-bg p-3 text-xs text-status-danger flex items-start gap-2.5">
+                    <AlertTriangle size={16} className="shrink-0 mt-0.5 text-status-danger" />
                     <div>
                       <span className="font-semibold">Insufficient Account Funds:</span> The entered amount exceeds the available funds in <strong>{selectedAcc.account_name}</strong>. Please select another payment account or adjust the amount.
                     </div>
@@ -1269,12 +1269,12 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
               <label className={LABEL}>Receipt Status (Auto-managed)</label>
               <div className="flex items-center h-9 px-3 rounded-lg border border-border bg-bg/50 text-xs font-medium cursor-not-allowed select-none">
                 {receiptFile || form.receipt_status === 'Uploaded' || (isEditing && modalMode.has_receipt) ? (
-                  <span className="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-semibold">
+                  <span className="inline-flex items-center gap-1.5 text-status-success font-semibold">
                     <CheckCircle2 size={14} />
                     Uploaded (Proof Attached)
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+                  <span className="inline-flex items-center gap-1.5 text-status-warning">
                     <Paperclip size={14} />
                     Pending (Attach proof above)
                   </span>
@@ -1369,10 +1369,10 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
           <div className="space-y-4">
             {/* Warning banner when budget is missing/nonexistent */}
             {detailRecord.status === 'Pending' && (!detailRecord.budget_id || (!detailRecord.budget_name && !budgets.some((b) => Number(b.budget_id) === Number(detailRecord.budget_id)))) && (
-              <div className="flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
-                <AlertTriangle size={16} className="shrink-0 mt-0.5 text-red-600 dark:text-red-400" />
+              <div className="flex items-start gap-2.5 rounded-lg border border-status-danger-border bg-status-danger-bg p-3 text-xs text-status-danger">
+                <AlertTriangle size={16} className="shrink-0 mt-0.5 text-status-danger" />
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-red-700 dark:text-red-400">Missing Budget  -  Cannot Be Approved</p>
+                  <p className="font-semibold text-status-danger">Missing Budget  -  Cannot Be Approved</p>
                   <p className="mt-0.5">
                     This expense is not linked to a valid budget in the system. An active budget must be assigned before it can be approved.
                   </p>
@@ -1381,14 +1381,14 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
             )}
             {/* Warning banner when budget is exceeded */}
             {detailRecord.status === 'Pending' && detailRecord.budget_remaining_amount !== null && Number(detailRecord.expense_amount) > Number(detailRecord.budget_remaining_amount) && (
-              <div className="flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
-                <AlertTriangle size={16} className="shrink-0 mt-0.5 text-red-600 dark:text-red-400" />
+              <div className="flex items-start gap-2.5 rounded-lg border border-status-danger-border bg-status-danger-bg p-3 text-xs text-status-danger">
+                <AlertTriangle size={16} className="shrink-0 mt-0.5 text-status-danger" />
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-red-700 dark:text-red-400">Budget Limit Exceeded  -  Cannot Be Approved</p>
+                  <p className="font-semibold text-status-danger">Budget Limit Exceeded  -  Cannot Be Approved</p>
                   <p className="mt-0.5">
                     This expense of <strong>{formatCurrency(detailRecord.expense_amount)}</strong> exceeds the available budget balance.
                   </p>
-                  <p className="mt-1 text-red-600 dark:text-red-400 font-medium">
+                  <p className="mt-1 text-status-danger font-medium">
                     Approval is blocked to protect against budget overruns.
                   </p>
                 </div>
@@ -1396,11 +1396,11 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
             )}
             {/* Warning banner when proof is missing */}
             {detailRecord.status === 'Pending' && !detailRecord.has_receipt && (
-              <div className="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
-                <AlertTriangle size={16} className="shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+              <div className="flex items-start gap-2.5 rounded-lg border border-status-warning-border bg-status-warning-bg p-3 text-xs text-status-warning">
+                <AlertTriangle size={16} className="shrink-0 mt-0.5 text-status-warning" />
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-amber-800 dark:text-amber-300">Proof Required for Approval</p>
-                  <p className="mt-0.5 text-amber-700 dark:text-amber-400/90">
+                  <p className="font-semibold text-status-warning">Proof Required for Approval</p>
+                  <p className="mt-0.5 text-status-warning">
                     A receipt or proof document must be attached before this expense can be approved or rejected.
                   </p>
                 </div>
@@ -1408,15 +1408,15 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
             )}
             {/* Status notification banner */}
             {detailRecord.status === 'Rejected' && (
-              <div className="flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
-                <XCircle size={16} className="shrink-0 mt-0.5 text-red-600 dark:text-red-400" />
+              <div className="flex items-start gap-2.5 rounded-lg border border-status-danger-border bg-status-danger-bg p-3 text-xs text-status-danger">
+                <XCircle size={16} className="shrink-0 mt-0.5 text-status-danger" />
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-red-700 dark:text-red-400">Expense Rejected</p>
+                  <p className="font-semibold text-status-danger">Expense Rejected</p>
                   <p className="mt-0.5">
                     This expense was rejected by <strong>{detailRecord.rejected_by_name || 'an administrator'}</strong>
                     {detailRecord.rejected_at ? ` on ${formatDateTime(detailRecord.rejected_at)}` : ''}.
                   </p>
-                  <p className="mt-1 font-medium text-red-900 dark:text-red-200">
+                  <p className="mt-1 font-medium text-status-danger">
                     Reason: <span className="italic">{detailRecord.rejection_remarks ? `“${detailRecord.rejection_remarks}”` : 'No remarks provided.'}</span>
                   </p>
                 </div>
@@ -1424,10 +1424,10 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
             )}
 
             {detailRecord.status === 'Approved' && (
-              <div className="flex items-start gap-2.5 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300">
-                <CheckCircle2 size={16} className="shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />
+              <div className="flex items-start gap-2.5 rounded-lg border border-status-success-border bg-status-success-bg p-3 text-xs text-status-success">
+                <CheckCircle2 size={16} className="shrink-0 mt-0.5 text-status-success" />
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-emerald-700 dark:text-emerald-400">Expense Approved</p>
+                  <p className="font-semibold text-status-success">Expense Approved</p>
                   <p className="mt-0.5">
                     Approved by <strong>{detailRecord.approved_by_name || 'an administrator'}</strong>
                     {detailRecord.approved_at ? ` on ${formatDateTime(detailRecord.approved_at)}` : ''}.
@@ -1548,20 +1548,20 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
           </p>
 
           {rejectError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+            <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">
               {rejectError}
             </div>
           )}
 
           <div>
             <label className={LABEL}>
-              Reason for Rejection <span className="text-red-500 dark:text-red-400">*</span>
+              Reason for Rejection <span className="text-status-danger">*</span>
             </label>
             <textarea
               rows={3}
               value={rejectRemarks}
               onChange={(e) => { setRejectRemarks(e.target.value); setRejectError('') }}
-              className={`w-full px-3 py-2 rounded-lg border bg-bg text-sm text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-red-500/40 ${rejectError ? 'border-red-400 dark:border-red-500' : 'border-border'}`}
+              className={`w-full px-3 py-2 rounded-lg border bg-bg text-sm text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-status-danger-border ${rejectError ? 'border-status-danger-border' : 'border-border'}`}
               style={INPUT_TEXT_STYLE}
               placeholder="Explain why this expense is being rejected (e.g. invalid receipt, policy limit exceeded, duplicate claim)..."
               autoFocus

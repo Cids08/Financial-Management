@@ -22,12 +22,12 @@ const INPUT = `h-9 px-3 rounded-lg border border-border bg-bg text-sm text-ink
 const INPUT_TEXT_STYLE = { color: 'var(--color-ink, #0f172a)', caretColor: 'var(--color-ink, #0f172a)', outline: 'none' }
 
 const ACTION_BADGE = {
-  create: 'text-emerald-600 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-500/10',
-  update: 'text-blue-600 bg-blue-50 dark:text-blue-400 dark:bg-blue-500/10',
-  archive: 'text-amber-600 bg-amber-50 dark:text-amber-400 dark:bg-amber-500/10',
-  restore: 'text-purple-600 bg-purple-50 dark:text-purple-400 dark:bg-purple-500/10',
-  login: 'text-teal-600 bg-teal-50 dark:text-teal-400 dark:bg-teal-500/10',
-  failed_login: 'text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-500/10',
+  create: 'bg-status-success-bg text-status-success',
+  update: 'bg-status-info-bg text-status-info',
+  archive: 'bg-status-neutral-bg text-status-neutral',
+  restore: 'bg-status-success-bg text-status-success',
+  login: 'bg-status-success-bg text-status-success',
+  failed_login: 'bg-status-danger-bg text-status-danger',
 }
 
 function formatDateTime(iso) {
@@ -204,7 +204,7 @@ export default function AuditLogs({ title = 'Audit Logs', crumbs = ['System', 'A
       </div>
 
       {exportError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+        <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">
           {exportError}
         </div>
       )}
@@ -304,7 +304,7 @@ export default function AuditLogs({ title = 'Audit Logs', crumbs = ['System', 'A
         {loading ? (
           <p className="text-xs text-muted px-5 py-6 text-center">Loading audit logs…</p>
         ) : error ? (
-          <p className="text-xs text-red-600 px-5 py-6 text-center">{error}</p>
+          <p className="text-xs text-status-danger px-5 py-6 text-center">{error}</p>
         ) : logs.length === 0 ? (
           <p className="text-xs text-muted px-5 py-6 text-center">No audit log entries match these filters.</p>
         ) : (

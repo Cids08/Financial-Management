@@ -11,21 +11,21 @@ import { useAccountsReceivable } from '../hooks/useAccountsReceivable'
 import { usePrivacy } from '../context/PrivacyContext'
 import { apiFetch } from '../utils/api'
 
-const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
-const PANEL_PAD = 'p-4'
+const PANEL = 'rounded-2xl border border-border bg-surface shadow-card'
+const PANEL_PAD = 'p-4 sm:p-5'
 
 const AR_STATUS_STYLES = {
-  Pending: 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400',
-  'Partially Paid': 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400',
-  Paid: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
-  Overdue: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
-  Cancelled: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
+  Pending: 'bg-status-warning-bg text-status-warning border-status-warning-border',
+  'Partially Paid': 'bg-status-warning-bg text-status-warning border-status-warning-border',
+  Paid: 'bg-status-success-bg text-status-success border-status-success-border',
+  Overdue: 'bg-status-danger-bg text-status-danger border-status-danger-border',
+  Cancelled: 'bg-status-neutral-bg text-status-neutral border-status-neutral-border',
 }
 
 const COLLECTION_STATUS_STYLES = {
-  Pending: 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400',
-  Confirmed: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
-  Voided: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
+  Pending: 'bg-status-warning-bg text-status-warning border-status-warning-border',
+  Confirmed: 'bg-status-success-bg text-status-success border-status-success-border',
+  Voided: 'bg-status-neutral-bg text-status-neutral border-status-neutral-border',
 }
 
 function formatDate(value) {
@@ -55,7 +55,7 @@ function StatCard({ label, value, subtitle, icon: Icon, iconBg, iconColor, onCli
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-xs text-muted group-hover:text-ink transition-colors">{label}</p>
-        <p className="text-lg font-bold text-ink">{value}</p>
+        <p className="mt-1 text-xl font-bold tracking-tight text-ink tabular-nums break-words">{value}</p>
         {subtitle && <p className="text-[11px] text-muted truncate mt-0.5">{subtitle}</p>}
       </div>
       <ChevronRight size={15} className="text-muted/40 group-hover:text-primary transition-all duration-200 shrink-0 group-hover:translate-x-0.5" />
@@ -284,21 +284,22 @@ export default function CollectorDashboard({ title = 'Dashboard', crumbs = ['Das
   ]
 
   return (
-    <div className="space-y-5 animate-fadeIn">
+    <div className="space-y-6 animate-fadeIn">
       <Breadcrumb items={crumbs} />
 
       {/* Header section with Year selector & Export button (matching Admin Dashboard) */}
-      <div className={`${PANEL} flex flex-col gap-3 ${PANEL_PAD} sm:flex-row sm:items-center sm:justify-between`}>
+      <div className={`${PANEL} flex flex-col gap-5 border-t-4 border-t-primary p-5 sm:p-6 lg:flex-row lg:items-center lg:justify-between`}>
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-ink">{title}</h1>
-          <p className="mt-1 text-xs text-muted">Outstanding balances and collection activity across your assigned accounts.</p>
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-dark">Your collections workspace</p>
+          <h1 className="text-2xl font-bold tracking-tight text-ink sm:text-3xl">{title}</h1>
+          <p className="mt-2 text-sm text-muted">Outstanding balances and collection activity across your assigned accounts.</p>
           {exportError && (
             <p className="mt-1 flex items-center gap-1 text-xs text-red-600 dark:text-red-400">
               <AlertTriangle size={12} className="shrink-0" /> {exportError}
             </p>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1.5 rounded-lg border border-border bg-bg px-2">
             <CalendarRange size={14} className="shrink-0 text-muted" />
             <select
@@ -319,7 +320,7 @@ export default function CollectorDashboard({ title = 'Dashboard', crumbs = ['Das
       </div>
 
       {(arError || collectionsError) && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+        <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">
           {arError || collectionsError}
         </div>
       )}
@@ -399,7 +400,7 @@ export default function CollectorDashboard({ title = 'Dashboard', crumbs = ['Das
                     <p className="text-xs text-muted">
                       {r.invoice_number} &middot;{' '}
                       {isOverdue ? (
-                        <span className="text-red-500 dark:text-red-400 font-medium">Due {formatDate(r.due_date)} · Overdue</span>
+                        <span className="text-status-danger font-medium">Due {formatDate(r.due_date)} · Overdue</span>
                       ) : (
                         r.due_date ? `Due ${formatDate(r.due_date)}` : 'No due date'
                       )}

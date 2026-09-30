@@ -35,8 +35,8 @@ const INPUT = `w-full h-9 px-3 rounded-lg border border-border bg-bg text-sm tex
 const LABEL = 'block text-xs font-medium text-muted mb-1.5'
 
 const STATUS_STYLES = {
-  Active: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
-  Inactive: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
+  Active: 'bg-status-success-bg text-status-success',
+  Inactive: 'bg-status-neutral-bg text-status-neutral',
 }
 
 export default function Departments({ title = 'Departments', crumbs = ['Master Data', 'Departments'] }) {
@@ -262,7 +262,7 @@ export default function Departments({ title = 'Departments', crumbs = ['Master D
       </div>
 
       {loadError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+        <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">
           {loadError}
         </div>
       )}
@@ -406,12 +406,12 @@ export default function Departments({ title = 'Departments', crumbs = ['Master D
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           {formError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{formError}</div>
+            <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{formError}</div>
           )}
           <div>
             <label className={LABEL}>Department Name <span className="text-red-500">*</span></label>
-            <input type="text" value={form.department_name} onChange={(e) => { setForm((f) => ({ ...f, department_name: e.target.value })); setFieldErrors((fe) => ({ ...fe, department_name: '' })) }} className={`${INPUT} ${fieldErrors.department_name ? 'border-red-400 dark:border-red-500' : ''}`} placeholder="e.g. Finance" />
-            {fieldErrors.department_name && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.department_name}</p>}
+            <input type="text" value={form.department_name} onChange={(e) => { setForm((f) => ({ ...f, department_name: e.target.value })); setFieldErrors((fe) => ({ ...fe, department_name: '' })) }} className={`${INPUT} ${fieldErrors.department_name ? 'border-status-danger-border' : ''}`} placeholder="e.g. Finance" />
+            {fieldErrors.department_name && <p className="mt-1 text-xs text-status-danger">{fieldErrors.department_name}</p>}
           </div>
           <div>
             <label className={LABEL}>Department Head</label>
@@ -420,8 +420,8 @@ export default function Departments({ title = 'Departments', crumbs = ['Master D
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={LABEL}>Department Email</label>
-              <input type="email" value={form.department_email} onChange={(e) => { setForm((f) => ({ ...f, department_email: e.target.value })); setFieldErrors((fe) => ({ ...fe, department_email: '' })) }} className={`${INPUT} ${fieldErrors.department_email ? 'border-red-400 dark:border-red-500' : ''}`} placeholder="finance@alibaton.com" />
-              {fieldErrors.department_email && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.department_email}</p>}
+              <input type="email" value={form.department_email} onChange={(e) => { setForm((f) => ({ ...f, department_email: e.target.value })); setFieldErrors((fe) => ({ ...fe, department_email: '' })) }} className={`${INPUT} ${fieldErrors.department_email ? 'border-status-danger-border' : ''}`} placeholder="finance@alibaton.com" />
+              {fieldErrors.department_email && <p className="mt-1 text-xs text-status-danger">{fieldErrors.department_email}</p>}
             </div>
             <div>
               <label className={LABEL}>Department Phone</label>
@@ -464,13 +464,13 @@ export default function Departments({ title = 'Departments', crumbs = ['Master D
       >
         <div className="space-y-3">
           {archiveError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{archiveError}</div>
+            <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{archiveError}</div>
           )}
           <p className="text-sm text-ink">
             Are you sure you want to archive <span className="font-semibold">{deptToArchive?.department_name}</span>?
           </p>
           {deptToArchive?.headcount > 0 && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+            <div className="rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2 text-xs text-status-warning">
               This department has {deptToArchive.headcount} employee{deptToArchive.headcount === 1 ? '' : 's'} assigned. Reassign
               {deptToArchive.headcount === 1 ? ' them' : ' them all'} to another department before archiving.
             </div>

@@ -56,8 +56,8 @@ const INPUT = `w-full h-9 px-3 rounded-lg border border-border bg-bg text-sm tex
 const LABEL = 'block text-xs font-medium text-muted mb-1.5'
 
 const STATUS_STYLES = {
-  Active: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
-  Inactive: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
+  Active: 'bg-status-success-bg text-status-success',
+  Inactive: 'bg-status-neutral-bg text-status-neutral',
 }
 
 export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data', 'Suppliers'] }) {
@@ -317,7 +317,7 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
       </div>
 
       {loadError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+        <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">
           {loadError}
         </div>
       )}
@@ -499,13 +499,13 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           {formError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{formError}</div>
+            <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{formError}</div>
           )}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={LABEL}>Supplier Name <span className="text-red-500">*</span></label>
-              <input type="text" value={form.supplier_name} onChange={(e) => { setForm((f) => ({ ...f, supplier_name: e.target.value })); setFieldErrors((fe) => ({ ...fe, supplier_name: '' })) }} className={`${INPUT} ${fieldErrors.supplier_name ? 'border-red-400 dark:border-red-500' : ''}`} placeholder="Coastal Steel Traders" />
-              {fieldErrors.supplier_name && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.supplier_name}</p>}
+              <input type="text" value={form.supplier_name} onChange={(e) => { setForm((f) => ({ ...f, supplier_name: e.target.value })); setFieldErrors((fe) => ({ ...fe, supplier_name: '' })) }} className={`${INPUT} ${fieldErrors.supplier_name ? 'border-status-danger-border' : ''}`} placeholder="Coastal Steel Traders" />
+              {fieldErrors.supplier_name && <p className="mt-1 text-xs text-status-danger">{fieldErrors.supplier_name}</p>}
             </div>
             <div>
               <label className={LABEL}>Category / Goods Supplied</label>
@@ -583,8 +583,8 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
             </div>
             <div>
               <label className={LABEL}>Email <span className="text-red-500">*</span></label>
-              <input type="email" value={form.email} onChange={(e) => { setForm((f) => ({ ...f, email: e.target.value })); setFieldErrors((fe) => ({ ...fe, email: '' })) }} className={`${INPUT} ${fieldErrors.email ? 'border-red-400 dark:border-red-500' : ''}`} placeholder="sales@company.com" />
-              {fieldErrors.email && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.email}</p>}
+              <input type="email" value={form.email} onChange={(e) => { setForm((f) => ({ ...f, email: e.target.value })); setFieldErrors((fe) => ({ ...fe, email: '' })) }} className={`${INPUT} ${fieldErrors.email ? 'border-status-danger-border' : ''}`} placeholder="sales@company.com" />
+              {fieldErrors.email && <p className="mt-1 text-xs text-status-danger">{fieldErrors.email}</p>}
             </div>
           </div>
           <div>

@@ -83,7 +83,7 @@ export default function ExpenseReceiptHistoryModal({ open, onClose, expense, fet
         )}
 
         {error && (
-          <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+          <div className="flex items-start gap-2 rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">
             <AlertTriangle size={14} className="mt-0.5 shrink-0" />
             <span>{error}</span>
           </div>
@@ -106,7 +106,7 @@ export default function ExpenseReceiptHistoryModal({ open, onClose, expense, fet
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-ink" title={doc.original_name}>
                       {doc.original_name}
-                      {index === 0 && <span className="ml-2 inline-flex items-center rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400">Current</span>}
+                      {index === 0 && <span className="ml-2 inline-flex items-center rounded-full bg-status-success-bg px-1.5 py-0.5 text-[10px] font-medium text-status-success">Current</span>}
                     </p>
                     <p className="text-xs text-muted">
                       {formatDateTime(doc.uploaded_at)}

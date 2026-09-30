@@ -33,8 +33,17 @@ const INPUT = `w-full h-9 px-3 rounded-lg border border-border bg-bg text-sm tex
   placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary
   transition-all duration-150`
 
-const PANEL     = 'rounded-xl border border-border bg-surface shadow-card'
-const PANEL_PAD = 'p-4'
+const PANEL     = 'rounded-2xl border border-border bg-surface shadow-card'
+const PANEL_PAD = 'p-4 sm:p-5'
+const CHART_TICK = { fontSize: 10, fill: 'var(--color-muted)' }
+const CHART_TOOLTIP = {
+  backgroundColor: 'var(--color-surface)',
+  border: '1px solid var(--color-border)',
+  borderRadius: 12,
+  color: 'var(--color-ink)',
+  fontSize: 12,
+  boxShadow: '0 8px 24px rgb(0 0 0 / 0.1)',
+}
 
 const EFFICIENCY_PERIODS = [
   { key: 'day',   label: 'Daily'   },
@@ -136,23 +145,24 @@ export default function CollectionEfficiencyPanel() {
               collected-vs-target comparison.
             */}
             <ComposedChart data={buckets} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-              <XAxis dataKey="period" tick={{ fontSize: 10 }} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+              <XAxis dataKey="period" tick={CHART_TICK} axisLine={false} tickLine={false} />
               <YAxis
                 yAxisId="currency"
-                tick={{ fontSize: 10 }}
+                tick={CHART_TICK}
                 tickFormatter={(v) => `${currencySymbol()}${(convertAmount(v) / 1000).toFixed(0)}k`}
                 width={48}
               />
               <YAxis
                 yAxisId="pct"
                 orientation="right"
-                tick={{ fontSize: 10 }}
+                tick={CHART_TICK}
                 tickFormatter={(v) => `${v}%`}
                 width={40}
                 domain={[0, 'dataMax + 10']}
               />
               <RechartsTooltip
+                contentStyle={CHART_TOOLTIP}
                 formatter={(value, name) => {
                   if (name === 'Efficiency')  return [`${value}%`, name]
                   if (name === 'Collected')   return [formatCurrency(value), name]
@@ -165,7 +175,7 @@ export default function CollectionEfficiencyPanel() {
                 yAxisId="currency"
                 dataKey="collected"
                 name="Collected"
-                fill="#2563eb"
+                fill="#f4b400"
                 radius={[4, 4, 0, 0]}
                 maxBarSize={48}
               />
@@ -173,7 +183,7 @@ export default function CollectionEfficiencyPanel() {
                 yAxisId="currency"
                 dataKey="target"
                 name="Target"
-                stroke="#f59e0b"
+                stroke="var(--color-muted)"
                 strokeWidth={2}
                 dot={false}
                 strokeDasharray="5 3"
@@ -182,7 +192,7 @@ export default function CollectionEfficiencyPanel() {
                 yAxisId="pct"
                 dataKey="efficiency"
                 name="Efficiency"
-                stroke="#10b981"
+                stroke="var(--color-ink)"
                 strokeWidth={2}
                 dot={{ r: 3 }}
               />

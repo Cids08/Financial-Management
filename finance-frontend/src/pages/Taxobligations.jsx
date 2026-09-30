@@ -112,9 +112,9 @@ const SEARCH_INPUT = `w-full h-9 pl-9 pr-3 rounded-lg border border-border bg-su
 const LABEL = 'block text-xs font-medium text-muted mb-1.5'
 
 const STATUS_STYLES = {
-  Pending: 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400',
-  Paid: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
-  Overdue: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
+  Pending: 'bg-status-warning-bg text-status-warning',
+  Paid: 'bg-status-success-bg text-status-success',
+  Overdue: 'bg-status-danger-bg text-status-danger',
 }
 
 function formatDate(value) {
@@ -567,7 +567,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
         <div className="min-w-0 pr-4">
           <h1 className="text-xl font-bold tracking-tight text-ink">{title}</h1>
           <p className="mt-1 text-xs text-muted">
-            Track statutory tax filings and payments. Obligations automatically flip to <span className="font-medium text-red-500">Overdue</span> once their due date passes  -  no manual update needed.
+            Track statutory tax filings and payments. Obligations automatically flip to <span className="font-medium text-status-danger">Overdue</span> once their due date passes  -  no manual update needed.
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -588,13 +588,13 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
 
       {/* Statutory Filing Compliance Alert */}
       {complianceAlert.hasUrgent && statusFilter === 'all' && !showArchived && (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 rounded-xl border border-rose-200 bg-rose-50/70 dark:border-rose-500/20 dark:bg-rose-500/10 p-3 text-xs">
-          <div className="flex items-center gap-2 text-rose-800 dark:text-rose-300">
-            <AlertTriangle size={16} className="shrink-0 text-rose-600 dark:text-rose-400" />
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 rounded-xl border border-status-danger-border bg-status-danger-bg p-3 text-xs">
+          <div className="flex items-center gap-2 text-status-danger">
+            <AlertTriangle size={16} className="shrink-0 text-status-danger" />
             <span>
               <strong>Statutory Filing Deadline Notice:</strong>{' '}
               {complianceAlert.overdueCount > 0 && (
-                <span className="font-semibold text-rose-700 dark:text-rose-400">
+                <span className="font-semibold text-status-danger">
                   {complianceAlert.overdueCount} obligation{complianceAlert.overdueCount === 1 ? '' : 's'} OVERDUE.{' '}
                 </span>
               )}
@@ -616,7 +616,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
       )}
 
       {scheduleNotice && (
-        <div className="flex items-start justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400">
+        <div className="flex items-start justify-between gap-3 rounded-lg border border-status-success-border bg-status-success-bg px-3 py-2 text-xs text-status-success">
           <span className="flex items-center gap-1.5 font-medium">
             <CheckCircle2 size={14} className="shrink-0" />
             {scheduleNotice}
@@ -626,11 +626,11 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
       )}
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{error}</div>
+        <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{error}</div>
       )}
 
       {docNotice && (
-        <div className="flex items-start justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+        <div className="flex items-start justify-between gap-3 rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2 text-xs text-status-warning">
           <span>{docNotice}</span>
           <button type="button" onClick={() => setDocNotice('')} className="shrink-0 font-medium underline">Dismiss</button>
         </div>
@@ -781,7 +781,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                         <p className="text-xs text-muted">{o.tax_period}</p>
                         {o.has_document && (
                           <Tooltip label="Supporting document attached">
-                            <Paperclip size={11} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                            <Paperclip size={11} className="text-status-success shrink-0" />
                           </Tooltip>
                         )}
                       </div>
@@ -789,7 +789,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                     <td className="px-3 py-2.5 whitespace-nowrap text-xs">
                       <p className="font-medium text-ink">{formatDate(o.due_date)}</p>
                       {o.status !== 'Paid' && (
-                        <p className={`text-[11px] ${remaining < 0 ? 'text-red-500 font-medium' : 'text-muted'}`}>
+                        <p className={`text-[11px] ${remaining < 0 ? 'text-status-danger font-medium' : 'text-muted'}`}>
                           {remaining < 0 ? `${Math.abs(remaining)}d overdue` : remaining === 0 ? 'Due today' : `Due in ${remaining}d`}
                         </p>
                       )}
@@ -929,11 +929,11 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           {formError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{formError}</div>
+            <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{formError}</div>
           )}
 
           {isLockedObligation && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+            <div className="rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2 text-xs text-status-warning">
               This obligation's payment has already been posted as an approved expense  -  tax type, period, rate, taxable amount, due date, and the paid checkbox are locked. Remarks, payment date, and reference number can still be edited. To correct the amount or dates, archive this obligation instead.
             </div>
           )}
@@ -1007,7 +1007,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
               <input type="text" value={form.tax_period} readOnly className={`${INPUT} bg-bg cursor-not-allowed`} style={INPUT_TEXT_STYLE} />
             </div>
             <div>
-              <label className={LABEL}>Due Date <span className="text-red-500">*</span></label>
+              <label className={LABEL}>Due Date <span className="text-status-danger">*</span></label>
               <input
                 type="date"
                 value={form.due_date}
@@ -1017,12 +1017,12 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                   setForm((f) => ({ ...f, due_date: e.target.value }))
                 }}
                 onBlur={(e) => validateDate('due_date', e.target.value)}
-                className={`${INPUT} scheme-light dark:scheme-dark ${(fieldErrors.due_date || dateErrors.due_date) ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} scheme-light dark:scheme-dark ${(fieldErrors.due_date || dateErrors.due_date) ? 'border-status-danger-border' : ''}`}
                 style={INPUT_TEXT_STYLE}
                 disabled={isLockedObligation}
               />
               {(fieldErrors.due_date || dateErrors.due_date) && (
-                <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.due_date || dateErrors.due_date}</p>
+                <p className="mt-1 text-xs text-status-danger">{fieldErrors.due_date || dateErrors.due_date}</p>
               )}
             </div>
           </div>
@@ -1050,7 +1050,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
               </p>
 
               {calcNotice && (
-                <div className="rounded border border-amber-200 bg-amber-50 dark:border-amber-500/20 dark:bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-700 dark:text-amber-400">
+                <div className="rounded border border-status-warning-border bg-status-warning-bg px-2.5 py-1.5 text-xs text-status-warning">
                   {calcNotice}
                 </div>
               )}
@@ -1102,7 +1102,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
               value of record. */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Taxable Amount <span className="text-red-500">*</span></label>
+              <label className={LABEL}>Taxable Amount <span className="text-status-danger">*</span></label>
               <input
                 type="number"
                 min={MIN_INVOICE_AMOUNT}
@@ -1122,13 +1122,13 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                     setAmountError('')
                   }
                 }}
-                className={`${INPUT} ${(amountError || fieldErrors.taxable_amount) ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${(amountError || fieldErrors.taxable_amount) ? 'border-status-danger-border' : ''}`}
                 style={INPUT_TEXT_STYLE}
                 placeholder={minHint(MIN_INVOICE_AMOUNT)}
                 disabled={isLockedObligation}
               />
               {(amountError || fieldErrors.taxable_amount) && (
-                <p className="mt-1 text-xs text-red-500 dark:text-red-400">{amountError || fieldErrors.taxable_amount}</p>
+                <p className="mt-1 text-xs text-status-danger">{amountError || fieldErrors.taxable_amount}</p>
               )}
             </div>
             <div>
@@ -1141,13 +1141,13 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                   setFieldErrors((fe) => ({ ...fe, tax_rate: '' }))
                   setForm((f) => ({ ...f, tax_rate: e.target.value }))
                 }}
-                className={`${INPUT} ${fieldErrors.tax_rate ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${fieldErrors.tax_rate ? 'border-status-danger-border' : ''}`}
                 style={INPUT_TEXT_STYLE}
                 placeholder="12"
                 disabled={isLockedObligation}
               />
               {fieldErrors.tax_rate && (
-                <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.tax_rate}</p>
+                <p className="mt-1 text-xs text-status-danger">{fieldErrors.tax_rate}</p>
               )}
             </div>
           </div>
@@ -1171,7 +1171,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
           {form.is_paid && (
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className={LABEL}>Payment Date <span className="text-red-500">*</span></label>
+                <label className={LABEL}>Payment Date <span className="text-status-danger">*</span></label>
                 <input
                   type="date"
                   value={form.payment_date}
@@ -1181,11 +1181,11 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                     setForm((f) => ({ ...f, payment_date: e.target.value }))
                   }}
                   onBlur={(e) => validateDate('payment_date', e.target.value)}
-                  className={`${INPUT} scheme-light dark:scheme-dark ${(fieldErrors.payment_date || dateErrors.payment_date) ? 'border-red-400 dark:border-red-500' : ''}`}
+                  className={`${INPUT} scheme-light dark:scheme-dark ${(fieldErrors.payment_date || dateErrors.payment_date) ? 'border-status-danger-border' : ''}`}
                   style={INPUT_TEXT_STYLE}
                 />
                 {(fieldErrors.payment_date || dateErrors.payment_date) && (
-                  <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.payment_date || dateErrors.payment_date}</p>
+                  <p className="mt-1 text-xs text-status-danger">{fieldErrors.payment_date || dateErrors.payment_date}</p>
                 )}
               </div>
               <div>
@@ -1226,12 +1226,12 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                       setFieldErrors((fe) => ({ ...fe, reference_number: '' }))
                     }
                   }}
-                  className={`${INPUT} ${fieldErrors.reference_number ? 'border-red-400 dark:border-red-500' : ''}`}
+                  className={`${INPUT} ${fieldErrors.reference_number ? 'border-status-danger-border' : ''}`}
                   style={INPUT_TEXT_STYLE}
                   placeholder={suggestReference(form.tax_type, form.due_date)}
                 />
                 {fieldErrors.reference_number && (
-                  <p className="mt-1 text-xs text-red-500 dark:text-red-400">
+                  <p className="mt-1 text-xs text-status-danger">
                     {fieldErrors.reference_number}
                   </p>
                 )}
@@ -1301,7 +1301,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
 
             <div className="flex items-center gap-3 rounded-lg border border-border bg-bg px-3 py-2 flex-wrap">
               {detailRecord.status === 'Paid' ? (
-                <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${detailRecord.has_document ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted'}`}>
+                <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${detailRecord.has_document ? 'text-status-success' : 'text-muted'}`}>
                   <Paperclip size={12} /> {detailRecord.has_document ? 'Document attached' : 'No document attached'}
                 </span>
               ) : (
@@ -1338,7 +1338,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
             </div>
 
             {docNotice && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+              <div className="rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2 text-xs text-status-warning">
                 {docNotice}
               </div>
             )}

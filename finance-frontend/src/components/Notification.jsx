@@ -129,7 +129,7 @@ export default function Notification() {
             </div>
           ) : error ? (
             <div className="flex flex-col items-center justify-center gap-1 py-8 text-center px-4">
-              <p className="text-xs text-red-500">{error}</p>
+              <p className="text-xs text-status-danger">{error}</p>
             </div>
           ) : preview.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-1.5 py-8 text-center">

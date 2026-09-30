@@ -364,7 +364,7 @@ export default function AdvisorChatPanel() {
                   onClick={() => setShowArchived(false)}
                   aria-pressed={!showArchived}
                   className={`flex-1 text-xs font-semibold rounded-lg px-2 py-1.5 transition-all duration-150 ${
-                    !showArchived ? 'bg-primary text-[#111827] shadow-xs' : 'text-muted hover:bg-bg hover:text-ink'
+                    !showArchived ? 'bg-primary text-black shadow-xs' : 'text-muted hover:bg-bg hover:text-ink'
                   }`}
                 >
                   Active ({conversations.length})
@@ -374,7 +374,7 @@ export default function AdvisorChatPanel() {
                   onClick={() => setShowArchived(true)}
                   aria-pressed={showArchived}
                   className={`flex-1 text-xs font-semibold rounded-lg px-2 py-1.5 transition-all duration-150 ${
-                    showArchived ? 'bg-primary text-[#111827] shadow-xs' : 'text-muted hover:bg-bg hover:text-ink'
+                    showArchived ? 'bg-primary text-black shadow-xs' : 'text-muted hover:bg-bg hover:text-ink'
                   }`}
                 >
                   Archived ({archivedConversations.length})
@@ -491,8 +491,8 @@ export default function AdvisorChatPanel() {
           <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
             {/* ── Modern High-Contrast Header ── */}
             <div className="flex items-center gap-3 px-4 py-3 bg-surface shrink-0 border-b border-border shadow-xs">
-              <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-[#111827] shrink-0 shadow-xs">
-                <Sparkles size={18} className="text-[#111827]" />
+              <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-black shrink-0 shadow-xs">
+                <Sparkles size={18} className="text-black" />
                 <span className="absolute -top-1 -right-1 flex h-3 w-3">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                   <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500 border-2 border-surface" />
@@ -629,13 +629,13 @@ export default function AdvisorChatPanel() {
                 disabled={!chatInput.trim() || isThinking}
                 aria-label="Send message"
                 className="flex items-center gap-1.5 h-9 px-3.5 rounded-xl font-bold text-sm
-                  bg-primary text-[#111827]
+                  bg-primary text-black
                   hover:bg-primary-dark
                   disabled:opacity-40 disabled:cursor-not-allowed
                   shadow-xs shadow-primary/20
                   transition-all duration-150 active:scale-95 shrink-0"
               >
-                <Send size={14} className="text-[#111827]" />
+                <Send size={14} className="text-black" />
                 <span>Send</span>
               </button>
             </form>
@@ -646,12 +646,12 @@ export default function AdvisorChatPanel() {
       {!open && (
         <div className="flex items-end gap-3">
           {teaserText && (
-            <div className="relative max-w-60 rounded-2xl px-4 py-3 text-sm font-semibold shadow-xl animate-fadeIn bg-primary text-[#111827] shadow-primary/25 border border-primary-dark/20">
+            <div className="relative max-w-60 rounded-2xl px-4 py-3 text-sm font-semibold shadow-xl animate-fadeIn bg-primary text-black shadow-primary/25 border border-primary-dark/20">
               <button
                 type="button"
                 onClick={() => setTeaserText(null)}
                 aria-label="Dismiss"
-                className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-[#111827] text-white hover:bg-black transition-colors duration-150 shadow-xs"
+                className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black text-white hover:bg-black transition-colors duration-150 shadow-xs"
               >
                 <X size={11} />
               </button>
@@ -666,9 +666,9 @@ export default function AdvisorChatPanel() {
             onClick={openChat}
             aria-label="Open AI advisor chat"
             aria-expanded={open}
-            className="relative flex h-14 w-14 items-center justify-center rounded-full bg-primary text-[#111827] shadow-xl shadow-primary/35 hover:scale-105 active:scale-95 transition-all duration-200 border-2 border-surface"
+            className="relative flex h-14 w-14 items-center justify-center rounded-full bg-primary text-black shadow-xl shadow-primary/35 hover:scale-105 active:scale-95 transition-all duration-200 border-2 border-surface"
           >
-            <Sparkles size={24} className="text-[#111827]" />
+            <Sparkles size={24} className="text-black" />
             <span className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
               <span className="relative inline-flex h-3.5 w-3.5 rounded-full bg-emerald-500 border-2 border-surface" />
@@ -703,7 +703,7 @@ export default function AdvisorChatPanel() {
             it again, choose Archive instead.
           </p>
           {deleteError && (
-            <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{deleteError}</div>
+            <div className="mt-3 rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{deleteError}</div>
           )}
         </Modal>
       )}

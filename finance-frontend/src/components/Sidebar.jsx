@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Landmark, ChevronsLeft, ChevronsRight, ChevronUp, ChevronDown } from 'lucide-react'
+import { Landmark, ChevronsLeft, ChevronsRight, ChevronUp, ChevronDown, X } from 'lucide-react'
 import { menuData } from '../utils/menuData'
 import { filterMenuByPermissions } from '../utils/permissions'
 import { useCompany } from '../context/CompanyContext'
@@ -71,14 +71,16 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
       {/* Mobile overlay */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 bg-ink/50 z-40 lg:hidden animate-fadeIn"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden animate-fadeIn"
           onClick={onCloseMobile}
           aria-hidden="true"
         />
       )}
 
       <aside
-        className={`fixed top-0 left-0 h-full bg-sidebar border-r border-sidebar-border z-50 flex flex-col
+        id="workspace-navigation"
+        aria-label="Workspace navigation"
+        className={`fixed top-0 left-0 h-dvh bg-sidebar border-r border-sidebar-border z-50 flex flex-col
           transition-all duration-300 ease-in-out-smooth
           ${collapsed ? 'lg:w-20' : 'lg:w-70'}
           w-70
@@ -86,19 +88,27 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
         `}
       >
         {/* Brand / logo row  -  reads from CompanyContext, editable in Settings */}
-        <div className="h-16 flex items-center gap-2.5 px-4 border-b border-sidebar-border shrink-0">
-          <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center shrink-0 overflow-hidden">
+        <div className="h-20 flex items-center gap-3 px-5 border-b border-sidebar-border shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shrink-0 overflow-hidden shadow-sm">
             {logoUrl ? (
               <img src={logoUrl} alt={name} className="w-full h-full object-cover" />
             ) : (
-              <Landmark size={18} className="text-[#111827]" />
+              <Landmark size={21} className="text-black" strokeWidth={1.8} />
             )}
           </div>
           {/* Label hides only when collapsed AND on desktop; mobile drawer is always full width */}
           <div className={`min-w-0 block ${collapsed ? 'lg:hidden' : ''}`}>
-            <p className="text-sm font-bold text-sidebar-ink leading-tight truncate">{name}</p>
-            <p className="text-[11px] text-sidebar-muted leading-tight truncate">{tagline}</p>
+            <p className="text-sm font-bold text-sidebar-ink leading-tight tracking-tight truncate">{name}</p>
+            <p className="mt-1 text-[10px] text-sidebar-muted leading-tight truncate">{tagline}</p>
           </div>
+          <button
+            type="button"
+            onClick={onCloseMobile}
+            aria-label="Close navigation"
+            className="ml-auto rounded-lg p-1.5 text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-ink lg:hidden"
+          >
+            <X size={18} />
+          </button>
         </div>
 
         {/* Menu (scroll container) */}
@@ -118,8 +128,12 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
 
           <nav
             ref={navRef}
-            className="h-full overflow-y-auto overflow-x-hidden scrollbar-none py-4 px-3"
+            aria-label="Main navigation"
+            className="h-full overflow-y-auto overflow-x-hidden scrollbar-none py-5 px-3"
           >
+            <p className={`px-3 pb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-sidebar-muted ${collapsed ? 'lg:hidden' : ''}`}>
+              Workspace
+            </p>
             <ul className="space-y-1">
               {mainItems.map((item) => (
                 <SidebarItem
@@ -148,7 +162,7 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
         </div>
 
         {/* Pinned account actions (always visible, never scrolls) */}
-        <div className="shrink-0 border-t border-sidebar-border px-3 py-2">
+        <div className="shrink-0 border-t border-sidebar-border px-3 py-3">
           <ul className="space-y-1">
             {footerItems.map((item) => (
               <SidebarItem
@@ -164,14 +178,17 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
 
         {/* Collapse toggle (desktop only) */}
         <button
+          type="button"
           onClick={onToggleCollapse}
-          className="hidden lg:flex items-center justify-center gap-2 mx-3 mb-4 py-2.5 rounded-lg
+          aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
+          aria-expanded={!collapsed}
+          className="hidden lg:flex items-center justify-center gap-2 mx-3 mb-4 py-2.5 rounded-xl border border-sidebar-border
             text-sidebar-muted hover:text-sidebar-ink hover:bg-sidebar-hover transition-colors duration-150 shrink-0"
         >
           {collapsed ? <ChevronsRight size={18} /> : (
             <>
               <ChevronsLeft size={18} />
-              <span className="text-xs font-medium">Collapse</span>
+              <span className="text-xs font-medium">Collapse navigation</span>
             </>
           )}
         </button>

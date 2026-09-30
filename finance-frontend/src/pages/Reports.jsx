@@ -17,8 +17,8 @@ import { useCompany } from '../context/CompanyContext'
 import { usePrivacy } from '../context/PrivacyContext'
 import { escapeHtml, currencyLabel } from '../utils/print'
 
-const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
-const PANEL_PAD = 'p-4'
+const PANEL = 'rounded-2xl border border-border bg-surface shadow-card'
+const PANEL_PAD = 'p-4 sm:p-5'
 const INPUT = `h-9 px-3 rounded-lg border border-border bg-bg text-sm text-ink
   focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-150`
 
@@ -36,46 +36,46 @@ const REPORT_CARDS = [
 // -- Chart config -------------------------------------------------------
 
 const CHART_COLORS = {
-  revenue: '#10b981',
-  expense: '#ef4444',
-  net: '#F4B400',
-  inflow: '#10b981',
-  outflow: '#ef4444',
-  allocated: '#94a3b8',
-  actual: '#F4B400',
-  overBudget: '#ef4444',
+  revenue: '#f4b400',
+  expense: 'var(--color-ink)',
+  net: '#a3a3a3',
+  inflow: '#f4b400',
+  outflow: '#a3a3a3',
+  allocated: '#a3a3a3',
+  actual: '#f4b400',
+  overBudget: 'var(--color-ink)',
 }
 
-const EXPENSE_PIE_COLORS = ['#3b82f6', '#8b5cf6', '#f59e0b', '#06b6d4', '#ec4899']
-const DEPT_PIE_COLORS = ['#F4B400', '#3b82f6', '#8b5cf6', '#10b981', '#f97316']
+const EXPENSE_PIE_COLORS = ['#f4b400', 'var(--color-ink)', '#a3a3a3', '#ffe58a', '#737373']
+const DEPT_PIE_COLORS = ['#f4b400', 'var(--color-ink)', '#a3a3a3', '#ffe58a', '#737373']
 
 const AGING_BUCKETS = [
-  { key: 'current', name: 'Current', color: '#10b981' },
-  { key: 'd1_30', name: '1-30 Days', color: '#F4B400' },
-  { key: 'd31_60', name: '31-60 Days', color: '#f97316' },
-  { key: 'd61_90', name: '61-90 Days', color: '#ef4444' },
-  { key: 'over90', name: '90+ Days', color: '#991b1b' },
+  { key: 'current', name: 'Current', color: '#d4d4d4' },
+  { key: 'd1_30', name: '1-30 Days', color: '#a3a3a3' },
+  { key: 'd31_60', name: '31-60 Days', color: '#ffe58a' },
+  { key: 'd61_90', name: '61-90 Days', color: '#f4b400' },
+  { key: 'over90', name: '90+ Days', color: 'var(--color-ink)' },
 ]
 
 const TOOLTIP_STYLE = {
   contentStyle: {
-    backgroundColor: '#FFFFFF',
-    border: '1px solid #E5E7EB',
-    borderRadius: 8,
+    backgroundColor: 'var(--color-surface)',
+    border: '1px solid var(--color-border)',
+    borderRadius: 12,
     fontSize: 12,
-    boxShadow: '0 4px 12px rgba(17,24,39,0.08)',
+    boxShadow: '0 8px 24px rgb(0 0 0 / 0.1)',
   },
-  labelStyle: { color: '#111827', fontWeight: 600, marginBottom: 4 },
-  itemStyle: { color: '#6B7280' },
+  labelStyle: { color: 'var(--color-ink)', fontWeight: 600, marginBottom: 4 },
+  itemStyle: { color: 'var(--color-muted)' },
 }
 
-const AXIS_TICK = { fontSize: 11, fill: '#6B7280' }
+const AXIS_TICK = { fontSize: 11, fill: 'var(--color-muted)' }
 const CURRENCY_TICK = (v) => `${currencySymbol()}${(convertAmount(v) / 1000).toFixed(0)}k`
 
 function ChartPanel({ title, height = 260, children }) {
   return (
-    <div className="rounded-lg border border-border bg-bg/40 p-3">
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{title}</p>
+    <div className="rounded-xl border border-border bg-bg/40 p-4">
+      <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-muted">{title}</p>
       <ResponsiveContainer width="100%" height={height}>
         {children}
       </ResponsiveContainer>
@@ -108,10 +108,10 @@ const PRINT_STYLES = `
 
   body {
     font-family: Arial, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    color: #1e293b;
+    color: #262626;
     font-size: 11px;
     line-height: 1.45;
-    background: #f1f5f9;
+    background: #f5f5f5;
     padding: 24px 0;
     margin: 0;
     -webkit-print-color-adjust: exact;
@@ -147,7 +147,7 @@ const PRINT_STYLES = `
   /* ── Corporate Letterhead (SAP B1 Header) ── */
   .doc-header {
     width: 100%;
-    border-bottom: 2.5px solid #0f2744;
+    border-bottom: 2.5px solid #171717;
     padding-bottom: 10px;
     margin-bottom: 16px;
     display: flex;
@@ -171,7 +171,7 @@ const PRINT_STYLES = `
   .doc-header-logo-init {
     height: 44px;
     width: 44px;
-    background: #0f2744;
+    background: #171717;
     color: #ffffff;
     font-weight: 800;
     font-size: 20px;
@@ -187,14 +187,14 @@ const PRINT_STYLES = `
   .doc-header-company-name {
     font-size: 15px;
     font-weight: 800;
-    color: #0f2744;
+    color: #171717;
     letter-spacing: 0.3px;
     text-transform: uppercase;
     line-height: 1.2;
   }
   .doc-header-meta {
     font-size: 9.5px;
-    color: #475569;
+    color: #525252;
     margin-top: 3px;
     line-height: 1.35;
   }
@@ -205,23 +205,23 @@ const PRINT_STYLES = `
   .doc-header-meta-box .doc-title {
     font-size: 13px;
     font-weight: 800;
-    color: #0f2744;
+    color: #171717;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     margin-bottom: 4px;
   }
   .doc-meta-row {
     font-size: 9px;
-    color: #334155;
+    color: #404040;
     line-height: 1.4;
   }
   .doc-meta-label {
-    color: #64748b;
+    color: #737373;
     font-weight: 600;
   }
   .doc-meta-val {
     font-weight: 700;
-    color: #0f2744;
+    color: #171717;
   }
 
   /* ── Report Table ── */
@@ -233,28 +233,28 @@ const PRINT_STYLES = `
     border-collapse: collapse;
     margin-top: 4px;
     margin-bottom: 8px;
-    border: 1px solid #cbd5e1;
+    border: 1px solid #d4d4d4;
     font-size: 11px;
   }
   thead tr th {
-    background: #1e293b;
+    background: #262626;
     color: #ffffff;
     font-size: 9.5px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     padding: 7px 10px;
-    border: 1px solid #1e293b;
+    border: 1px solid #262626;
     white-space: nowrap;
   }
   tbody tr td {
     padding: 7px 10px;
     font-size: 11px;
-    border: 1px solid #e2e8f0;
-    color: #1e293b;
+    border: 1px solid #e5e5e5;
+    color: #262626;
   }
   tbody tr:nth-child(even) td {
-    background: #f8fafc;
+    background: #fafafa;
   }
   td.num, th.num {
     text-align: right;
@@ -265,45 +265,45 @@ const PRINT_STYLES = `
 
   /* Section heading rows (REVENUE, EXPENSES) */
   tr.section-heading td {
-    background: #f1f5f9;
-    color: #0f2744;
+    background: #f5f5f5;
+    color: #171717;
     font-size: 9.5px;
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.6px;
     padding: 5px 10px;
-    border: 1px solid #cbd5e1;
+    border: 1px solid #d4d4d4;
   }
 
   /* Accounting Totals Row: Classic double bottom border */
   tfoot tr td {
-    background: #f8fafc;
-    color: #0f2744;
+    background: #fafafa;
+    color: #171717;
     font-weight: 800;
     font-size: 11.5px;
     padding: 7px 10px;
-    border-top: 1.5px solid #0f2744;
-    border-bottom: 3px double #0f2744;
-    border-left: 1px solid #cbd5e1;
-    border-right: 1px solid #cbd5e1;
+    border-top: 1.5px solid #171717;
+    border-bottom: 3px double #171717;
+    border-left: 1px solid #d4d4d4;
+    border-right: 1px solid #d4d4d4;
   }
-  .positive { color: #15803d; font-weight: 700; }
-  .negative { color: #b91c1c; font-weight: 700; }
+  .positive { color: #171717; font-weight: 700; }
+  .negative { color: #856000; font-weight: 700; }
 
   /* ── Comparative Chart Card ── */
   .chart-card {
-    border: 1px solid #cbd5e1;
+    border: 1px solid #d4d4d4;
     border-radius: 4px;
     padding: 10px 14px;
     margin: 10px 0;
-    background: #f8fafc;
+    background: #fafafa;
   }
   .chart-title {
     font-size: 9.5px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    color: #475569;
+    color: #525252;
     margin-bottom: 8px;
   }
 
@@ -311,7 +311,7 @@ const PRINT_STYLES = `
   .signature-section {
     margin-top: 20px;
     padding-top: 12px;
-    border-top: 1.5px solid #cbd5e1;
+    border-top: 1.5px solid #d4d4d4;
     page-break-inside: avoid;
   }
   .signature-section-title {
@@ -319,7 +319,7 @@ const PRINT_STYLES = `
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.8px;
-    color: #64748b;
+    color: #737373;
     margin-bottom: 10px;
   }
   .signature-row {
@@ -328,9 +328,9 @@ const PRINT_STYLES = `
   }
   .signature-box {
     flex: 1;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-top: 2.5px solid #0f2744;
+    background: #fafafa;
+    border: 1px solid #e5e5e5;
+    border-top: 2.5px solid #171717;
     padding: 8px 10px;
     border-radius: 2px;
   }
@@ -339,48 +339,48 @@ const PRINT_STYLES = `
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    color: #0f2744;
+    color: #171717;
   }
   .signature-box .sig-line {
-    border-bottom: 1px solid #94a3b8;
+    border-bottom: 1px solid #a3a3a3;
     height: 30px;
     margin: 4px 0 6px;
   }
   .signature-box .sig-name {
     font-size: 9.5px;
     font-weight: 700;
-    color: #0f2744;
+    color: #171717;
   }
   .signature-box .sig-role {
     font-size: 8.5px;
-    color: #64748b;
+    color: #737373;
     margin-top: 1px;
   }
   .signature-box .sig-date {
     font-size: 8.5px;
-    color: #94a3b8;
+    color: #a3a3a3;
     margin-top: 4px;
   }
 
   /* ── Document Footer ── */
   .doc-footer {
     width: 100%;
-    border-top: 1px solid #cbd5e1;
+    border-top: 1px solid #d4d4d4;
     padding-top: 6px;
     margin-top: 10px;
     margin-bottom: 2px;
     display: flex;
     justify-content: space-between;
     font-size: 8px;
-    color: #94a3b8;
+    color: #a3a3a3;
   }
   .doc-footer .footer-brand {
-    color: #0f2744;
+    color: #171717;
     font-weight: 700;
   }
   .doc-footer .footer-conf {
     font-style: italic;
-    color: #64748b;
+    color: #737373;
   }
 
   /* ── Print Media Rules ── */
@@ -440,16 +440,16 @@ function generateComparativeBarSvg({ title, currentLabel, priorLabel, items }) {
     const y = topPad + (idx * rowH)
     const currW = Math.max(3, Math.round((Math.abs(item.current || 0) / maxVal) * barMaxW))
     const priorW = Math.max(3, Math.round((Math.abs(item.prior || 0) / maxVal) * barMaxW))
-    const currFill = item.current >= 0 ? '#10b981' : '#ef4444'
+    const currFill = item.current >= 0 ? '#f4b400' : '#171717'
 
     return `
-      <text x="165" y="${y + 16}" text-anchor="end" font-size="11" font-weight="600" fill="#334155">${item.label}</text>
+      <text x="165" y="${y + 16}" text-anchor="end" font-size="11" font-weight="600" fill="#404040">${item.label}</text>
       <!-- Current bar -->
       <rect x="${startX}" y="${y}" width="${currW}" height="12" rx="2" fill="${currFill}" />
-      <text x="${startX + currW + 8}" y="${y + 10}" font-size="10" font-weight="700" fill="#1e293b">${formatCurrencyRaw(item.current)}</text>
+      <text x="${startX + currW + 8}" y="${y + 10}" font-size="10" font-weight="700" fill="#262626">${formatCurrencyRaw(item.current)}</text>
       <!-- Prior bar -->
-      <rect x="${startX}" y="${y + 16}" width="${priorW}" height="12" rx="2" fill="#94a3b8" />
-      <text x="${startX + priorW + 8}" y="${y + 26}" font-size="10" fill="#64748b">${formatCurrencyRaw(item.prior)}</text>
+      <rect x="${startX}" y="${y + 16}" width="${priorW}" height="12" rx="2" fill="#a3a3a3" />
+      <text x="${startX + priorW + 8}" y="${y + 26}" font-size="10" fill="#737373">${formatCurrencyRaw(item.prior)}</text>
     `
   }).join('')
 
@@ -459,12 +459,12 @@ function generateComparativeBarSvg({ title, currentLabel, priorLabel, items }) {
       <svg width="100%" height="${h}" viewBox="0 0 680 ${h}" xmlns="http://www.w3.org/2000/svg" style="display:block;">
         <!-- Two-row non-colliding legend -->
         <g transform="translate(${startX}, 8)">
-          <rect x="0" y="0" width="10" height="10" rx="2" fill="#10b981" />
-          <text x="16" y="9" font-size="10" font-weight="600" fill="#334155">Current: ${currentLabel}</text>
+          <rect x="0" y="0" width="10" height="10" rx="2" fill="#f4b400" />
+          <text x="16" y="9" font-size="10" font-weight="600" fill="#404040">Current: ${currentLabel}</text>
         </g>
         <g transform="translate(${startX}, 24)">
-          <rect x="0" y="0" width="10" height="10" rx="2" fill="#94a3b8" />
-          <text x="16" y="9" font-size="10" font-weight="600" fill="#64748b">Past: ${priorLabel}</text>
+          <rect x="0" y="0" width="10" height="10" rx="2" fill="#a3a3a3" />
+          <text x="16" y="9" font-size="10" font-weight="600" fill="#737373">Past: ${priorLabel}</text>
         </g>
         ${rows}
       </svg>
@@ -1239,12 +1239,13 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
   const statCardsAreEmpty = isActiveLoading
 
   return (
-    <div className="space-y-5 animate-fadeIn">
+    <div className="space-y-6 animate-fadeIn">
       <Breadcrumb items={crumbs} />
 
       <div>
-        <h1 className="text-xl font-bold tracking-tight text-ink">{title}</h1>
-        <p className="mt-1 text-xs text-muted">
+        <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-dark">Financial intelligence</p>
+        <h1 className="text-2xl font-bold tracking-tight text-ink sm:text-3xl">{title}</h1>
+        <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted">
           Financial statements assembled from posted Collections, Disbursements, Budgets, and Expenses across the General Ledger.
         </p>
       </div>
@@ -1403,7 +1404,7 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{error}</div>
+        <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{error}</div>
       )}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -1493,18 +1494,18 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                   <ChartPanel title={isComparing ? `Performance Comparison: Current (${comparisonInfo?.current_label || 'Current'}) vs. Past (${comparisonInfo?.prior_label || 'Past'})` : 'Revenue vs. Expenses vs. Net Income'}>
                     {isComparing ? (
                       <BarChart data={incomeCompareChartData} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
-                        <XAxis dataKey="name" tick={AXIS_TICK} axisLine={{ stroke: '#E5E7EB' }} tickLine={false} />
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                        <XAxis dataKey="name" tick={AXIS_TICK} axisLine={{ stroke: 'var(--color-border)' }} tickLine={false} />
                         <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} tickFormatter={CURRENCY_TICK} width={56} />
                         <Tooltip {...TOOLTIP_STYLE} formatter={(value) => formatCurrency(value)} />
-                        <Legend wrapperStyle={{ fontSize: 11, color: '#6B7280' }} />
-                        <Bar dataKey="Current" name={comparisonInfo?.current_label || 'Current Period'} fill="#F4B400" radius={[4, 4, 0, 0]} maxBarSize={44} />
-                        <Bar dataKey="Past" name={comparisonInfo?.prior_label || 'Past Period'} fill="#94A3B8" radius={[4, 4, 0, 0]} maxBarSize={44} />
+                        <Legend wrapperStyle={{ fontSize: 11, color: 'var(--color-muted)' }} />
+                        <Bar dataKey="Current" name={comparisonInfo?.current_label || 'Current Period'} fill="#f4b400" radius={[4, 4, 0, 0]} maxBarSize={44} />
+                        <Bar dataKey="Past" name={comparisonInfo?.prior_label || 'Past Period'} fill="#a3a3a3" radius={[4, 4, 0, 0]} maxBarSize={44} />
                       </BarChart>
                     ) : (
                       <BarChart data={incomeChartData} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
-                        <XAxis dataKey="name" tick={AXIS_TICK} axisLine={{ stroke: '#E5E7EB' }} tickLine={false} />
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                        <XAxis dataKey="name" tick={AXIS_TICK} axisLine={{ stroke: 'var(--color-border)' }} tickLine={false} />
                         <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} tickFormatter={CURRENCY_TICK} width={56} />
                         <Tooltip {...TOOLTIP_STYLE} formatter={(value) => formatCurrency(value)} />
                         <Bar dataKey="value" radius={[6, 6, 0, 0]} maxBarSize={64}>
@@ -1516,7 +1517,7 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                   <ChartPanel title="Expense Breakdown">
                     <PieChart>
                       <Tooltip {...TOOLTIP_STYLE} formatter={(value) => formatCurrency(value)} />
-                      <Legend wrapperStyle={{ fontSize: 11, color: '#6B7280' }} />
+                      <Legend wrapperStyle={{ fontSize: 11, color: 'var(--color-muted)' }} />
                       <Pie data={expensePieData} dataKey="value" nameKey="name" innerRadius={55} outerRadius={85} paddingAngle={3}>
                         {expensePieData.map((entry, i) => (
                           <Cell key={entry.name} fill={EXPENSE_PIE_COLORS[i % EXPENSE_PIE_COLORS.length]} />
@@ -1638,26 +1639,26 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                   {isComparing ? (
                     <ChartPanel title="Cash Flow Comparison: Current vs. Past Net Change by Cash Account" height={280}>
                       <BarChart data={cashFlowChartData} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
-                        <XAxis dataKey="name" tick={AXIS_TICK} axisLine={{ stroke: '#E5E7EB' }} tickLine={false} />
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                        <XAxis dataKey="name" tick={AXIS_TICK} axisLine={{ stroke: 'var(--color-border)' }} tickLine={false} />
                         <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} tickFormatter={CURRENCY_TICK} width={56} />
                         <Tooltip {...TOOLTIP_STYLE} formatter={(value) => formatCurrency(value)} />
-                        <Legend wrapperStyle={{ fontSize: 11, color: '#6B7280' }} />
-                        <Bar dataKey="net" name="Current Net Change" fill="#F4B400" radius={[4, 4, 0, 0]} maxBarSize={36} />
-                        <Bar dataKey="priorNet" name="Past Net Change" fill="#94A3B8" radius={[4, 4, 0, 0]} maxBarSize={36} />
+                        <Legend wrapperStyle={{ fontSize: 11, color: 'var(--color-muted)' }} />
+                        <Bar dataKey="net" name="Current Net Change" fill="#f4b400" radius={[4, 4, 0, 0]} maxBarSize={36} />
+                        <Bar dataKey="priorNet" name="Past Net Change" fill="#a3a3a3" radius={[4, 4, 0, 0]} maxBarSize={36} />
                       </BarChart>
                     </ChartPanel>
                   ) : (
                     <ChartPanel title="Inflow vs. Outflow by Cash Account" height={280}>
                       <ComposedChart data={cashFlowChartData} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
-                        <XAxis dataKey="name" tick={AXIS_TICK} axisLine={{ stroke: '#E5E7EB' }} tickLine={false} />
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                        <XAxis dataKey="name" tick={AXIS_TICK} axisLine={{ stroke: 'var(--color-border)' }} tickLine={false} />
                         <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} tickFormatter={CURRENCY_TICK} width={56} />
                         <Tooltip {...TOOLTIP_STYLE} formatter={(value) => formatCurrency(value)} />
-                        <Legend wrapperStyle={{ fontSize: 11, color: '#6B7280' }} />
+                        <Legend wrapperStyle={{ fontSize: 11, color: 'var(--color-muted)' }} />
                         <Bar dataKey="inflow" name="Inflow" fill={CHART_COLORS.inflow} radius={[6, 6, 0, 0]} maxBarSize={40} />
                         <Bar dataKey="outflow" name="Outflow" fill={CHART_COLORS.outflow} radius={[6, 6, 0, 0]} maxBarSize={40} />
-                        <Line type="monotone" dataKey="net" name="Net Change" stroke="#111827" strokeWidth={2} dot={{ r: 3 }} />
+                        <Line type="monotone" dataKey="net" name="Net Change" stroke="var(--color-ink)" strokeWidth={2} dot={{ r: 3 }} />
                       </ComposedChart>
                     </ChartPanel>
                   )}
@@ -1743,11 +1744,11 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                 <div className="grid grid-cols-1 gap-4 border-b border-border p-4 lg:grid-cols-2">
                   <ChartPanel title="Aging by Customer">
                     <BarChart data={arAging} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
-                      <XAxis dataKey="customer" tick={{ fontSize: 10, fill: '#6B7280' }} axisLine={{ stroke: '#E5E7EB' }} tickLine={false} interval={0} angle={-12} textAnchor="end" height={50} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                      <XAxis dataKey="customer" tick={{ fontSize: 10, fill: 'var(--color-muted)' }} axisLine={{ stroke: 'var(--color-border)' }} tickLine={false} interval={0} angle={-12} textAnchor="end" height={50} />
                       <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} tickFormatter={CURRENCY_TICK} width={56} />
                       <Tooltip {...TOOLTIP_STYLE} formatter={(value) => formatCurrency(value)} />
-                      <Legend wrapperStyle={{ fontSize: 10, color: '#6B7280' }} />
+                      <Legend wrapperStyle={{ fontSize: 10, color: 'var(--color-muted)' }} />
                       {AGING_BUCKETS.map((b, i) => (
                         <Bar
                           key={b.key}
@@ -1763,7 +1764,7 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                   <ChartPanel title="Overall Aging Distribution">
                     <PieChart>
                       <Tooltip {...TOOLTIP_STYLE} formatter={(value) => formatCurrency(value)} />
-                      <Legend wrapperStyle={{ fontSize: 11, color: '#6B7280' }} />
+                      <Legend wrapperStyle={{ fontSize: 11, color: 'var(--color-muted)' }} />
                       <Pie data={arBucketTotals} dataKey="value" nameKey="name" innerRadius={55} outerRadius={85} paddingAngle={3}>
                         {arBucketTotals.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
                       </Pie>
@@ -1819,11 +1820,11 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                 <div className="grid grid-cols-1 gap-4 border-b border-border p-4 lg:grid-cols-2">
                   <ChartPanel title="Aging by Supplier">
                     <BarChart data={apAging} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
-                      <XAxis dataKey="supplier" tick={{ fontSize: 10, fill: '#6B7280' }} axisLine={{ stroke: '#E5E7EB' }} tickLine={false} interval={0} angle={-12} textAnchor="end" height={50} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                      <XAxis dataKey="supplier" tick={{ fontSize: 10, fill: 'var(--color-muted)' }} axisLine={{ stroke: 'var(--color-border)' }} tickLine={false} interval={0} angle={-12} textAnchor="end" height={50} />
                       <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} tickFormatter={CURRENCY_TICK} width={56} />
                       <Tooltip {...TOOLTIP_STYLE} formatter={(value) => formatCurrency(value)} />
-                      <Legend wrapperStyle={{ fontSize: 10, color: '#6B7280' }} />
+                      <Legend wrapperStyle={{ fontSize: 10, color: 'var(--color-muted)' }} />
                       {AGING_BUCKETS.map((b, i) => (
                         <Bar
                           key={b.key}
@@ -1839,7 +1840,7 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                   <ChartPanel title="Overall Aging Distribution">
                     <PieChart>
                       <Tooltip {...TOOLTIP_STYLE} formatter={(value) => formatCurrency(value)} />
-                      <Legend wrapperStyle={{ fontSize: 11, color: '#6B7280' }} />
+                      <Legend wrapperStyle={{ fontSize: 11, color: 'var(--color-muted)' }} />
                       <Pie data={apBucketTotals} dataKey="value" nameKey="name" innerRadius={55} outerRadius={85} paddingAngle={3}>
                         {apBucketTotals.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
                       </Pie>
@@ -1892,21 +1893,21 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                   <ChartPanel title={isComparing ? 'Department Actual Spend: Current vs. Past' : 'Allocated vs. Actual by Department'}>
                     {isComparing ? (
                       <BarChart data={budgetVsActual} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
-                        <XAxis dataKey="department" tick={{ fontSize: 10, fill: '#6B7280' }} axisLine={{ stroke: '#E5E7EB' }} tickLine={false} interval={0} angle={-12} textAnchor="end" height={50} />
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                        <XAxis dataKey="department" tick={{ fontSize: 10, fill: 'var(--color-muted)' }} axisLine={{ stroke: 'var(--color-border)' }} tickLine={false} interval={0} angle={-12} textAnchor="end" height={50} />
                         <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} tickFormatter={CURRENCY_TICK} width={56} />
                         <Tooltip {...TOOLTIP_STYLE} formatter={(value) => formatCurrency(value)} />
-                        <Legend wrapperStyle={{ fontSize: 11, color: '#6B7280' }} />
-                        <Bar dataKey="actual" name="Current Spend" fill="#F4B400" radius={[4, 4, 0, 0]} maxBarSize={36} />
-                        <Bar dataKey="prior_actual" name="Past Spend" fill="#94A3B8" radius={[4, 4, 0, 0]} maxBarSize={36} />
+                        <Legend wrapperStyle={{ fontSize: 11, color: 'var(--color-muted)' }} />
+                        <Bar dataKey="actual" name="Current Spend" fill="#f4b400" radius={[4, 4, 0, 0]} maxBarSize={36} />
+                        <Bar dataKey="prior_actual" name="Past Spend" fill="#a3a3a3" radius={[4, 4, 0, 0]} maxBarSize={36} />
                       </BarChart>
                     ) : (
                       <BarChart data={budgetVsActual} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
-                        <XAxis dataKey="department" tick={{ fontSize: 10, fill: '#6B7280' }} axisLine={{ stroke: '#E5E7EB' }} tickLine={false} interval={0} angle={-12} textAnchor="end" height={50} />
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                        <XAxis dataKey="department" tick={{ fontSize: 10, fill: 'var(--color-muted)' }} axisLine={{ stroke: 'var(--color-border)' }} tickLine={false} interval={0} angle={-12} textAnchor="end" height={50} />
                         <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} tickFormatter={CURRENCY_TICK} width={56} />
                         <Tooltip {...TOOLTIP_STYLE} formatter={(value) => formatCurrency(value)} />
-                        <Legend wrapperStyle={{ fontSize: 11, color: '#6B7280' }} />
+                        <Legend wrapperStyle={{ fontSize: 11, color: 'var(--color-muted)' }} />
                         <Bar dataKey="allocated" name="Allocated" fill={CHART_COLORS.allocated} radius={[6, 6, 0, 0]} maxBarSize={36} />
                         <Bar dataKey="actual" name="Actual" radius={[6, 6, 0, 0]} maxBarSize={36}>
                           {budgetVsActual.map((r) => (
@@ -1919,7 +1920,7 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                   <ChartPanel title="Budget Allocation Share">
                     <PieChart>
                       <Tooltip {...TOOLTIP_STYLE} formatter={(value) => formatCurrency(value)} />
-                      <Legend wrapperStyle={{ fontSize: 11, color: '#6B7280' }} />
+                      <Legend wrapperStyle={{ fontSize: 11, color: 'var(--color-muted)' }} />
                       <Pie data={budgetPieData} dataKey="value" nameKey="name" innerRadius={55} outerRadius={85} paddingAngle={3}>
                         {budgetPieData.map((entry, i) => (
                           <Cell key={entry.name} fill={DEPT_PIE_COLORS[i % DEPT_PIE_COLORS.length]} />

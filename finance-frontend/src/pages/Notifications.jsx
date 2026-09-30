@@ -226,7 +226,7 @@ export default function Notifications({ title = 'Notifications', crumbs = ['Noti
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{error}</div>
+        <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{error}</div>
       )}
 
       <div className={PANEL}>
@@ -355,9 +355,9 @@ export default function Notifications({ title = 'Notifications', crumbs = ['Noti
             </div>
           </div>
 
-          <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-500/20 dark:bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-300">
+          <div className="rounded-lg border border-status-warning-border bg-status-warning-bg p-3 text-xs text-status-warning">
             <div className="flex items-start gap-2">
-              <AlertCircle size={15} className="shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+              <AlertCircle size={15} className="shrink-0 mt-0.5 text-status-warning" />
               <div>
                 <span className="font-semibold">Browser Permission Required:</span>
                 <p className="mt-0.5">When you click <strong>Continue & Enable</strong>, your web browser will display a permission prompt. Please click <strong>"Allow"</strong> to activate alerts.</p>

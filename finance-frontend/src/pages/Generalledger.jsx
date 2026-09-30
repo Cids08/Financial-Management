@@ -874,14 +874,14 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
       </div>
 
       {!grandTotals.balanced && (
-        <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+        <div className="flex items-center gap-2 rounded-lg border border-status-danger-border bg-status-danger-bg px-4 py-3 text-sm text-status-danger">
           <AlertTriangle size={15} className="shrink-0" />
           Ledger is out of balance by {formatCurrency(Math.abs(grandTotals.difference))}. Check the source transaction that posted a one-sided entry.
         </div>
       )}
 
       {error && (
-        <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+        <div className="flex items-center gap-2 rounded-lg border border-status-danger-border bg-status-danger-bg px-4 py-3 text-sm text-status-danger">
           <AlertTriangle size={15} className="shrink-0" />
           {error}
         </div>
@@ -894,21 +894,21 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
             <button
               type="button"
               onClick={() => setView('journal')}
-              className={`flex flex-1 md:flex-none items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition-colors duration-150 ${view === 'journal' ? 'bg-primary text-[#111827] shadow-sm' : 'text-muted hover:text-ink'}`}
+              className={`flex flex-1 md:flex-none items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition-colors duration-150 ${view === 'journal' ? 'bg-primary text-black shadow-sm' : 'text-muted hover:text-ink'}`}
             >
               <Rows3 size={14} /> Journal
             </button>
             <button
               type="button"
               onClick={() => setView('ledger')}
-              className={`flex flex-1 md:flex-none items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition-colors duration-150 ${view === 'ledger' ? 'bg-primary text-[#111827] shadow-sm' : 'text-muted hover:text-ink'}`}
+              className={`flex flex-1 md:flex-none items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition-colors duration-150 ${view === 'ledger' ? 'bg-primary text-black shadow-sm' : 'text-muted hover:text-ink'}`}
             >
               <Layers size={14} /> Ledger
             </button>
             <button
               type="button"
               onClick={() => setView('trial-balance')}
-              className={`flex flex-1 md:flex-none items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition-colors duration-150 ${view === 'trial-balance' ? 'bg-primary text-[#111827] shadow-sm' : 'text-muted hover:text-ink'}`}
+              className={`flex flex-1 md:flex-none items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition-colors duration-150 ${view === 'trial-balance' ? 'bg-primary text-black shadow-sm' : 'text-muted hover:text-ink'}`}
             >
               <ListTree size={14} /> Trial Balance
             </button>
@@ -1022,7 +1022,7 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
               <button
                 type="button"
                 onClick={() => setLineFilter('debit')}
-                className={`flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors duration-150 ${lineFilter === 'debit' ? 'bg-primary text-[#111827] shadow-sm' : 'text-muted hover:text-ink'}`}
+                className={`flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors duration-150 ${lineFilter === 'debit' ? 'bg-primary text-black shadow-sm' : 'text-muted hover:text-ink'}`}
               >
                 <TrendingUp size={13} /> Debit
               </button>
@@ -1340,7 +1340,7 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
               <span className="text-[10.5px] uppercase tracking-wide text-muted">Totals</span>
               <span className="w-28 whitespace-nowrap text-right text-xs tabular-nums text-ink">Dr {formatCurrency(ledgerData.totals.debit)}</span>
               <span className="w-28 whitespace-nowrap text-right text-xs tabular-nums text-ink">Cr {formatCurrency(ledgerData.totals.credit)}</span>
-              <span className={`w-32 whitespace-nowrap text-right text-xs font-semibold tabular-nums ${Math.abs(ledgerData.totals.balance) < 0.005 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+              <span className={`w-32 whitespace-nowrap text-right text-xs font-semibold tabular-nums ${Math.abs(ledgerData.totals.balance) < 0.005 ? 'text-status-success' : 'text-status-danger'}`}>
                 {Math.abs(ledgerData.totals.balance) < 0.005 ? 'Balanced' : formatCurrency(Math.abs(ledgerData.totals.balance)) + ' off'}
               </span>
             </div>
@@ -1388,7 +1388,7 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
                     <td className="px-4 py-3 text-right text-xs uppercase tracking-wide text-muted">Totals</td>
                     <td className="px-4 py-3 whitespace-nowrap text-right tabular-nums text-ink text-xs">{formatCurrency(trialTotals.debit)}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-right tabular-nums text-ink text-xs">{formatCurrency(trialTotals.credit)}</td>
-                    <td className={`px-4 py-3 whitespace-nowrap text-right tabular-nums text-xs ${Math.abs(trialTotals.debit - trialTotals.credit) < 0.005 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                    <td className={`px-4 py-3 whitespace-nowrap text-right tabular-nums text-xs ${Math.abs(trialTotals.debit - trialTotals.credit) < 0.005 ? 'text-status-success' : 'text-status-danger'}`}>
                       {Math.abs(trialTotals.debit - trialTotals.credit) < 0.005 ? 'Balanced' : formatCurrency(Math.abs(trialTotals.debit - trialTotals.credit)) + ' off'}
                     </td>
                   </tr>
@@ -1423,7 +1423,7 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold text-ink">{detailGroup.description}</p>
-              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${detailGroup.is_balanced ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400' : 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400'}`}>
+              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${detailGroup.is_balanced ? 'bg-status-success-bg text-status-success' : 'bg-status-danger-bg text-status-danger'}`}>
                 {detailGroup.is_balanced ? 'Balanced' : 'Out of Balance'}
               </span>
             </div>

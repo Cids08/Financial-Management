@@ -37,8 +37,8 @@ export default function RetentionCountdown({ deletedAt, compact = false, classNa
 
   const tones = {
     calm: 'bg-bg text-muted border border-border',
-    warn: 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400',
-    due: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
+    warn: 'bg-status-warning-bg text-status-warning',
+    due: 'bg-status-danger-bg text-status-danger',
   }
 
   return (

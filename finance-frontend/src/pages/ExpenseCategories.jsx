@@ -22,8 +22,8 @@ const INPUT_TEXT_STYLE = { color: 'var(--color-ink, #0f172a)', caretColor: 'var(
 const LABEL = 'block text-xs font-medium text-muted mb-1.5'
 
 const ACTIVE_STYLES = {
-  true: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400',
-  false: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+  true: 'bg-status-success-bg text-status-success',
+  false: 'bg-status-neutral-bg text-status-neutral',
 }
 
 export default function ExpenseCategories({ title = 'Expense Categories', crumbs = ['Master Data', 'Expense Categories'] }) {
@@ -163,10 +163,10 @@ export default function ExpenseCategories({ title = 'Expense Categories', crumbs
       </div>
 
       {listError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{listError}</div>
+        <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{listError}</div>
       )}
       {mutateError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{mutateError}</div>
+        <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{mutateError}</div>
       )}
 
       <div className={PANEL}>
@@ -273,18 +273,18 @@ export default function ExpenseCategories({ title = 'Expense Categories', crumbs
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           {formError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{formError}</div>
+            <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{formError}</div>
           )}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={LABEL}>Category Code <span className="text-red-500">*</span></label>
-              <input type="text" value={form.category_code} onChange={(e) => { setForm((f) => ({ ...f, category_code: e.target.value })); setFieldErrors((fe) => ({ ...fe, category_code: '' })) }} className={`${INPUT} ${fieldErrors.category_code ? 'border-red-400 dark:border-red-500' : ''}`} style={INPUT_TEXT_STYLE} placeholder="e.g. TAX, UTIL" />
-              {fieldErrors.category_code && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.category_code}</p>}
+              <input type="text" value={form.category_code} onChange={(e) => { setForm((f) => ({ ...f, category_code: e.target.value })); setFieldErrors((fe) => ({ ...fe, category_code: '' })) }} className={`${INPUT} ${fieldErrors.category_code ? 'border-status-danger-border' : ''}`} style={INPUT_TEXT_STYLE} placeholder="e.g. TAX, UTIL" />
+              {fieldErrors.category_code && <p className="mt-1 text-xs text-status-danger">{fieldErrors.category_code}</p>}
             </div>
             <div>
               <label className={LABEL}>Category Name <span className="text-red-500">*</span></label>
-              <input type="text" value={form.category_name} onChange={(e) => { setForm((f) => ({ ...f, category_name: e.target.value })); setFieldErrors((fe) => ({ ...fe, category_name: '' })) }} className={`${INPUT} ${fieldErrors.category_name ? 'border-red-400 dark:border-red-500' : ''}`} style={INPUT_TEXT_STYLE} placeholder="e.g. Utilities" />
-              {fieldErrors.category_name && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.category_name}</p>}
+              <input type="text" value={form.category_name} onChange={(e) => { setForm((f) => ({ ...f, category_name: e.target.value })); setFieldErrors((fe) => ({ ...fe, category_name: '' })) }} className={`${INPUT} ${fieldErrors.category_name ? 'border-status-danger-border' : ''}`} style={INPUT_TEXT_STYLE} placeholder="e.g. Utilities" />
+              {fieldErrors.category_name && <p className="mt-1 text-xs text-status-danger">{fieldErrors.category_name}</p>}
             </div>
           </div>
           <div>

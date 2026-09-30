@@ -51,8 +51,8 @@ const ROLE_STYLES = {
 const ROLE_STYLE_FALLBACK = 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
 
 const STATUS_STYLES = {
-  Active: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
-  Inactive: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
+  Active: 'bg-status-success-bg text-status-success',
+  Inactive: 'bg-status-neutral-bg text-status-neutral',
 }
 
 const EMPTY_FORM = { first_name: '', last_name: '', email: '', role_id: '', title_id: '', status: 'Active' }
@@ -129,7 +129,7 @@ function NewUserCredentialsModal({ credentials, onClose }) {
       footer={<Button variant="primary" size="md" onClick={onClose}>Done</Button>}
     >
       <div className="space-y-3">
-        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+        <div className="flex items-start gap-2 rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2.5 text-xs text-status-warning">
           <ShieldAlert size={14} className="shrink-0 mt-0.5" />
           This password is shown only once. Share it with the new user securely. They should change it after their first login.
         </div>
@@ -635,7 +635,7 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
       </div>
 
       {usersError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+        <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">
           {usersError}
         </div>
       )}
@@ -887,7 +887,7 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           {formError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+            <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">
               {formError}
             </div>
           )}
@@ -906,10 +906,10 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
                 type="text"
                 value={form.first_name}
                 onChange={(e) => { setForm((f) => ({ ...f, first_name: e.target.value })); setFieldErrors((fe) => ({ ...fe, first_name: '' })) }}
-                className={`${INPUT} ${fieldErrors.first_name ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${fieldErrors.first_name ? 'border-status-danger-border' : ''}`}
                 placeholder="Juan"
               />
-              {fieldErrors.first_name && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.first_name}</p>}
+              {fieldErrors.first_name && <p className="mt-1 text-xs text-status-danger">{fieldErrors.first_name}</p>}
             </div>
             <div>
               <label className={LABEL}>Last Name <span className="text-red-500">*</span></label>
@@ -917,10 +917,10 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
                 type="text"
                 value={form.last_name}
                 onChange={(e) => { setForm((f) => ({ ...f, last_name: e.target.value })); setFieldErrors((fe) => ({ ...fe, last_name: '' })) }}
-                className={`${INPUT} ${fieldErrors.last_name ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${fieldErrors.last_name ? 'border-status-danger-border' : ''}`}
                 placeholder="Dela Cruz"
               />
-              {fieldErrors.last_name && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.last_name}</p>}
+              {fieldErrors.last_name && <p className="mt-1 text-xs text-status-danger">{fieldErrors.last_name}</p>}
             </div>
           </div>
 
@@ -930,10 +930,10 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
               type="email"
               value={form.email}
               onChange={(e) => { setForm((f) => ({ ...f, email: e.target.value })); setFieldErrors((fe) => ({ ...fe, email: '' })) }}
-              className={`${INPUT} ${fieldErrors.email ? 'border-red-400 dark:border-red-500' : ''}`}
+              className={`${INPUT} ${fieldErrors.email ? 'border-status-danger-border' : ''}`}
               placeholder="juan.delacruz@alibaton.com"
             />
-            {fieldErrors.email && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.email}</p>}
+            {fieldErrors.email && <p className="mt-1 text-xs text-status-danger">{fieldErrors.email}</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -952,7 +952,7 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
                   ))}
               </select>
               {isEditing && Number(modalMode.user_id) === Number(profile?.id) && (
-                <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">You can't change your own role.</p>
+                <p className="mt-1 text-[11px] text-status-warning">You can't change your own role.</p>
               )}
             </div>
             <div>
@@ -1015,7 +1015,7 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
       >
         {roleGate && (
           <div className="space-y-4">
-            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+            <div className="flex items-start gap-2 rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2.5 text-xs text-status-warning">
               <ShieldAlert size={14} className="shrink-0 mt-0.5" />
               <span>
                 Changing <span className="font-medium text-ink">{roleGate.user.first_name} {roleGate.user.last_name}</span>'s role
@@ -1025,7 +1025,7 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
             </div>
 
             {gateError && (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+              <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">
                 {gateError}
               </div>
             )}

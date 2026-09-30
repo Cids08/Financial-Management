@@ -33,7 +33,7 @@ export default function Modal({ open, onClose, title, children, footer, maxWidth
     <div className="fixed inset-0 z-60 flex items-end justify-center sm:items-center sm:p-4">
       {/* Backdrop  -  blurBackdrop is opt-in per modal instance so this stays unchanged everywhere else */}
       <div
-        className={`absolute inset-0 bg-ink/50 animate-fadeIn ${blurBackdrop ? 'backdrop-blur-md' : ''}`}
+        className={`absolute inset-0 bg-black/60 animate-fadeIn ${blurBackdrop ? 'backdrop-blur-md' : 'backdrop-blur-sm'}`}
         onClick={onClose}
         aria-hidden="true"
       />
@@ -42,12 +42,13 @@ export default function Modal({ open, onClose, title, children, footer, maxWidth
       <div
         role="dialog"
         aria-modal="true"
+        aria-label={typeof title === 'string' ? title : undefined}
         className={`relative flex w-full ${resolvedMaxWidth} max-h-[92vh] sm:max-h-[85vh] flex-col
           rounded-t-2xl border border-b-0 border-border bg-surface shadow-dropdown animate-fadeIn
-          sm:rounded-xl sm:border-b sm:border-border`}
+          sm:rounded-2xl sm:border-b sm:border-border`}
       >
         <div className="flex shrink-0 items-center justify-between border-b border-border px-5 py-4">
-          <h2 className="text-sm font-semibold text-ink">{title}</h2>
+          <h2 className="text-base font-semibold tracking-tight text-ink">{title}</h2>
           <button
             type="button"
             onClick={onClose}
@@ -61,7 +62,7 @@ export default function Modal({ open, onClose, title, children, footer, maxWidth
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
 
         {footer && (
-          <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border bg-surface px-5 py-4 rounded-b-none sm:rounded-b-xl">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border bg-bg/60 px-5 py-4 rounded-b-none sm:rounded-b-2xl">
             {footer}
           </div>
         )}

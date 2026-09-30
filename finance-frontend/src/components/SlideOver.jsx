@@ -35,14 +35,15 @@ export default function SlideOver({ open, onClose, title, subtitle, footer, chil
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div
-        className={`absolute inset-0 bg-ink/40 transition-opacity duration-200 ${mounted ? 'opacity-100' : 'opacity-0'}`}
+        className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-200 ${mounted ? 'opacity-100' : 'opacity-0'}`}
         onClick={onClose}
         aria-hidden="true"
       />
       <div
         role="dialog"
         aria-modal="true"
-        className={`relative flex h-full w-full ${widthClass} flex-col bg-surface shadow-2xl
+        aria-label={typeof title === 'string' ? title : undefined}
+        className={`relative flex h-full w-full ${widthClass} flex-col border-l border-border bg-surface shadow-2xl
           transition-transform duration-300 ease-in-out-smooth
           ${mounted ? 'translate-x-0' : 'translate-x-full'}`}
       >

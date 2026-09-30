@@ -58,14 +58,14 @@ const INPUT_TEXT_STYLE = { color: 'var(--color-ink, #0f172a)', caretColor: 'var(
 const LABEL = 'block text-xs font-medium text-muted mb-1.5'
 
 const STATUS_STYLES = {
-  'Pending Approval': 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400',
-  Pending: 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400',
-  'For Payment': 'bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-400',
-  Approved: 'bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-400',
-  'Partially Paid': 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400',
-  Paid: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
-  Overdue: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
-  Cancelled: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
+  'Pending Approval': 'bg-status-warning-bg text-status-warning',
+  Pending: 'bg-status-warning-bg text-status-warning',
+  'For Payment': 'bg-status-warning-bg text-status-warning',
+  Approved: 'bg-status-success-bg text-status-success',
+  'Partially Paid': 'bg-status-warning-bg text-status-warning',
+  Paid: 'bg-status-success-bg text-status-success',
+  Overdue: 'bg-status-danger-bg text-status-danger',
+  Cancelled: 'bg-status-neutral-bg text-status-neutral',
 }
 
 export function getApDisplayStatus(record) {
@@ -238,7 +238,7 @@ function BillScanUpload({ onScanned, onFileSelected, onClear }) {
       <div className="flex items-center gap-2">
         <ScanLine size={15} className="text-primary-dark shrink-0" />
         <p className="text-xs font-semibold text-ink">
-          Supporting Document <span className="text-red-500 dark:text-red-400">*</span>
+          Supporting Document <span className="text-status-danger">*</span>
           <span className="font-normal text-muted ml-1">Upload image or PDF to auto-fill</span>
         </p>
       </div>
@@ -280,7 +280,7 @@ function BillScanUpload({ onScanned, onFileSelected, onClear }) {
               </p>
             )}
             {status === 'done' && (
-              <p className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+              <p className="flex items-center gap-1.5 text-xs text-status-success font-medium">
                 <CheckCircle2 size={13} /> {preview === 'pdf' ? 'PDF verified & fields filled below  -  please review' : 'Fields filled below  -  please review before saving'}
               </p>
             )}
@@ -291,7 +291,7 @@ function BillScanUpload({ onScanned, onFileSelected, onClear }) {
         </div>
       )}
 
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && <p className="text-xs text-status-danger">{error}</p>}
     </div>
   )
 }
@@ -858,9 +858,9 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
       </div>
 
       {successMessage && (
-        <div className="flex items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400 animate-fadeIn">
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-status-success-border bg-status-success-bg px-3 py-2 text-xs font-medium text-status-success animate-fadeIn">
           <div className="flex items-center gap-2">
-            <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <CheckCircle2 size={16} className="text-status-success shrink-0" />
             <span>{successMessage}</span>
           </div>
           <button type="button" onClick={() => setSuccessMessage('')} className="text-emerald-600 hover:text-emerald-800 dark:text-emerald-400">
@@ -870,7 +870,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
       )}
 
       {billsError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+        <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">
           {billsError}
         </div>
       )}
@@ -999,7 +999,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                     {r.penalty_rate > 0 ? (
                       isOverdueBill(r) ? (
                         <>
-                          <p className="text-red-600 dark:text-red-400 tabular-nums whitespace-nowrap">{r.penalty_rate}%</p>
+                          <p className="text-status-danger tabular-nums whitespace-nowrap">{r.penalty_rate}%</p>
                           <p className="text-muted tabular-nums whitespace-nowrap">{formatCurrency(r.penalty_amount)}</p>
                         </>
                       ) : (
@@ -1179,7 +1179,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           {(formValidationError || formError) && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{formValidationError || formError}</div>
+            <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{formValidationError || formError}</div>
           )}
 
           {!isEditing && (
@@ -1190,14 +1190,14 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                 onClear={() => setAttachmentFile(null)}
               />
               {fieldErrors.document && (
-                <p className="text-xs text-red-500 dark:text-red-400 -mt-2">{fieldErrors.document}</p>
+                <p className="text-xs text-status-danger -mt-2">{fieldErrors.document}</p>
               )}
             </>
           )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Supplier <span className="text-red-500 dark:text-red-400">*</span></label>
+              <label className={LABEL}>Supplier <span className="text-status-danger">*</span></label>
               <select
                 value={form.supplier_id}
                 disabled={isEditing}
@@ -1220,30 +1220,30 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
               {isEditing && <p className="mt-1 text-[11px] text-muted">Supplier cannot be changed once recorded.</p>}
             </div>
             <div>
-              <label className={LABEL}>Invoice Number <span className="text-red-500 dark:text-red-400">*</span></label>
+              <label className={LABEL}>Invoice Number <span className="text-status-danger">*</span></label>
               <input
                 type="text"
                 value={form.invoice_number}
                 onChange={(e) => { setForm((f) => ({ ...f, invoice_number: e.target.value })); setFieldErrors((fe) => ({ ...fe, invoice_number: '' })) }}
-                className={`${INPUT} ${fieldErrors.invoice_number ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${fieldErrors.invoice_number ? 'border-status-danger-border' : ''}`}
                 placeholder="SUP-INV-3301"
               />
-              {fieldErrors.invoice_number && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.invoice_number}</p>}
+              {fieldErrors.invoice_number && <p className="mt-1 text-xs text-status-danger">{fieldErrors.invoice_number}</p>}
             </div>
           </div>
           <div>
-            <label className={LABEL}>Account (what this bill debits) <span className="text-red-500 dark:text-red-400">*</span></label>
+            <label className={LABEL}>Account (what this bill debits) <span className="text-status-danger">*</span></label>
             <select
               value={form.account_id}
               onChange={(e) => { setForm((f) => ({ ...f, account_id: e.target.value })); setFieldErrors((fe) => ({ ...fe, account_id: '' })) }}
-              className={`${INPUT} ${fieldErrors.account_id ? 'border-red-400 dark:border-red-500' : ''}`}
+              className={`${INPUT} ${fieldErrors.account_id ? 'border-status-danger-border' : ''}`}
             >
               <option value="" disabled>Select an account…</option>
               {(accounts ?? []).map((a) => (
                 <option key={a.id} value={a.id}>{a.account_code}  -  {a.account_name}</option>
               ))}
             </select>
-            {fieldErrors.account_id && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.account_id}</p>}
+            {fieldErrors.account_id && <p className="mt-1 text-xs text-status-danger">{fieldErrors.account_id}</p>}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -1255,12 +1255,12 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                 max={MAX_BILL_DATE}
                 onChange={(e) => { setForm((f) => ({ ...f, invoice_date: e.target.value })); setFieldErrors((fe) => ({ ...fe, invoice_date: '' })) }}
                 onBlur={(e) => validateDate('invoice_date', e.target.value)}
-                className={`${INPUT} scheme-light dark:scheme-dark ${dateErrors.invoice_date || fieldErrors.invoice_date ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} scheme-light dark:scheme-dark ${dateErrors.invoice_date || fieldErrors.invoice_date ? 'border-status-danger-border' : ''}`}
               />
-              {(dateErrors.invoice_date || fieldErrors.invoice_date) && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{dateErrors.invoice_date || fieldErrors.invoice_date}</p>}
+              {(dateErrors.invoice_date || fieldErrors.invoice_date) && <p className="mt-1 text-xs text-status-danger">{dateErrors.invoice_date || fieldErrors.invoice_date}</p>}
             </div>
             <div>
-              <label className={LABEL}>Due Date <span className="text-red-500 dark:text-red-400">*</span></label>
+              <label className={LABEL}>Due Date <span className="text-status-danger">*</span></label>
               <input
                 type="date"
                 required
@@ -1269,14 +1269,14 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                 max={MAX_BILL_DATE}
                 onChange={(e) => { setForm((f) => ({ ...f, due_date: e.target.value })); setFieldErrors((fe) => ({ ...fe, due_date: '' })) }}
                 onBlur={(e) => validateDate('due_date', e.target.value)}
-                className={`${INPUT} scheme-light dark:scheme-dark ${dateErrors.due_date || fieldErrors.due_date ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} scheme-light dark:scheme-dark ${dateErrors.due_date || fieldErrors.due_date ? 'border-status-danger-border' : ''}`}
               />
-              {(dateErrors.due_date || fieldErrors.due_date) && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{dateErrors.due_date || fieldErrors.due_date}</p>}
+              {(dateErrors.due_date || fieldErrors.due_date) && <p className="mt-1 text-xs text-status-danger">{dateErrors.due_date || fieldErrors.due_date}</p>}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Original Amount <span className="text-red-500 dark:text-red-400">*</span></label>
+              <label className={LABEL}>Original Amount <span className="text-status-danger">*</span></label>
               <input
                 type="number"
                 min={MIN_INVOICE_AMOUNT}
@@ -1294,10 +1294,10 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                     setFieldErrors((fe) => ({ ...fe, amount: `Amount must be at least ${formatCurrency(MIN_INVOICE_AMOUNT)}.` }))
                   }
                 }}
-                className={`${INPUT} ${fieldErrors.amount ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${fieldErrors.amount ? 'border-status-danger-border' : ''}`}
                 placeholder={minHint(MIN_INVOICE_AMOUNT)}
               />
-              {fieldErrors.amount && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.amount}</p>}
+              {fieldErrors.amount && <p className="mt-1 text-xs text-status-danger">{fieldErrors.amount}</p>}
             </div>
             <div>
               <label className={LABEL}>Payment Method</label>
@@ -1349,11 +1349,11 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                     setFieldErrors((fe) => ({ ...fe, reference_number: '' }))
                   }
                 }}
-                className={`${INPUT} ${fieldErrors.reference_number ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${fieldErrors.reference_number ? 'border-status-danger-border' : ''}`}
                 placeholder="REF-AP-001"
               />
               {fieldErrors.reference_number && (
-                <p className="mt-1 text-xs text-red-500 dark:text-red-400">
+                <p className="mt-1 text-xs text-status-danger">
                   {fieldErrors.reference_number}
                 </p>
               )}
@@ -1398,10 +1398,10 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                     setFieldErrors((fe) => ({ ...fe, penalty_rate: 'Penalty rate cannot exceed 100%.' }))
                   }
                 }}
-                className={`${INPUT} ${fieldErrors.penalty_rate ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${fieldErrors.penalty_rate ? 'border-status-danger-border' : ''}`}
                 placeholder="e.g. 2"
               />
-              {fieldErrors.penalty_rate && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.penalty_rate}</p>}
+              {fieldErrors.penalty_rate && <p className="mt-1 text-xs text-status-danger">{fieldErrors.penalty_rate}</p>}
             </div>
             <div>
               <label className={LABEL}>Status</label>
@@ -1488,14 +1488,14 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
         {detailRecord && (
           <div className="space-y-4">
             {!detailRecord.approved_by && !detailRecord.is_archived && detailRecord.status !== 'Cancelled' && (
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3.5 rounded-xl border border-amber-300/80 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/10 animate-fadeIn">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3.5 rounded-xl border border-status-warning-border bg-status-warning-bg animate-fadeIn">
                 <div className="flex items-center gap-2.5">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-status-warning-bg text-status-warning shrink-0">
                     <AlertTriangle size={19} />
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-amber-900 dark:text-amber-200">Awaiting CEO Approval</p>
-                    <p className="text-[11px] text-amber-700 dark:text-amber-300">This bill requires approval before disbursements or payments can proceed.</p>
+                    <p className="text-xs font-bold text-status-warning">Awaiting CEO Approval</p>
+                    <p className="text-[11px] text-status-warning">This bill requires approval before disbursements or payments can proceed.</p>
                   </div>
                 </div>
                 {canApprove && (
@@ -1612,7 +1612,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                   <p className="px-3 py-3 text-xs text-muted text-center">Loading audit history…</p>
                 )}
                 {!auditLogsLoading && auditLogsError && (
-                  <p className="px-3 py-3 text-xs text-red-600 text-center">{auditLogsError}</p>
+                  <p className="px-3 py-3 text-xs text-status-danger text-center">{auditLogsError}</p>
                 )}
                 {!auditLogsLoading && !auditLogsError && auditLogs.length === 0 && (
                   <p className="px-3 py-3 text-xs text-muted text-center">No audit trail recorded for this bill.</p>
@@ -1716,7 +1716,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
         {payTarget && (
           <form onSubmit={handleConfirmPayBill} className="space-y-4">
             {payError && (
-              <div className="rounded-lg border border-red-200 bg-red-50 dark:border-red-500/20 dark:bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-400">
+              <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">
                 {payError}
               </div>
             )}
@@ -1752,7 +1752,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-xs font-medium text-muted">
-                  Payment Amount ({currencySymbol(getActiveBaseCurrency())}) <span className="text-red-500 dark:text-red-400">*</span>
+                  Payment Amount ({currencySymbol(getActiveBaseCurrency())}) <span className="text-status-danger">*</span>
                 </label>
                 <div className="flex items-center gap-2">
                   <button
@@ -1796,7 +1796,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
             {/* Cash Account */}
             <div>
               <label className={LABEL}>
-                Disburse From Cash / Bank Account <span className="text-red-500 dark:text-red-400">*</span>
+                Disburse From Cash / Bank Account <span className="text-status-danger">*</span>
               </label>
               <select
                 value={payForm.cash_account_id}
@@ -1819,7 +1819,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                 const selectedAcc = wizardCashAccounts.find((a) => String(a.id) === String(payForm.cash_account_id))
                 if (selectedAcc && Number(payForm.amount_to_pay) > Number(selectedAcc.current_balance)) {
                   return (
-                    <p className="text-xs text-red-500 dark:text-red-400 mt-1 font-medium">
+                    <p className="text-xs text-status-danger mt-1 font-medium">
                       Warning: Payment amount exceeds available funds in {selectedAcc.account_name}. Reduce the amount or pick a different account.
                     </p>
                   )
@@ -1831,7 +1831,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
             {/* Method and Date */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className={LABEL}>Payment Method <span className="text-red-500 dark:text-red-400">*</span></label>
+                <label className={LABEL}>Payment Method <span className="text-status-danger">*</span></label>
                 <select
                   value={payForm.payment_method}
                   onChange={(e) => setPayForm((f) => ({ ...f, payment_method: e.target.value }))}
@@ -1844,7 +1844,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                 </select>
               </div>
               <div>
-                <label className={LABEL}>Payment Date <span className="text-red-500 dark:text-red-400">*</span></label>
+                <label className={LABEL}>Payment Date <span className="text-status-danger">*</span></label>
                 <input
                   type="date"
                   value={payForm.payment_date}

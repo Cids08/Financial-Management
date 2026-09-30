@@ -46,12 +46,12 @@ const INPUT = `w-full h-9 px-3 rounded-lg border border-border bg-bg text-sm tex
 const LABEL = 'block text-xs font-medium text-muted mb-1.5'
 
 const STATUS_STYLES = {
-  'For Collection': 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400',
-  Pending: 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400',
-  'Partially Paid': 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400',
-  Paid: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
-  Overdue: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
-  Cancelled: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
+  'For Collection': 'bg-status-warning-bg text-status-warning',
+  Pending: 'bg-status-warning-bg text-status-warning',
+  'Partially Paid': 'bg-status-warning-bg text-status-warning',
+  Paid: 'bg-status-success-bg text-status-success',
+  Overdue: 'bg-status-danger-bg text-status-danger',
+  Cancelled: 'bg-status-neutral-bg text-status-neutral',
 }
 
 export function getArDisplayStatus(record) {
@@ -252,7 +252,7 @@ function InvoiceScanUpload({ onScanned, onFileSelected, onClear }) {
       <div className="flex items-center gap-2">
         <ScanLine size={15} className="text-primary-dark shrink-0" />
         <p className="text-xs font-semibold text-ink">
-          Supporting Document <span className="text-red-500 dark:text-red-400">*</span>
+          Supporting Document <span className="text-status-danger">*</span>
           <span className="font-normal text-muted ml-1">Upload image or PDF to auto-fill</span>
         </p>
       </div>
@@ -294,7 +294,7 @@ function InvoiceScanUpload({ onScanned, onFileSelected, onClear }) {
               </p>
             )}
             {status === 'done' && (
-              <p className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+              <p className="flex items-center gap-1.5 text-xs text-status-success font-medium">
                 <CheckCircle2 size={13} /> {preview === 'pdf' ? 'PDF verified & fields filled below  -  please review' : 'Fields filled below  -  please review before saving'}
               </p>
             )}
@@ -305,7 +305,7 @@ function InvoiceScanUpload({ onScanned, onFileSelected, onClear }) {
         </div>
       )}
 
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && <p className="text-xs text-status-danger">{error}</p>}
     </div>
   )
 }
@@ -706,7 +706,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+        <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">
           {error}
         </div>
       )}
@@ -822,7 +822,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                   </td>
                   <td className="px-3 xl:px-4 py-3.5 text-ink min-w-0">
                     <p className="truncate font-medium" title={customerName(r.customer_id)}>{customerName(r.customer_id)}</p>
-                    <p className={`text-xs truncate ${r.collector_id ? 'text-muted' : 'text-amber-600 dark:text-amber-400'}`} title={collectorName(r.collector_id)}>
+                    <p className={`text-xs truncate ${r.collector_id ? 'text-muted' : 'text-status-warning'}`} title={collectorName(r.collector_id)}>
                       {collectorName(r.collector_id)}
                     </p>
                   </td>
@@ -842,7 +842,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                     {r.penalty_rate > 0 ? (
                       isOverdueRecord(r) ? (
                         <>
-                          <p className="text-red-600 dark:text-red-400 tabular-nums whitespace-nowrap">{r.penalty_rate}%</p>
+                          <p className="text-status-danger tabular-nums whitespace-nowrap">{r.penalty_rate}%</p>
                           <p className="text-muted tabular-nums whitespace-nowrap">{formatCurrency(r.penalty_amount)}</p>
                         </>
                       ) : (
@@ -976,7 +976,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Server-side error fallback (only shows when the API itself fails) */}
           {serverError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{serverError}</div>
+            <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{serverError}</div>
           )}
 
           {!isEditing && (
@@ -987,36 +987,36 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                 onClear={() => setAttachmentFile(null)}
               />
               {fieldErrors.document && (
-                <p className="text-xs text-red-500 dark:text-red-400 -mt-2">{fieldErrors.document}</p>
+                <p className="text-xs text-status-danger -mt-2">{fieldErrors.document}</p>
               )}
             </>
           )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Customer <span className="text-red-500 dark:text-red-400">*</span></label>
+              <label className={LABEL}>Customer <span className="text-status-danger">*</span></label>
               <select
                 value={form.customer_id}
                 disabled={isEditing}
                 onChange={(e) => { setForm((f) => ({ ...f, customer_id: e.target.value })); setFieldErrors((fe) => ({ ...fe, customer_id: '' })) }}
-                className={`${INPUT} ${isEditing ? 'opacity-80 cursor-not-allowed bg-slate-100 dark:bg-slate-800' : ''} ${fieldErrors.customer_id ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${isEditing ? 'opacity-80 cursor-not-allowed bg-slate-100 dark:bg-slate-800' : ''} ${fieldErrors.customer_id ? 'border-status-danger-border' : ''}`}
               >
                 <option value="">Select customer</option>
                 {customers.map((c) => <option key={c.customer_id} value={c.customer_id}>{c.customer_name}</option>)}
               </select>
               {isEditing && <p className="mt-1 text-[11px] text-muted">Customer cannot be changed once recorded.</p>}
-              {fieldErrors.customer_id && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.customer_id}</p>}
+              {fieldErrors.customer_id && <p className="mt-1 text-xs text-status-danger">{fieldErrors.customer_id}</p>}
             </div>
             <div>
-              <label className={LABEL}>Invoice Number <span className="text-red-500 dark:text-red-400">*</span></label>
+              <label className={LABEL}>Invoice Number <span className="text-status-danger">*</span></label>
               <input
                 type="text"
                 value={form.invoice_number}
                 onChange={(e) => { setForm((f) => ({ ...f, invoice_number: e.target.value })); setFieldErrors((fe) => ({ ...fe, invoice_number: '' })) }}
-                className={`${INPUT} ${fieldErrors.invoice_number ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${fieldErrors.invoice_number ? 'border-status-danger-border' : ''}`}
                 placeholder="INV-2026-0001"
               />
-              {fieldErrors.invoice_number && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.invoice_number}</p>}
+              {fieldErrors.invoice_number && <p className="mt-1 text-xs text-status-danger">{fieldErrors.invoice_number}</p>}
             </div>
           </div>
           <div>
@@ -1037,12 +1037,12 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                 value={form.invoice_date}
                 onChange={(e) => setForm((f) => ({ ...f, invoice_date: e.target.value }))}
                 onBlur={(e) => validateDate('invoice_date', e.target.value)}
-                className={`${INPUT} scheme-light dark:scheme-dark ${dateErrors.invoice_date ? 'border-red-400 focus:ring-red-300 focus:border-red-400 dark:border-red-500 dark:focus:ring-red-500/30 dark:focus:border-red-500' : ''}`}
+                className={`${INPUT} scheme-light dark:scheme-dark ${dateErrors.invoice_date ? 'border-status-danger-border focus:ring-status-danger-border focus:border-status-danger-border' : ''}`}
               />
-              {dateErrors.invoice_date && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{dateErrors.invoice_date}</p>}
+              {dateErrors.invoice_date && <p className="mt-1 text-xs text-status-danger">{dateErrors.invoice_date}</p>}
             </div>
             <div>
-              <label className={LABEL}>Due Date <span className="text-red-500 dark:text-red-400">*</span></label>
+              <label className={LABEL}>Due Date <span className="text-status-danger">*</span></label>
               <input
                 type="date"
                 required
@@ -1051,14 +1051,14 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                 value={form.due_date}
                 onChange={(e) => { setForm((f) => ({ ...f, due_date: e.target.value })); setFieldErrors((fe) => ({ ...fe, due_date: '' })) }}
                 onBlur={(e) => validateDate('due_date', e.target.value)}
-                className={`${INPUT} scheme-light dark:scheme-dark ${dateErrors.due_date || fieldErrors.due_date ? 'border-red-400 focus:ring-red-300 focus:border-red-400 dark:border-red-500 dark:focus:ring-red-500/30 dark:focus:border-red-500' : ''}`}
+                className={`${INPUT} scheme-light dark:scheme-dark ${dateErrors.due_date || fieldErrors.due_date ? 'border-status-danger-border focus:ring-status-danger-border focus:border-status-danger-border' : ''}`}
               />
-              {(dateErrors.due_date || fieldErrors.due_date) && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{dateErrors.due_date || fieldErrors.due_date}</p>}
+              {(dateErrors.due_date || fieldErrors.due_date) && <p className="mt-1 text-xs text-status-danger">{dateErrors.due_date || fieldErrors.due_date}</p>}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Original Amount <span className="text-red-500 dark:text-red-400">*</span></label>
+              <label className={LABEL}>Original Amount <span className="text-status-danger">*</span></label>
               <input
                 type="number"
                 min={MIN_INVOICE_AMOUNT}
@@ -1077,10 +1077,10 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                     setFieldErrors((fe) => ({ ...fe, original_amount: '' }))
                   }
                 }}
-                className={`${INPUT} ${fieldErrors.original_amount ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${fieldErrors.original_amount ? 'border-status-danger-border' : ''}`}
                 placeholder={minHint(MIN_INVOICE_AMOUNT)}
               />
-              {fieldErrors.original_amount && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.original_amount}</p>}
+              {fieldErrors.original_amount && <p className="mt-1 text-xs text-status-danger">{fieldErrors.original_amount}</p>}
             </div>
             <div>
               <label className={LABEL}>Balance</label>
@@ -1098,10 +1098,10 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                     setFieldErrors((fe) => ({ ...fe, balance: '' }))
                   }
                 }}
-                className={`${INPUT} ${fieldErrors.balance ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${fieldErrors.balance ? 'border-status-danger-border' : ''}`}
                 placeholder="0.00"
               />
-              {fieldErrors.balance && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.balance}</p>}
+              {fieldErrors.balance && <p className="mt-1 text-xs text-status-danger">{fieldErrors.balance}</p>}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -1159,11 +1159,11 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                     setFieldErrors((fe) => ({ ...fe, reference_no: '' }))
                   }
                 }}
-                className={`${INPUT} ${fieldErrors.reference_no ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${fieldErrors.reference_no ? 'border-status-danger-border' : ''}`}
                 placeholder="REF-AR-001"
               />
               {fieldErrors.reference_no && (
-                <p className="mt-1 text-xs text-red-500 dark:text-red-400">
+                <p className="mt-1 text-xs text-status-danger">
                   {fieldErrors.reference_no}
                 </p>
               )}
@@ -1191,10 +1191,10 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                     setFieldErrors((fe) => ({ ...fe, penalty_rate: '' }))
                   }
                 }}
-                className={`${INPUT} ${fieldErrors.penalty_rate ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${fieldErrors.penalty_rate ? 'border-status-danger-border' : ''}`}
                 placeholder="0"
               />
-              {fieldErrors.penalty_rate && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.penalty_rate}</p>}
+              {fieldErrors.penalty_rate && <p className="mt-1 text-xs text-status-danger">{fieldErrors.penalty_rate}</p>}
             </div>
             <div>
               <label className={LABEL}>Status</label>

@@ -1,3 +1,4 @@
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import Button from './Button'
 
 export default function Pagination({
@@ -21,7 +22,7 @@ export default function Pagination({
 
   return (
     <div
-      className={`flex flex-col gap-2 px-4 py-3 text-xs text-muted sm:flex-row sm:items-center sm:justify-between ${
+      className={`flex flex-col gap-3 px-4 py-4 text-xs text-muted sm:flex-row sm:items-center sm:justify-between ${
         bordered ? 'border-t border-border' : ''
       } ${className}`}
     >
@@ -31,14 +32,18 @@ export default function Pagination({
           variant="secondary"
           size="sm"
           disabled={page <= 1}
+          icon={ChevronLeft}
           onClick={() => onPageChange(page - 1)}
         >
           Previous
         </Button>
+        <span className="min-w-8 text-center font-semibold tabular-nums text-ink" aria-label={`Page ${page} of ${totalPages}`}>{page} / {totalPages}</span>
         <Button
           variant="secondary"
           size="sm"
           disabled={page >= totalPages}
+          icon={ChevronRight}
+          iconPosition="right"
           onClick={() => onPageChange(page + 1)}
         >
           Next

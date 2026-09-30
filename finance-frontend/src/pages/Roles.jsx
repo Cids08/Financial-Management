@@ -318,7 +318,7 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
       </div>
 
       {rolesError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+        <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">
           {rolesError}
         </div>
       )}
@@ -454,7 +454,7 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           {formError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+            <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">
               {formError}
             </div>
           )}
@@ -465,10 +465,10 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
               type="text"
               value={form.role_name}
               onChange={(e) => { setForm((f) => ({ ...f, role_name: e.target.value })); setFieldErrors((fe) => ({ ...fe, role_name: '' })) }}
-              className={`${INPUT} ${fieldErrors.role_name ? 'border-red-400 dark:border-red-500' : ''}`}
+              className={`${INPUT} ${fieldErrors.role_name ? 'border-status-danger-border' : ''}`}
               placeholder="e.g. Accountant"
             />
-            {fieldErrors.role_name && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.role_name}</p>}
+            {fieldErrors.role_name && <p className="mt-1 text-xs text-status-danger">{fieldErrors.role_name}</p>}
           </div>
 
           <div>
@@ -501,14 +501,14 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
       >
         <div className="space-y-2">
           {deleteError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+            <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">
               {deleteError}
             </div>
           )}
           <p className="text-sm text-ink">
             Are you sure you want to archive <span className="font-semibold">{roleToArchive?.role_name}</span>?
             {roleToArchive?.userCount > 0 && (
-              <span className="mt-2 block text-xs text-amber-600 dark:text-amber-400">
+              <span className="mt-2 block text-xs text-status-warning">
                 This role currently has {roleToArchive.userCount} user{roleToArchive.userCount === 1 ? '' : 's'} assigned. They'll need to be reassigned a role first.
               </span>
             )}
@@ -527,7 +527,7 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
       >
         <div className="space-y-3">
           {permLocked && (
-            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+            <div className="flex items-start gap-2 rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2 text-xs text-status-warning">
               <ShieldAlert size={14} className="shrink-0 mt-0.5" />
               <span>
                 {isProtectedSuperAdminRole
@@ -538,7 +538,7 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
           )}
 
           {permError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+            <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">
               {permError}
             </div>
           )}
@@ -646,7 +646,7 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
         }
       >
         <div className="space-y-4">
-          <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+          <div className="flex items-start gap-2 rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2.5 text-xs text-status-warning">
             <ShieldAlert size={14} className="shrink-0 mt-0.5" />
             <span>
               {pendingChange ? (
@@ -672,7 +672,7 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
           </div>
 
           {permGateError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+            <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">
               {permGateError}
             </div>
           )}

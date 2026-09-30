@@ -23,8 +23,8 @@ import { useStaffDashboard } from '../hooks/useStaffDashboard'
 import { usePrivacy } from '../context/PrivacyContext'
 import { apiFetch } from '../utils/api'
 
-const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
-const PANEL_PAD = 'p-4'
+const PANEL = 'rounded-2xl border border-border bg-surface shadow-card'
+const PANEL_PAD = 'p-4 sm:p-5'
 
 // Staff has view/manage on these five modules  -  no approve on any of them
 // (see RolesAndPermissionsSeeder). Routes match the /master-data and
@@ -50,14 +50,14 @@ function StatCard({ label, value, icon: Icon, iconBg, iconColor, loading, onClic
       type="button"
       onClick={onClick}
       className={`${PANEL} ${PANEL_PAD} flex items-center gap-3 text-left transition-all duration-150
-        hover:border-primary/40 hover:bg-primary/5 active:scale-[0.99] cursor-pointer w-full group focus:outline-none`}
+        hover:border-primary/40 hover:bg-primary/5 active:scale-[0.99] cursor-pointer w-full group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary`}
     >
       <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${iconBg} transition-transform duration-150 group-hover:scale-105`}>
         <Icon size={18} className={iconColor} />
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-xs text-muted group-hover:text-ink truncate transition-colors">{label}</p>
-        <p className="text-lg font-bold text-ink truncate">{loading ? '—' : value}</p>
+        <p className="mt-1 text-xl font-bold tracking-tight text-ink tabular-nums truncate">{loading ? '—' : value}</p>
       </div>
     </button>
   )
@@ -88,7 +88,7 @@ function AttentionSection({ title, icon: Icon, items, emptyLabel, renderItem }) 
         <Icon size={15} className="text-muted" />
         <p className="text-sm font-semibold text-ink">{title}</p>
         {items?.length > 0 && (
-          <span className="ml-auto rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-600 dark:bg-amber-500/10 dark:text-amber-400">
+          <span className="ml-auto rounded-full bg-status-warning-bg px-2 py-0.5 text-xs font-medium text-status-warning">
             {items.length}
           </span>
         )}
@@ -150,13 +150,14 @@ export default function StaffDashboard({ title = 'Dashboard', crumbs = ['Dashboa
   ]
 
   return (
-    <div className="space-y-5 animate-fadeIn">
+    <div className="space-y-6 animate-fadeIn">
       <Breadcrumb items={crumbs} />
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className={`${PANEL} flex flex-col gap-5 border-t-4 border-t-primary p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6`}>
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-ink">{title}</h1>
-          <p className="mt-1 text-xs text-muted">Your day-to-day overview.</p>
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-dark">Your daily workspace</p>
+          <h1 className="text-2xl font-bold tracking-tight text-ink sm:text-3xl">{title}</h1>
+          <p className="mt-2 text-sm text-muted">Your accounts, activity, and next steps in one place.</p>
           {exportError && (
             <p className="mt-1 flex items-center gap-1 text-xs text-red-600 dark:text-red-400">
               <AlertTriangle size={12} className="shrink-0" /> {exportError}
@@ -171,7 +172,7 @@ export default function StaffDashboard({ title = 'Dashboard', crumbs = ['Dashboa
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+        <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">
           {error}
         </div>
       )}

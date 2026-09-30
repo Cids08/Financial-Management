@@ -192,7 +192,7 @@ export default function DisbursementProofModal({ open, onClose, disbursement, fe
             )}
 
             {uploadError && (
-              <div className="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400">
+              <div className="flex items-center gap-1.5 text-xs text-status-danger">
                 <AlertTriangle size={13} className="shrink-0" />
                 <span>{uploadError}</span>
               </div>
@@ -216,7 +216,7 @@ export default function DisbursementProofModal({ open, onClose, disbursement, fe
               <span>Loading proof files...</span>
             </div>
           ) : historyError ? (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+            <div className="rounded-lg border border-status-danger-border bg-status-danger-bg p-3 text-xs text-status-danger">
               {historyError}
             </div>
           ) : documents.length === 0 ? (
@@ -238,7 +238,7 @@ export default function DisbursementProofModal({ open, onClose, disbursement, fe
                         <div className="flex items-center gap-2">
                           <p className="text-xs font-semibold text-ink truncate">{doc.original_name}</p>
                           {isCurrent && (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-status-success-bg text-status-success">
                               Current
                             </span>
                           )}

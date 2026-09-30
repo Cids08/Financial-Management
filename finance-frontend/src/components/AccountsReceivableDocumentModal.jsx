@@ -190,7 +190,7 @@ export default function AccountsReceivableDocumentModal({ open, onClose, invoice
         )}
 
         {uploadError && (
-          <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+          <div className="flex items-center gap-2 rounded-lg border border-status-danger-border bg-status-danger-bg p-2.5 text-xs text-status-danger">
             <AlertTriangle size={14} className="shrink-0" />
             <p>{uploadError}</p>
           </div>
@@ -204,7 +204,7 @@ export default function AccountsReceivableDocumentModal({ open, onClose, invoice
               <Loader2 size={16} className="animate-spin mr-2" /> Loading document history...
             </div>
           ) : historyError ? (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+            <div className="rounded-lg border border-status-danger-border bg-status-danger-bg p-2 text-xs text-status-danger">
               {historyError}
             </div>
           ) : documents.length === 0 ? (
@@ -217,7 +217,7 @@ export default function AccountsReceivableDocumentModal({ open, onClose, invoice
                     <div className="flex items-center gap-1.5">
                       <p className="font-medium text-ink truncate">{doc.original_name}</p>
                       {idx === 0 && (
-                        <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400">
+                        <span className="rounded bg-status-success-bg px-1.5 py-0.5 text-[10px] font-semibold text-status-success">
                           Current
                         </span>
                       )}

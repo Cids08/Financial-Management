@@ -203,7 +203,7 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+        <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">
           {error}
         </div>
       )}
@@ -242,7 +242,7 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
             </span>
           )}
           {!showArchived && activeStat === 'risk' && (
-            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-status-warning-bg text-status-warning">
               Budget flags only
             </span>
           )}

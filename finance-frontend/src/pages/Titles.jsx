@@ -20,8 +20,8 @@ const INPUT = `w-full h-9 px-3 rounded-lg border border-border bg-bg text-sm tex
 const LABEL = 'block text-xs font-medium text-muted mb-1.5'
 
 const STATUS_STYLES = {
-  Active: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
-  Inactive: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
+  Active: 'bg-status-success-bg text-status-success',
+  Inactive: 'bg-status-neutral-bg text-status-neutral',
 }
 
 export default function Titles({ title = 'Titles', crumbs = ['Master Data', 'Titles'] }) {
@@ -173,7 +173,7 @@ export default function Titles({ title = 'Titles', crumbs = ['Master Data', 'Tit
       </div>
 
       {hookError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+        <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">
           {hookError}
         </div>
       )}
@@ -279,12 +279,12 @@ export default function Titles({ title = 'Titles', crumbs = ['Master Data', 'Tit
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           {formError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{formError}</div>
+            <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{formError}</div>
           )}
           <div>
             <label className={LABEL}>Position Name <span className="text-red-500">*</span></label>
-            <input type="text" value={form.name} onChange={(e) => { setForm((f) => ({ ...f, name: e.target.value })); setFieldErrors((fe) => ({ ...fe, name: '' })) }} className={`${INPUT} ${fieldErrors.name ? 'border-red-400 dark:border-red-500' : ''}`} placeholder="e.g. Financial Controller" />
-            {fieldErrors.name && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.name}</p>}
+            <input type="text" value={form.name} onChange={(e) => { setForm((f) => ({ ...f, name: e.target.value })); setFieldErrors((fe) => ({ ...fe, name: '' })) }} className={`${INPUT} ${fieldErrors.name ? 'border-status-danger-border' : ''}`} placeholder="e.g. Financial Controller" />
+            {fieldErrors.name && <p className="mt-1 text-xs text-status-danger">{fieldErrors.name}</p>}
           </div>
           <div>
             <label className={LABEL}>Status</label>
@@ -318,13 +318,13 @@ export default function Titles({ title = 'Titles', crumbs = ['Master Data', 'Tit
       >
         <div className="space-y-3">
           {archiveError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{archiveError}</div>
+            <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{archiveError}</div>
           )}
           <p className="text-sm text-ink">
             Are you sure you want to archive <span className="font-semibold">{titleToArchive?.title_name}</span>?
           </p>
           {titleToArchive?.headcount > 0 && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+            <div className="rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2 text-xs text-status-warning">
               This position has {titleToArchive.headcount} user{titleToArchive.headcount === 1 ? '' : 's'} assigned. Reassign
               {titleToArchive.headcount === 1 ? ' them' : ' them all'} to another position before archiving.
             </div>

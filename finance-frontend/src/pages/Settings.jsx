@@ -34,7 +34,7 @@ const LABEL = 'block text-xs font-medium text-muted mb-1.5'
 function InlineError({ message }) {
   if (!message) return null
   return (
-    <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+    <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">
       {message}
     </div>
   )
@@ -43,7 +43,7 @@ function InlineError({ message }) {
 function InlineSuccess({ message }) {
   if (!message) return null
   return (
-    <div className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400">
+    <div className="flex items-center gap-1.5 rounded-lg border border-status-success-border bg-status-success-bg px-3 py-2 text-xs text-status-success">
       <CheckCircle2 size={14} /> {message}
     </div>
   )
@@ -216,7 +216,7 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
                 ) : logoUrl ? (
                   <img src={logoUrl} alt={name} className="h-full w-full object-cover" />
                 ) : (
-                  <Building2 size={22} className="text-[#111827]" />
+                  <Building2 size={22} className="text-black" />
                 )}
               </div>
               <Button
@@ -551,7 +551,7 @@ function LogoUploadModal({ open, currentUrl, onClose, onUpload, onRemove }) {
             {preview ? (
               <img src={preview} alt="Preview" className="h-full w-full object-cover" />
             ) : (
-              <Building2 size={28} className="text-[#111827]" />
+              <Building2 size={28} className="text-black" />
             )}
           </div>
         </div>
@@ -579,7 +579,7 @@ function LogoUploadModal({ open, currentUrl, onClose, onUpload, onRemove }) {
           />
         </div>
 
-        {error && <p className="text-xs text-red-600">{error}</p>}
+        {error && <p className="text-xs text-status-danger">{error}</p>}
       </div>
     </Modal>
   )

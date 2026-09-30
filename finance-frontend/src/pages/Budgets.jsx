@@ -35,9 +35,9 @@ import { hasPermission } from '../utils/permissions'
 // column. Draft = awaiting approval, Active = approved & spendable,
 // Cancelled = rejected, Closed = end-of-cycle (a later, separate action).
 const APPROVAL_STYLES = {
-  Draft: 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400',
-  Active: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
-  Cancelled: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
+  Draft: 'bg-status-warning-bg text-status-warning',
+  Active: 'bg-status-success-bg text-status-success',
+  Cancelled: 'bg-status-danger-bg text-status-danger',
 }
 const APPROVAL_ICONS = { Draft: Clock, Active: CheckCircle2, Cancelled: XCircle }
 
@@ -149,10 +149,10 @@ function TableUtilizationCell({ budget }) {
     : 'bg-gradient-to-r from-emerald-400 to-emerald-500'
 
   const badgeStyles = isOver
-    ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20'
+    ? 'bg-status-danger-bg text-status-danger border-status-danger-border'
     : isWarning
-    ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20'
-    : 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20'
+    ? 'bg-status-warning-bg text-status-warning border-status-warning-border'
+    : 'bg-status-success-bg text-status-success border-status-success-border'
 
   const tooltipText = `${formatCurrency(used)} spent of ${formatCurrency(allocated)} (${displayPct}%) · ${remaining < 0 ? 'Deficit: ' + formatCurrency(Math.abs(remaining)) : 'Left: ' + formatCurrency(remaining)} · Threshold: ${warningPct}%`
 
@@ -198,10 +198,10 @@ function BudgetHealthCard({ budget, onOpenDetail, onPrint }) {
     : 'bg-gradient-to-r from-emerald-400 to-emerald-500'
 
   const badgeStyles = m.isOver
-    ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20'
+    ? 'bg-status-danger-bg text-status-danger border-status-danger-border'
     : m.isWarning
-    ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20'
-    : 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20'
+    ? 'bg-status-warning-bg text-status-warning border-status-warning-border'
+    : 'bg-status-success-bg text-status-success border-status-success-border'
 
   return (
     <div className={`${PANEL} p-4 flex flex-col justify-between space-y-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md border border-border/80`}>
@@ -237,13 +237,13 @@ function BudgetHealthCard({ budget, onOpenDetail, onPrint }) {
         </div>
         <div className="rounded-lg border border-border bg-bg/60 p-2 text-left">
           <span className="text-[10px] text-muted block font-medium">Utilized ({m.displayPct}%)</span>
-          <p className={`text-xs font-bold mt-0.5 tabular-nums truncate ${m.isOver ? 'text-rose-600 dark:text-rose-400' : m.isWarning ? 'text-amber-600 dark:text-amber-400' : 'text-ink'}`}>
+          <p className={`text-xs font-bold mt-0.5 tabular-nums truncate ${m.isOver ? 'text-status-danger' : m.isWarning ? 'text-status-warning' : 'text-ink'}`}>
             {formatCurrency(m.used)}
           </p>
         </div>
         <div className="rounded-lg border border-border bg-bg/60 p-2 text-left">
           <span className="text-[10px] text-muted block font-medium">Remaining</span>
-          <p className={`text-xs font-bold mt-0.5 tabular-nums truncate ${m.remaining < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+          <p className={`text-xs font-bold mt-0.5 tabular-nums truncate ${m.remaining < 0 ? 'text-status-danger' : 'text-status-success'}`}>
             {formatCurrency(m.remaining)}
           </p>
         </div>
@@ -281,7 +281,7 @@ function BudgetHealthCard({ budget, onOpenDetail, onPrint }) {
 
         <div className="flex items-center justify-between text-[10px] text-muted">
           <span>0%</span>
-          <span className="font-medium text-amber-600 dark:text-amber-400">Warning at {m.warningPct}%</span>
+          <span className="font-medium text-status-warning">Warning at {m.warningPct}%</span>
           <span>100% (Ceiling)</span>
         </div>
         </button>
@@ -1089,17 +1089,17 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{error}</div>
+        <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{error}</div>
       )}
 
       {successMessage && (
         <div
-          className={`flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-xs text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300 transition-all duration-500 ${
+          className={`flex items-center justify-between gap-3 rounded-lg border border-status-success-border bg-status-success-bg px-3.5 py-2.5 text-xs text-status-success transition-all duration-500 ${
             successVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-1 pointer-events-none'
           }`}
         >
           <div className="flex items-center gap-2">
-            <CheckCircle2 size={15} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <CheckCircle2 size={15} className="text-status-success shrink-0" />
             <span>{successMessage}</span>
           </div>
           <button type="button" onClick={dismissSuccess} className="shrink-0 font-medium underline">Dismiss</button>
@@ -1107,7 +1107,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
       )}
 
       {pageNotice && (
-        <div className="flex items-start justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+        <div className="flex items-start justify-between gap-3 rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2 text-xs text-status-warning">
           <span>{pageNotice}</span>
           <button type="button" onClick={() => setPageNotice('')} className="shrink-0 font-medium underline">Dismiss</button>
         </div>
@@ -1181,14 +1181,14 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
             <Activity size={15} />
             <span>Utilization & Health Tracker</span>
             {healthDistribution.warning > 0 || healthDistribution.over > 0 ? (
-              <span className="inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full text-[10px] font-bold bg-amber-500 text-white leading-none">
+              <span className="inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full text-[10px] font-bold bg-status-warning text-white leading-none">
                 {healthDistribution.warning + healthDistribution.over}
               </span>
             ) : (
               <span className={`ml-0.5 text-xs px-1.5 py-0.5 rounded-full font-semibold ${
                 activeTab === 'tracker'
-                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300'
-                  : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400'
+                  ? 'bg-status-success-bg text-status-success'
+                  : 'bg-status-success-bg text-status-success'
               }`}>
                 {healthDistribution.healthy} Active
               </span>
@@ -1316,7 +1316,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                           <p className="font-medium text-ink">{b.budget_name}</p>
                           <p className="text-xs text-muted">{b.department_name || '—'} · {b.budget_code} · {b.budget_type}</p>
                           {isPending && !b.has_plan && (
-                            <p className="mt-0.5 flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
+                            <p className="mt-0.5 flex items-center gap-1 text-xs text-status-warning">
                               <AlertTriangle size={11} />
                               No budget plan attached
                             </p>
@@ -1325,7 +1325,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                         <td className="px-4 py-3.5 whitespace-nowrap text-ink">{b.fiscal_year}</td>
                         <td className="px-4 py-3.5 whitespace-nowrap">
                           <p className="font-semibold text-ink tabular-nums">{formatCurrency(b.allocated_amount)}</p>
-                          <p className={`text-xs tabular-nums mt-0.5 ${isOverspent ? 'text-rose-600 dark:text-rose-400 font-semibold' : 'text-muted'}`}>
+                          <p className={`text-xs tabular-nums mt-0.5 ${isOverspent ? 'text-status-danger font-semibold' : 'text-muted'}`}>
                             {isOverspent ? `Deficit: -${formatCurrency(Math.abs(b.remaining_amount))}` : `Remaining: ${formatCurrency(b.remaining_amount)}`}
                           </p>
                         </td>
@@ -1464,11 +1464,11 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
               onClick={() => setTrackerHealthFilter('healthy')}
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all duration-150 cursor-pointer active:scale-95 ${
                 trackerHealthFilter === 'healthy'
-                  ? 'border-emerald-500 bg-emerald-50 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300 shadow-sm ring-1 ring-emerald-400/30'
-                  : 'border-border bg-surface text-muted hover:bg-emerald-50/60 hover:text-emerald-700 hover:border-emerald-300 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-400 dark:hover:border-emerald-500/40 hover:shadow-sm'
+                  ? 'border-status-success-border bg-status-success-bg text-status-success shadow-sm ring-1 ring-status-success-border'
+                  : 'border-border bg-surface text-muted hover:bg-status-success-bg hover:text-status-success hover:border-status-success-border hover:shadow-sm'
               }`}
             >
-              <CheckCircle2 size={13} className={trackerHealthFilter === 'healthy' ? 'text-emerald-600' : 'text-emerald-500'} />
+              <CheckCircle2 size={13} className={trackerHealthFilter === 'healthy' ? 'text-status-success' : 'text-status-success'} />
               Healthy ({healthDistribution.healthy})
             </button>
             <button
@@ -1476,11 +1476,11 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
               onClick={() => setTrackerHealthFilter('warning')}
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all duration-150 cursor-pointer active:scale-95 ${
                 trackerHealthFilter === 'warning'
-                  ? 'border-amber-500 bg-amber-50 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300 shadow-sm ring-1 ring-amber-400/30'
-                  : 'border-border bg-surface text-muted hover:bg-amber-50/60 hover:text-amber-700 hover:border-amber-300 dark:hover:bg-amber-500/10 dark:hover:text-amber-400 dark:hover:border-amber-500/40 hover:shadow-sm'
+                  ? 'border-status-warning-border bg-status-warning-bg text-status-warning shadow-sm ring-1 ring-status-warning-border'
+                  : 'border-border bg-surface text-muted hover:bg-status-warning-bg hover:text-status-warning hover:border-status-warning-border hover:shadow-sm'
               }`}
             >
-              <Clock size={13} className={trackerHealthFilter === 'warning' ? 'text-amber-600' : 'text-amber-500'} />
+              <Clock size={13} className={trackerHealthFilter === 'warning' ? 'text-status-warning' : 'text-status-warning'} />
               Near Limit ({healthDistribution.warning})
             </button>
             <button
@@ -1488,11 +1488,11 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
               onClick={() => setTrackerHealthFilter('over')}
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all duration-150 cursor-pointer active:scale-95 ${
                 trackerHealthFilter === 'over'
-                  ? 'border-rose-500 bg-rose-50 text-rose-800 dark:bg-rose-500/20 dark:text-rose-300 shadow-sm ring-1 ring-rose-400/30'
-                  : 'border-border bg-surface text-muted hover:bg-rose-50/60 hover:text-rose-700 hover:border-rose-300 dark:hover:bg-rose-500/10 dark:hover:text-rose-400 dark:hover:border-rose-500/40 hover:shadow-sm'
+                  ? 'border-status-danger-border bg-status-danger-bg text-status-danger shadow-sm ring-1 ring-status-danger-border'
+                  : 'border-border bg-surface text-muted hover:bg-status-danger-bg hover:text-status-danger hover:border-status-danger-border hover:shadow-sm'
               }`}
             >
-              <AlertTriangle size={13} className={trackerHealthFilter === 'over' ? 'text-rose-600' : 'text-rose-500'} />
+              <AlertTriangle size={13} className={trackerHealthFilter === 'over' ? 'text-status-danger' : 'text-status-danger'} />
               Over Budget ({healthDistribution.over})
             </button>
           </div>
@@ -1628,7 +1628,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                             <td className="px-4 py-3.5 whitespace-nowrap font-semibold text-ink tabular-nums">{formatCurrency(m.allocated)}</td>
                             <td className="px-4 py-3.5 whitespace-nowrap font-medium text-ink tabular-nums">{formatCurrency(m.used)}</td>
                             <td className="px-4 py-3.5 whitespace-nowrap font-medium tabular-nums">
-                              <span className={m.isOver ? 'text-rose-600 dark:text-rose-400 font-bold' : 'text-emerald-600 dark:text-emerald-400'}>
+                              <span className={m.isOver ? 'text-status-danger font-bold' : 'text-status-success'}>
                                 {m.remaining < 0 ? `-${formatCurrency(Math.abs(m.remaining))} (Deficit)` : formatCurrency(m.remaining)}
                               </span>
                             </td>
@@ -1682,11 +1682,11 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           {serverError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{serverError}</div>
+            <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{serverError}</div>
           )}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Department {!isEditing && <span className="text-red-500">*</span>}</label>
+              <label className={LABEL}>Department {!isEditing && <span className="text-status-danger">*</span>}</label>
               {isEditing ? (
                 <div className={INPUT_LOCKED}><span className="truncate">{modalMode.department_name || '—'}</span></div>
               ) : (
@@ -1701,7 +1701,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                         return { ...f, department_id: deptId, budget_code: nextCode }
                       })
                     }}
-                    className={`${INPUT} ${fieldErrors.department_id ? 'border-red-400 dark:border-red-500' : ''}`}
+                    className={`${INPUT} ${fieldErrors.department_id ? 'border-status-danger-border' : ''}`}
                     style={INPUT_TEXT_STYLE}
                   >
                     <option value="">Select department</option>
@@ -1711,12 +1711,12 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                       </option>
                     ))}
                   </select>
-                  {fieldErrors.department_id && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.department_id}</p>}
+                  {fieldErrors.department_id && <p className="mt-1 text-xs text-status-danger">{fieldErrors.department_id}</p>}
                 </>
               )}
             </div>
             <div>
-              <label className={LABEL}>Fiscal Year {!isEditing && <span className="text-red-500">*</span>}</label>
+              <label className={LABEL}>Fiscal Year {!isEditing && <span className="text-status-danger">*</span>}</label>
               {isEditing ? (
                 <div className={INPUT_LOCKED}><span>{form.fiscal_year}</span></div>
               ) : (
@@ -1727,12 +1727,12 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                     max={MAX_FISCAL_YEAR}
                     value={form.fiscal_year}
                     onChange={(e) => handleFiscalYearChange(e.target.value)}
-                    className={`${INPUT} ${fieldErrors.fiscal_year ? 'border-red-400 dark:border-red-500' : ''}`}
+                    className={`${INPUT} ${fieldErrors.fiscal_year ? 'border-status-danger-border' : ''}`}
                     style={INPUT_TEXT_STYLE}
                     placeholder={String(CURRENT_YEAR)}
                   />
                   {fieldErrors.fiscal_year ? (
-                    <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.fiscal_year}</p>
+                    <p className="mt-1 text-xs text-status-danger">{fieldErrors.fiscal_year}</p>
                   ) : (
                     <p className="mt-1 text-[11px] text-muted">Must be {CURRENT_YEAR} - {MAX_FISCAL_YEAR}  -  new budgets can't be backdated to a past fiscal year.</p>
                   )}
@@ -1746,7 +1746,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className={LABEL} style={{ marginBottom: 0 }}>
-                    Budget Code <span className="text-red-500">*</span>
+                    Budget Code <span className="text-status-danger">*</span>
                   </label>
                   <button
                     type="button"
@@ -1772,7 +1772,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                       setFieldErrors((fe) => ({ ...fe, budget_code: '' }))
                       setForm((f) => ({ ...f, budget_code: e.target.value }))
                     }}
-                    className={`${INPUT} ${(fieldErrors.budget_code || duplicateCodeWarning) ? 'border-red-400 dark:border-red-500' : ''}`}
+                    className={`${INPUT} ${(fieldErrors.budget_code || duplicateCodeWarning) ? 'border-status-danger-border' : ''}`}
                     style={INPUT_TEXT_STYLE}
                     placeholder="e.g. BUD-2026-FIN-OP"
                   />
@@ -1782,16 +1782,16 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                     </span>
                   )}
                 </div>
-                {fieldErrors.budget_code && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.budget_code}</p>}
+                {fieldErrors.budget_code && <p className="mt-1 text-xs text-status-danger">{fieldErrors.budget_code}</p>}
                 {!fieldErrors.budget_code && duplicateCodeWarning && (
-                  <p className="mt-1 text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                  <p className="mt-1 text-xs text-status-warning flex items-center gap-1">
                     <AlertTriangle size={12} className="shrink-0" />
                     Code &quot;{duplicateCodeWarning.budget_code}&quot; is already in use.
                   </p>
                 )}
               </div>
               <div>
-                <label className={LABEL}>Budget Type <span className="text-red-500">*</span></label>
+                <label className={LABEL}>Budget Type <span className="text-status-danger">*</span></label>
                 <select
                   value={form.budget_type}
                   onChange={(e) => {
@@ -1807,13 +1807,13 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                       }
                     })
                   }}
-                  className={`${INPUT} ${fieldErrors.budget_type ? 'border-red-400 dark:border-red-500' : ''}`}
+                  className={`${INPUT} ${fieldErrors.budget_type ? 'border-status-danger-border' : ''}`}
                   style={INPUT_TEXT_STYLE}
                 >
                   <option value="">Select type</option>
                   {BUDGET_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
-                {fieldErrors.budget_type && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.budget_type}</p>}
+                {fieldErrors.budget_type && <p className="mt-1 text-xs text-status-danger">{fieldErrors.budget_type}</p>}
               </div>
             </div>
           )}
@@ -1824,7 +1824,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
               <div className="flex items-center justify-between">
                 <label className="text-xs font-semibold text-ink dark:text-white flex items-center gap-1.5">
                   <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary/20 text-primary text-[10px] font-bold">✎</span>
-                  Specify Custom Budget Type <span className="text-red-500">*</span>
+                  Specify Custom Budget Type <span className="text-status-danger">*</span>
                 </label>
                 <span className="text-[10px] text-muted">Max 100 characters</span>
               </div>
@@ -1836,7 +1836,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                   setFieldErrors((fe) => ({ ...fe, budget_type_other: '' }))
                   setForm((f) => ({ ...f, budget_type_other: e.target.value }))
                 }}
-                className={`${INPUT} ${fieldErrors.budget_type_other ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${fieldErrors.budget_type_other ? 'border-status-danger-border' : ''}`}
                 style={INPUT_TEXT_STYLE}
                 placeholder="e.g. Research & Development, IT Infrastructure, Training & Seminar"
                 maxLength={100}
@@ -1846,15 +1846,15 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                 <span>{form.budget_type_other?.length || 0}/100</span>
               </div>
               {fieldErrors.budget_type_other && (
-                <p className="text-xs text-red-500 dark:text-red-400">{fieldErrors.budget_type_other}</p>
+                <p className="text-xs text-status-danger">{fieldErrors.budget_type_other}</p>
               )}
             </div>
           )}
 
           {/* Duplicate Budget Warning Banner */}
           {!isEditing && duplicateBudgetWarning && (
-            <div className="rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-2.5 animate-fadeIn">
-              <AlertTriangle size={16} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <div className="rounded-lg border border-status-warning-border bg-status-warning-bg p-3 text-xs text-status-warning flex items-start gap-2.5 animate-fadeIn">
+              <AlertTriangle size={16} className="text-status-warning shrink-0 mt-0.5" />
               <div className="space-y-1 min-w-0">
                 <p className="font-bold">Existing {duplicateBudgetWarning.budget_type} Budget Detected for FY{form.fiscal_year}</p>
                 <p className="text-xs">
@@ -1865,7 +1865,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                   </span>
                   {' '}Allocated: {formatCurrency(duplicateBudgetWarning.allocated_amount)}
                 </p>
-                <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                <p className="text-[11px] text-status-warning">
                   A department can have multiple budgets for different purposes (e.g. Capital, Project, Operational), but duplicate budgets of the same type are not permitted in the same fiscal year.
                 </p>
               </div>
@@ -1874,7 +1874,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
 
           {!isEditing && (
             <div>
-              <label className={LABEL}>Budget Name <span className="text-red-500">*</span></label>
+              <label className={LABEL}>Budget Name <span className="text-status-danger">*</span></label>
               <input
                 type="text"
                 value={form.budget_name}
@@ -1882,13 +1882,13 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                   setFieldErrors((fe) => ({ ...fe, budget_name: '' }))
                   setForm((f) => ({ ...f, budget_name: e.target.value }))
                 }}
-                className={`${INPUT} ${(fieldErrors.budget_name || duplicateNameWarning) ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${(fieldErrors.budget_name || duplicateNameWarning) ? 'border-status-danger-border' : ''}`}
                 style={INPUT_TEXT_STYLE}
                 placeholder="e.g. IT Infrastructure FY2026"
               />
-              {fieldErrors.budget_name && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.budget_name}</p>}
+              {fieldErrors.budget_name && <p className="mt-1 text-xs text-status-danger">{fieldErrors.budget_name}</p>}
               {!fieldErrors.budget_name && duplicateNameWarning && (
-                <p className="mt-1 text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                <p className="mt-1 text-xs text-status-warning flex items-center gap-1">
                   <AlertTriangle size={12} className="shrink-0" />
                   A budget named &quot;{duplicateNameWarning.budget_name}&quot; already exists for FY{form.fiscal_year}.
                 </p>
@@ -1898,7 +1898,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Allocated Amount <span className="text-red-500">*</span></label>
+              <label className={LABEL}>Allocated Amount <span className="text-status-danger">*</span></label>
               <input
                 type="number"
                 min={MIN_INVOICE_AMOUNT}
@@ -1918,12 +1918,12 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                     setAmountError('')
                   }
                 }}
-                className={`${INPUT} ${(amountError || fieldErrors.allocated_amount) ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${(amountError || fieldErrors.allocated_amount) ? 'border-status-danger-border' : ''}`}
                 style={INPUT_TEXT_STYLE}
                 placeholder={minHint(MIN_INVOICE_AMOUNT)}
               />
               {(amountError || fieldErrors.allocated_amount) && (
-                <p className="mt-1 text-xs text-red-500 dark:text-red-400">{amountError || fieldErrors.allocated_amount}</p>
+                <p className="mt-1 text-xs text-status-danger">{amountError || fieldErrors.allocated_amount}</p>
               )}
             </div>
             <div>
@@ -1937,17 +1937,17 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                   setFieldErrors((fe) => ({ ...fe, warning_percentage: '' }))
                   setForm((f) => ({ ...f, warning_percentage: e.target.value }))
                 }}
-                className={`${INPUT} ${fieldErrors.warning_percentage ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${fieldErrors.warning_percentage ? 'border-status-danger-border' : ''}`}
                 style={INPUT_TEXT_STYLE}
                 placeholder="e.g. 80"
               />
-              {fieldErrors.warning_percentage && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.warning_percentage}</p>}
+              {fieldErrors.warning_percentage && <p className="mt-1 text-xs text-status-danger">{fieldErrors.warning_percentage}</p>}
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Start Date <span className="text-red-500">*</span></label>
+              <label className={LABEL}>Start Date <span className="text-status-danger">*</span></label>
               <input
                 type="date"
                 value={form.start_date}
@@ -1955,17 +1955,17 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                 max={dateBounds.max}
                 onChange={(e) => handleStartDateChange(e.target.value)}
                 onBlur={(e) => validateDate('start_date', e.target.value)}
-                className={`${INPUT} scheme-light dark:scheme-dark ${(fieldErrors.start_date || dateErrors.start_date) ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} scheme-light dark:scheme-dark ${(fieldErrors.start_date || dateErrors.start_date) ? 'border-status-danger-border' : ''}`}
                 style={INPUT_TEXT_STYLE}
               />
               {(fieldErrors.start_date || dateErrors.start_date) ? (
-                <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.start_date || dateErrors.start_date}</p>
+                <p className="mt-1 text-xs text-status-danger">{fieldErrors.start_date || dateErrors.start_date}</p>
               ) : (
                 <p className="mt-1 text-[11px] text-muted">Must fall within fiscal year {isEditing ? modalMode.fiscal_year : (form.fiscal_year || '—')}.</p>
               )}
             </div>
             <div>
-              <label className={LABEL}>End Date <span className="text-red-500">*</span></label>
+              <label className={LABEL}>End Date <span className="text-status-danger">*</span></label>
               <input
                 type="date"
                 value={form.end_date}
@@ -1976,11 +1976,11 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                   setForm((f) => ({ ...f, end_date: e.target.value }))
                 }}
                 onBlur={(e) => validateDate('end_date', e.target.value)}
-                className={`${INPUT} scheme-light dark:scheme-dark ${(fieldErrors.end_date || dateErrors.end_date) ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} scheme-light dark:scheme-dark ${(fieldErrors.end_date || dateErrors.end_date) ? 'border-status-danger-border' : ''}`}
                 style={INPUT_TEXT_STYLE}
               />
               {(fieldErrors.end_date || dateErrors.end_date) && (
-                <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.end_date || dateErrors.end_date}</p>
+                <p className="mt-1 text-xs text-status-danger">{fieldErrors.end_date || dateErrors.end_date}</p>
               )}
             </div>
           </div>
@@ -1998,7 +1998,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
               may or may not have a plan yet either way. */}
           <div>
             <label className={LABEL}>
-              Budget Plan {!isEditing && <span className="text-red-500">*</span>}
+              Budget Plan {!isEditing && <span className="text-status-danger">*</span>}
             </label>
 
             {isEditing && modalMode.has_plan && !editPlanFile && (
@@ -2019,7 +2019,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                 a "downloaded instead of previewed" result from clicking
                 View above is invisible until the modal is closed. */}
             {isEditing && viewNotice && (
-              <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+              <div className="mb-2 rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2 text-xs text-status-warning">
                 {viewNotice}
               </div>
             )}
@@ -2060,7 +2060,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
             )}
 
             {(fieldErrors.plan_file || (isEditing ? editPlanFileError : planFileError)) && (
-              <p className="mt-1 text-xs text-red-600 dark:text-red-400">{fieldErrors.plan_file || (isEditing ? editPlanFileError : planFileError)}</p>
+              <p className="mt-1 text-xs text-status-danger">{fieldErrors.plan_file || (isEditing ? editPlanFileError : planFileError)}</p>
             )}
 
             <p className="mt-1 text-xs text-muted">
@@ -2203,20 +2203,20 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
             </div>
 
             {viewNotice && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+              <div className="rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2 text-xs text-status-warning">
                 {viewNotice}
               </div>
             )}
 
             {detailRecord.status === 'Draft' && (
-              <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+              <div className="flex items-center gap-2 rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2.5 text-xs text-status-warning">
                 <AlertTriangle size={14} className="shrink-0" />
                 <span>This budget is <span className="font-semibold">pending approval</span>. It cannot be used for disbursements until approved.</span>
               </div>
             )}
 
             {detailRecord.status === 'Draft' && !detailRecord.has_plan && (
-              <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+              <div className="flex items-center justify-between gap-2 rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2 text-xs text-status-warning">
                 <span className="flex items-center gap-2"><AlertTriangle size={14} className="shrink-0" /> No budget plan attached yet.</span>
                 <button type="button" onClick={() => setUploadTarget(detailRecord)} className="inline-flex items-center gap-1 font-medium underline shrink-0">
                   Attach file
@@ -2231,23 +2231,23 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                 <div className="rounded-xl border border-border bg-surface/50 p-4 space-y-3.5 shadow-sm">
                   {/* Alert Banner if Overbudget or Nearing Limit */}
                   {m.isOver && (
-                    <div className="flex items-start gap-2.5 rounded-lg border border-rose-200 bg-rose-50 px-3.5 py-2.5 dark:border-rose-500/30 dark:bg-rose-500/10">
-                      <AlertTriangle size={17} className="mt-0.5 shrink-0 text-rose-600 dark:text-rose-400" />
+                    <div className="flex items-start gap-2.5 rounded-lg border border-status-danger-border bg-status-danger-bg px-3.5 py-2.5">
+                      <AlertTriangle size={17} className="mt-0.5 shrink-0 text-status-danger" />
                       <div className="min-w-0 flex-1">
-                        <p className="text-xs font-semibold text-rose-800 dark:text-rose-300">Budget Ceiling Exceeded</p>
-                        <p className="text-xs text-rose-700/90 dark:text-rose-400/90 mt-0.5">
-                          Total expenditures of <strong>{formatCurrency(m.used)}</strong> exceed the allocated ceiling of <strong>{formatCurrency(m.allocated)}</strong> by <span className="font-semibold text-rose-800 dark:text-rose-200">{formatCurrency(Math.abs(m.remaining))}</span> ({m.displayPct}% utilized).
+                        <p className="text-xs font-semibold text-status-danger">Budget Ceiling Exceeded</p>
+                        <p className="text-xs text-status-danger mt-0.5">
+                          Total expenditures of <strong>{formatCurrency(m.used)}</strong> exceed the allocated ceiling of <strong>{formatCurrency(m.allocated)}</strong> by <span className="font-semibold text-status-danger">{formatCurrency(Math.abs(m.remaining))}</span> ({m.displayPct}% utilized).
                         </p>
                       </div>
                     </div>
                   )}
 
                   {!m.isOver && m.isWarning && (
-                    <div className="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 dark:border-amber-500/30 dark:bg-amber-500/10">
-                      <AlertTriangle size={17} className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                    <div className="flex items-start gap-2.5 rounded-lg border border-status-warning-border bg-status-warning-bg px-3.5 py-2.5">
+                      <AlertTriangle size={17} className="mt-0.5 shrink-0 text-status-warning" />
                       <div className="min-w-0 flex-1">
-                        <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">Budget Warning: Near Limit</p>
-                        <p className="text-xs text-amber-700/90 dark:text-amber-400/90 mt-0.5">
+                        <p className="text-xs font-semibold text-status-warning">Budget Warning: Near Limit</p>
+                        <p className="text-xs text-status-warning mt-0.5">
                           Utilization has reached <strong>{m.displayPct}%</strong>, exceeding the <strong>{m.warningPct}%</strong> warning threshold. Available: <strong>{formatCurrency(m.remaining)}</strong>.
                         </p>
                       </div>
@@ -2264,20 +2264,20 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
 
                     <div className="rounded-lg border border-border bg-bg/70 p-2.5">
                       <span className="text-[11px] font-medium text-muted block">Total Utilized</span>
-                      <p className={`text-sm font-bold mt-0.5 tabular-nums truncate ${m.isOver ? 'text-rose-600 dark:text-rose-400' : m.isWarning ? 'text-amber-600 dark:text-amber-400' : 'text-ink'}`}>
+                      <p className={`text-sm font-bold mt-0.5 tabular-nums truncate ${m.isOver ? 'text-status-danger' : m.isWarning ? 'text-status-warning' : 'text-ink'}`}>
                         {formatCurrency(m.used)}
                       </p>
-                      <span className={`text-[10px] font-medium block mt-0.5 ${m.isOver ? 'text-rose-600 dark:text-rose-400' : m.isWarning ? 'text-amber-600 dark:text-amber-400' : 'text-muted'}`}>
+                      <span className={`text-[10px] font-medium block mt-0.5 ${m.isOver ? 'text-status-danger' : m.isWarning ? 'text-status-warning' : 'text-muted'}`}>
                         {m.displayPct}% spent
                       </span>
                     </div>
 
                     <div className="rounded-lg border border-border bg-bg/70 p-2.5">
                       <span className="text-[11px] font-medium text-muted block">Remaining Balance</span>
-                      <p className={`text-sm font-bold mt-0.5 tabular-nums truncate ${m.remaining < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                      <p className={`text-sm font-bold mt-0.5 tabular-nums truncate ${m.remaining < 0 ? 'text-status-danger' : 'text-status-success'}`}>
                         {formatCurrency(m.remaining)}
                       </p>
-                      <span className={`text-[10px] font-medium block mt-0.5 ${m.remaining < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                      <span className={`text-[10px] font-medium block mt-0.5 ${m.remaining < 0 ? 'text-status-danger' : 'text-status-success'}`}>
                         {m.remaining < 0 ? 'Budget deficit' : `${m.allocated > 0 ? Math.max(0, Math.round((m.remaining / m.allocated) * 100)) : 0}% left`}
                       </span>
                     </div>
@@ -2292,10 +2292,10 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                       </span>
                       <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${
                         m.isOver
-                          ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20'
+                          ? 'bg-status-danger-bg text-status-danger border-status-danger-border'
                           : m.isWarning
-                          ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20'
-                          : 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20'
+                          ? 'bg-status-warning-bg text-status-warning border-status-warning-border'
+                          : 'bg-status-success-bg text-status-success border-status-success-border'
                       }`}>
                         {m.healthLabel} · {m.displayPct}%
                       </span>
@@ -2323,8 +2323,8 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
 
                     <div className="flex items-center justify-between text-[11px] text-muted">
                       <span>0%</span>
-                      <span className="flex items-center gap-1 font-medium text-amber-700 dark:text-amber-400">
-                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500" />
+                      <span className="flex items-center gap-1 font-medium text-status-warning">
+                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-status-warning" />
                         Warning threshold: {m.warningPct}%
                       </span>
                       <span>100% ceiling</span>
@@ -2341,7 +2341,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                 <DetailRow
                   label="Remaining Balance"
                   value={
-                    <span className={Number(detailRecord.remaining_amount) < 0 ? 'text-rose-600 dark:text-rose-400 font-semibold' : 'text-emerald-600 dark:text-emerald-400 font-medium'}>
+                    <span className={Number(detailRecord.remaining_amount) < 0 ? 'text-status-danger font-semibold' : 'text-status-success font-medium'}>
                       {Number(detailRecord.remaining_amount) < 0 ? `-${formatCurrency(Math.abs(detailRecord.remaining_amount))} (Deficit)` : formatCurrency(detailRecord.remaining_amount)}
                     </span>
                   }
@@ -2396,7 +2396,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                         </button>
                       </span>
                     ) : (
-                      <span className="text-amber-600 dark:text-amber-400">Not attached</span>
+                      <span className="text-status-warning">Not attached</span>
                     )
                   }
                 />

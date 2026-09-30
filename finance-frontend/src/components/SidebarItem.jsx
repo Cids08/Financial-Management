@@ -10,14 +10,12 @@ export default function SidebarItem({ item, collapsed, onNavigate, onLogoutClick
   const Icon = item.icon
 
   const baseLinkClasses = ({ isActive }) =>
-    `group relative flex items-center rounded-lg py-2.5 text-sm font-medium
+    `group relative flex items-center gap-3 rounded-xl py-2.5 text-[13px] font-medium
      transition-all duration-150 ease-in-out-smooth
-     ${collapsed ? 'justify-center px-0' : 'gap-3 px-3'}
+     ${collapsed ? 'px-3 lg:justify-center lg:px-0' : 'px-3'}
      ${
        isActive
-         ? 'bg-primary text-[#111827] font-semibold shadow-sm'
-         : item.isLogout
-         ? 'text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10'
+         ? 'bg-primary text-black font-semibold shadow-sm'
          : 'text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-ink'
      }`
 
@@ -25,7 +23,7 @@ export default function SidebarItem({ item, collapsed, onNavigate, onLogoutClick
   // beyond the fill color so the current page is unmistakable.
   const ActiveBar = ({ isActive }) =>
     isActive ? (
-      <span className="absolute left-0 top-1/2 h-5 w-1 -translate-x-3 -translate-y-1/2 rounded-r-full bg-primary-dark" />
+      <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-x-3 -translate-y-1/2 rounded-r-full bg-primary" />
     ) : null
 
   // Unread-style badge for a leaf item. Expanded: a numeric pill pushed to
@@ -35,27 +33,26 @@ export default function SidebarItem({ item, collapsed, onNavigate, onLogoutClick
   const hasBadge = typeof badge === 'number' && badge > 0
   const BadgePill = () =>
     hasBadge ? (
-      <span className="ml-auto flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-semibold leading-none text-white">
+      <span className={`ml-auto flex h-5 min-w-5 shrink-0 items-center justify-center rounded-md bg-white px-1.5 text-[10px] font-bold leading-none text-black ${collapsed ? 'lg:hidden' : ''}`}>
         {badge > 99 ? '99+' : badge}
       </span>
     ) : null
   const BadgeDot = () =>
     hasBadge ? (
-      <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-sidebar" />
+      <span className="absolute -right-1 -top-1 hidden h-2 w-2 rounded-full bg-white ring-2 ring-sidebar lg:block" />
     ) : null
 
   // Parent item with children  -  static section, no dropdown
   if (hasChildren) {
     return (
-      <li className="pt-3 mt-2 border-t border-sidebar-border first:mt-0 first:pt-0 first:border-t-0">
-        {!collapsed && (
-          <p
-            className={`px-3 pb-1 text-xs font-semibold uppercase tracking-wide truncate
-              ${isChildActive ? 'text-primary-dark' : 'text-sidebar-muted'}`}
-          >
-            {item.label}
-          </p>
-        )}
+      <li className="pt-4 mt-3 border-t border-sidebar-border first:mt-0 first:pt-0 first:border-t-0">
+        <p
+          className={`px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.14em] truncate
+            ${collapsed ? 'lg:hidden' : ''}
+            ${isChildActive ? 'text-primary' : 'text-sidebar-muted'}`}
+        >
+          {item.label}
+        </p>
 
         <ul className="space-y-1">
           {item.children.map((child) => (
@@ -64,13 +61,14 @@ export default function SidebarItem({ item, collapsed, onNavigate, onLogoutClick
                 to={child.path}
                 onClick={onNavigate}
                 className={baseLinkClasses}
+                aria-label={child.label}
                 title={collapsed ? child.label : undefined}
               >
                 {({ isActive }) => (
                   <>
                     <ActiveBar isActive={isActive} />
                     <child.icon size={17} className="shrink-0" strokeWidth={1.8} />
-                    {!collapsed && <span className="truncate">{child.label}</span>}
+                    <span className={`truncate ${collapsed ? 'lg:hidden' : ''}`}>{child.label}</span>
                   </>
                 )}
               </NavLink>
@@ -88,14 +86,15 @@ export default function SidebarItem({ item, collapsed, onNavigate, onLogoutClick
         <button
           type="button"
           onClick={onLogoutClick}
+          aria-label={item.label}
           title={collapsed ? item.label : undefined}
-          className={`group relative flex w-full items-center rounded-lg py-2.5 text-sm font-medium text-left
+          className={`group relative flex w-full items-center gap-3 rounded-xl py-2.5 text-[13px] font-medium text-left
             transition-all duration-150 ease-in-out-smooth
-            ${collapsed ? 'justify-center px-0' : 'gap-3 px-3'}
-            text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10`}
+            ${collapsed ? 'px-3 lg:justify-center lg:px-0' : 'px-3'}
+            text-sidebar-muted hover:bg-sidebar-hover hover:text-primary`}
         >
           <Icon size={19} className="shrink-0" strokeWidth={1.8} />
-          {!collapsed && <span className="truncate">{item.label}</span>}
+          <span className={`truncate ${collapsed ? 'lg:hidden' : ''}`}>{item.label}</span>
         </button>
       </li>
     )
@@ -108,6 +107,7 @@ export default function SidebarItem({ item, collapsed, onNavigate, onLogoutClick
         to={item.path}
         onClick={onNavigate}
         className={baseLinkClasses}
+        aria-label={hasBadge ? `${item.label}, ${badge} unread` : item.label}
         title={collapsed ? `${item.label}${hasBadge ? ` (${badge})` : ''}` : undefined}
       >
         {({ isActive }) => (
@@ -117,8 +117,8 @@ export default function SidebarItem({ item, collapsed, onNavigate, onLogoutClick
               <Icon size={19} strokeWidth={1.8} />
               {collapsed && <BadgeDot />}
             </span>
-            {!collapsed && <span className="truncate">{item.label}</span>}
-            {!collapsed && <BadgePill />}
+            <span className={`truncate ${collapsed ? 'lg:hidden' : ''}`}>{item.label}</span>
+            <BadgePill />
           </>
         )}
       </NavLink>

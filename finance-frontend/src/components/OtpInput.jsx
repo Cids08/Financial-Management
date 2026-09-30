@@ -11,7 +11,7 @@ import { useEffect, useRef } from 'react'
  *  - onComplete: optional callback when all digits are filled
  *  - disabled: boolean
  *  - autoFocus: boolean (focuses first box on mount)
- *  - hasError: boolean (highlights boxes in red)
+ *  - hasError: boolean (highlights invalid digits)
  */
 export default function OtpInput({
   length = 6,
@@ -132,7 +132,7 @@ export default function OtpInput({
   }
 
   return (
-    <div className="flex items-center justify-center gap-2 sm:gap-2.5 my-3" onPaste={handlePaste}>
+    <div className="flex items-center justify-center gap-1.5 sm:gap-2.5 my-3" onPaste={handlePaste}>
       {digits.map((digit, idx) => {
         const isFilled = Boolean(digit)
         return (
@@ -149,18 +149,19 @@ export default function OtpInput({
             onChange={(e) => handleChange(idx, e)}
             onKeyDown={(e) => handleKeyDown(idx, e)}
             onFocus={(e) => e.target.select()}
-            className={`h-12 w-10 sm:h-13 sm:w-11 rounded-xl text-center font-mono text-xl font-bold
+            className={`h-12 w-10 min-w-0 sm:h-13 sm:w-11 rounded-xl text-center font-mono text-xl font-bold
               transition-all duration-150 outline-none
               ${
                 hasError
-                  ? 'border-2 border-red-500 bg-red-50/50 text-red-600 dark:bg-red-500/10 dark:text-red-400'
+                  ? 'border-2 border-status-danger bg-status-danger-bg text-status-danger'
                   : isFilled
                     ? 'border-2 border-primary bg-primary/5 text-ink dark:bg-primary/10 shadow-sm'
-                    : 'border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/60 text-ink shadow-xs'
+                    : 'border border-border bg-bg text-ink shadow-xs'
               }
-              focus:border-primary focus:ring-2 focus:ring-primary/30 focus:bg-white dark:focus:bg-slate-900
+              focus:border-primary focus:ring-2 focus:ring-primary/30 focus:bg-surface
               disabled:opacity-50 disabled:cursor-not-allowed`}
             aria-label={`Digit ${idx + 1}`}
+            aria-invalid={hasError || undefined}
           />
         )
       })}

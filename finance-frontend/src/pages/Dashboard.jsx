@@ -77,7 +77,7 @@ const MODULE_CARD_CONFIG = [
 ]
 
 const OVERVIEW_CARD_CONFIG = [
-  { key: 'total_revenue', title: 'Total Revenue', icon: TrendingUp, iconBg: 'bg-primary/15', route: '/reports' },
+  { key: 'total_revenue', title: 'Cash Collected', icon: TrendingUp, iconBg: 'bg-primary/15', route: '/reports' },
   { key: 'total_expenses', title: 'Total Expenses', icon: TrendingDown, iconBg: 'bg-red-50 dark:bg-red-500/10', route: '/transactions/expenses' },
   { key: 'available_cash', title: 'Available Cash', icon: PiggyBank, iconBg: 'bg-amber-50 dark:bg-amber-500/10', route: '/master-data/cash-accounts' },
   { key: 'net_cash_flow', title: 'Net Cash Flow', icon: Activity, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', route: '/analytics/forecasting' },
@@ -94,20 +94,20 @@ const CHART_ROUTES = {
 }
 
 const CHART_COLORS = {
-  revenue: '#10b981', // emerald
-  expense: '#ef4444', // red
-  inflow: '#10b981',
-  outflow: '#ef4444',
-  net: '#3b82f6', // blue
-  collections: '#3b82f6',
-  allocated: '#94a3b8', // slate
-  used: '#f59e0b', // amber
-  aging: '#a855f7', // purple
+  revenue: '#f4b400',
+  expense: 'var(--color-ink)',
+  inflow: '#f4b400',
+  outflow: 'var(--color-ink)',
+  net: '#a3a3a3',
+  collections: '#f4b400',
+  allocated: '#a3a3a3',
+  used: '#f4b400',
+  aging: '#f4b400',
 }
 
-const AXIS_STYLE = { fontSize: 11, fill: 'var(--color-muted, #64748b)' }
+const AXIS_STYLE = { fontSize: 11, fill: 'var(--color-muted, #737373)' }
 const CHART_MARGIN = { top: 5, right: 24, left: 0, bottom: 0 }
-const PIE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#a855f7', '#ef4444', '#06b6d4', '#8b5cf6', '#f43f5e', '#64748b']
+const PIE_COLORS = ['#f4b400', 'var(--color-ink)', '#a3a3a3', '#ffe58a', '#525252', '#b88400', '#d4d4d4', '#694b00', '#737373']
 const shortMonthTick = (label) => (typeof label === 'string' ? label.split(' ')[0] : label)
 
 /** Compact Y-axis tick: ₱1.2M, ₱148.5K, ₱500 — prevents the full peso label from being clipped */
@@ -129,10 +129,11 @@ function evenTicks(data, count = 7) {
 }
 const TOOLTIP_STYLE = {
   fontSize: 12,
-  borderRadius: 8,
-  border: '1px solid var(--color-border, #e2e8f0)',
+  borderRadius: 12,
+  border: '1px solid var(--color-border, #e5e5e5)',
   backgroundColor: 'var(--color-surface, #fff)',
-  color: 'var(--color-ink, #0f172a)',
+  color: 'var(--color-ink, #171717)',
+  boxShadow: '0 8px 24px rgb(0 0 0 / 0.1)',
 }
 
 const COLUMNS = [
@@ -146,9 +147,9 @@ const COLUMNS = [
 
 const APPROVAL_ICON = { expense: Receipt, budget: Wallet, disbursement: CreditCard }
 const APPROVAL_BADGE = {
-  Pending: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20',
-  Escalated: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20',
-  Approved: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20',
+  Pending: 'bg-status-warning-bg text-status-warning border-status-warning-border',
+  Escalated: 'bg-status-danger-bg text-status-danger border-status-danger-border',
+  Approved: 'bg-status-success-bg text-status-success border-status-success-border',
 }
 
 const DEADLINE_ICON = {
@@ -186,10 +187,10 @@ const NEW_TRANSACTION_OPTIONS = [
 /* ---------------------------------------------------------------------- */
 /* Shared style tokens                                                     */
 /* ---------------------------------------------------------------------- */
-const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
-const HIGHLIGHT_PANEL = 'rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/70 shadow-card'
-const PANEL_PAD = 'p-4'
-const SECTION_TITLE = 'text-sm font-semibold text-ink'
+const PANEL = 'rounded-2xl border border-border bg-surface shadow-card'
+const HIGHLIGHT_PANEL = 'rounded-2xl border border-primary/20 bg-primary/5 shadow-card'
+const PANEL_PAD = 'p-4 sm:p-5'
+const SECTION_TITLE = 'text-sm font-semibold tracking-tight text-ink'
 const SECTION_SUBTITLE = 'text-xs text-muted'
 const CLICKABLE_ROW = 'w-full text-left cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 active:shadow-card'
 
@@ -204,13 +205,19 @@ function iconForForecast(target) {
   return Target
 }
 
-function ChartCard({ title, subtitle, route, navigate, empty, contentClassName = 'h-36', children }) {
+function ChartCard({ title, subtitle, route, navigate, empty, contentClassName = 'h-44', children }) {
   return (
     <div
       role={route ? 'button' : undefined}
       tabIndex={route ? 0 : undefined}
       onClick={route ? () => navigate(route) : undefined}
-      className={`${PANEL} ${PANEL_PAD} text-left ${route ? CLICKABLE_ROW : ''}`}
+      onKeyDown={route ? (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          navigate(route)
+        }
+      } : undefined}
+      className={`${PANEL} ${PANEL_PAD} text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${route ? CLICKABLE_ROW : ''}`}
     >
       <div className="mb-3">
         <p className="text-sm font-semibold text-ink">{title}</p>
@@ -397,7 +404,7 @@ export default function Dashboard() {
     return (
       <div className="space-y-5 animate-fadeIn">
         <Breadcrumb items={['Dashboard']} />
-        <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+        <div className="flex items-center gap-2 rounded-lg border border-status-danger-border bg-status-danger-bg px-4 py-3 text-sm text-status-danger">
           <AlertTriangle size={15} className="shrink-0" />
           {error || 'Something went wrong loading the dashboard.'}
         </div>
@@ -430,6 +437,8 @@ export default function Dashboard() {
       value: privacyMode ? MASKED : formatCurrency(entry.value || 0),
       icon: cfg.icon,
       trend: entry.trend,
+      trendLabel: cfg.key === 'available_cash' ? 'Current balance' : `vs. ${year - 1}`,
+      trendPreference: cfg.key === 'total_expenses' ? 'decrease' : 'increase',
       iconBg: cfg.iconBg,
       route: cfg.route,
     }
@@ -485,23 +494,24 @@ export default function Dashboard() {
   })()
 
   return (
-    <div className="space-y-5 animate-fadeIn">
+    <div className="space-y-6 animate-fadeIn">
       <Breadcrumb items={['Dashboard']} />
 
       {/* 1. Welcome section */}
-      <div className={`${PANEL} flex flex-col gap-3 ${PANEL_PAD} sm:flex-row sm:items-center sm:justify-between`}>
+      <div className={`${PANEL} relative flex flex-col gap-5 border-t-4 border-t-primary p-5 sm:p-6 xl:flex-row xl:items-center xl:justify-between`}>
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-ink">
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-dark">Your financial workspace</p>
+          <h1 className="text-2xl font-bold tracking-tight text-ink sm:text-3xl">
             Welcome back{profile?.name ? `, ${[profile.role, profile.name.split(' ')[0]].filter(Boolean).join('-')}` : ''}!
           </h1>
-          <p className="mt-1 text-xs text-muted">Here's your financial snapshot.</p>
+          <p className="mt-2 text-sm text-muted">A clear view of your business, at a glance.</p>
           {exportError && (
             <p className="mt-1 flex items-center gap-1 text-xs text-red-600 dark:text-red-400">
               <AlertTriangle size={12} className="shrink-0" /> {exportError}
             </p>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1.5 rounded-lg border border-border bg-bg px-2">
             <CalendarRange size={14} className="shrink-0 text-muted" />
             <select
@@ -527,10 +537,10 @@ export default function Dashboard() {
         <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
           <h2 className={SECTION_TITLE}>Financial Overview</h2>
           <p className={SECTION_SUBTITLE}>
-            Revenue, expenses &amp; net cash flow for {year} (vs. {year - 1}) &middot; available cash is a live balance
+            Cash collected, expenses &amp; net cash flow for {year} (vs. {year - 1}) &middot; available cash is a live balance
           </p>
         </div>
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {overviewCards.map((card) => (
             <DashboardCard
               key={card.title}
@@ -543,7 +553,7 @@ export default function Dashboard() {
 
       {/* AI Insights */}
       <div className={`${HIGHLIGHT_PANEL} p-5`}>
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/20 text-primary-dark">
               <Sparkles size={18} />
@@ -584,7 +594,7 @@ export default function Dashboard() {
 
       {/* Forecast Summary */}
       <div className={`${HIGHLIGHT_PANEL} ${PANEL_PAD}`}>
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/20 text-primary-dark">
               <Target size={18} />
@@ -636,7 +646,7 @@ export default function Dashboard() {
           <h2 className={SECTION_TITLE}>Modules</h2>
           <span className={SECTION_SUBTITLE}>Tap a card to open</span>
         </div>
-        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
           {moduleCards.map((card) => {
             const Icon = card.icon
             return (
@@ -644,18 +654,18 @@ export default function Dashboard() {
                 key={card.title}
                 type="button"
                 onClick={() => handleModuleClick(card.route)}
-                className={`group flex items-center gap-3 ${PANEL} p-3 text-left ${CLICKABLE_ROW}`}
+                className={`group relative flex min-w-0 flex-col items-start gap-3 sm:flex-row sm:items-center ${PANEL} p-3 text-left ${CLICKABLE_ROW}`}
               >
                 <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${card.iconBg}`}>
                   <Icon size={14} className={card.iconColor} />
                 </div>
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 w-full flex-1">
                   <p className="truncate text-xs font-medium text-muted">{card.title}</p>
-                  <p className="text-sm font-bold text-ink">{card.value}</p>
+                  <p className="text-sm font-bold tabular-nums break-words text-ink">{card.value}</p>
                 </div>
                 <ChevronRight
                   size={14}
-                  className="shrink-0 text-border opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-hover:text-primary"
+                  className="absolute right-3 top-4 sm:static shrink-0 text-muted opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-hover:text-primary"
                 />
               </button>
             )
@@ -668,7 +678,7 @@ export default function Dashboard() {
         <h2 className={`mb-2 ${SECTION_TITLE}`}>Charts &amp; Trends</h2>
 
         {chartsError && (
-          <div className="mb-3 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+          <div className="mb-3 flex items-center gap-2 rounded-lg border border-status-danger-border bg-status-danger-bg px-4 py-3 text-sm text-status-danger">
             <AlertTriangle size={15} className="shrink-0" />
             {chartsError}
           </div>
@@ -683,7 +693,7 @@ export default function Dashboard() {
             <ChartCard title="Revenue Trend" subtitle={`${year}, monthly`} route={CHART_ROUTES.revenue_trend} navigate={navigate} empty={!chartData?.revenue_trend?.length}>
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData?.revenue_trend} margin={CHART_MARGIN}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e2e8f0)" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e5e5e5)" />
                   <XAxis dataKey="label" tick={AXIS_STYLE} interval={0} tickFormatter={shortMonthTick} />
                   <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={62} />
                   <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
@@ -695,7 +705,7 @@ export default function Dashboard() {
             <ChartCard title="Expense Trend" subtitle={`${year}, monthly`} route={CHART_ROUTES.expense_trend} navigate={navigate} empty={!chartData?.expense_trend?.length}>
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData?.expense_trend} margin={CHART_MARGIN}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e2e8f0)" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e5e5e5)" />
                   <XAxis dataKey="label" tick={AXIS_STYLE} interval={0} tickFormatter={shortMonthTick} />
                   <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={62} />
                   <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
@@ -707,7 +717,7 @@ export default function Dashboard() {
             <ChartCard title="Collections Trend" subtitle="Daily, 30 days" route={CHART_ROUTES.collections_trend} navigate={navigate} empty={!chartData?.collections_trend?.length}>
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chartData?.collections_trend} margin={CHART_MARGIN}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e2e8f0)" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e5e5e5)" />
                   <XAxis dataKey="label" tick={AXIS_STYLE} interval={0} ticks={evenTicks(chartData?.collections_trend, 7)} />
                   <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={62} />
                   <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
@@ -719,7 +729,7 @@ export default function Dashboard() {
             <ChartCard title="Cash Flow" subtitle="Inflow vs. outflow" route={CHART_ROUTES.cash_flow_trend} navigate={navigate} empty={!chartData?.cash_flow_trend?.length}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData?.cash_flow_trend} margin={CHART_MARGIN}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e2e8f0)" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e5e5e5)" />
                   <XAxis dataKey="label" tick={AXIS_STYLE} interval={0} tickFormatter={shortMonthTick} />
                   <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={62} />
                   <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
@@ -822,7 +832,7 @@ export default function Dashboard() {
             <ChartCard title="Budget Utilization" subtitle="By department" route={CHART_ROUTES.budget_utilization} navigate={navigate} empty={!chartData?.budget_utilization?.length}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData?.budget_utilization} margin={CHART_MARGIN}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e2e8f0)" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e5e5e5)" />
                   <XAxis dataKey="label" tick={AXIS_STYLE} interval={0} angle={-15} textAnchor="end" height={40} />
                   <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={62} />
                   <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
@@ -836,7 +846,7 @@ export default function Dashboard() {
             <ChartCard title="Receivable Aging" subtitle="0-30 / 31-60 / 61-90 / 90+" route={CHART_ROUTES.receivable_aging} navigate={navigate} empty={!chartData?.receivable_aging?.length}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData?.receivable_aging} margin={CHART_MARGIN}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e2e8f0)" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e5e5e5)" />
                   <XAxis dataKey="label" tick={AXIS_STYLE} interval={0} />
                   <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={62} />
                   <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
@@ -848,7 +858,7 @@ export default function Dashboard() {
             <ChartCard title="Payable Aging" subtitle="0-30 / 31-60 / 61-90 / 90+" route={CHART_ROUTES.payable_aging} navigate={navigate} empty={!chartData?.payable_aging?.length}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData?.payable_aging} margin={CHART_MARGIN}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e2e8f0)" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e5e5e5)" />
                   <XAxis dataKey="label" tick={AXIS_STYLE} interval={0} />
                   <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={62} />
                   <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />

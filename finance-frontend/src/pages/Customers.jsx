@@ -55,8 +55,8 @@ const INPUT_TEXT_STYLE = { color: 'var(--color-ink, #0f172a)', caretColor: 'var(
 const LABEL = 'block text-xs font-medium text-muted mb-1.5'
 
 const STATUS_STYLES = {
-  Active: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
-  Inactive: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
+  Active: 'bg-status-success-bg text-status-success',
+  Inactive: 'bg-status-neutral-bg text-status-neutral',
 }
 
 export default function Customers({ title = 'Customers', crumbs = ['Master Data', 'Customers'] }) {
@@ -323,7 +323,7 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
       </div>
 
       {loadError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+        <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">
           {loadError}
         </div>
       )}
@@ -498,12 +498,12 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           {formError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{formError}</div>
+            <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{formError}</div>
           )}
           <div>
             <label className={LABEL}>Company Name <span className="text-red-500">*</span></label>
-            <input type="text" value={form.customer_name} onChange={(e) => { setForm((f) => ({ ...f, customer_name: e.target.value })); setFieldErrors((fe) => ({ ...fe, customer_name: '' })) }} className={`${INPUT} ${fieldErrors.customer_name ? 'border-red-400 dark:border-red-500' : ''}`} style={INPUT_TEXT_STYLE} placeholder="Delacruz Trading Corp." />
-            {fieldErrors.customer_name && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.customer_name}</p>}
+            <input type="text" value={form.customer_name} onChange={(e) => { setForm((f) => ({ ...f, customer_name: e.target.value })); setFieldErrors((fe) => ({ ...fe, customer_name: '' })) }} className={`${INPUT} ${fieldErrors.customer_name ? 'border-status-danger-border' : ''}`} style={INPUT_TEXT_STYLE} placeholder="Delacruz Trading Corp." />
+            {fieldErrors.customer_name && <p className="mt-1 text-xs text-status-danger">{fieldErrors.customer_name}</p>}
           </div>
           <div>
             <AddressSelector
@@ -516,8 +516,8 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={LABEL}>Contact Person <span className="text-red-500">*</span></label>
-              <input type="text" value={form.contact_person} onChange={(e) => { setForm((f) => ({ ...f, contact_person: e.target.value })); setFieldErrors((fe) => ({ ...fe, contact_person: '' })) }} className={`${INPUT} ${fieldErrors.contact_person ? 'border-red-400 dark:border-red-500' : ''}`} style={INPUT_TEXT_STYLE} placeholder="Juan Delacruz" />
-              {fieldErrors.contact_person && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.contact_person}</p>}
+              <input type="text" value={form.contact_person} onChange={(e) => { setForm((f) => ({ ...f, contact_person: e.target.value })); setFieldErrors((fe) => ({ ...fe, contact_person: '' })) }} className={`${INPUT} ${fieldErrors.contact_person ? 'border-status-danger-border' : ''}`} style={INPUT_TEXT_STYLE} placeholder="Juan Delacruz" />
+              {fieldErrors.contact_person && <p className="mt-1 text-xs text-status-danger">{fieldErrors.contact_person}</p>}
             </div>
             <div>
               <label className={LABEL}>Position</label>
@@ -533,8 +533,8 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
             </div>
             <div>
               <label className={LABEL}>Email Address <span className="text-red-500">*</span></label>
-              <input type="email" value={form.email} onChange={(e) => { setForm((f) => ({ ...f, email: e.target.value })); setFieldErrors((fe) => ({ ...fe, email: '' })) }} className={`${INPUT} ${fieldErrors.email ? 'border-red-400 dark:border-red-500' : ''}`} style={INPUT_TEXT_STYLE} placeholder="accounts@company.com" />
-              {fieldErrors.email && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.email}</p>}
+              <input type="email" value={form.email} onChange={(e) => { setForm((f) => ({ ...f, email: e.target.value })); setFieldErrors((fe) => ({ ...fe, email: '' })) }} className={`${INPUT} ${fieldErrors.email ? 'border-status-danger-border' : ''}`} style={INPUT_TEXT_STYLE} placeholder="accounts@company.com" />
+              {fieldErrors.email && <p className="mt-1 text-xs text-status-danger">{fieldErrors.email}</p>}
             </div>
           </div>
           <div>
@@ -585,7 +585,7 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
           </div>
           <div>
             <label className={LABEL}>Credit Limit</label>
-            <div className={`flex items-center gap-2 rounded-lg border bg-bg px-3 py-2 transition-colors duration-150 ${fieldErrors.credit_limit ? 'border-red-400 dark:border-red-500' : 'border-border focus-within:border-primary focus-within:bg-surface'}`}>
+            <div className={`flex items-center gap-2 rounded-lg border bg-bg px-3 py-2 transition-colors duration-150 ${fieldErrors.credit_limit ? 'border-status-danger-border' : 'border-border focus-within:border-primary focus-within:bg-surface'}`}>
               <Wallet size={15} className="text-muted shrink-0" />
               <input
                 type="number"
@@ -602,7 +602,7 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
                 className="w-full text-sm bg-transparent outline-none border-0"
               />
             </div>
-            {fieldErrors.credit_limit && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.credit_limit}</p>}
+            {fieldErrors.credit_limit && <p className="mt-1 text-xs text-status-danger">{fieldErrors.credit_limit}</p>}
             {isEditing && (
               <p className="mt-1.5 text-[11px] text-muted">
                 Current balance: {formatCurrency(modalMode?.current_balance, currency)} (updates automatically from receivables, not editable here)

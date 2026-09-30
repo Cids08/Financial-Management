@@ -19,11 +19,11 @@ import { formatCurrency } from '../utils/formatters'
 const fmt = (n) => formatCurrency(n)
 
 const URGENCY_COLOR = {
-  Overdue: 'bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-500/15 dark:text-rose-400 dark:border-rose-500/30',
-  'Due Today': 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-500/30',
+  Overdue: 'bg-status-danger-bg text-status-danger border-status-danger-border',
+  'Due Today': 'bg-status-warning-bg text-status-warning border-status-warning-border',
 }
 const urgencyClass = (u) =>
-  URGENCY_COLOR[u] ?? 'bg-primary/15 text-primary-dark border-primary/30 dark:bg-primary/20 dark:text-primary dark:border-primary/40'
+  URGENCY_COLOR[u] ?? 'bg-status-warning-bg text-status-warning border-status-warning-border'
 
 const HORIZON_OPTIONS = [
   { label: 'Overdue only', value: 0, description: 'Past due date' },
@@ -308,7 +308,7 @@ export default function PaymentWizardModal({
 
               {/* Cash Account */}
               <div>
-                <label className="block text-xs font-medium text-muted mb-1">Cash Account <span className="text-rose-500">*</span></label>
+                <label className="block text-xs font-medium text-muted mb-1">Cash Account <span className="text-status-danger">*</span></label>
                 <select
                   value={cashAccountId}
                   onChange={(e) => setCashAccountId(e.target.value)}
@@ -323,7 +323,7 @@ export default function PaymentWizardModal({
                 </select>
                 {/* Overdraft validation only  —  balance is never shown in this modal */}
                 {isOverdraft && selectedTotal > 0 && (
-                  <div className="mt-1 flex items-center gap-2 text-xs text-rose-700 dark:text-rose-400">
+                  <div className="mt-1 flex items-center gap-2 text-xs text-status-danger">
                     <AlertTriangle size={13} className="shrink-0" />
                     <span>Selected total exceeds available funds in this account. Reduce amounts or pick another account.</span>
                   </div>
@@ -332,7 +332,7 @@ export default function PaymentWizardModal({
 
               {/* Payment Method */}
               <div>
-                <label className="block text-xs font-medium text-muted mb-1">Payment Method <span className="text-rose-500">*</span></label>
+                <label className="block text-xs font-medium text-muted mb-1">Payment Method <span className="text-status-danger">*</span></label>
                 <select
                   value={paymentMethod}
                   onChange={(e) => setPaymentMethod(e.target.value)}
@@ -344,7 +344,7 @@ export default function PaymentWizardModal({
 
               {/* Payment Date */}
               <div>
-                <label className="block text-xs font-medium text-muted mb-1">Payment Date <span className="text-rose-500">*</span></label>
+                <label className="block text-xs font-medium text-muted mb-1">Payment Date <span className="text-status-danger">*</span></label>
                 <input
                   type="date"
                   value={paymentDate}
@@ -354,7 +354,7 @@ export default function PaymentWizardModal({
               </div>
 
               {proposalError && (
-                <div className="flex items-start gap-2 p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg text-rose-700 dark:text-rose-400 text-xs sm:text-sm">
+                <div className="flex items-start gap-2 p-3 bg-status-danger-bg border border-status-danger-border rounded-lg text-status-danger text-xs sm:text-sm">
                   <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
                   {proposalError}
                 </div>
@@ -375,15 +375,15 @@ export default function PaymentWizardModal({
                   <div className="text-xs text-muted">{fmt(totals.total_available)} available</div>
                 </div>
                 {totals.total_overdue > 0 && (
-                  <div className="flex-1 min-w-35 p-3 bg-rose-500/10 rounded-xl border border-rose-500/20">
-                    <div className="text-xs text-rose-600 dark:text-rose-400 font-medium">Overdue</div>
-                    <div className="text-lg font-bold text-rose-700 dark:text-rose-400">{totals.total_overdue} bills</div>
+                  <div className="flex-1 min-w-35 p-3 bg-status-danger-bg rounded-xl border border-status-danger-border">
+                    <div className="text-xs text-status-danger font-medium">Overdue</div>
+                    <div className="text-lg font-bold text-status-danger">{totals.total_overdue} bills</div>
                     <div className="text-xs text-muted">Requires immediate payment</div>
                   </div>
                 )}
-                <div className={`flex-1 min-w-35 p-3 rounded-xl border ${isOverdraft ? 'bg-rose-500/10 border-rose-500/20' : 'bg-emerald-500/10 border-emerald-500/20'}`}>
-                  <div className={`text-xs font-medium ${isOverdraft ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>Selected Total</div>
-                  <div className={`text-lg font-bold ${isOverdraft ? 'text-rose-700 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}>{fmt(selectedTotal)}</div>
+                <div className={`flex-1 min-w-35 p-3 rounded-xl border ${isOverdraft ? 'bg-status-danger-bg border-status-danger-border' : 'bg-status-success-bg border-status-success-border'}`}>
+                  <div className={`text-xs font-medium ${isOverdraft ? 'text-status-danger' : 'text-status-success'}`}>Selected Total</div>
+                  <div className={`text-lg font-bold ${isOverdraft ? 'text-status-danger' : 'text-status-success'}`}>{fmt(selectedTotal)}</div>
                   <div className={`text-xs text-muted`}>
                     {selectedCount} of {proposals.length} selected
                   </div>
@@ -391,7 +391,7 @@ export default function PaymentWizardModal({
               </div>
 
               {isOverdraft && (
-                <div className="flex items-start gap-2 p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg text-rose-700 dark:text-rose-400 text-xs sm:text-sm">
+                <div className="flex items-start gap-2 p-3 bg-status-danger-bg border border-status-danger-border rounded-lg text-status-danger text-xs sm:text-sm">
                   <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
                   <span>Selected total exceeds the cash account balance. Reduce amounts or deselect bills before proceeding.</span>
                 </div>
@@ -399,18 +399,18 @@ export default function PaymentWizardModal({
 
               {/* Withheld bills notice  -  "No Document, No Payment" policy */}
               {(totals.attachment_missing_count ?? 0) > 0 && (
-                <div className="flex items-start gap-2.5 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-800 dark:text-amber-300">
-                  <Paperclip className="w-4 h-4 mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                <div className="flex items-start gap-2.5 p-3 bg-status-warning-bg border border-status-warning-border rounded-lg text-status-warning">
+                  <Paperclip className="w-4 h-4 mt-0.5 shrink-0 text-status-warning" />
                   <div className="text-sm">
-                    <p className="font-semibold text-amber-800 dark:text-amber-300">
+                    <p className="font-semibold text-status-warning">
                       {totals.attachment_missing_count} bill{totals.attachment_missing_count === 1 ? '' : 's'} withheld  -  missing supporting document{totals.attachment_missing_count === 1 ? '' : 's'}
                     </p>
-                    <p className="text-amber-700 dark:text-amber-400/90 mt-0.5 text-xs">
+                    <p className="text-status-warning mt-0.5 text-xs">
                       Company policy requires an attached invoice or delivery receipt before a bill can be included in a payment run.
                       Attach the document in <strong>Accounts Payable</strong>, then re-run the wizard.
                     </p>
                     {(totals.withheld_invoices ?? []).length > 0 && (
-                      <p className="text-amber-600 dark:text-amber-400 mt-1 text-xs font-mono">
+                      <p className="text-status-warning mt-1 text-xs font-mono">
                         Withheld: {totals.withheld_invoices.join(', ')}
                       </p>
                     )}
@@ -503,7 +503,7 @@ export default function PaymentWizardModal({
               )}
 
               {execError && (
-                <div className="flex items-start gap-2 p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg text-rose-700 dark:text-rose-400 text-xs sm:text-sm">
+                <div className="flex items-start gap-2 p-3 bg-status-danger-bg border border-status-danger-border rounded-lg text-status-danger text-xs sm:text-sm">
                   <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
                   {execError}
                 </div>
@@ -517,14 +517,14 @@ export default function PaymentWizardModal({
           {step === 2 && result && (
             <div className="max-w-xl mx-auto space-y-6">
               <div className="text-center">
-                <div className="w-16 h-16 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-4">
+                <div className="w-16 h-16 bg-status-success-bg text-status-success rounded-full flex items-center justify-center mx-auto mb-4">
                   <CheckCircle className="w-9 h-9" />
                 </div>
                 <h3 className="text-xl font-bold text-ink">Payment Run Complete!</h3>
                 <p className="text-sm text-muted mt-1">
                   {result.count} disbursement{result.count !== 1 ? 's' : ''} created · {fmt(result.total_amount)} total
                 </p>
-                <p className="text-xs text-muted mt-2">Disbursements are <span className="font-semibold text-amber-600 dark:text-amber-400">Waiting for Approval</span> and require release through the Disbursements module.</p>
+                <p className="text-xs text-muted mt-2">Disbursements are <span className="font-semibold text-status-warning">Waiting for Approval</span> and require release through the Disbursements module.</p>
               </div>
 
               <div className="rounded-xl border border-border bg-surface overflow-hidden">
@@ -546,7 +546,7 @@ export default function PaymentWizardModal({
                         <td className="px-4 py-3 text-muted font-mono text-xs">{d.invoice_number}</td>
                         <td className="px-4 py-3 text-right font-mono text-ink">{fmt(d.amount_paid)}</td>
                         <td className="px-4 py-3 text-center">
-                          <span className="inline-flex items-center px-2 py-0.5 text-xs font-semibold rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/20">
+                          <span className="inline-flex items-center px-2 py-0.5 text-xs font-semibold rounded-full bg-status-warning-bg text-status-warning border border-status-warning-border">
                             {d.status}
                           </span>
                         </td>

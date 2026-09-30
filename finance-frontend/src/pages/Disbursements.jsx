@@ -57,10 +57,10 @@ const INPUT_TEXT_STYLE = { color: 'var(--color-ink, #0f172a)', caretColor: 'var(
 const LABEL = 'block text-xs font-medium text-muted mb-1.5'
 
 const DISBURSEMENT_STATUS_STYLES = {
-  Pending: 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400',
-  Approved: 'bg-primary/10 text-primary-dark dark:bg-primary/15 dark:text-primary',
-  Released: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
-  Rejected: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
+  Pending: 'bg-status-warning-bg text-status-warning',
+  Approved: 'bg-status-success-bg text-status-success',
+  Released: 'bg-status-success-bg text-status-success',
+  Rejected: 'bg-status-danger-bg text-status-danger',
 }
 
 // User-facing wording for the disbursement lifecycle. The backend stores the
@@ -566,9 +566,9 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
       </div>
 
       {dActionSuccess && (
-        <div className="flex items-center justify-between gap-2 p-3 bg-emerald-500/15 border border-emerald-500/30 rounded-lg text-emerald-800 dark:text-emerald-300 text-xs sm:text-sm">
+        <div className="flex items-center justify-between gap-2 p-3 bg-status-success-bg border border-status-success-border rounded-lg text-status-success text-xs sm:text-sm">
           <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <CheckCircle2 className="w-4 h-4 text-status-success shrink-0" />
             <span>{dActionSuccess}</span>
           </div>
           <button type="button" onClick={() => setDActionSuccess('')} className="text-muted hover:text-ink">
@@ -578,9 +578,9 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
       )}
 
       {(error || dActionError) && (
-        <div className="flex items-center justify-between gap-2 p-3 bg-rose-500/15 border border-rose-500/30 rounded-lg text-rose-800 dark:text-rose-300 text-xs sm:text-sm">
+        <div className="flex items-center justify-between gap-2 p-3 bg-status-danger-bg border border-status-danger-border rounded-lg text-status-danger text-xs sm:text-sm">
           <div className="flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+            <AlertTriangle className="w-4 h-4 text-status-danger shrink-0" />
             <span>{error || dActionError}</span>
           </div>
           <button type="button" onClick={() => setDActionError('')} className="text-muted hover:text-ink">
@@ -754,7 +754,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${DISBURSEMENT_STATUS_STYLES[d.status]}`}>{DISBURSEMENT_STATUS_LABELS[d.status] || d.status}</span>
                         {isOverdrawn && (
                           <Tooltip label={`Insufficient balance in ${cashAccName} to cover ${formatCurrency(d.amount_paid)}`}>
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300 border border-red-200 dark:border-red-500/30">
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-status-danger-bg text-status-danger border border-status-danger-border">
                               <AlertTriangle size={9} className="shrink-0" />
                               Insufficient Funds
                             </span>
@@ -762,7 +762,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                         )}
                         {isMissingBudget && (
                           <Tooltip label={`No active approved budget found for ${d.department_name || 'this department'}. Release blocked.`}>
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300 border border-amber-200 dark:border-amber-500/30">
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-status-warning-bg text-status-warning border border-status-warning-border">
                               <AlertTriangle size={9} className="shrink-0" />
                               No Budget
                             </span>
@@ -977,7 +977,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
       >
         <form onSubmit={handleDisbursementSubmit} className="space-y-4">
           {dFormError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{dFormError}</div>
+            <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{dFormError}</div>
           )}
           <div className="rounded-lg border border-border bg-bg px-3 py-2 text-xs text-muted">
             Modify payment details, account assignment, or reference for this pending disbursement voucher before approval and release.
@@ -985,11 +985,11 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Related Bill <span className="text-red-500 dark:text-red-400">*</span></label>
+              <label className={LABEL}>Related Bill <span className="text-status-danger">*</span></label>
               <select
                 value={dForm.ap_id}
                 onChange={(e) => { handleApBillChange(e); setFieldErrors((fe) => ({ ...fe, ap_id: '' })) }}
-                className={`${INPUT} ${fieldErrors.ap_id ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${fieldErrors.ap_id ? 'border-status-danger-border' : ''}`}
                 style={INPUT_TEXT_STYLE}
                 disabled={apBillsLoading}
               >
@@ -1000,14 +1000,14 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                     <option key={apBillId(bill)} value={apBillId(bill)}>{apBillLabel(bill)}</option>
                   ))}
               </select>
-              {fieldErrors.ap_id && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.ap_id}</p>}
+              {fieldErrors.ap_id && <p className="mt-1 text-xs text-status-danger">{fieldErrors.ap_id}</p>}
             </div>
             <div>
               <label className={LABEL}>Department <span className="font-normal text-muted">(Optional)</span></label>
               <select
                 value={dForm.department_id}
                 onChange={(e) => { setDForm((f) => ({ ...f, department_id: e.target.value })); setFieldErrors((fe) => ({ ...fe, department_id: '' })) }}
-                className={`${INPUT} ${fieldErrors.department_id ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${fieldErrors.department_id ? 'border-status-danger-border' : ''}`}
                 style={INPUT_TEXT_STYLE}
                 disabled={departmentsLoading}
               >
@@ -1016,7 +1016,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                   <option key={dept.department_id} value={dept.department_id}>{dept.department_name}</option>
                 ))}
               </select>
-              {fieldErrors.department_id && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.department_id}</p>}
+              {fieldErrors.department_id && <p className="mt-1 text-xs text-status-danger">{fieldErrors.department_id}</p>}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -1031,7 +1031,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
               />
             </div>
             <div>
-              <label className={LABEL}>Disbursed To <span className="text-red-500 dark:text-red-400">*</span></label>
+              <label className={LABEL}>Disbursed To <span className="text-status-danger">*</span></label>
               <input
                 type="text"
                 value={dForm.payee}
@@ -1042,12 +1042,12 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                 placeholder="Auto-filled from selected bill"
               />
               <p className="mt-1 text-[11px] text-muted">Locked to the approved bill's supplier name.</p>
-              {fieldErrors.payee && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.payee}</p>}
+              {fieldErrors.payee && <p className="mt-1 text-xs text-status-danger">{fieldErrors.payee}</p>}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Payment Date <span className="text-red-500 dark:text-red-400">*</span></label>
+              <label className={LABEL}>Payment Date <span className="text-status-danger">*</span></label>
               <input
                 type="date"
                 min="2017-01-01"
@@ -1055,13 +1055,13 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                 value={dForm.payment_date}
                 onChange={(e) => { setDForm((f) => ({ ...f, payment_date: e.target.value })); setFieldErrors((fe) => ({ ...fe, payment_date: '' })) }}
                 onBlur={(e) => validateDate('payment_date', e.target.value)}
-                className={`${INPUT} scheme-light dark:scheme-dark ${dateErrors.payment_date || fieldErrors.payment_date ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} scheme-light dark:scheme-dark ${dateErrors.payment_date || fieldErrors.payment_date ? 'border-status-danger-border' : ''}`}
                 style={INPUT_TEXT_STYLE}
               />
-              {(dateErrors.payment_date || fieldErrors.payment_date) && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{dateErrors.payment_date || fieldErrors.payment_date}</p>}
+              {(dateErrors.payment_date || fieldErrors.payment_date) && <p className="mt-1 text-xs text-status-danger">{dateErrors.payment_date || fieldErrors.payment_date}</p>}
             </div>
             <div>
-              <label className={LABEL}>Amount Paid <span className="text-red-500 dark:text-red-400">*</span></label>
+              <label className={LABEL}>Amount Paid <span className="text-status-danger">*</span></label>
               <input
                 type="number"
                 min={MIN_COLLECTION_AMOUNT}
@@ -1084,11 +1084,11 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                     }
                   }
                 }}
-                className={`${INPUT} ${fieldErrors.amount_paid ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${fieldErrors.amount_paid ? 'border-status-danger-border' : ''}`}
                 style={INPUT_TEXT_STYLE}
                 placeholder={minHint(MIN_COLLECTION_AMOUNT)}
               />
-              {fieldErrors.amount_paid && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.amount_paid}</p>}
+              {fieldErrors.amount_paid && <p className="mt-1 text-xs text-status-danger">{fieldErrors.amount_paid}</p>}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -1099,7 +1099,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
               </select>
             </div>
             <div>
-              <label className={LABEL}>Cash Account <span className="text-red-500 dark:text-red-400">*</span></label>
+              <label className={LABEL}>Cash Account <span className="text-status-danger">*</span></label>
               <select
                 value={dForm.cash_account_id}
                 onChange={(e) => {
@@ -1114,7 +1114,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                     setFieldErrors((fe) => ({ ...fe, amount_paid: '' }))
                   }
                 }}
-                className={`${INPUT} ${fieldErrors.cash_account_id ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${fieldErrors.cash_account_id ? 'border-status-danger-border' : ''}`}
                 style={INPUT_TEXT_STYLE}
                 disabled={cashAccountsLoading}
               >
@@ -1125,7 +1125,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                   </option>
                 ))}
               </select>
-              {fieldErrors.cash_account_id && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{fieldErrors.cash_account_id}</p>}
+              {fieldErrors.cash_account_id && <p className="mt-1 text-xs text-status-danger">{fieldErrors.cash_account_id}</p>}
             </div>
           </div>
           {(() => {
@@ -1134,8 +1134,8 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
             if (selectedAcc) {
               if (Number(selectedAcc.current_balance) <= 0) {
                 return (
-                  <div className="rounded-lg border border-red-200 bg-red-50 dark:border-red-500/30 dark:bg-red-500/10 p-3 text-xs text-red-800 dark:text-red-300 flex items-start gap-2.5">
-                    <AlertTriangle size={16} className="shrink-0 mt-0.5 text-red-600 dark:text-red-400" />
+                  <div className="rounded-lg border border-status-danger-border bg-status-danger-bg p-3 text-xs text-status-danger flex items-start gap-2.5">
+                    <AlertTriangle size={16} className="shrink-0 mt-0.5 text-status-danger" />
                     <div>
                       <span className="font-semibold">Account Has Zero Balance:</span> <strong>{selectedAcc.account_name}</strong> currently has no available funds for transactions. Please select another account.
                     </div>
@@ -1144,8 +1144,8 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
               }
               if (enteredAmt > 0 && enteredAmt > Number(selectedAcc.current_balance)) {
                 return (
-                  <div className="rounded-lg border border-red-200 bg-red-50 dark:border-red-500/30 dark:bg-red-500/10 p-3 text-xs text-red-800 dark:text-red-300 flex items-start gap-2.5">
-                    <AlertTriangle size={16} className="shrink-0 mt-0.5 text-red-600 dark:text-red-400" />
+                  <div className="rounded-lg border border-status-danger-border bg-status-danger-bg p-3 text-xs text-status-danger flex items-start gap-2.5">
+                    <AlertTriangle size={16} className="shrink-0 mt-0.5 text-status-danger" />
                     <div>
                       <span className="font-semibold">Insufficient Account Funds:</span> The entered amount ({formatCurrency(enteredAmt)}) exceeds the available funds in <strong>{selectedAcc.account_name}</strong>. This voucher cannot be created until sufficient funds are available.
                     </div>
@@ -1194,12 +1194,12 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                     setFieldErrors((fe) => ({ ...fe, reference_number: '' }))
                   }
                 }}
-                className={`${INPUT} ${fieldErrors.reference_number ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${fieldErrors.reference_number ? 'border-status-danger-border' : ''}`}
                 style={INPUT_TEXT_STYLE}
                 placeholder="REF-DIS-001"
               />
               {fieldErrors.reference_number && (
-                <p className="mt-1 text-xs text-red-500 dark:text-red-400">
+                <p className="mt-1 text-xs text-status-danger">
                   {fieldErrors.reference_number}
                 </p>
               )}
@@ -1382,20 +1382,20 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
           return (
             <div className="space-y-4">
               {dActionError && (
-                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+                <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">
                   {dActionError}
                 </div>
               )}
               {/* Insufficient Funds alert banner */}
               {isDetailOverdrawn && (
-                <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-500/30 dark:bg-red-500/10">
-                  <AlertTriangle size={18} className="mt-0.5 shrink-0 text-red-600 dark:text-red-400" />
+                <div className="flex items-start gap-3 rounded-lg border border-status-danger-border bg-status-danger-bg px-4 py-3">
+                  <AlertTriangle size={18} className="mt-0.5 shrink-0 text-status-danger" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-red-700 dark:text-red-400">Insufficient Account Funds</p>
-                    <p className="text-xs text-red-600 dark:text-red-400/90 mt-0.5">
+                    <p className="text-sm font-semibold text-status-danger">Insufficient Account Funds</p>
+                    <p className="text-xs text-status-danger mt-0.5">
                       The assigned cash account (<strong>{detailAccName}</strong>) currently has insufficient funds to cover this disbursement of <strong>{formatCurrency(dDetailRecord.amount_paid)}</strong>.
                     </p>
-                    <p className="text-xs text-red-500 dark:text-red-400/70 mt-1">
+                    <p className="text-xs text-status-danger mt-1">
                       Funds must be deposited to this account before this payment can be released.
                     </p>
                   </div>
@@ -1403,14 +1403,14 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
               )}
               {/* Missing Active Budget alert banner */}
               {isPayroll && checkMissingBudget(dDetailRecord) && (
-                <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-500/30 dark:bg-amber-500/10">
-                  <AlertTriangle size={18} className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                <div className="flex items-start gap-3 rounded-lg border border-status-warning-border bg-status-warning-bg px-4 py-3">
+                  <AlertTriangle size={18} className="mt-0.5 shrink-0 text-status-warning" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Missing Active Department Budget</p>
-                    <p className="text-xs text-amber-700 dark:text-amber-400/90 mt-0.5">
+                    <p className="text-sm font-semibold text-status-warning">Missing Active Department Budget</p>
+                    <p className="text-xs text-status-warning mt-0.5">
                       The requesting department (<strong>{dDetailRecord.department_name || 'Department'}</strong>) does not have an approved <strong>Active</strong> budget.
                     </p>
-                    <p className="text-xs text-amber-600 dark:text-amber-400/80 mt-1">
+                    <p className="text-xs text-status-warning mt-1">
                       To maintain fiscal control, an approved active budget is strictly required before payroll funds can be released.
                     </p>
                   </div>
@@ -1418,11 +1418,11 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
               )}
               {/* Pending approval banner */}
               {dDetailRecord.status === 'Pending' && canApprovePayments && (
-                <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-500/30 dark:bg-amber-500/10">
-                  <AlertTriangle size={16} className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                <div className="flex items-start gap-3 rounded-lg border border-status-warning-border bg-status-warning-bg px-4 py-3">
+                  <AlertTriangle size={16} className="mt-0.5 shrink-0 text-status-warning" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">Awaiting Approval</p>
-                    <p className="text-xs text-amber-600 dark:text-amber-400/80 mt-0.5">This disbursement is pending your review.</p>
+                    <p className="text-sm font-semibold text-status-warning">Awaiting Approval</p>
+                    <p className="text-xs text-status-warning mt-0.5">This disbursement is pending your review.</p>
                   </div>
                 </div>
               )}
@@ -1438,11 +1438,11 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
               )}
               {/* Missing proof banner  -  AP only, blocks release until proof is attached */}
               {dDetailRecord.status === 'Approved' && !isPayroll && !dDetailRecord.has_attachment && (
-                <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-500/30 dark:bg-amber-500/10">
-                  <Paperclip size={16} className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                <div className="flex items-start gap-3 rounded-lg border border-status-warning-border bg-status-warning-bg px-4 py-3">
+                  <Paperclip size={16} className="mt-0.5 shrink-0 text-status-warning" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">Proof of Payment Required</p>
-                    <p className="text-xs text-amber-600 dark:text-amber-400/80 mt-0.5">
+                    <p className="text-sm font-semibold text-status-warning">Proof of Payment Required</p>
+                    <p className="text-xs text-status-warning mt-0.5">
                       A bank transfer slip, check voucher scan, or official receipt must be attached before this disbursement can be released.
                       Use the <strong>Attach Proof</strong> button in the Supporting Documents section below.
                     </p>
@@ -1476,7 +1476,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                             <span className="text-xs text-muted">({formatCurrency(dDetailRecord.active_budget.remaining_amount)} left)</span>
                           </span>
                         ) : (
-                          <span className="font-semibold text-rose-600 dark:text-rose-400">No active budget</span>
+                          <span className="font-semibold text-status-danger">No active budget</span>
                         )
                       }
                     />
@@ -1517,7 +1517,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
               {!isPayroll && (
                 <div className="flex items-center justify-between rounded-lg border border-border bg-bg px-4 py-3">
                   <div className="flex items-center gap-2.5">
-                    <FileText size={15} className={dDetailRecord.has_attachment ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted'} />
+                    <FileText size={15} className={dDetailRecord.has_attachment ? 'text-status-success' : 'text-muted'} />
                     <span className="text-sm text-ink">
                       {dDetailRecord.has_attachment ? 'Proof of payment attached' : 'No proof of payment attached'}
                     </span>

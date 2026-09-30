@@ -1,14 +1,29 @@
 import { useState } from 'react'
 import { useLocation } from 'react-router-dom'
-import { LogIn, Mail, Lock, Eye, EyeOff, AlertCircle, Sun, Moon, ShieldCheck, ArrowLeft, ShieldOff, AlertTriangle, Clock, RefreshCw } from 'lucide-react'
+import { ArrowUpRight, LogIn, Mail, Lock, Eye, EyeOff, AlertCircle, Sun, Moon, ShieldCheck, ArrowLeft, ShieldOff, AlertTriangle, Clock, RefreshCw } from 'lucide-react'
 import Button from '../components/Button'
 import OtpInput from '../components/OtpInput'
 import { useAuth } from '../hooks/useAuth'
 import { useCountdown, formatCountdown } from '../hooks/useCountdown'
 import { useTheme } from '../context/ThemeContext'
-import logo from '../assets/logo.svg'
-import logoDark from '../assets/logo-dark.svg'
-import loginBg from '../assets/login-bg.jpg'
+
+function BrandMark() {
+  return (
+    <svg viewBox="100 65 280 235" fill="currentColor" className="h-9 w-9" aria-hidden="true">
+      <path d="M235 83 155 281h49l17-42c7-18 18-35 29-51L235 83ZM265 83l-15 105c11 16 22 33 29 51l17 42h49L265 83Z" />
+      <path d="m250 220-22 61h44l-22-61ZM120 267c55-57 128-86 205-84 23 1 32 7 35 29 2 20-2 37-5 56-2-34-15-63-50-67-65-8-127 20-185 66Z" />
+    </svg>
+  )
+}
+
+function AuthErrorMessage({ retryAfter, message }) {
+  return (
+    <span>
+      <span role="alert">{retryAfter > 0 ? 'Too many attempts.' : message}</span>
+      {retryAfter > 0 && <span aria-live="off"> Try again in {retryAfter}s.</span>}
+    </span>
+  )
+}
 
 export default function Login() {
   const {
@@ -84,69 +99,89 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden">
-      {/* Company cover photo  -  a wide banner with logo/tagline/contact
-          details baked into the bottom third, so object-position is
-          pushed toward the top to keep the sky + equipment cluster in
-          frame and crop out that dense text band instead of squashing
-          the whole banner in. */}
-      <div
-        className="absolute inset-0 bg-cover bg-no-repeat"
-        style={{ backgroundImage: `url(${loginBg})`, backgroundPosition: 'center 15%' }}
-        aria-hidden="true"
-      />
-      {/* Scrim over the photo so the frosted-glass card keeps enough
-          contrast regardless of theme or how bright the underlying photo
-          is  -  a hazy sky can wash out light-mode text just as easily as
-          a dark photo can bury dark-mode text, so this needs to be dark
-          enough to hold contrast either way, not tuned to one specific
-          photo's brightness. */}
-      <div className="absolute inset-0 bg-black/55 dark:bg-black/70" aria-hidden="true" />
-
-      <div className="pointer-events-none absolute -top-24 -left-24 w-96 h-96 rounded-full bg-primary/30 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-32 -right-16 w-md h-112 rounded-full bg-primary-dark/25 blur-3xl" />
-      <div className="pointer-events-none absolute top-1/3 right-1/4 w-72 h-72 rounded-full bg-amber-300/15 dark:bg-amber-500/10 blur-3xl" />
-
-      <button
-        type="button"
-        onClick={toggleTheme}
-        aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-        className="absolute top-4 right-4 z-10 flex h-9 w-9 items-center justify-center rounded-lg
-          border border-white/40 dark:border-white/10 bg-white/70 dark:bg-white/10 backdrop-blur-md
-          text-ink hover:text-primary-dark transition-colors duration-150"
-      >
-        {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-      </button>
-
-      {/* Card opacity bumped up from the original /40·/30  -  against a
-          photo background (vs. a flat gradient) the card needs to hold
-          its own contrast regardless of what's directly behind it, so
-          it's less see-through than a typical glass card would be. */}
-      <div className="relative z-10 w-full max-w-sm rounded-2xl border border-white/40 dark:border-white/10
-        bg-white/70 dark:bg-surface/70 backdrop-blur-xl shadow-2xl shadow-black/20 p-8">
-        <div className="mx-auto mb-4 w-40 h-40 rounded-2xl overflow-hidden ring-1 ring-white/50 dark:ring-white/10 shadow-lg">
-          <img src={theme === 'dark' ? logoDark : logo} alt="Alibaton Construction Incorporated" className="h-full w-full object-cover" />
+    <div className="min-h-screen bg-surface lg:grid lg:grid-cols-[0.95fr_1.05fr]">
+      <aside className="relative hidden min-h-screen overflow-hidden bg-black p-12 text-white lg:flex lg:flex-col xl:p-16">
+        <div className="relative z-10 flex items-center gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-black"><BrandMark /></div>
+          <div>
+            <p className="text-lg font-bold tracking-[0.14em]">ALIBATON</p>
+            <p className="mt-0.5 text-[10px] tracking-[0.16em] text-white/60">CONSTRUCTION INCORPORATED</p>
+          </div>
         </div>
+
+        <div className="relative z-10 my-auto py-16">
+          <p className="mb-6 flex items-center gap-3 text-xs font-semibold tracking-[0.2em] text-primary">
+            <span className="h-px w-8 bg-primary" /> FINANCIAL MANAGEMENT
+          </p>
+          <h2 className="max-w-lg text-5xl font-semibold leading-[1.1] tracking-tight xl:text-6xl">
+            A clearer view.<br /><span className="text-primary">A stronger<br />business.</span>
+          </h2>
+          <p className="mt-6 max-w-sm text-sm leading-7 text-white/60">
+            Bring your projects, payments, and people together. Stay in control of what moves your business forward.
+          </p>
+
+          <div className="relative mt-12 h-36 max-w-sm border-b border-white/15" aria-hidden="true">
+            <div className="absolute inset-0 flex flex-col justify-between">
+              {[0, 1, 2].map((line) => <div key={line} className="border-t border-dashed border-white/10" />)}
+            </div>
+            <div className="relative flex h-full items-end gap-3 px-2">
+              <div className="h-[24%] flex-1 rounded-t-lg bg-white/10" />
+              <div className="h-[39%] flex-1 rounded-t-lg bg-white/15" />
+              <div className="h-[34%] flex-1 rounded-t-lg bg-white/20" />
+              <div className="h-[57%] flex-1 rounded-t-lg bg-primary/40" />
+              <div className="h-[72%] flex-1 rounded-t-lg bg-primary/65" />
+              <div className="relative h-full flex-1 rounded-t-lg bg-primary">
+                <ArrowUpRight size={24} className="absolute left-1/2 top-4 -translate-x-1/2 text-black" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="relative z-10 flex items-center gap-2 text-xs text-white/50">
+          <span className="h-1.5 w-1.5 rounded-full bg-primary" /> Built on precision. Driven by progress.
+        </div>
+        <div className="pointer-events-none absolute -right-48 -top-48 h-[480px] w-[480px] rounded-full border border-white/10" aria-hidden="true" />
+        <div className="pointer-events-none absolute -right-32 -top-32 h-[352px] w-[352px] rounded-full border border-white/5" aria-hidden="true" />
+      </aside>
+
+      <main className="flex min-h-screen flex-col px-6 py-6 sm:px-12 lg:px-16 xl:px-24">
+        <header className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2.5 lg:invisible">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-black"><BrandMark /></div>
+            <span className="text-sm font-bold tracking-[0.12em] text-ink">ALIBATON</span>
+          </div>
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-muted transition-colors hover:border-primary hover:text-primary-dark"
+          >
+            {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
+          </button>
+        </header>
+
+        <div className="mx-auto my-auto w-full max-w-sm py-14 sm:max-w-md">
 
         {!twoFactorPending ? (
           <>
-            <h1 className="text-lg font-bold text-ink text-center">Sign in to your account</h1>
-            <p className="mt-1.5 text-sm text-muted text-center">
-              Enter your credentials to access the Financial Management System.
+            <p className="mb-3 text-[11px] font-bold tracking-[0.18em] text-primary-dark">WELCOME BACK</p>
+            <h1 className="text-3xl font-semibold tracking-tight text-ink sm:text-4xl">Sign in to your<br />workspace.</h1>
+            <p className="mt-4 text-sm leading-6 text-muted">
+              Enter your credentials to manage your finances.
             </p>
 
             {accountLockedFor > 0 && (
-              <div className="flex items-start gap-2 mt-5 px-3 py-2 rounded-lg bg-amber-50/70 border border-amber-200/70 text-xs text-amber-700 backdrop-blur-sm dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+              <div className="flex items-start gap-2.5 mt-5 px-4 py-3 rounded-xl bg-status-danger-bg border border-status-danger-border text-xs leading-5 text-status-danger">
                 <Lock size={14} className="shrink-0 mt-0.5" />
                 <span>
-                  Too many failed attempts. Your account is locked for{' '}
-                  <span className="font-semibold tabular-nums">{formatLockout(accountLockedFor)}</span>.
+                  <span role="alert">Too many failed attempts. Your account is locked.</span>{' '}
+                  <span aria-live="off">Try again in <span className="font-semibold tabular-nums">{formatLockout(accountLockedFor)}</span>.</span>
                 </span>
               </div>
             )}
 
             {authNotice === 'signedOutElsewhere' && (
-              <div className="flex items-start gap-2 mt-5 px-3 py-2.5 rounded-lg bg-sky-50/70 border border-sky-200/70 text-xs text-sky-700 backdrop-blur-sm dark:border-sky-500/25 dark:bg-sky-500/10 dark:text-sky-400">
+              <div role="status" className="flex items-start gap-2.5 mt-5 px-4 py-3 rounded-xl bg-status-info-bg border border-status-info-border text-xs leading-5 text-status-info">
                 <ShieldCheck size={14} className="shrink-0 mt-0.5" />
                 <span>
                   You were signed out because you signed in from another tab
@@ -156,7 +191,7 @@ export default function Login() {
             )}
 
             {authNotice === 'signedOutByServer' && (
-              <div className="flex items-start gap-2 mt-5 px-3 py-2.5 rounded-lg bg-sky-50/70 border border-sky-200/70 text-xs text-sky-700 backdrop-blur-sm dark:border-sky-500/25 dark:bg-sky-500/10 dark:text-sky-400">
+              <div role="status" className="flex items-start gap-2.5 mt-5 px-4 py-3 rounded-xl bg-status-info-bg border border-status-info-border text-xs leading-5 text-status-info">
                 <ShieldCheck size={14} className="shrink-0 mt-0.5" />
                 <span>
                   Your session was ended. This happens when you sign in on
@@ -174,16 +209,16 @@ export default function Login() {
 
               if (isWarning) {
                 return (
-                  <div className="flex items-start gap-2 mt-5 px-3 py-2.5 rounded-lg bg-amber-50/70 border border-amber-300/70 text-xs text-amber-700 backdrop-blur-sm dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-400">
+                  <div className="flex items-start gap-2.5 mt-5 px-4 py-3 rounded-xl bg-status-danger-bg border border-status-danger-border text-xs leading-5 text-status-danger">
                     <AlertTriangle size={14} className="shrink-0 mt-0.5" />
-                    <span>{retryAfter > 0 ? `Too many attempts. Try again in ${retryAfter}s.` : error}</span>
+                    <AuthErrorMessage retryAfter={retryAfter} message={error} />
                   </div>
                 )
               }
 
               if (isInactive) {
                 return (
-                  <div className="flex items-start gap-2 mt-5 px-3 py-2.5 rounded-lg bg-slate-100/70 border border-slate-300/70 text-xs text-slate-600 backdrop-blur-sm dark:border-slate-500/25 dark:bg-slate-500/10 dark:text-slate-400">
+                  <div role="alert" className="flex items-start gap-2.5 mt-5 px-4 py-3 rounded-xl bg-status-info-bg border border-status-info-border text-xs leading-5 text-status-info">
                     <ShieldOff size={14} className="shrink-0 mt-0.5" />
                     <span>{error}</span>
                   </div>
@@ -192,20 +227,17 @@ export default function Login() {
 
               // Generic wrong credentials / expired 2FA session / other
               return (
-                <div className="flex items-start gap-2 mt-5 px-3 py-2.5 rounded-lg bg-red-50/70 border border-red-200/70 text-xs text-red-600 backdrop-blur-sm dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+                <div className="flex items-start gap-2.5 mt-5 px-4 py-3 rounded-xl bg-status-danger-bg border border-status-danger-border text-xs leading-5 text-status-danger">
                   <AlertCircle size={14} className="shrink-0 mt-0.5" />
-                  <span>
-                    {retryAfter > 0
-                      ? `Too many attempts. Try again in ${retryAfter}s.`
-                      : isExpired
-                        ? error
-                        : 'Incorrect email or password. Please try again.'}
-                  </span>
+                  <AuthErrorMessage
+                    retryAfter={retryAfter}
+                    message={isExpired ? error : 'Incorrect email or password. Please try again.'}
+                  />
                 </div>
               )
             })()}
 
-            <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+            <form onSubmit={handleSubmit} className="mt-8 space-y-5">
               {/*
                 Honeypot field. Deliberately NOT type="hidden"  -  some bots
                 skip those. Hidden via off-screen positioning instead, and
@@ -229,10 +261,10 @@ export default function Login() {
               </div>
 
               <label className="block">
-                <span className="text-xs font-semibold text-ink/80 dark:text-muted mb-1.5 block">Email</span>
-                <div className="flex items-center gap-2 rounded-xl border border-slate-300 dark:border-slate-700
-                  px-3.5 py-2.5 bg-white/80 dark:bg-slate-900/60 backdrop-blur-sm shadow-xs
-                  focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/25 focus-within:bg-white dark:focus-within:bg-slate-900
+                <span className="text-xs font-semibold text-ink mb-2 block">Email address</span>
+                <div className="flex items-center gap-3 rounded-xl border border-border
+                  px-4 py-3.5 bg-bg
+                  focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15 focus-within:bg-surface
                   transition-all duration-150">
                   <Mail size={16} className="text-muted shrink-0" />
                   <input
@@ -242,16 +274,16 @@ export default function Login() {
                     value={form.email}
                     onChange={handleChange('email')}
                     placeholder="you@company.com"
-                    className="w-full text-sm text-ink bg-transparent outline-none border-0 appearance-none focus:outline-none focus:ring-0 focus:shadow-none focus:border-0"
+                    className="min-w-0 w-full text-sm text-ink bg-transparent outline-none border-0 appearance-none focus:outline-none focus:ring-0 focus:shadow-none focus:border-0"
                   />
                 </div>
               </label>
 
               <label className="block">
-                <span className="text-xs font-semibold text-ink/80 dark:text-muted mb-1.5 block">Password</span>
-                <div className="flex items-center gap-2 rounded-xl border border-slate-300 dark:border-slate-700
-                  px-3.5 py-2.5 bg-white/80 dark:bg-slate-900/60 backdrop-blur-sm shadow-xs
-                  focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/25 focus-within:bg-white dark:focus-within:bg-slate-900
+                <span className="text-xs font-semibold text-ink mb-2 block">Password</span>
+                <div className="flex items-center gap-3 rounded-xl border border-border
+                  px-4 py-3.5 bg-bg
+                  focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15 focus-within:bg-surface
                   transition-all duration-150">
                   <Lock size={16} className="text-muted shrink-0" />
                   <input
@@ -261,13 +293,13 @@ export default function Login() {
                     value={form.password}
                     onChange={handleChange('password')}
                     placeholder="••••••••"
-                    className="w-full text-sm text-ink bg-transparent outline-none border-0 appearance-none focus:outline-none focus:ring-0 focus:shadow-none focus:border-0"
+                    className="min-w-0 w-full text-sm text-ink bg-transparent outline-none border-0 appearance-none focus:outline-none focus:ring-0 focus:shadow-none focus:border-0"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword((v) => !v)}
                     aria-label={showPassword ? 'Hide password' : 'Show password'}
-                    className="text-muted hover:text-ink transition-colors duration-150 p-0.5 rounded"
+                    className="text-muted hover:text-ink transition-colors duration-150 p-1 rounded"
                   >
                     {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
@@ -279,7 +311,7 @@ export default function Login() {
                 variant="primary"
                 size="md"
                 icon={LogIn}
-                className="w-full h-11 text-sm font-semibold"
+                className="mt-2 w-full h-12 rounded-xl text-sm font-semibold"
                 loading={loading}
                 loadingVariant="spinner"
                 disabled={loading || retryAfter > 0 || accountLockedFor > 0}
@@ -296,32 +328,29 @@ export default function Login() {
           </>
         ) : (
           <>
-            <div className="mx-auto mb-1 flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary-dark">
-              <ShieldCheck size={17} />
+            <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/15 text-primary-dark">
+              <ShieldCheck size={23} />
             </div>
-            <h1 className="text-lg font-bold text-ink text-center">Enter verification code</h1>
-            <p className="mt-1.5 text-sm text-muted text-center">
+            <p className="mb-3 text-[11px] font-bold tracking-[0.18em] text-primary-dark">ONE MORE STEP</p>
+            <h1 className="text-3xl font-semibold tracking-tight text-ink">Check your inbox.</h1>
+            <p className="mt-4 text-sm leading-6 text-muted">
               We've sent a 6-digit code to{' '}
               <span className="font-medium text-ink">{twoFactorPending.maskedEmail}</span>.
             </p>
 
             {error && (
-              <div className="flex items-center gap-2 mt-5 px-3 py-2 rounded-lg bg-red-50/70 border border-red-200/70 text-xs text-red-600 backdrop-blur-sm dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+              <div className="flex items-center gap-2.5 mt-5 px-4 py-3 rounded-xl bg-status-danger-bg border border-status-danger-border text-xs leading-5 text-status-danger">
                 <AlertCircle size={14} className="shrink-0" />
-                <span>
-                  {retryAfter > 0
-                    ? `Too many attempts. Try again in ${retryAfter}s.`
-                    : error}
-                </span>
+                <AuthErrorMessage retryAfter={retryAfter} message={error} />
               </div>
             )}
             {resendMessage && (
-              <div className="mt-5 px-3 py-2 rounded-lg bg-emerald-50/70 border border-emerald-200/70 text-xs text-emerald-700 backdrop-blur-sm dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400">
+              <div role="status" className="mt-5 px-4 py-3 rounded-xl bg-status-success-bg border border-status-success-border text-xs leading-5 text-status-success">
                 {resendMessage}
               </div>
             )}
 
-            <form onSubmit={handleVerify} className="mt-6 space-y-4">
+            <form onSubmit={handleVerify} className="mt-8 space-y-5">
               <OtpInput
                 length={6}
                 value={code}
@@ -336,7 +365,7 @@ export default function Login() {
                 type="submit"
                 variant="primary"
                 size="md"
-                className="w-full h-11 text-sm font-semibold"
+                className="w-full h-12 rounded-xl text-sm font-semibold"
                 loading={loading}
                 loadingVariant="spinner"
                 disabled={loading || code.length !== 6 || retryAfter > 0 || codeExpired}
@@ -348,7 +377,7 @@ export default function Login() {
                     : 'Verify & Sign In'}
               </Button>
 
-              <div className="flex items-center justify-between pt-1">
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
                 <button
                   type="button"
                   onClick={handleBack}
@@ -361,7 +390,7 @@ export default function Login() {
                     type="button"
                     onClick={handleResend}
                     disabled={loading}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary-dark ring-1 ring-primary/25 hover:bg-primary/15 disabled:opacity-50 disabled:pointer-events-none transition-colors duration-150"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-semibold text-ink ring-1 ring-primary/25 hover:bg-primary/15 disabled:opacity-50 disabled:pointer-events-none transition-colors duration-150"
                   >
                     <RefreshCw size={13} /> Resend code
                   </button>
@@ -371,8 +400,8 @@ export default function Login() {
                     <span
                       className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-semibold tabular-nums transition-colors duration-300 ${
                         codeSecondsLeft <= 30
-                          ? 'border-red-300/70 bg-red-50/80 text-red-600 animate-pulse dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400'
-                          : 'border-amber-300/70 bg-amber-50/80 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400'
+                          ? 'border-status-warning-border bg-status-warning-bg text-status-warning'
+                          : 'border-border bg-bg text-ink'
                       }`}
                     >
                       <Clock size={11} />
@@ -384,7 +413,12 @@ export default function Login() {
             </form>
           </>
         )}
-      </div>
+          <div className="mt-8 flex items-center gap-2 border-t border-border pt-6 text-xs text-muted">
+            <Lock size={13} className="shrink-0" /> Authorized personnel only.
+          </div>
+        </div>
+        <p className="text-center text-[11px] text-muted">Alibaton Construction Incorporated</p>
+      </main>
     </div>
   )
 }

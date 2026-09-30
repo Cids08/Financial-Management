@@ -55,9 +55,9 @@ const INPUT = `w-full h-9 px-3 rounded-lg border border-border bg-bg text-sm tex
 const LABEL = 'block text-xs font-medium text-muted mb-1.5'
 
 const STATUS_STYLES = {
-  Active: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20',
-  'Under Maintenance': 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20',
-  Disposed: 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400 border border-red-200 dark:border-red-500/20',
+  Active: 'bg-status-success-bg text-status-success border border-status-success-border',
+  'Under Maintenance': 'bg-status-warning-bg text-status-warning border border-status-warning-border',
+  Disposed: 'bg-status-neutral-bg text-status-neutral border border-status-neutral-border',
 }
 
 export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master Data', 'Fixed Assets'] }) {
@@ -313,7 +313,7 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+        <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">
           {error}
         </div>
       )}
@@ -838,7 +838,7 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           {formError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+            <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">
               {formError}
             </div>
           )}
@@ -858,10 +858,10 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
                     setFieldErrors((fe) => ({ ...fe, asset_code: '' }))
                     setForm((f) => ({ ...f, asset_code: e.target.value }))
                   }}
-                  className={`${INPUT} font-mono ${fieldErrors.asset_code ? 'border-red-400 dark:border-red-500' : ''}`}
+                  className={`${INPUT} font-mono ${fieldErrors.asset_code ? 'border-status-danger-border' : ''}`}
                   placeholder="FA-2024-009"
                 />
-                {fieldErrors.asset_code && <p className="mt-1 text-xs text-red-500">{fieldErrors.asset_code}</p>}
+                {fieldErrors.asset_code && <p className="mt-1 text-xs text-status-danger">{fieldErrors.asset_code}</p>}
               </div>
 
               <div className="sm:col-span-2">
@@ -873,10 +873,10 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
                     setFieldErrors((fe) => ({ ...fe, asset_name: '' }))
                     setForm((f) => ({ ...f, asset_name: e.target.value }))
                   }}
-                  className={`${INPUT} ${fieldErrors.asset_name ? 'border-red-400 dark:border-red-500' : ''}`}
+                  className={`${INPUT} ${fieldErrors.asset_name ? 'border-status-danger-border' : ''}`}
                   placeholder="e.g. Tadano 50-Ton Rough Terrain Crane"
                 />
-                {fieldErrors.asset_name && <p className="mt-1 text-xs text-red-500">{fieldErrors.asset_name}</p>}
+                {fieldErrors.asset_name && <p className="mt-1 text-xs text-status-danger">{fieldErrors.asset_name}</p>}
               </div>
             </div>
 
@@ -971,10 +971,10 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
                     setForm((f) => ({ ...f, purchase_date: e.target.value }))
                   }}
                   onBlur={(e) => validateDate('purchase_date', e.target.value)}
-                  className={`${INPUT} scheme-light dark:scheme-dark ${(fieldErrors.purchase_date || dateErrors.purchase_date) ? 'border-red-400 dark:border-red-500' : ''}`}
+                  className={`${INPUT} scheme-light dark:scheme-dark ${(fieldErrors.purchase_date || dateErrors.purchase_date) ? 'border-status-danger-border' : ''}`}
                 />
                 {(fieldErrors.purchase_date || dateErrors.purchase_date) && (
-                  <p className="mt-1 text-xs text-red-500">{fieldErrors.purchase_date || dateErrors.purchase_date}</p>
+                  <p className="mt-1 text-xs text-status-danger">{fieldErrors.purchase_date || dateErrors.purchase_date}</p>
                 )}
               </div>
 

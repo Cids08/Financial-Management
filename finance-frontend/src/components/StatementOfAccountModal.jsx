@@ -22,11 +22,11 @@ function fmtDate(str) {
 
 function agingColor(bucket) {
   const MAP = {
-    current: 'text-emerald-700 dark:text-emerald-300',
-    d1_30:   'text-amber-600 dark:text-amber-400',
-    d31_60:  'text-orange-600 dark:text-orange-400',
-    d61_90:  'text-red-600 dark:text-red-400',
-    over90:  'text-red-800 dark:text-red-300 font-bold',
+    current: 'text-status-success',
+    d1_30: 'text-status-danger',
+    d31_60: 'text-status-danger',
+    d61_90: 'text-status-danger',
+    over90: 'text-status-danger font-bold',
   }
   return MAP[bucket] || ''
 }
@@ -37,6 +37,18 @@ const BUCKET_LABELS = {
   d31_60:  '31-60 days',
   d61_90:  '61-90 days',
   over90:  '90+ days',
+}
+
+const INVOICE_STATUS_STYLES = {
+  Paid: 'bg-status-success-bg text-status-success border-status-success-border',
+  Approved: 'bg-status-success-bg text-status-success border-status-success-border',
+  Posted: 'bg-status-success-bg text-status-success border-status-success-border',
+  Pending: 'bg-status-warning-bg text-status-warning border-status-warning-border',
+  Unpaid: 'bg-status-warning-bg text-status-warning border-status-warning-border',
+  'Partially Paid': 'bg-status-warning-bg text-status-warning border-status-warning-border',
+  Processing: 'bg-status-info-bg text-status-info border-status-info-border',
+  Overdue: 'bg-status-danger-bg text-status-danger border-status-danger-border',
+  Rejected: 'bg-status-danger-bg text-status-danger border-status-danger-border',
 }
 
 // ─── Print helpers ───────────────────────────────────────────────────────────
@@ -401,15 +413,19 @@ function CustomerSOADetail({ soa, onBack, onPrint }) {
                 <td className="px-3 py-3 text-xs text-muted whitespace-nowrap">{fmtDate(inv.invoice_date)}</td>
                 <td className="px-3 py-3 text-xs text-muted whitespace-nowrap">{fmtDate(inv.due_date)}</td>
                 <td className="px-3 py-3 text-right tabular-nums text-xs">{formatCurrencyRaw(inv.original_amount)}</td>
-                <td className="px-3 py-3 text-right tabular-nums text-xs text-emerald-600 dark:text-emerald-400">{formatCurrencyRaw(inv.paid_amount)}</td>
+                <td className="px-3 py-3 text-right tabular-nums text-xs text-status-success">{formatCurrencyRaw(inv.paid_amount)}</td>
                 <td className="px-3 py-3 text-right tabular-nums text-xs font-semibold text-ink">{formatCurrencyRaw(inv.remaining_balance)}</td>
-                <td className={`px-3 py-3 text-right text-xs font-semibold ${inv.days_overdue > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                <td className={`px-3 py-3 text-right text-xs font-semibold ${inv.days_overdue > 0 ? 'text-status-danger' : 'text-status-success'}`}>
                   {inv.days_overdue > 0 ? `${inv.days_overdue} days` : 'Current'}
                 </td>
                 <td className={`px-3 py-3 text-xs font-medium ${agingColor(inv.aging_bucket)}`}>
                   {BUCKET_LABELS[inv.aging_bucket] ?? inv.aging_bucket}
                 </td>
-                <td className="px-3 py-3 text-xs text-muted">{inv.status}</td>
+                <td className="px-3 py-3 text-xs">
+                  <span className={`inline-flex items-center whitespace-nowrap rounded-md border px-2 py-0.5 font-medium ${INVOICE_STATUS_STYLES[inv.status] || 'bg-status-neutral-bg text-status-neutral border-status-neutral-border'}`}>
+                    {inv.status}
+                  </span>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -572,12 +588,12 @@ export default function StatementOfAccountModal({ open, onClose, fetchAgingSumma
         <div className="flex-1 overflow-y-auto p-6">
           {/* Error banners */}
           {agingError && (
-            <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 p-3 text-xs text-red-700 dark:text-red-300">
+            <div className="mb-4 flex items-start gap-2 rounded-lg border border-status-danger-border bg-status-danger-bg p-3 text-xs text-status-danger">
               <AlertTriangle size={14} className="mt-0.5 shrink-0" /> {agingError}
             </div>
           )}
           {soaError && (
-            <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 p-3 text-xs text-red-700 dark:text-red-300">
+            <div className="mb-4 flex items-start gap-2 rounded-lg border border-status-danger-border bg-status-danger-bg p-3 text-xs text-status-danger">
               <AlertTriangle size={14} className="mt-0.5 shrink-0" /> {soaError}
             </div>
           )}

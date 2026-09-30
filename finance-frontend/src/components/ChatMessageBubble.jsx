@@ -11,7 +11,7 @@ function renderMessageText(text) {
   return parts.map((part, idx) => {
     if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
       return (
-        <strong key={idx} className="font-bold text-amber-700 dark:text-primary-light">
+        <strong key={idx} className="font-bold text-primary-dark dark:text-primary-light">
           {part.slice(2, -2)}
         </strong>
       )
@@ -28,8 +28,8 @@ function ChatMessageBubble({ role, text }) {
       <div
         className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold shadow-xs ${
           isUser
-            ? 'bg-primary text-[#111827]'
-            : 'bg-primary/15 text-amber-700 dark:text-primary border border-primary/30'
+            ? 'bg-primary text-black'
+            : 'bg-primary/15 text-primary-dark dark:text-primary border border-primary/30'
         }`}
       >
         {isUser ? <User size={13} /> : <Sparkles size={13} />}
@@ -39,7 +39,7 @@ function ChatMessageBubble({ role, text }) {
       <div
         className={`max-w-[82%] rounded-2xl px-3.5 py-2.5 text-sm whitespace-pre-line leading-relaxed shadow-sm ${
           isUser
-            ? 'bg-primary text-[#111827] font-medium rounded-br-xs'
+            ? 'bg-primary text-black font-medium rounded-br-xs'
             : 'bg-surface text-ink border border-border rounded-bl-xs'
         }`}
       >

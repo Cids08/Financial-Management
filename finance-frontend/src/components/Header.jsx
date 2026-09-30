@@ -34,11 +34,11 @@ function getInitials(name) {
 // recreated (and re-verified against React's reconciler) on every render.
 function ProfileAvatar({ size, showImage, url, name, initials, onError }) {
   return (
-    <div className={`${size} rounded-full bg-primary/20 flex items-center justify-center shrink-0 overflow-hidden`}>
+    <div className={`${size} rounded-xl bg-primary flex items-center justify-center shrink-0 overflow-hidden`}>
       {showImage ? (
         <img src={url} alt={name} className="w-full h-full object-cover" onError={onError} />
       ) : (
-        <span className="text-primary-dark font-semibold text-xs">{initials}</span>
+        <span className="text-black font-bold text-xs">{initials}</span>
       )}
     </div>
   )
@@ -127,18 +127,19 @@ export default memo(function Header({ onToggleSidebar, collapsed, onLogoutClick 
 
   return (
     <header
-      className={`fixed top-0 left-0 right-0 h-16 bg-surface border-b border-border shadow-header z-40
-        flex items-center justify-between px-4 lg:px-6
+      className={`fixed top-0 left-0 right-0 h-20 bg-surface/95 backdrop-blur-md border-b border-border z-40
+        flex items-center justify-between gap-3 px-4 lg:px-7
         transition-all duration-300 ease-in-out-smooth
-        ${collapsed ? 'lg:pl-20' : 'lg:pl-70'}`}
+        ${collapsed ? 'lg:left-20' : 'lg:left-70'}`}
     >
       <div className="flex items-center gap-3 min-w-0">
         <div className="relative group shrink-0">
           <button
             onClick={onToggleSidebar}
-            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            className="flex items-center justify-center w-9 h-9 rounded-lg text-ink
-              hover:bg-bg active:bg-border/60 transition-colors duration-150"
+            aria-label="Toggle navigation"
+            aria-controls="workspace-navigation"
+            className="flex items-center justify-center w-10 h-10 rounded-xl border border-border text-muted
+              hover:text-ink hover:bg-bg active:bg-border/60 transition-colors duration-150"
           >
             {collapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
           </button>
@@ -152,7 +153,7 @@ export default memo(function Header({ onToggleSidebar, collapsed, onLogoutClick 
           </span>
         </div>
 
-        <div className={`${collapsed ? 'block' : 'hidden sm:block'} min-w-0 leading-tight`}>
+        <div className="hidden sm:block min-w-0 leading-tight">
           {profileLoading ? (
             <div className="h-8 w-40 rounded bg-bg animate-pulse" />
           ) : (
@@ -160,35 +161,36 @@ export default memo(function Header({ onToggleSidebar, collapsed, onLogoutClick 
               <p className="text-sm font-semibold text-ink truncate">
                 {greeting}, <span className="text-primary-dark">{firstName}</span>
               </p>
-              <p className="text-xs text-muted truncate">{dateLabel} · {timeLabel}</p>
+              <p className="mt-1 text-[11px] text-muted truncate">{dateLabel} <span className="px-1" aria-hidden="true">/</span> {timeLabel}</p>
             </>
           )}
         </div>
       </div>
 
-      <div className="hidden md:block flex-1 max-w-lg mx-6">
+      <div className="hidden md:block flex-1 min-w-0 max-w-md mx-1 xl:mx-6">
         <SearchBar />
       </div>
 
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
         <button
           onClick={togglePrivacy}
           disabled={cooldownActive}
           aria-label={privacyOn ? 'Disable Privacy Mode' : 'Enable Privacy Mode'}
+          aria-pressed={privacyOn}
           title={privacyOn ? 'Privacy Mode On - click to reveal amounts' : 'Privacy Mode Off - click to hide amounts'}
-          className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold border transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed
+          className={`flex h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 text-xs font-semibold border transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed
             ${privacyOn
-              ? 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400'
+              ? 'border-primary/30 bg-primary/10 text-primary-dark'
               : 'border-border bg-surface text-muted hover:text-ink hover:border-ink/20'}`}
         >
-          {privacyOn ? <EyeOff size={14} /> : <Eye size={14} />}
-          {privacyOn ? 'Privacy On' : 'Privacy Off'}
+          {privacyOn ? <EyeOff size={17} /> : <Eye size={17} />}
+          <span className="hidden xl:inline">{privacyOn ? 'Privacy On' : 'Privacy Off'}</span>
         </button>
 
         <button
           onClick={toggleTheme}
-          aria-label="Toggle dark mode"
-          className="flex items-center justify-center w-9 h-9 rounded-lg
+          aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          className="flex items-center justify-center w-10 h-10 rounded-xl
             text-muted hover:text-ink hover:bg-bg transition-colors duration-150"
         >
           {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
@@ -200,22 +202,24 @@ export default memo(function Header({ onToggleSidebar, collapsed, onLogoutClick 
         <div className="relative" ref={ref}>
           <button
             onClick={() => setProfileOpen((o) => !o)}
-            className="flex items-center gap-2.5 pl-1.5 pr-2 py-1.5 rounded-lg hover:bg-bg transition-colors duration-150"
+            aria-label={`Open account menu for ${userName}`}
+            aria-expanded={profileOpen}
+            className="flex items-center gap-2.5 p-1 rounded-xl hover:bg-bg transition-colors duration-150"
           >
-            <ProfileAvatar size="w-8 h-8" showImage={showImage} url={avatarUrl} name={userName} initials={initials} onError={() => setImgError(true)} />
-            <div className={`${collapsed ? 'block' : 'hidden lg:block'} text-left leading-tight`}>
-              <p className="text-sm font-semibold text-ink">{userName}</p>
-              <p className="text-xs text-muted">{role}</p>
+            <ProfileAvatar size="w-9 h-9" showImage={showImage} url={avatarUrl} name={userName} initials={initials} onError={() => setImgError(true)} />
+            <div className="hidden 2xl:block max-w-36 text-left leading-tight">
+              <p className="text-sm font-semibold text-ink truncate">{userName}</p>
+              <p className="mt-1 text-[11px] text-muted truncate">{role}</p>
             </div>
             <ChevronDown
               size={15}
-              className={`${collapsed ? 'block' : 'hidden lg:block'} text-muted transition-transform duration-200 ${profileOpen ? 'rotate-180' : ''}`}
+              className={`hidden 2xl:block text-muted transition-transform duration-200 ${profileOpen ? 'rotate-180' : ''}`}
             />
           </button>
 
           {profileOpen && (
-            <div className="absolute right-0 mt-2 w-56 bg-surface rounded-xl border border-border
-                shadow-dropdown animate-fadeIn origin-top-right z-50 py-1.5">
+            <div className="absolute right-0 mt-3 w-64 bg-surface rounded-2xl border border-border
+                shadow-dropdown animate-fadeIn origin-top-right z-50 p-1.5">
               <div className="px-3.5 py-2.5 border-b border-border flex items-center gap-2.5">
                 <ProfileAvatar size="w-9 h-9" showImage={showImage} url={avatarUrl} name={userName} initials={initials} onError={() => setImgError(true)} />
                 <div className="min-w-0">
@@ -229,8 +233,8 @@ export default memo(function Header({ onToggleSidebar, collapsed, onLogoutClick 
                   {divider && <div className="my-1 border-t border-border" />}
                   <button
                     onClick={onClick}
-                    className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-sm transition-colors duration-150
-                      ${danger ? 'text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10' : 'text-ink hover:bg-bg'}`}
+                    className={`w-full flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm transition-colors duration-150
+                      ${danger ? 'text-primary-dark hover:bg-primary/10' : 'text-ink hover:bg-bg'}`}
                   >
                     <ItemIcon size={16} className={danger ? '' : 'text-muted'} />
                     {label}

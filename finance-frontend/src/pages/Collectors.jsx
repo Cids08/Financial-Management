@@ -27,8 +27,8 @@ const INPUT = `w-full h-9 px-3 rounded-lg border border-border bg-bg text-sm tex
 const LABEL = 'block text-xs font-medium text-muted mb-1.5'
 
 const STATUS_STYLES = {
-  true: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
-  false: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400',
+  true: 'bg-status-success-bg text-status-success',
+  false: 'bg-status-neutral-bg text-status-neutral',
 }
 
 const PERIODS = [
@@ -46,7 +46,7 @@ const PERIODS = [
 const CHART_COLORS = {
   collected: 'var(--color-primary, #f59e0b)',
   target: 'var(--color-muted, #94a3b8)',
-  efficiency: 'var(--color-emerald-400, #34d399)',
+  efficiency: 'var(--color-ink)',
   grid: 'var(--color-border, #334155)',
   axisText: 'var(--color-muted, #94a3b8)',
 }
@@ -130,7 +130,7 @@ function EfficiencyTooltip({ active, payload, label }) {
     <div className="rounded-lg border border-border bg-surface px-3 py-2 shadow-lg text-xs">
       <p className="font-semibold text-ink mb-1">{label}</p>
       {payload.map((entry) => (
-        <p key={entry.dataKey} style={{ color: entry.color }} className="flex items-center justify-between gap-3">
+        <p key={entry.dataKey} className="flex items-center justify-between gap-3 text-ink">
           <span>{entry.name}</span>
           <span className="font-medium tabular-nums">
             {entry.dataKey === 'efficiency' ? `${entry.value}%` : formatCurrency(entry.value)}
@@ -185,7 +185,7 @@ function EfficiencyModal({ collector, onClose, getEfficiency }) {
         </div>
 
         {error && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{error}</div>
+          <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{error}</div>
         )}
 
         {loading ? (
@@ -197,7 +197,7 @@ function EfficiencyModal({ collector, onClose, getEfficiency }) {
         ) : (
           <>
             {rows.every((r) => r.collected === 0) && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+              <div className="rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2 text-xs text-status-warning">
                 No confirmed collections recorded in this period yet. The dashed line below shows the target for reference.
               </div>
             )}
@@ -258,10 +258,10 @@ function EfficiencyModal({ collector, onClose, getEfficiency }) {
                   <span
                     className={`shrink-0 inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold
                       ${r.efficiency >= 100
-                        ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400'
+                        ? 'bg-status-success-bg text-status-success'
                         : r.efficiency >= 70
-                          ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400'
-                          : 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400'}`}
+                          ? 'bg-status-warning-bg text-status-warning'
+                          : 'bg-status-danger-bg text-status-danger'}`}
                   >
                     {r.efficiency}%
                   </span>
@@ -435,7 +435,7 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{error}</div>
+        <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{error}</div>
       )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -628,7 +628,7 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           {formError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">{formError}</div>
+            <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{formError}</div>
           )}
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -711,10 +711,10 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
                     setTargetErrors((te) => ({ ...te, monthly_target: '' }))
                   }
                 }}
-                className={`${INPUT} ${targetErrors.monthly_target ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${targetErrors.monthly_target ? 'border-status-danger-border' : ''}`}
                 placeholder="250000"
               />
-              {targetErrors.monthly_target && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{targetErrors.monthly_target}</p>}
+              {targetErrors.monthly_target && <p className="mt-1 text-xs text-status-danger">{targetErrors.monthly_target}</p>}
             </div>
             <div>
               <label className={LABEL}>Commission %</label>
@@ -732,10 +732,10 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
                     setTargetErrors((te) => ({ ...te, commission_rate: '' }))
                   }
                 }}
-                className={`${INPUT} ${targetErrors.commission_rate ? 'border-red-400 dark:border-red-500' : ''}`}
+                className={`${INPUT} ${targetErrors.commission_rate ? 'border-status-danger-border' : ''}`}
                 placeholder="2.5"
               />
-              {targetErrors.commission_rate && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{targetErrors.commission_rate}</p>}
+              {targetErrors.commission_rate && <p className="mt-1 text-xs text-status-danger">{targetErrors.commission_rate}</p>}
             </div>
             <div>
               <label className={LABEL}>Status</label>
@@ -760,8 +760,8 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
         }
       >
         <div className="space-y-4">
-          <div className="flex items-start gap-3 rounded-xl border border-emerald-500/20 bg-emerald-50/60 dark:bg-emerald-500/10 p-3.5 text-xs text-emerald-800 dark:text-emerald-300">
-            <ShieldCheck size={20} className="shrink-0 text-emerald-600 dark:text-emerald-400 mt-0.5" />
+          <div className="flex items-start gap-3 rounded-xl border border-status-success-border bg-status-success-bg p-3.5 text-xs text-status-success">
+            <ShieldCheck size={20} className="shrink-0 text-status-success mt-0.5" />
             <div>
               <p className="font-semibold text-sm mb-0.5">User Account Auto-Created</p>
               <p>
@@ -802,7 +802,7 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
               }}
               className="shrink-0 flex items-center gap-1.5"
             >
-              {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+              {copied ? <Check size={14} className="text-status-success" /> : <Copy size={14} />}
               {copied ? 'Copied!' : 'Copy Credentials'}
             </Button>
           </div>

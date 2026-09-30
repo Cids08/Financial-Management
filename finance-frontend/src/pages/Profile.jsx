@@ -29,9 +29,9 @@ const ACTIVITY_ICON = {
 }
 
 const ACTIVITY_COLOR = {
-  success: 'text-emerald-600 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-500/10',
-  failed: 'text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-500/10',
-  warning: 'text-amber-600 bg-amber-50 dark:text-amber-400 dark:bg-amber-500/10',
+  success: 'bg-status-success-bg text-status-success',
+  failed: 'bg-status-danger-bg text-status-danger',
+  warning: 'bg-status-warning-bg text-status-warning',
 }
 
 /* ---------------------------------------------------------------------- */
@@ -80,7 +80,7 @@ function timeAgo(iso) {
 function InlineError({ message }) {
   if (!message) return null
   return (
-    <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+    <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">
       {message}
     </div>
   )
@@ -89,7 +89,7 @@ function InlineError({ message }) {
 function InlineSuccess({ message }) {
   if (!message) return null
   return (
-    <div className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400">
+    <div className="flex items-center gap-1.5 rounded-lg border border-status-success-border bg-status-success-bg px-3 py-2 text-xs text-status-success">
       <CheckCircle2 size={14} /> {message}
     </div>
   )
@@ -211,10 +211,10 @@ export default function Profile() {
     if (/[0-9]/.test(v)) score++
     if (/[^A-Za-z0-9]/.test(v)) score++
     const levels = [
-      { label: 'Weak', width: 'w-1/4', color: 'bg-red-500' },
-      { label: 'Fair', width: 'w-2/4', color: 'bg-amber-500' },
-      { label: 'Good', width: 'w-3/4', color: 'bg-blue-500' },
-      { label: 'Strong', width: 'w-full', color: 'bg-emerald-500' },
+      { label: 'Weak', width: 'w-1/4', color: 'bg-status-danger' },
+      { label: 'Fair', width: 'w-2/4', color: 'bg-status-warning' },
+      { label: 'Good', width: 'w-3/4', color: 'bg-status-info' },
+      { label: 'Strong', width: 'w-full', color: 'bg-status-success' },
     ]
     return levels[Math.max(0, score - 1)] || levels[0]
   }, [pwForm.next])
@@ -373,13 +373,13 @@ export default function Profile() {
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 mb-1 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+        <div className="flex items-center gap-2 mb-1 px-3 py-2 rounded-lg bg-status-danger-bg border border-status-danger-border text-xs text-status-danger">
           <AlertCircle size={14} />
           {error}
         </div>
       )}
       {successMessage && (
-        <div className="mb-1 px-3 py-2 rounded-lg bg-primary/10 border border-primary/30 text-xs text-ink">
+        <div className="mb-1 px-3 py-2 rounded-lg bg-status-success-bg border border-status-success-border text-xs text-status-success">
           {successMessage}
         </div>
       )}
@@ -507,8 +507,8 @@ export default function Profile() {
 
           <div className="flex items-center gap-2.5 shrink-0">
             {security.twoFABusy && (
-              <span className="flex items-center gap-1.5 text-xs font-semibold text-primary animate-pulse">
-                <Loader2 size={13} className="animate-spin text-primary shrink-0" />
+              <span className="flex items-center gap-1.5 text-xs font-semibold text-status-info animate-pulse">
+                <Loader2 size={13} className="animate-spin text-status-info shrink-0" />
                 {security.twoFAEnabled ? 'Opening...' : 'Generating code...'}
               </span>
             )}
@@ -550,22 +550,22 @@ export default function Profile() {
 
         {/* Real-time feedback banner while initiating */}
         {security.twoFABusy && !security.twoFAEnabled && (
-          <div className="mt-3 flex items-center gap-2 rounded-lg border border-primary/25 bg-primary/10 px-3 py-2 text-xs text-primary-dark font-medium animate-fadeIn">
-            <Loader2 size={14} className="animate-spin shrink-0 text-primary" />
+          <div className="mt-3 flex items-center gap-2 rounded-lg border border-status-info-border bg-status-info-bg px-3 py-2 text-xs text-status-info font-medium animate-fadeIn">
+            <Loader2 size={14} className="animate-spin shrink-0 text-status-info" />
             <span>Generating your 2FA verification key and sending the 6-digit code to your email... Please wait a moment.</span>
           </div>
         )}
 
         {/* Error notification if initiating or toggling failed */}
         {security.twoFAError && !twoFAModalOpen && !disable2FAModalOpen && (
-          <div className="mt-3 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400 animate-fadeIn">
+          <div className="mt-3 flex items-center gap-2 rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger animate-fadeIn">
             <AlertTriangle size={14} className="shrink-0" />
             <span>{security.twoFAError}</span>
           </div>
         )}
 
         {security.twoFAEnabled && (
-          <div className="mt-4 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-xs text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400">
+          <div className="mt-4 flex items-center gap-2 rounded-lg border border-status-success-border bg-status-success-bg px-3 py-2.5 text-xs text-status-success">
             <CheckCircle2 size={14} className="shrink-0" />
             Two-factor authentication is active on your account.
           </div>
@@ -794,8 +794,8 @@ export default function Profile() {
                 <span
                   className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-semibold tabular-nums transition-colors duration-300 ${
                     setupSecondsLeft <= 30
-                      ? 'border-red-300/70 bg-red-50/80 text-red-600 animate-pulse dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400'
-                      : 'border-amber-300/70 bg-amber-50/80 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400'
+                      ? 'border-status-danger-border bg-status-danger-bg text-status-danger animate-pulse'
+                      : 'border-status-warning-border bg-status-warning-bg text-status-warning'
                   }`}
                 >
                   <Clock size={11} />
@@ -993,7 +993,7 @@ function AvatarUploadModal({ currentUrl, onClose, onUpload, onRemove }) {
             />
           </div>
 
-          {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+          {error && <p className="text-xs text-status-danger">{error}</p>}
         </div>
 
         {/* Footer */}

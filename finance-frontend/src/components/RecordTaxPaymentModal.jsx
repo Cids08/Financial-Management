@@ -243,7 +243,7 @@ export default function RecordTaxPaymentModal({
         </div>
 
         {error && (
-          <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+          <div className="flex items-start gap-2 rounded-lg border border-status-danger-border bg-status-danger-bg p-3 text-xs text-status-danger">
             <AlertTriangle size={15} className="shrink-0 mt-0.5" />
             <span>{error}</span>
           </div>
@@ -252,7 +252,7 @@ export default function RecordTaxPaymentModal({
         {/* Cash / Bank Account Selector */}
         <div>
           <label className={LABEL_CLASS}>
-            Paid From (Cash / Bank Account) <span className="text-red-500">*</span>
+            Paid From (Cash / Bank Account) <span className="text-status-danger">*</span>
           </label>
           <select
             value={form.cash_account_id}
@@ -261,7 +261,7 @@ export default function RecordTaxPaymentModal({
               setFieldErrors((prev) => ({ ...prev, cash_account_id: '' }))
             }}
             disabled={submitting || loadingAccounts}
-            className={`${INPUT_CLASS} ${fieldErrors.cash_account_id ? 'border-red-500' : ''}`}
+            className={`${INPUT_CLASS} ${fieldErrors.cash_account_id ? 'border-status-danger-border' : ''}`}
           >
             <option value="">
               {loadingAccounts ? 'Loading cash accounts...' : 'Select Cash / Bank Account...'}
@@ -276,7 +276,7 @@ export default function RecordTaxPaymentModal({
             })}
           </select>
           {fieldErrors.cash_account_id ? (
-            <p className="mt-1 text-xs text-red-500">{fieldErrors.cash_account_id}</p>
+            <p className="mt-1 text-xs text-status-danger">{fieldErrors.cash_account_id}</p>
           ) : (
             <p className="mt-1 text-[11px] text-muted">
               Funds will be deducted from this account and synchronized with the General Ledger.
@@ -288,7 +288,7 @@ export default function RecordTaxPaymentModal({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className={LABEL_CLASS}>
-              Payment Date <span className="text-red-500">*</span>
+              Payment Date <span className="text-status-danger">*</span>
             </label>
             <input
               type="date"
@@ -298,17 +298,17 @@ export default function RecordTaxPaymentModal({
                 setFieldErrors((prev) => ({ ...prev, payment_date: '' }))
               }}
               disabled={submitting}
-              className={`${INPUT_CLASS} ${fieldErrors.payment_date ? 'border-red-500' : ''}`}
+              className={`${INPUT_CLASS} ${fieldErrors.payment_date ? 'border-status-danger-border' : ''}`}
             />
             {fieldErrors.payment_date && (
-              <p className="mt-1 text-xs text-red-500">{fieldErrors.payment_date}</p>
+              <p className="mt-1 text-xs text-status-danger">{fieldErrors.payment_date}</p>
             )}
           </div>
 
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-xs font-medium text-muted">
-                Reference / Confirmation No. <span className="text-red-500">*</span>
+                Reference / Confirmation No. <span className="text-status-danger">*</span>
               </label>
               <button
                 type="button"
@@ -327,10 +327,10 @@ export default function RecordTaxPaymentModal({
                 setFieldErrors((prev) => ({ ...prev, reference_number: '' }))
               }}
               disabled={submitting}
-              className={`${INPUT_CLASS} ${fieldErrors.reference_number ? 'border-red-500' : ''}`}
+              className={`${INPUT_CLASS} ${fieldErrors.reference_number ? 'border-status-danger-border' : ''}`}
             />
             {fieldErrors.reference_number && (
-              <p className="mt-1 text-xs text-red-500">{fieldErrors.reference_number}</p>
+              <p className="mt-1 text-xs text-status-danger">{fieldErrors.reference_number}</p>
             )}
           </div>
         </div>
@@ -360,7 +360,7 @@ export default function RecordTaxPaymentModal({
                 dragActive
                   ? 'border-primary bg-primary/5'
                   : fieldErrors.document
-                  ? 'border-red-400 bg-red-50/50 dark:bg-red-500/5'
+                  ? 'border-status-danger-border bg-status-danger-bg'
                   : 'border-border hover:border-primary/50 hover:bg-bg/60'
               }`}
             >
@@ -394,7 +394,7 @@ export default function RecordTaxPaymentModal({
                 type="button"
                 onClick={() => setFile(null)}
                 disabled={submitting}
-                className="p-1 text-muted hover:text-red-500 rounded transition-colors"
+                className="p-1 text-muted hover:text-status-danger rounded transition-colors"
                 title="Remove file"
               >
                 <X size={15} />
@@ -402,7 +402,7 @@ export default function RecordTaxPaymentModal({
             </div>
           )}
           {fieldErrors.document && (
-            <p className="mt-1 text-xs text-red-500">{fieldErrors.document}</p>
+            <p className="mt-1 text-xs text-status-danger">{fieldErrors.document}</p>
           )}
         </div>
 

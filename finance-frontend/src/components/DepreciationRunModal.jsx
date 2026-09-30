@@ -306,7 +306,7 @@ export default function DepreciationRunModal({
                 <div
                   className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-colors ${
                     i < step
-                      ? 'bg-primary border-primary text-[#111827]'
+                      ? 'bg-primary border-primary text-black'
                       : i === step
                       ? 'border-primary text-primary-dark dark:text-primary'
                       : 'border-border text-muted'
@@ -354,7 +354,7 @@ export default function DepreciationRunModal({
                       type="button"
                       onClick={() => setPeriod('monthly')}
                       className={`flex-1 py-2 font-medium transition-colors ${
-                        period === 'monthly' ? 'bg-primary text-[#111827] font-semibold' : 'bg-surface text-ink hover:bg-bg'
+                        period === 'monthly' ? 'bg-primary text-black font-semibold' : 'bg-surface text-ink hover:bg-bg'
                       }`}
                     >
                       Monthly
@@ -363,7 +363,7 @@ export default function DepreciationRunModal({
                       type="button"
                       onClick={() => setPeriod('annual')}
                       className={`flex-1 py-2 font-medium transition-colors ${
-                        period === 'annual' ? 'bg-primary text-[#111827] font-semibold' : 'bg-surface text-ink hover:bg-bg'
+                        period === 'annual' ? 'bg-primary text-black font-semibold' : 'bg-surface text-ink hover:bg-bg'
                       }`}
                     >
                       Annual
@@ -443,7 +443,7 @@ export default function DepreciationRunModal({
               </div>
 
               {previewError && (
-                <div className="flex items-start gap-2 p-3 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 rounded-lg text-rose-700 dark:text-rose-300 dark:text-rose-300 text-sm">
+                <div className="flex items-start gap-2 p-3 bg-status-danger-bg border border-status-danger-border rounded-lg text-status-danger text-sm">
                   <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
                   {previewError}
                 </div>
@@ -456,12 +456,12 @@ export default function DepreciationRunModal({
             <div className="space-y-4">
               {/* Idempotency Warning if already posted */}
               {previewData.already_posted && (
-                <div className="flex items-start gap-3 p-4 bg-amber-50 dark:bg-amber-500/10 border border-amber-300 dark:border-amber-500/40 rounded-xl text-amber-800 dark:text-amber-200 text-sm">
-                  <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <div className="flex items-start gap-3 p-4 bg-status-warning-bg border border-status-warning-border rounded-xl text-status-warning text-sm">
+                  <ShieldAlert className="w-5 h-5 text-status-warning shrink-0 mt-0.5" />
                   <div>
                     <strong className="font-bold">Period Already Posted:</strong> A depreciation journal entry for{' '}
                     <strong>{previewData.period_key}</strong> has already been posted under transaction voucher{' '}
-                    <span className="font-mono font-bold text-amber-900 dark:text-amber-200">{previewData.voucher_number}</span>.
+                    <span className="font-mono font-bold text-status-warning">{previewData.voucher_number}</span>.
                     Duplicate execution is strictly prevented by system controls.
                   </div>
                 </div>
@@ -479,15 +479,15 @@ export default function DepreciationRunModal({
                   <div className="text-lg font-bold text-ink font-mono">{fmt(selectedCurrentBookTotal)}</div>
                   <div className="text-xs text-muted">Current carrying value</div>
                 </div>
-                <div className="p-3 bg-rose-50 dark:bg-rose-500/10 rounded-xl border border-rose-200 dark:border-rose-500/30">
-                  <div className="text-xs text-rose-600 dark:text-rose-300 font-medium">Depreciation Expense</div>
-                  <div className="text-lg font-bold text-rose-700 dark:text-rose-300 font-mono">{fmt(selectedDepreciationTotal)}</div>
-                  <div className="text-xs text-rose-500">Period P&L impact</div>
+                <div className="p-3 bg-surface rounded-xl border border-border">
+                  <div className="text-xs text-ink font-medium">Depreciation Expense</div>
+                  <div className="text-lg font-bold text-ink font-mono">{fmt(selectedDepreciationTotal)}</div>
+                  <div className="text-xs text-ink">Period P&L impact</div>
                 </div>
-                <div className="p-3 bg-emerald-50 dark:bg-emerald-500/10 rounded-xl border border-emerald-200 dark:border-emerald-500/30">
-                  <div className="text-xs text-emerald-600 dark:text-emerald-300 font-medium">Post-Run Book Value</div>
-                  <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300 font-mono">{fmt(selectedProjectedBookTotal)}</div>
-                  <div className="text-xs text-emerald-600 dark:text-emerald-300">Ending carrying value</div>
+                <div className="p-3 bg-surface rounded-xl border border-border">
+                  <div className="text-xs text-ink font-medium">Post-Run Book Value</div>
+                  <div className="text-lg font-bold text-ink font-mono">{fmt(selectedProjectedBookTotal)}</div>
+                  <div className="text-xs text-ink">Ending carrying value</div>
                 </div>
               </div>
 
@@ -555,8 +555,8 @@ export default function DepreciationRunModal({
                             <td className="px-3 py-2 text-muted">{p.asset_category}</td>
                             <td className="px-3 py-2 text-right font-mono text-ink">{fmt(p.purchase_cost)}</td>
                             <td className="px-3 py-2 text-right font-mono text-ink">{fmt(p.current_book_value)}</td>
-                            <td className="px-3 py-2 text-right font-mono font-bold text-rose-700 dark:text-rose-300">{fmt(p.period_depreciation)}</td>
-                            <td className="px-3 py-2 text-right font-mono font-bold text-emerald-700 dark:text-emerald-300">{fmt(p.projected_book_value)}</td>
+                            <td className="px-3 py-2 text-right font-mono font-bold text-ink">{fmt(p.period_depreciation)}</td>
+                            <td className="px-3 py-2 text-right font-mono font-bold text-ink">{fmt(p.projected_book_value)}</td>
                           </tr>
                         )
                       })}
@@ -568,8 +568,8 @@ export default function DepreciationRunModal({
                         </td>
                         <td className="px-3 py-2 text-right font-mono">{fmt(selectedProposals.reduce((s, p) => s + p.purchase_cost, 0))}</td>
                         <td className="px-3 py-2 text-right font-mono">{fmt(selectedCurrentBookTotal)}</td>
-                        <td className="px-3 py-2 text-right font-mono text-rose-700 dark:text-rose-300">{fmt(selectedDepreciationTotal)}</td>
-                        <td className="px-3 py-2 text-right font-mono text-emerald-700 dark:text-emerald-300">{fmt(selectedProjectedBookTotal)}</td>
+                        <td className="px-3 py-2 text-right font-mono text-ink">{fmt(selectedDepreciationTotal)}</td>
+                        <td className="px-3 py-2 text-right font-mono text-ink">{fmt(selectedProjectedBookTotal)}</td>
                       </tr>
                     </tfoot>
                   </table>
@@ -577,7 +577,7 @@ export default function DepreciationRunModal({
               )}
 
               {execError && (
-                <div className="flex items-start gap-2 p-3 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 rounded-lg text-rose-700 dark:text-rose-300 dark:text-rose-300 text-sm">
+                <div className="flex items-start gap-2 p-3 bg-status-danger-bg border border-status-danger-border rounded-lg text-status-danger text-sm">
                   <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
                   {execError}
                 </div>
@@ -588,8 +588,8 @@ export default function DepreciationRunModal({
           {/* STEP 2: Confirmation / Success */}
           {step === 2 && runResult && (
             <div className="max-w-xl mx-auto space-y-6 text-center">
-              <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto">
-                <CheckCircle2 className="w-9 h-9 text-emerald-600 dark:text-emerald-300" />
+              <div className="w-16 h-16 bg-status-success-bg rounded-full flex items-center justify-center mx-auto">
+                <CheckCircle2 className="w-9 h-9 text-status-success" />
               </div>
               <div>
                 <h3 className="text-xl font-bold text-ink">Depreciation Run Complete!</h3>
@@ -605,7 +605,7 @@ export default function DepreciationRunModal({
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted">Total Depreciation Posted:</span>
-                  <span className="font-mono font-bold text-rose-700 dark:text-rose-300">{fmt(runResult.total_depreciation)}</span>
+                  <span className="font-mono font-bold text-ink">{fmt(runResult.total_depreciation)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted">GL Accounts Updated:</span>
@@ -613,7 +613,7 @@ export default function DepreciationRunModal({
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted">Execution Status:</span>
-                  <span className="inline-flex items-center px-2 py-0.5 text-xs font-semibold rounded-full bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+                  <span className="inline-flex items-center px-2 py-0.5 text-xs font-semibold rounded-full bg-status-success-bg text-status-success">
                     Posted & Reconciled
                   </span>
                 </div>
@@ -664,7 +664,7 @@ export default function DepreciationRunModal({
               type="button"
               disabled={loadingPreview}
               onClick={loadPreview}
-              className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-primary hover:bg-primary-dark disabled:opacity-50 text-[#111827] rounded-lg transition-colors shadow-sm"
+              className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-primary hover:bg-primary-dark disabled:opacity-50 text-black rounded-lg transition-colors shadow-sm"
             >
               {loadingPreview ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
               {loadingPreview ? 'Calculating…' : 'Calculate Preview'}
@@ -676,7 +676,7 @@ export default function DepreciationRunModal({
               type="button"
               disabled={previewData?.already_posted || selectedAssetIds.size === 0 || executing}
               onClick={handleExecuteRun}
-              className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-primary hover:bg-primary-dark disabled:opacity-50 text-[#111827] rounded-lg transition-colors shadow-sm"
+              className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-primary hover:bg-primary-dark disabled:opacity-50 text-black rounded-lg transition-colors shadow-sm"
             >
               {executing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
               {executing ? 'Posting to GL…' : `Post Depreciation · ${fmt(selectedDepreciationTotal)}`}

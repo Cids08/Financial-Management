@@ -185,7 +185,7 @@ export default function GenerateTaxScheduleModal({ open, onClose, onGenerate }) 
         </div>
 
         {error && (
-          <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400">
+          <div className="flex items-start gap-2 rounded-lg border border-status-danger-border bg-status-danger-bg p-3 text-xs text-status-danger">
             <AlertTriangle size={15} className="shrink-0 mt-0.5" />
             <span>{error}</span>
           </div>
@@ -195,7 +195,7 @@ export default function GenerateTaxScheduleModal({ open, onClose, onGenerate }) 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium text-muted mb-1.5">
-              Fiscal Year <span className="text-red-500">*</span>
+              Fiscal Year <span className="text-status-danger">*</span>
             </label>
             <select
               value={year}
@@ -213,7 +213,7 @@ export default function GenerateTaxScheduleModal({ open, onClose, onGenerate }) 
 
           <div>
             <label className="block text-xs font-medium text-muted mb-1.5">
-              Filing Period Scope <span className="text-red-500">*</span>
+              Filing Period Scope <span className="text-status-danger">*</span>
             </label>
             <select
               value={periodScope}
