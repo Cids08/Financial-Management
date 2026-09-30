@@ -5,6 +5,7 @@ import { useAuth } from '../hooks/useAuth'
 import { getEcho, disconnectEcho } from '../utils/echo'
 import { getClientSessionId, isAuthenticated } from '../utils/authToken'
 import { apiFetch } from '../utils/api'
+import { setForcedLogoutVisible } from '../utils/forcedLogoutGate'
 
 /**
  * Mount this once, inside the authenticated layout (alongside where
@@ -41,6 +42,11 @@ export default function ForcedLogoutListener() {
             // other tab/device triggered it.
             if (event.originSessionId === getClientSessionId()) return
 
+            // Hold AuthExpiredListener off: the token is being revoked
+            // right now, and the next 401 would yank this modal away a
+            // split second after it appears. This tab's logout should be
+            // driven by the modal button, not by a racing redirect.
+            setForcedLogoutVisible(true)
             setNotice({ deviceLabel: event.deviceLabel })
           })
       })
@@ -53,6 +59,7 @@ export default function ForcedLogoutListener() {
 
     return () => {
       cancelled = true
+      setForcedLogoutVisible(false)
       if (channel) {
         getEcho().leave(`user.${channel.name?.replace('private-', '') ?? ''}`)
       }

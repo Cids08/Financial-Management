@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { isForcedLogoutVisible } from '../utils/forcedLogoutGate'
 
 // Listens for the 'auth:expired' event dispatched by apiFetch() on a 401
 // and performs a clean client-side redirect to the login page, instead of
@@ -17,6 +18,10 @@ export default function AuthExpiredListener() {
 
   useEffect(() => {
     const handleAuthExpired = () => {
+      // The ForcedLogout modal is showing; let it drive this session's
+      // exit (via its "Return to sign in" button) instead of racing it
+      // to the login page and yanking the modal off screen.
+      if (isForcedLogoutVisible()) return
       if (redirectingRef.current) return
       redirectingRef.current = true
       // Pass a reason through router state so the Login page can explain
