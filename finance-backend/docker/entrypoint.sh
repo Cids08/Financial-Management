@@ -22,23 +22,35 @@ fi
 echo "==> DB_CONNECTION=${DB_CONNECTION:-auto} DB_HOST=${DB_HOST:-(none)} DB_DATABASE=${DB_DATABASE:-(unset)}"
 php artisan tinker --execute="echo '==> Laravel will use the [' . config('database.default') . '] connection' . PHP_EOL;"
 
-# Full wipe & re-seed for defense / deployment:
-# Set APP_RESET_ON_BOOT=true in HostForge before deploying to drop every table,
-# re-migrate from scratch, and seed the entire defense dataset (10+ master records,
-# 6 months of historical transactions for ARIMA AI forecasting).
-# Set it back to false after the deploy, or keep it unset.
+# ---------------------------------------------------------------------------
+# Webserver-first boot:
+#   APP_RESET_ON_BOOT=true  -> drop every table, re-migrate, seed the full
+#                              defense dataset (~20 seeders, 6 months of
+#                              transactions). This is SLOWER than the platform
+#                              health-check window, so it now runs in the
+#                              background AFTER the web stack is up — the app
+#                              comes online first and the seed finishes behind
+#                              it. Progress/errors go to /tmp/db-seed.log.
+#   APP_SEED_ON_BOOT=true   -> migrate + full seed in the background.
+#   (default)               -> migrate + 3 idempotent core seeders in the
+#                              foreground (fast, well under the health window).
+# Set RESET/SEED to false after the first successful deploy — the database
+# persists on the managed Postgres, so you only need to seed once.
+# ---------------------------------------------------------------------------
+echo "==> Starting supervisord (web stack first; seed may run behind it)..."
+/usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf &
+SUPERVISOR_PID=$!
+
+seed_log=/tmp/db-seed.log
+
 if [ "${APP_RESET_ON_BOOT:-false}" = "true" ]; then
-    echo "==> APP_RESET_ON_BOOT=true — wiping and re-creating database with complete defense dataset..."
-    php artisan migrate:fresh --force
-    php artisan db:seed --force
-    echo "==> Fresh database reset & full seeding complete."
+    echo "==> APP_RESET_ON_BOOT=true — wiping + full seed running in the background (tail ${seed_log})..."
+    ( php artisan migrate:fresh --force && php artisan db:seed --force; echo "==> reset+seed exit code: $?" ) > "$seed_log" 2>&1 &
 elif [ "${APP_SEED_ON_BOOT:-false}" = "true" ]; then
-    echo "==> APP_SEED_ON_BOOT=true — running migrations and seeding full defense dataset..."
-    php artisan migrate --force
-    php artisan db:seed --force
-    echo "==> Database seeding complete."
+    echo "==> APP_SEED_ON_BOOT=true — migrate + full seed running in the background (tail ${seed_log})..."
+    ( php artisan migrate --force && php artisan db:seed --force; echo "==> seed exit code: $?" ) > "$seed_log" 2>&1 &
 else
-    echo "==> Running migrations..."
+    echo "==> Running migrations (foreground)..."
     php artisan migrate --force
     echo "==> Ensuring core auth & permissions (idempotent)..."
     php artisan db:seed --class=RolesAndPermissionsSeeder --force
@@ -54,5 +66,5 @@ php artisan config:cache
 php artisan route:cache || echo "    (route:cache skipped — not all routes are cacheable, continuing without it)"
 php artisan view:cache
 
-echo "==> Starting supervisord..."
-exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
+echo "==> Waiting for supervisord..."
+wait "$SUPERVISOR_PID"
