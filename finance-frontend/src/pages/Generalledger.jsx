@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Search, BookOpen, Scale, TrendingUp, TrendingDown, Info, ExternalLink, ListTree, Layers, Rows3, Loader2, AlertTriangle, ChevronDown, ChevronRight, X, RotateCcw, Filter, Printer, Download } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { useDataUpdates } from '../hooks/useDataUpdates'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
@@ -112,6 +113,7 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
   const [datePreset, setDatePreset] = useState('today')
   const [lineFilter, setLineFilter] = useState(EMPTY_FILTERS.lineFilter) // 'all' | 'debit' | 'credit'
   const [page, setPage] = useState(1)
+  const [refreshKey, setRefreshKey] = useState(0)
 
   const [detailGroup, setDetailGroup] = useState(null) // lines for the journal entry shown in the detail modal
   const [detailLoading, setDetailLoading] = useState(false)
@@ -132,6 +134,13 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
   const { profile } = useProfileContext()
 
   const navigate = useNavigate()
+
+  // Live updates: the ledger is derived from postings across every module,
+  // so any of these changing re-fetches the active view  -  no reload needed.
+  useDataUpdates([
+    'accounts-receivable', 'accounts-payable', 'collections', 'expenses',
+    'disbursements', 'tax-obligations', 'budgets',
+  ], () => setRefreshKey((k) => k + 1))
 
   // Jump to the original record behind a ledger line, in its own module,
   // reusing the same router-state highlight mechanism as SearchBar so the
@@ -191,7 +200,7 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
       .catch(() => setError('Could not load journal entries. Please try again.'))
       .finally(() => setLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, filterParams, page])
+  }, [view, filterParams, page, refreshKey])
 
   // Trial balance  -  depends on filters only (no pagination).
   useEffect(() => {
@@ -203,7 +212,7 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
       .then((json) => setTrialBalance(json.data || []))
       .catch(() => setError('Could not load the trial balance. Please try again.'))
       .finally(() => setLoading(false))
-  }, [view, filterParams])
+  }, [view, filterParams, refreshKey])
 
   // Account ledger (SAP B1 style)  -  depends on filters only (no pagination).
   useEffect(() => {
@@ -223,7 +232,7 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
       })
       .catch(() => setError('Could not load the account ledger. Please try again.'))
       .finally(() => setLoading(false))
-  }, [view, filterParams])
+  }, [view, filterParams, refreshKey])
 
   const trialTotals = useMemo(() => ({
     debit: trialBalance.reduce((sum, r) => sum + Number(r.total_debit || 0), 0),

@@ -10,6 +10,7 @@ import { formatCurrency, maskedAmount } from '../utils/formatters'
 import { useAccountsReceivable } from '../hooks/useAccountsReceivable'
 import { usePrivacy } from '../context/PrivacyContext'
 import { apiFetch } from '../utils/api'
+import { useDataUpdates } from '../hooks/useDataUpdates'
 
 const PANEL = 'rounded-2xl border border-border bg-surface shadow-card'
 const PANEL_PAD = 'p-4 sm:p-5'
@@ -133,6 +134,19 @@ export default function CollectorDashboard({ title = 'Dashboard', crumbs = ['Das
       .then((json) => { if (json.success) setCustomerStats(json.data) })
       .catch(() => {})
   }, [])
+
+  // Live updates for the collector's own view: AR, collections and customer
+  // stats all refresh in place when anything in those modules changes.
+  const refreshAll = useCallback(() => {
+    fetchRecords()
+    fetchCollections()
+    apiFetch('/api/customers/stats')
+      .then((res) => res.json())
+      .then((json) => { if (json.success) setCustomerStats(json.data) })
+      .catch(() => {})
+  }, [fetchRecords, fetchCollections])
+
+  useDataUpdates(['accounts-receivable', 'collections', 'customers'], refreshAll)
 
   const activeAR = useMemo(() => arRecords.filter((r) => !r.is_archived), [arRecords])
   const activeCollections = useMemo(() => collections.filter((c) => !c.is_archived), [collections])

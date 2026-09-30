@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Bell, BellOff, Check, CheckCheck, Trash2, Loader2, BellPlus, Search, RotateCcw, X, Monitor, Shield, AlertCircle } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
@@ -7,6 +7,9 @@ import Button from '../components/Button'
 import Tooltip from '../components/Tooltip'
 import Modal from '../components/Modal'
 import { useNotificationsContext } from '../context/NotificationsContext'
+import { useProfileContext } from '../context/ProfileContext'
+import { getEcho } from '../utils/echo'
+import { isAuthenticated } from '../utils/authToken'
 import { notificationTypeMeta, NOTIFICATION_MODULES, NOTIFICATION_SEVERITIES } from '../utils/notificationTypes'
 import { enablePush, disablePush, getBrowserSubscriptionState, fetchVapidKey } from '../utils/pushNotifications'
 
@@ -81,6 +84,41 @@ export default function Notifications({ title = 'Notifications', crumbs = ['Noti
   useEffect(() => {
     fetchNotifications({ unread: unreadOnly, types: severity ? [severity] : [], modules: module ? [module] : [] }, page)
   }, [unreadOnly, severity, module, page]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Live list: a new notification arriving on private-user.{id} re-fetches
+  // the list so new entries appear without a manual reload. The channel is
+  // shared with NotificationsContext (badge counter), so cleanup only stops
+  // this listener  -  it must NOT leave the channel or the badge dies too.
+  const { profile } = useProfileContext()
+  const pageRef = useRef(page)
+  pageRef.current = page
+  const listParamsRef = useRef({ unread: unreadOnly, severity, module })
+  listParamsRef.current = { unread: unreadOnly, severity, module }
+  useEffect(() => {
+    if (!isAuthenticated() || !profile?.id) return
+    const refreshList = () => {
+      const p = listParamsRef.current
+      fetchNotifications({ unread: p.unread, types: p.severity ? [p.severity] : [], modules: p.module ? [p.module] : [] }, pageRef.current)
+    }
+    let channel
+    try {
+      const echo = getEcho()
+      channel = echo.private(`user.${profile.id}`)
+      channel.listen('.notification.created', refreshList)
+    } catch {
+      // websocket unavailable — rely on page reload / filters
+    }
+    return () => {
+      if (channel) {
+        try {
+          channel.stopListening('.notification.created', refreshList)
+        } catch {
+          // ignore
+        }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.id])
 
   const totalPages = meta.last_page || 1
 

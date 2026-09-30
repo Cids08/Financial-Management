@@ -1,19 +1,19 @@
 import { createContext, useContext, useEffect } from 'react'
 import { useNotifications } from '../hooks/useNotifications'
+import { useProfileContext } from './ProfileContext'
+import { getEcho } from '../utils/echo'
+import { isAuthenticated } from '../utils/authToken'
 
 const NotificationsContext = createContext(null)
 
-// Same polling cadence Sidebar.jsx used before  -  now lives in exactly one
-// place instead of once per component that needs the unread count.
+// Kept as a fallback for sessions where the websocket dropped; the real
+// badge updates now arrive faster over the private-user channel.
 const UNREAD_POLL_MS = 30_000
 
 export function NotificationsProvider({ children }) {
-  // Everything useNotifications() exposes (notifications, meta, unreadCount,
-  // loading, error, fetchNotifications, fetchUnreadCount, markAsRead,
-  // markAllAsRead, deleteNotification) is shared as-is  -  consumers just
-  // call useNotificationsContext() instead of useNotifications() directly.
   const notificationsState = useNotifications()
   const { fetchUnreadCount } = notificationsState
+  const { profile } = useProfileContext()
 
   useEffect(() => {
     fetchUnreadCount()
@@ -25,6 +25,34 @@ export function NotificationsProvider({ children }) {
       window.removeEventListener('focus', handleFocus)
     }
   }, [fetchUnreadCount])
+
+  // Live badge updates: notification.created arrives on private-user.{id}
+  // from NotificationService and refreshes the unread count immediately
+  // instead of waiting for the 30s poll.
+  useEffect(() => {
+    if (!isAuthenticated() || !profile?.id) return
+
+    let channel
+    try {
+      const echo = getEcho()
+      channel = echo.private(`user.${profile.id}`)
+      channel.listen('.notification.created', () => {
+        fetchUnreadCount()
+      })
+    } catch {
+      // Websocket unavailable — poll/focus fallback still covers us.
+    }
+
+    return () => {
+      if (channel) {
+        try {
+          getEcho().leave(`user.${profile.id}`)
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }, [profile?.id, fetchUnreadCount])
 
   return (
     <NotificationsContext.Provider value={notificationsState}>

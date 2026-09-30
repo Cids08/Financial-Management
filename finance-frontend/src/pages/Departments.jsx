@@ -7,6 +7,7 @@ import Pagination from '../components/Pagination'
 import Tooltip from '../components/Tooltip'
 import { apiFetch } from '../utils/api'
 import { useHighlightRow } from '../hooks/useHighlightRow'
+import { useDataUpdates } from '../hooks/useDataUpdates'
 import { useProfile } from '../hooks/useProfile'
 import DeletePermanentButton from '../components/DeletePermanentButton'
 import RetentionCountdown from '../components/RetentionCountdown'
@@ -119,6 +120,9 @@ export default function Departments({ title = 'Departments', crumbs = ['Master D
     const timeout = setTimeout(fetchDepartments, 300) // debounce search typing
     return () => clearTimeout(timeout)
   }, [fetchDepartments])
+
+  // Live updates (departments are edited from other pages' dropdowns too).
+  useDataUpdates(['departments'], () => fetchDepartments())
 
   // Switching views should always land back on page 1  -  an archived-list
   // page number has no relationship to the active list's pagination.

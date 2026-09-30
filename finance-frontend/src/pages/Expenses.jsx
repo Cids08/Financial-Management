@@ -22,6 +22,7 @@ import { MIN_COLLECTION_AMOUNT, minHint } from '../utils/business'
 import { apiFetch } from '../utils/api'
 import { isImageFile, compressImageToUploadable, HOSTED_PDF_MAX_BYTES } from '../utils/fileUpload'
 import { useExpenses } from '../hooks/useExpenses'
+import { useDataUpdates } from '../hooks/useDataUpdates'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 import { useSearchParams } from 'react-router-dom'
 
@@ -295,9 +296,14 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
     mutating, mutateError,
     createExpense, updateExpense, approveExpense, batchApproveExpenses, fetchApprovalProposals, rejectExpense, archiveExpense, restoreExpense,
     uploadReceipt, viewReceipt, fetchReceiptHistory, viewReceiptVersion,
+    refetchStats,
   } = useExpenses()
 
   usePrivacy()
+
+  // Live updates: expenses, their budgets and the expense stats refresh in
+  // place when another user creates/approves/changes them.
+  useDataUpdates(['expenses', 'budgets', 'expense-categories', 'disbursements'], () => { refetch(); refetchStats() })
 
   const company = useCompany()
 

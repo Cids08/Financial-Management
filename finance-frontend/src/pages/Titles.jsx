@@ -7,6 +7,7 @@ import Pagination from '../components/Pagination'
 import Tooltip from '../components/Tooltip'
 import { useTitles } from '../hooks/useTitles'
 import { useHighlightRow } from '../hooks/useHighlightRow'
+import { useDataUpdates } from '../hooks/useDataUpdates'
 import DeletePermanentButton from '../components/DeletePermanentButton'
 import RetentionCountdown from '../components/RetentionCountdown'
 import { useProfile } from '../hooks/useProfile'
@@ -69,6 +70,9 @@ export default function Titles({ title = 'Titles', crumbs = ['Master Data', 'Tit
     const timeout = setTimeout(loadTitles, 300)
     return () => clearTimeout(timeout)
   }, [loadTitles])
+
+  // Live updates (titles are also referenced in the Users page).
+  useDataUpdates(['titles'], () => loadTitles())
 
   const toggleShowArchived = (checked) => {
     setShowArchived(checked)

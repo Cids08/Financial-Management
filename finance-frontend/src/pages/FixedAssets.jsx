@@ -12,6 +12,7 @@ import Tooltip from '../components/Tooltip'
 import { formatCurrency, formatDate } from '../utils/formatters'
 import { MIN_INVOICE_AMOUNT, minHint } from '../utils/business'
 import { useFixedAssets } from '../hooks/useFixedAssets'
+import { useDataUpdates } from '../hooks/useDataUpdates'
 import { apiFetch } from '../utils/api'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 import DeletePermanentButton from '../components/DeletePermanentButton'
@@ -74,6 +75,9 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
   } = useFixedAssets()
 
   usePrivacy()
+
+  // Live updates (depreciation runs + asset edits refresh in place).
+  useDataUpdates(['fixed-assets'], () => refetch())
 
   const { profile } = useProfile()
   const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin' || profile?.role_slug === 'admin' || profile?.role_slug === 'super-admin'

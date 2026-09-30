@@ -9,6 +9,7 @@ import { apiFetch } from '../utils/api'
 import { useCompany } from '../context/CompanyContext'
 import { usePermissions } from '../context/PermissionsContext'
 import { useHighlightRow } from '../hooks/useHighlightRow'
+import { useDataUpdates } from '../hooks/useDataUpdates'
 import DeletePermanentButton from '../components/DeletePermanentButton'
 import RetentionCountdown from '../components/RetentionCountdown'
 import { formatCurrency, formatDate } from '../utils/formatters'
@@ -153,6 +154,9 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
   useEffect(() => {
     fetchStats()
   }, [fetchStats])
+
+  // Live updates (supplier records also change via the AP page's inline CUD).
+  useDataUpdates(['suppliers'], () => { fetchSuppliers(); fetchStats() })
 
   // Stats now come from a dedicated /stats endpoint (see fetchStats above)  - 
   // they reflect true global counts regardless of the current table filter,

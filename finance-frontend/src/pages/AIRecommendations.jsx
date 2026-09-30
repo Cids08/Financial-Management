@@ -13,6 +13,7 @@ import DeletePermanentButton from '../components/DeletePermanentButton'
 import RetentionCountdown from '../components/RetentionCountdown'
 import { normalizeAiCurrencyText } from '../utils/formatters'
 import { useAiRecommendations } from '../hooks/useAiRecommendations'
+import { useDataUpdates } from '../hooks/useDataUpdates'
 import { useProfile } from '../hooks/useProfile'
 
 // Real ai_recommendations_category_check values  -  confirmed against the
@@ -64,6 +65,9 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
   useEffect(() => {
     fetchRecommendations()
   }, [fetchRecommendations])
+
+  // Live updates (AI advice is driven by the underlying figures).
+  useDataUpdates(['ai-recommendations', 'forecasts'], () => fetchRecommendations())
 
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')

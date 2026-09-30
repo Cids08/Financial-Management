@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Contracts\AdvisorEngine;
 use App\Contracts\ForecastEngine;
 use App\Contracts\RecommendationEngine;
+use App\Observers\DataUpdateObserver;
 use App\Services\Advisor\RemoteAdvisorEngine;
 use App\Services\Forecasting\PythonArimaForecastEngine;
 use App\Services\Recommendation\RemoteRecommendationEngine;
@@ -42,6 +43,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        // Realtime push: every watched model change broadcasts a DataUpdated
+        // refetch signal on the private-data channel so frontend pages update
+        // without manual refresh. Register each model in MODULE_MAP as an
+        // observer; the map lives in DataUpdateObserver.
+        foreach (DataUpdateObserver::modelClasses() as $model) {
+            $model::observe(DataUpdateObserver::class);
+        }
     }
 }

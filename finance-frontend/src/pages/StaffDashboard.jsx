@@ -22,6 +22,7 @@ import { formatCurrency } from '../utils/formatters'
 import { useStaffDashboard } from '../hooks/useStaffDashboard'
 import { usePrivacy } from '../context/PrivacyContext'
 import { apiFetch } from '../utils/api'
+import { useAllDataUpdates } from '../hooks/useDataUpdates'
 
 const PANEL = 'rounded-2xl border border-border bg-surface shadow-card'
 const PANEL_PAD = 'p-4 sm:p-5'
@@ -111,6 +112,10 @@ export default function StaffDashboard({ title = 'Dashboard', crumbs = ['Dashboa
   usePrivacy()
 
   useEffect(() => { fetchDashboard() }, [fetchDashboard])
+
+  // Staff dashboard aggregates the modules staff can see — live-refresh on
+  // any data change so figures stay current without manual reloads.
+  useAllDataUpdates(fetchDashboard)
 
   const summary = data?.summary
   const attention = data?.attention || {}

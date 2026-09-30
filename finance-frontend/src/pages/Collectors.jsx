@@ -11,6 +11,7 @@ import Tooltip2 from '../components/Tooltip'
 import { formatCurrency } from '../utils/formatters'
 import { apiFetch } from '../utils/api'
 import { useCollectors } from '../hooks/useCollectors'
+import { useDataUpdates } from '../hooks/useDataUpdates'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 import DeletePermanentButton from '../components/DeletePermanentButton'
 import RetentionCountdown from '../components/RetentionCountdown'
@@ -288,6 +289,9 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
   } = useCollectors()
 
   usePrivacy()
+
+  // Live updates (collector records + their collection performance).
+  useDataUpdates(['collectors', 'collections'], () => refetch())
 
   const { profile } = useProfile()
   const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin' || profile?.role_slug === 'admin' || profile?.role_slug === 'super-admin'

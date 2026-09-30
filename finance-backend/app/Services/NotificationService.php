@@ -105,8 +105,30 @@ class NotificationService
         ]);
 
         $this->dispatchPush($userId, $notification);
+        $this->broadcastCreated($notification);
 
         return $notification;
+    }
+
+    /**
+     * Fire-and-forget realtime badge update. A failed broadcast must never
+     * break the request that created the notification.
+     */
+    protected function broadcastCreated(Notification $notification): void
+    {
+        if (config('broadcasting.default') !== 'reverb') {
+            return;
+        }
+
+        try {
+            \App\Events\NotificationCreated::dispatch(
+                $notification->user_id,
+                $notification->id,
+                Notification::forUser($notification->user_id)->unread()->count(),
+            );
+        } catch (Throwable $e) {
+            Log::warning("Failed to broadcast notification.created: {$e->getMessage()}");
+        }
     }
 
     /**

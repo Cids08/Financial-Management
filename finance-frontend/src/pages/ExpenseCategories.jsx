@@ -7,6 +7,7 @@ import Pagination from '../components/Pagination'
 import Tooltip from '../components/Tooltip'
 import { usePermissions } from '../context/PermissionsContext'
 import { useExpenseCategories } from '../hooks/useExpenseCategories'
+import { useDataUpdates } from '../hooks/useDataUpdates'
 import DeletePermanentButton from '../components/DeletePermanentButton'
 import RetentionCountdown from '../components/RetentionCountdown'
 import { useProfile } from '../hooks/useProfile'
@@ -38,6 +39,9 @@ export default function ExpenseCategories({ title = 'Expense Categories', crumbs
     createCategory, updateCategory, archiveCategory, restoreCategory,
     refetch,
   } = useExpenseCategories()
+
+  // Live updates (categories are also edited inline from the Expenses page).
+  useDataUpdates(['expense-categories'], () => refetch())
 
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)

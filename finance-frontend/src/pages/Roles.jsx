@@ -7,6 +7,7 @@ import Modal from '../components/Modal'
 import Pagination from '../components/Pagination'
 import Tooltip from '../components/Tooltip'
 import { useRoles } from '../hooks/useRoles'
+import { useDataUpdates } from '../hooks/useDataUpdates'
 import { useProfile } from '../hooks/useProfile'
 import { apiFetch } from '../utils/api'
 
@@ -51,6 +52,9 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
     fetchRoleWithPermissions,
     updateRolePermissions,
   } = useRoles()
+
+  // Live updates (roles/permissions may change while another admin works).
+  useDataUpdates(['roles'], () => refetch())
 
   const [search, setSearch] = useState('')
   const [showArchived, setShowArchived] = useState(false)

@@ -16,6 +16,7 @@ import { printSlip } from '../utils/printSlip'
 import { money, SIGNATURE_PRESETS } from '../utils/print'
 import { MIN_INVOICE_AMOUNT, minHint } from '../utils/business'
 import { useTaxObligations } from '../hooks/useTaxObligations'
+import { useDataUpdates } from '../hooks/useDataUpdates'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 import DeletePermanentButton from '../components/DeletePermanentButton'
 import RetentionCountdown from '../components/RetentionCountdown'
@@ -156,6 +157,10 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
   } = useTaxObligations()
 
   usePrivacy()
+
+  // Live updates: tax obligations, their payments (disbursements) and the tax
+  // base (expenses) refresh in place when another user changes them.
+  useDataUpdates(['tax-obligations', 'disbursements', 'expenses'], () => refetch())
 
   const { profile } = useProfile()
   const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'

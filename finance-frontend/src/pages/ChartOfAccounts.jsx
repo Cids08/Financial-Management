@@ -6,6 +6,7 @@ import Modal from '../components/Modal'
 import Pagination from '../components/Pagination'
 import Tooltip from '../components/Tooltip'
 import { useProfile } from '../hooks/useProfile'
+import { useDataUpdates } from '../hooks/useDataUpdates'
 import { apiFetch } from '../utils/api'
 
 const ACCOUNT_TYPES = ['Asset', 'Liability', 'Equity', 'Revenue', 'Expense']
@@ -108,6 +109,9 @@ export default function ChartOfAccounts({ title = 'Chart of Accounts', crumbs = 
   useEffect(() => {
     void fetchList()
   }, [page])
+
+  // Live updates.
+  useDataUpdates(['chart-of-accounts'], () => fetchList())
 
   const fetchParentOptions = async () => {
     try {

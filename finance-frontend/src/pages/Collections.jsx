@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Search, Pencil, Archive, RotateCcw, HandCoins, Clock3, Wallet, Info, Printer, CheckCircle2, XCircle, Paperclip, X, RefreshCw, Users, AlertCircle, Lock, Upload } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
@@ -8,6 +8,7 @@ import Pagination from '../components/Pagination'
 import CollectionEfficiencyPanel from '../components/CollectionEfficiencyPanel'
 import CollectionProofHistoryModal from '../components/CollectionProofHistoryModal'
 import { useCollectionUpdates } from '../hooks/useCollectionUpdates'
+import { useDataUpdates } from '../hooks/useDataUpdates'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 import { useProfile } from '../hooks/useProfile'
 import { useCompany } from '../context/CompanyContext'
@@ -177,11 +178,10 @@ function useLookups() {
 }
 
 // ---------------------------------------------------------------------------
-// Assigned Invoice Queue hook — live-polls AR records that have a collector
-// assigned and are not yet fully paid. Auto-refreshes every 30 s so the
-// queue updates when an admin assigns a new collector on the AR page.
+// Assigned Invoice Queue — live-updates via the accounts-receivable data
+// channel so the queue refreshes the moment an admin assigns a new
+// collector on the AR page (no polling). Kept in sync by useDataUpdates.
 // ---------------------------------------------------------------------------
-const QUEUE_POLL_MS = 15_000
 const QUEUE_EXCLUDE_STATUSES = new Set(['Paid'])
 
 function useAssignedInvoices() {
@@ -189,7 +189,6 @@ function useAssignedInvoices() {
   const [queueLoading,  setQueueLoading]  = useState(true)
   const [queueError,    setQueueError]    = useState('')
   const [lastFetched,   setLastFetched]   = useState(null)
-  const timerRef = useRef(null)
 
   const fetchQueue = () => {
     setQueueError('')
@@ -211,8 +210,6 @@ function useAssignedInvoices() {
 
   useEffect(() => {
     fetchQueue()
-    timerRef.current = setInterval(fetchQueue, QUEUE_POLL_MS)
-    return () => clearInterval(timerRef.current)
   }, [])
 
   return { invoices, queueLoading, queueError, lastFetched, refetchQueue: fetchQueue }
@@ -264,6 +261,10 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
   const { invoices: assignedInvoices, queueLoading, queueError, lastFetched, refetchQueue } = useAssignedInvoices()
 
   useCollectionUpdates(() => { refetch(); refetchQueue() })
+
+  // AR invoice changes (new assignment, status change, edit) refresh the
+  // assigned-invoice queue live  -  replaced the old 15s setInterval poll.
+  useDataUpdates(['accounts-receivable', 'collections'], () => { refetch(); refetchQueue() })
 
   usePrivacy()
 

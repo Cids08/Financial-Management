@@ -8,6 +8,7 @@ import Tooltip from '../components/Tooltip'
 import { apiFetch } from '../utils/api'
 import { useCompany } from '../context/CompanyContext'
 import { useHighlightRow } from '../hooks/useHighlightRow'
+import { useDataUpdates } from '../hooks/useDataUpdates'
 import { formatCurrency, formatDate } from '../utils/formatters'
 import { usePermissions } from '../context/PermissionsContext'
 import { useProfile } from '../hooks/useProfile'
@@ -163,6 +164,9 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
   useEffect(() => {
     fetchStats()
   }, [fetchStats])
+
+  // Live updates (customer records also change via the AR page's inline CUD).
+  useDataUpdates(['customers'], () => { fetchCustomers(); fetchStats() })
 
   // Stats now come from a dedicated /stats endpoint (see fetchStats above)  - 
   // they reflect true global counts regardless of the current table filter,

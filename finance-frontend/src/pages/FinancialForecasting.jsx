@@ -14,6 +14,7 @@ import Pagination from '../components/Pagination'
 import { formatCurrency } from '../utils/formatters'
 import { usePrivacy } from '../context/PrivacyContext'
 import { useForecasts } from '../hooks/useForecasts'
+import { useDataUpdates } from '../hooks/useDataUpdates'
 import { useProfile } from '../hooks/useProfile'
 import DeletePermanentButton from '../components/DeletePermanentButton'
 import RetentionCountdown from '../components/RetentionCountdown'
@@ -524,6 +525,10 @@ export default function FinancialForecasting({ title = 'Financial Forecasting', 
     restoreForecast,
     refetch,
   } = useForecasts()
+
+  // Live updates: forecasts refresh when new data (expenses, disbursements,
+  // AR) arrives, so projections stay current without a manual reload.
+  useDataUpdates(['forecasts', 'ai-recommendations', 'expenses', 'disbursements', 'accounts-receivable'], () => refetch())
 
   const { privacyOn } = usePrivacy()
 

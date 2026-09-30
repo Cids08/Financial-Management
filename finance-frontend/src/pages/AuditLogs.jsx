@@ -5,6 +5,7 @@ import Button from '../components/Button'
 import Pagination from '../components/Pagination'
 import { usePermissions } from '../context/PermissionsContext'
 import { useAuditLogs } from '../hooks/useAuditLogs'
+import { useDataUpdates } from '../hooks/useDataUpdates'
 import { downloadCsv, printTimestamp } from '../utils/print'
 import { DATE_PRESETS, applyDatePresetChange } from '../utils/datePresets'
 import { useProfileContext } from '../context/ProfileContext'
@@ -120,6 +121,10 @@ export default function AuditLogs({ title = 'Audit Logs', crumbs = ['System', 'A
   useEffect(() => {
     if (canView) fetchLogs(filters, page)
   }, [canView, filters, page, fetchLogs])
+
+  // Live updates: audit entries are written on almost every data change,
+  // so refresh whenever any module is touched  -  no reload needed.
+  useDataUpdates(['*'], () => { if (canView) fetchLogs(filters, page) })
 
   const applyDatePreset = (key) => {
     const next = applyDatePresetChange(key)

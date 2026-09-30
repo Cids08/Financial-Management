@@ -11,6 +11,7 @@ import { money, SIGNATURE_PRESETS } from '../utils/print'
 import { MIN_INVOICE_AMOUNT, MIN_COLLECTION_AMOUNT, minHint } from '../utils/business'
 import { useAccountsPayable } from '../hooks/useAccountsPayable'
 import { useHighlightRow } from '../hooks/useHighlightRow'
+import { useDataUpdates } from '../hooks/useDataUpdates'
 import { apiFetch } from '../utils/api'
 import DeletePermanentButton from '../components/DeletePermanentButton'
 import RetentionCountdown from '../components/RetentionCountdown'
@@ -337,6 +338,10 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
   const canExecutePayments = canManage || hasPermission('ap.approve') || hasPermission('disbursements.manage') || hasPermission('disbursements.approve')
 
   usePrivacy()
+
+  // Live updates: bills, suppliers and cash accounts refresh in place when
+  // another user changes them  -  no manual reload needed.
+  useDataUpdates(['accounts-payable', 'suppliers', 'cash-accounts', 'disbursements'], () => refetch())
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')

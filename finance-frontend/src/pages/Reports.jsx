@@ -12,6 +12,7 @@ import Button from '../components/Button'
 import Pagination from '../components/Pagination'
 import { formatCurrency, formatCurrencyRaw, currencySymbol, convertAmount } from '../utils/formatters'
 import { useReports } from '../hooks/useReports'
+import { useDataUpdates } from '../hooks/useDataUpdates'
 import { useProfile } from '../hooks/useProfile'
 import { useCompany } from '../context/CompanyContext'
 import { usePrivacy } from '../context/PrivacyContext'
@@ -622,6 +623,7 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
   // Client-side paging for the report body tables
   const REPORT_PAGE_SIZE = 10
   const [reportPage, setReportPage] = useState(1)
+  const [refreshKey, setRefreshKey] = useState(0)
   const reportStart = (reportPage - 1) * REPORT_PAGE_SIZE
   const reportEnd = reportPage * REPORT_PAGE_SIZE
 
@@ -639,6 +641,13 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
 
   usePrivacy()
 
+  // Live updates: reports are recomputed from the underlying transactions,
+  // so refresh in place whenever any money-moving module changes.
+  useDataUpdates([
+    'accounts-receivable', 'accounts-payable', 'collections', 'expenses',
+    'disbursements', 'tax-obligations', 'budgets', 'forecasts',
+  ], () => setRefreshKey((k) => k + 1))
+
   const company = useMemo(() => (
     companyName ? { name: companyName, logoUrl: companyLogoUrl, address: companyAddress } : null
   ), [companyName, companyLogoUrl, companyAddress])
@@ -646,7 +655,7 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
   // Fetch when active tab or applied filters change
   useEffect(() => {
     fetchReport(activeReport, appliedFilters)
-  }, [activeReport, appliedFilters, fetchReport])
+  }, [activeReport, appliedFilters, fetchReport, refreshKey])
 
   const handleApplyFilter = () => {
     let newFilter = {

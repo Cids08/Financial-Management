@@ -24,6 +24,7 @@ import Modal from '../components/Modal'
 import Pagination from '../components/Pagination'
 import Tooltip from '../components/Tooltip'
 import { useUsers } from '../hooks/useUsers'
+import { useDataUpdates } from '../hooks/useDataUpdates'
 import DeletePermanentButton from '../components/DeletePermanentButton'
 import RetentionCountdown from '../components/RetentionCountdown'
 import { useProfile } from '../hooks/useProfile'
@@ -315,6 +316,9 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
     restoreUser,
     refetch,
   } = useUsers()
+
+  // Live updates (user accounts may change while another admin works).
+  useDataUpdates(['users'], () => refetch())
 
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState(searchParams.get('role') || 'all')

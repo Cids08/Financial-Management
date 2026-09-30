@@ -7,6 +7,7 @@ import Pagination from '../components/Pagination'
 import Tooltip from '../components/Tooltip'
 import { formatCurrency, maskedAmount } from '../utils/formatters'
 import { useCashAccounts } from '../hooks/useCashAccounts'
+import { useDataUpdates } from '../hooks/useDataUpdates'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 import DeletePermanentButton from '../components/DeletePermanentButton'
 import RetentionCountdown from '../components/RetentionCountdown'
@@ -57,6 +58,9 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
   } = useCashAccounts()
 
   const { privacyOn } = usePrivacy()
+
+  // Live updates (balances/records change as disbursements are approved).
+  useDataUpdates(['cash-accounts', 'disbursements', 'accounts-payable'], () => refetch())
 
   const { profile } = useProfile()
   const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin' || profile?.role_slug === 'admin' || profile?.role_slug === 'super-admin'

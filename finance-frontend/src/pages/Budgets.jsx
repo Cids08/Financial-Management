@@ -18,6 +18,7 @@ import { printSlip } from '../utils/printSlip'
 import { money, SIGNATURE_PRESETS } from '../utils/print'
 import { MIN_INVOICE_AMOUNT, minHint } from '../utils/business'
 import { useBudgets } from '../hooks/useBudgets'
+import { useDataUpdates } from '../hooks/useDataUpdates'
 import { useDepartments } from '../hooks/useDepartments'
 import DeletePermanentButton from '../components/DeletePermanentButton'
 import RetentionCountdown from '../components/RetentionCountdown'
@@ -457,6 +458,10 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
   useEffect(() => { load() }, [statusFilter, showArchived, dateFrom, dateTo, page]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { fetchStats() }, []) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { fetchDepartments({}, 1, 100) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Live updates: budget list/stats and the utilization figures refresh in
+  // place when budgets or their underlying expenses/disbursements change.
+  useDataUpdates(['budgets', 'expenses', 'disbursements'], () => { fetchBudgets(); fetchStats() })
 
   // Debounce free-text search instead of firing a request per keystroke.
   useEffect(() => {

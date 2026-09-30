@@ -10,6 +10,7 @@ import { printSlip } from '../utils/printSlip'
 import { money, SIGNATURE_PRESETS } from '../utils/print'
 import { MIN_INVOICE_AMOUNT, minHint, formatBaseAmount } from '../utils/business'
 import { useAccountsReceivable } from '../hooks/useAccountsReceivable'
+import { useDataUpdates } from '../hooks/useDataUpdates'
 import { apiFetch } from '../utils/api'
 import DeletePermanentButton from '../components/DeletePermanentButton'
 import RetentionCountdown from '../components/RetentionCountdown'
@@ -345,6 +346,10 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
   useEffect(() => {
     fetchRecords()
   }, [fetchRecords])
+
+  // Live updates: invoices, collections (which change balances) and customer
+  // stats all refresh in place when another user creates/updates them.
+  useDataUpdates(['accounts-receivable', 'collections', 'customers'], () => fetchRecords())
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')

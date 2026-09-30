@@ -20,6 +20,7 @@ import RetentionCountdown from '../components/RetentionCountdown'
 import { usePrivacy } from '../context/PrivacyContext'
 import { hasPermission } from '../utils/permissions'
 import { useDisbursements } from '../hooks/useDisbursements'
+import { useDataUpdates } from '../hooks/useDataUpdates'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 import { useDepartments } from '../hooks/useDepartments'
 import { useCashAccounts } from '../hooks/useCashAccounts'
@@ -227,6 +228,10 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
   const { bills: apBills, billsLoading: apBillsLoading } = useAccountsPayable()
 
   usePrivacy()
+
+  // Live updates: disbursements, their linked AP bills and departments
+  // refresh in place when changed by another user.
+  useDataUpdates(['disbursements', 'accounts-payable', 'departments', 'cash-accounts'], () => refresh())
 
   // Global search / General Ledger jump navigates here with a highlightId
   // (and, since this table is server-filtered inside useDisbursements, a

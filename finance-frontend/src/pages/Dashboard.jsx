@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   TrendingUp,
@@ -37,6 +37,7 @@ import Table from '../components/Table'
 import Button from '../components/Button'
 import { formatCurrency, formatDate, maskedAmount, normalizeAiCurrencyText } from '../utils/formatters'
 import { apiFetch } from '../utils/api'
+import { useAllDataUpdates } from '../hooks/useDataUpdates'
 import { usePrivacy } from '../context/PrivacyContext'
 import { useProfile } from '../hooks/useProfile'
 import { usePermissions } from '../context/PermissionsContext'
@@ -362,6 +363,27 @@ export default function Dashboard() {
       .catch(() => setChartsError('Could not load charts.'))
       .finally(() => setChartsLoading(false))
   }, [year])
+
+  // Live updates: the dashboard aggregates every module, so any data.updated
+  // event on the shared channel triggers a silent refetch of both the KPIs
+  // and the charts  -  no manual refresh required.
+  const refresh = useCallback(() => {
+    setLoading(true)
+    apiFetch(`/api/dashboard?year=${year}`)
+      .then((res) => res.json())
+      .then((json) => setData(json.data))
+      .catch(() => setError('Could not load the dashboard. Please try again.'))
+      .finally(() => setLoading(false))
+
+    setChartsLoading(true)
+    apiFetch(`/api/dashboard/charts?year=${year}`)
+      .then((res) => res.json())
+      .then((json) => setChartData(json.data))
+      .catch(() => setChartsError('Could not load charts.'))
+      .finally(() => setChartsLoading(false))
+  }, [year])
+
+  useAllDataUpdates(refresh)
 
   const handleModuleClick = (route) => {
     if (route) navigate(route)
