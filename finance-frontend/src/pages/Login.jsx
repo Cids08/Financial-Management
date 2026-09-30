@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useLocation } from 'react-router-dom'
-import { ArrowUpRight, LogIn, Mail, Lock, Eye, EyeOff, AlertCircle, Sun, Moon, ShieldCheck, ArrowLeft, ShieldOff, AlertTriangle, Clock, RefreshCw } from 'lucide-react'
+import { ArrowUpRight, LogIn, Mail, Lock, Eye, EyeOff, AlertCircle, Sun, Moon, ShieldCheck, ArrowLeft, ShieldOff, AlertTriangle, Clock, Timer, RefreshCw } from 'lucide-react'
 import Button from '../components/Button'
 import OtpInput from '../components/OtpInput'
 import { useAuth } from '../hooks/useAuth'
@@ -197,6 +197,16 @@ export default function Login() {
                   Your session was ended. This happens when you sign in on
                   another device, or when your session expires. If this wasn't
                   you, change your password.
+                </span>
+              </div>
+            )}
+
+            {authNotice === 'sessionIdle' && (
+              <div role="status" className="flex items-start gap-2.5 mt-5 px-4 py-3 rounded-xl bg-status-info-bg border border-status-info-border text-xs leading-5 text-status-info">
+                <Timer size={14} className="shrink-0 mt-0.5" />
+                <span>
+                  You were signed out after 3 minutes of inactivity. Just sign
+                  in again to continue where you left off.
                 </span>
               </div>
             )}

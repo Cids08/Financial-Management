@@ -238,10 +238,14 @@ export function useAuth() {
     setError(null)
   }, [])
 
-  const logout = useCallback(() => {
+  // Log out and return to the sign-in page. Optional `reason` is forwarded
+  // to the Login route's state so it can explain WHY the session ended
+  // (idle timeout, server expiry, etc.) instead of dumping the user at the
+  // form with no context.
+  const logout = useCallback((reason) => {
     disconnectEcho()
     clearToken()
-    navigate('/')
+    navigate('/', { state: reason ? { authNotice: reason } : undefined })
   }, [navigate])
 
   return {
