@@ -1,3 +1,4 @@
+import ResponsiveTable from './ResponsiveTable'
 import { useCallback, useEffect, useState } from 'react'
 import {
   AlertCircle,
@@ -514,7 +515,7 @@ export default function DepreciationRunModal({
                 </div>
               ) : (
                 <div className="overflow-x-hidden overflow-y-auto rounded-xl border border-border max-h-[42vh]">
-                  <table className="w-full text-xs">
+                  <ResponsiveTable className="w-full text-xs">
                     <thead className="bg-bg border-b border-border sticky top-0 z-10">
                       <tr>
                         <th className="px-3 py-2.5 text-left">
@@ -572,7 +573,7 @@ export default function DepreciationRunModal({
                         <td className="px-3 py-2 text-right font-mono text-ink">{fmt(selectedProjectedBookTotal)}</td>
                       </tr>
                     </tfoot>
-                  </table>
+                  </ResponsiveTable>
                 </div>
               )}
 
@@ -664,7 +665,7 @@ export default function DepreciationRunModal({
               type="button"
               disabled={loadingPreview}
               onClick={loadPreview}
-              className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-primary hover:bg-primary-dark disabled:opacity-50 text-black rounded-lg transition-colors shadow-sm"
+              className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-primary hover:bg-primary-hover disabled:opacity-50 text-black rounded-lg transition-colors shadow-sm"
             >
               {loadingPreview ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
               {loadingPreview ? 'Calculating…' : 'Calculate Preview'}
@@ -676,7 +677,7 @@ export default function DepreciationRunModal({
               type="button"
               disabled={previewData?.already_posted || selectedAssetIds.size === 0 || executing}
               onClick={handleExecuteRun}
-              className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-primary hover:bg-primary-dark disabled:opacity-50 text-black rounded-lg transition-colors shadow-sm"
+              className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-primary hover:bg-primary-hover disabled:opacity-50 text-black rounded-lg transition-colors shadow-sm"
             >
               {executing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
               {executing ? 'Posting to GL…' : `Post Depreciation · ${fmt(selectedDepreciationTotal)}`}

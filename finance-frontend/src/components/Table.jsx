@@ -1,3 +1,4 @@
+import ResponsiveTable from './ResponsiveTable'
 import { Check, Clock3, CircleAlert, LoaderCircle } from 'lucide-react'
 
 const statusStyles = {
@@ -30,8 +31,8 @@ function StatusBadge({ status }) {
 
 export default function Table({ columns, data, onRowClick }) {
   return (
-    <div className="overflow-x-auto rounded-t-2xl">
-      <table className="w-full text-sm">
+    <div className="min-w-0 rounded-t-2xl">
+      <ResponsiveTable className="w-full text-sm">
         <thead className="bg-bg/80">
           <tr className="border-b border-border">
             {columns.map((col) => (
@@ -76,7 +77,7 @@ export default function Table({ columns, data, onRowClick }) {
             </tr>
           ))}
         </tbody>
-      </table>
+      </ResponsiveTable>
     </div>
   )
 }

@@ -8,7 +8,7 @@
         /* A4 portrait. Margins mirror the 'snapshot' PAGE_SPEC in
            finance-frontend/src/utils/print.js (14mm top, 12mm sides,
            14mm bottom  -  no signature block, so no footer band needed). */
-        @page { size: A4 portrait; margin: 14mm 12mm 14mm 12mm; }
+        @page { size: A4 landscape; margin: 14mm 12mm 14mm 12mm; }
         /* DejaVu Sans (embedded TTF) instead of 'Helvetica' (core WinAnsi
            font) so the peso sign U+20B1 has a glyph  -  Helvetica would
            render it as a literal "?". Amounts print with the Settings
@@ -52,8 +52,10 @@
         thead { display: table-header-group; }
         tr, .overview-grid td, .card { page-break-inside: avoid; }
     </style>
+    @include('pdf.report-style')
 </head>
 <body>
+    @include('pdf.report-footer')
     {{-- Letterhead: same information as the browser print header. --}}
     <table class="letterhead">
         <tr>
@@ -88,7 +90,7 @@
     <table class="overview-grid">
         <tr>
             <td>
-                <div class="metric-label">Total Revenue <span class="muted-note">({{ $selected_year }})</span></div>
+                <div class="metric-label">Cash Collected <span class="muted-note">({{ $selected_year }})</span></div>
                 <div class="metric-value">{{ $currency }} {{ number_format($overview['total_revenue']['value'] ?? 0, 2) }}</div>
                 <div class="metric-note">Cash collected via Collections</div>
             </td>
@@ -147,18 +149,22 @@
     @if (count($recent_transactions) === 0)
         <p class="empty">No recent transactions.</p>
     @else
-        <table>
+        <table class="transaction-grid">
+            <colgroup><col style="width:11%"><col style="width:17%"><col style="width:16%"><col style="width:28%"><col style="width:16%"><col style="width:12%"></colgroup>
+            <thead>
             <tr>
-                <th>Date</th>
-                <th>Reference No.</th>
-                <th>Transaction</th>
-                <th>Customer / Supplier</th>
-                <th class="amount">Amount</th>
-                <th>Status</th>
+                <th style="width:10%">Date</th>
+                <th style="width:17%">Reference No.</th>
+                <th style="width:16%">Transaction</th>
+                <th style="width:27%">Customer / Supplier</th>
+                <th class="amount" style="width:18%">Amount</th>
+                <th style="width:12%">Status</th>
             </tr>
+            </thead>
+            <tbody>
             @foreach ($recent_transactions as $t)
                 <tr>
-                    <td>{{ $t['date'] }}</td>
+                    <td class="nowrap">{{ $t['date'] }}</td>
                     <td>{{ $t['reference'] }}</td>
                     <td>{{ $t['transaction'] }}</td>
                     <td>{{ $t['party'] }}</td>
@@ -166,6 +172,7 @@
                     <td>{{ $t['status'] }}</td>
                 </tr>
             @endforeach
+            </tbody>
         </table>
     @endif
 
@@ -175,6 +182,7 @@
         statement. Amounts reflect records currently in the system and may change as
         transactions are recorded, approved, or amended after this snapshot was taken.
     </div>
+    @include('pdf.signatures')
 </body>
 </html>
 

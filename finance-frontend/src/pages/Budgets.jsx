@@ -1,3 +1,5 @@
+import { TableSkeleton } from '../components/LoadingSkeleton'
+import ResponsiveTable from '../components/ResponsiveTable'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Search, Plus, Pencil, Archive, RotateCcw, PiggyBank, TrendingDown, Building2, Info, Printer,
@@ -1290,7 +1292,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
 
           <div className={PANEL}>
             <div className="overflow-hidden rounded-t-xl">
-              <table className="w-full text-sm">
+              <ResponsiveTable className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
                     <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Budget</th>
@@ -1302,9 +1304,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                 </thead>
                 <tbody>
                   {loading ? (
-                    <tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-muted">
-                      <Loader2 size={16} className="inline animate-spin mr-2" /> Loading budgets...
-                    </td></tr>
+                    <TableSkeleton columns={5} />
                   ) : budgets.length === 0 ? (
                     <tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-muted">No budgets match your filters.</td></tr>
                   ) : budgets.map((b) => {
@@ -1429,7 +1429,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                     )
                   })}
                 </tbody>
-              </table>
+              </ResponsiveTable>
             </div>
 
             <Pagination
@@ -1607,7 +1607,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
           {trackerViewMode === 'table' && (
             <div className={PANEL}>
               <div className="overflow-hidden rounded-t-xl">
-                <table className="w-full text-sm">
+                <ResponsiveTable className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border">
                       <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Department & Budget</th>
@@ -1659,7 +1659,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                       })
                     )}
                   </tbody>
-                </table>
+                </ResponsiveTable>
               </div>
             </div>
           )}

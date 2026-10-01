@@ -1,3 +1,5 @@
+import ModalLoading from './ModalLoading'
+import ResponsiveTable from './ResponsiveTable'
 // src/components/TaxComplianceReportModal.jsx
 import { useEffect, useMemo, useState } from 'react'
 import {
@@ -458,10 +460,7 @@ export default function TaxComplianceReportModal({ open, onClose }) {
         </div>
 
         {loading && (
-          <div className="py-8 text-center text-xs text-muted">
-            <Loader2 size={16} className="inline animate-spin mr-2" />
-            Loading complete tax declaration history…
-          </div>
+          <ModalLoading variant="statement" />
         )}
 
         {error && (
@@ -504,7 +503,7 @@ export default function TaxComplianceReportModal({ open, onClose }) {
 
             {/* Quick Preview Table */}
             <div className="rounded-lg border border-border overflow-hidden max-h-56 overflow-y-auto">
-              <table className="w-full text-xs">
+              <ResponsiveTable className="w-full text-xs">
                 <thead className="bg-surface border-b border-border sticky top-0">
                   <tr>
                     <th className="text-left px-3 py-2 text-muted font-medium">Tax / Form</th>
@@ -554,7 +553,7 @@ export default function TaxComplianceReportModal({ open, onClose }) {
                     ))
                   )}
                 </tbody>
-              </table>
+              </ResponsiveTable>
             </div>
 
             <p className="text-[11px] text-muted italic">

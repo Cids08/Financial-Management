@@ -1,3 +1,4 @@
+import ModalLoading from './ModalLoading'
 import { useEffect, useRef, useState } from 'react'
 import { FileText, Eye, Upload, Loader2, AlertTriangle } from 'lucide-react'
 import Modal from './Modal'
@@ -181,9 +182,7 @@ export default function CollectionProofHistoryModal({ open, onClose, collection,
         )}
 
         {loading ? (
-          <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted">
-            <Loader2 size={16} className="animate-spin" /> Loading history…
-          </div>
+          <ModalLoading />
         ) : documents.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted">
             No proof has been attached to this collection yet.

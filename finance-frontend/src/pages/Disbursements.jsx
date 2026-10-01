@@ -1,3 +1,5 @@
+import { TableSkeleton } from '../components/LoadingSkeleton'
+import ResponsiveTable from '../components/ResponsiveTable'
 import { useState, useMemo, useEffect } from 'react'
 import {
   Search, Plus, Pencil, Archive, RotateCcw, Send, CheckCircle2, Clock3, Info, Printer,
@@ -697,7 +699,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
 
       <div className={PANEL}>
         <div className="overflow-hidden rounded-t-xl">
-          <table className="w-full text-sm">
+          <ResponsiveTable className="w-full text-sm">
             <thead className="bg-surface">
               <tr className="border-b border-border">
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-3 py-3">Disbursed To</th>
@@ -711,7 +713,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-muted">Loading disbursements…</td></tr>
+                <TableSkeleton columns={7} />
               ) : visibleDisbursements.length === 0 ? (
                 <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-muted">
                   {dHasDateFilter ? 'No disbursements fall within the selected payment date range.' : 'No disbursements match your filters.'}
@@ -893,7 +895,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                               type="button"
                               disabled={releasingId !== null}
                               onClick={() => handleRelease(d.disbursement_id, false)}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-primary hover:bg-primary-dark active:bg-primary-dark text-black shadow-sm transition-all duration-150 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-primary hover:bg-primary-hover active:bg-primary-hover text-black shadow-sm transition-all duration-150 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
                             >
                               {releasingId === d.disbursement_id ? (
                                 <>
@@ -950,7 +952,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                 )
               })}
             </tbody>
-          </table>
+          </ResponsiveTable>
         </div>
 
         <Pagination
@@ -1329,7 +1331,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                   type="button"
                   disabled={releasingId !== null}
                   onClick={() => handleRelease(dDetailRecord.disbursement_id, true)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-lg bg-primary hover:bg-primary-dark active:bg-primary-dark text-black shadow-sm transition-all duration-150 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-lg bg-primary hover:bg-primary-hover active:bg-primary-hover text-black shadow-sm transition-all duration-150 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {releasingId === dDetailRecord.disbursement_id ? (
                     <>

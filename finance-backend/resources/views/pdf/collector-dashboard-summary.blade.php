@@ -58,8 +58,10 @@
         thead { display: table-header-group; }
         tr, .overview-grid td { page-break-inside: avoid; }
     </style>
+    @include('pdf.report-style')
 </head>
 <body>
+    @include('pdf.report-footer')
     {{-- Letterhead --}}
     <table class="letterhead">
         <tr>

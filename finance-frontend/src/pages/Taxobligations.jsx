@@ -1,3 +1,5 @@
+import { TableSkeleton } from '../components/LoadingSkeleton'
+import ResponsiveTable from '../components/ResponsiveTable'
 import { useMemo, useState, useEffect } from 'react'
 import { Search, Plus, Pencil, Archive, RotateCcw, Receipt, CheckCircle2, Clock3, AlertTriangle, Info, Printer, Sparkles, Loader2, CalendarRange, X, Paperclip, History, FileText, Calculator, FileSpreadsheet, Layers } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
@@ -747,7 +749,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
 
       <div className={PANEL}>
         <div className="overflow-hidden rounded-t-xl">
-          <table className="w-full text-sm">
+          <ResponsiveTable className="w-full text-sm">
             <thead className="bg-surface">
               <tr className="border-b border-border">
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-3.5 py-3 whitespace-nowrap">Tax Type / Period</th>
@@ -759,9 +761,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-muted">
-                  <Loader2 size={16} className="inline animate-spin mr-2" /> Loading tax obligations…
-                </td></tr>
+                <TableSkeleton columns={5} />
               )}
               {!loading && sortedObligations.map((o) => {
                 const remaining = daysUntil(o.due_date)
@@ -915,7 +915,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                 </td></tr>
               )}
             </tbody>
-          </table>
+          </ResponsiveTable>
         </div>
 
         <Pagination page={page} totalPages={meta.last_page} onPageChange={setPage} total={meta.total} label="tax obligations" showRange rangeStart={rangeStart} rangeEnd={rangeEnd} bordered />
@@ -1044,7 +1044,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                   type="button"
                   onClick={handleAutoCompute}
                   disabled={calcLoading}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-primary hover:bg-primary-dark text-white transition-all duration-150 active:scale-95 disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-primary hover:bg-primary-hover text-black transition-all duration-150 active:scale-95 disabled:opacity-50"
                 >
                   {calcLoading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
                   {calcLoading ? 'Calculating…' : 'Compute Base'}

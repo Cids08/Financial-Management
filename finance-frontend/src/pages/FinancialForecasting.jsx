@@ -1,3 +1,5 @@
+import { TableSkeleton, ContentSkeleton } from '../components/LoadingSkeleton'
+import ResponsiveTable from '../components/ResponsiveTable'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Search, Plus, TrendingUp, Target, Percent, Info, Activity, CalendarRange, Archive, ArchiveRestore, AlertTriangle, RotateCcw, X,
@@ -143,7 +145,7 @@ const StatCard = memo(function StatCard({ label, value, icon: Icon, iconBg, icon
       </div>
       <div className="min-w-0">
         <p className="text-xs text-muted">{label}</p>
-        <p className="text-lg font-bold text-ink">{value}</p>
+        <p className="wrap-anywhere text-lg font-bold text-ink">{value}</p>
       </div>
     </button>
   )
@@ -157,10 +159,9 @@ const ForecastRow = memo(function ForecastRow({ forecast: f, showArchived, isAdm
       className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150 cursor-pointer"
     >
       <td className="px-2.5 py-2.5 whitespace-nowrap">
-        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${TYPE_STYLES[f.forecast_type] || 'bg-gray-100 text-muted'}`}>{f.forecast_type}</span>
+        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${TYPE_STYLES[f.forecast_type] || 'bg-gray-100 text-muted'}`}>{f.forecast_type}</span><p className="mt-1 text-[10px] text-muted">{f.arima_model}</p>
       </td>
-      <td className="px-2.5 py-2.5 whitespace-nowrap text-ink font-medium">{f.forecast_period}</td>
-      <td className="px-2.5 py-2.5 whitespace-nowrap text-muted text-xs">{f.historical_period}</td>
+      <td className="px-2.5 py-2.5 text-ink font-medium">{f.forecast_period}<p className="mt-1 text-[10px] font-normal text-muted">History: {f.historical_period}</p></td>
       <td className="px-2.5 py-2.5 whitespace-nowrap text-right tabular-nums text-ink">{formatCurrency(f.predicted_amount)}</td>
       <td className={`px-2.5 py-2.5 whitespace-nowrap text-right tabular-nums font-medium ${confidenceColor(f.confidence_level)}`}>{f.confidence_level}%</td>
       <td className={`px-2.5 py-2.5 whitespace-nowrap text-right tabular-nums ${mapeColor(f.mape)}`}>
@@ -173,7 +174,6 @@ const ForecastRow = memo(function ForecastRow({ forecast: f, showArchived, isAdm
           {f.mape != null ? `${f.mape}%` : '—'}
         </span>
       </td>
-      <td className="px-2.5 py-2.5 whitespace-nowrap text-muted text-xs">{f.arima_model}</td>
       <td className="px-2.5 py-2.5 text-right">
         <div className="flex items-center justify-end gap-1">
           <Tooltip label="View forecast trend" align="end">
@@ -449,7 +449,7 @@ const ForecastDetailModal = memo(function ForecastDetailModal({ forecastId, onCl
 
   return (
     <Modal open={!!forecastId} onClose={onClose} title="Forecast Trend" footer={<Button variant="secondary" size="md" onClick={onClose}>Close</Button>}>
-      {loading && <p className="text-sm text-muted py-6 text-center">Loading forecast…</p>}
+      {loading && <ContentSkeleton />}
       {error && (
         <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{error}</div>
       )}
@@ -655,7 +655,7 @@ export default function FinancialForecasting({ title = 'Financial Forecasting', 
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {statCards.map(({ key, ...card }) => <StatCard key={key} {...card} />)}
       </div>
 
@@ -766,22 +766,20 @@ export default function FinancialForecasting({ title = 'Financial Forecasting', 
 
       <div className={PANEL}>
         <div className="overflow-hidden rounded-t-xl">
-          <table className="w-full text-sm">
+          <ResponsiveTable minTableWidth={640} className="w-full text-xs table-fixed">
             <thead className="bg-surface">
               <tr className="border-b border-border">
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-2.5 py-2.5 whitespace-nowrap">Type</th>
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-2.5 py-2.5 whitespace-nowrap">Forecast Period</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-2.5 py-2.5 whitespace-nowrap">Historical Period</th>
                 <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-2.5 py-2.5 whitespace-nowrap">Predicted Amount</th>
                 <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-2.5 py-2.5 whitespace-nowrap">Confidence</th>
                 <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-2.5 py-2.5 whitespace-nowrap">MAPE</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-2.5 py-2.5 whitespace-nowrap">Model</th>
-                <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-2.5 py-2.5 whitespace-nowrap">Details</th>
+                <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-2.5 py-2.5 whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody>
               {forecastsLoading && (
-                <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-muted">Loading forecasts…</td></tr>
+                <TableSkeleton columns={6} />
               )}
               {!forecastsLoading && filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE).map((f) => (
                 <ForecastRow
@@ -798,13 +796,13 @@ export default function FinancialForecasting({ title = 'Financial Forecasting', 
               ))}
               {!forecastsLoading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-sm text-muted">
+                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">
                     {showArchived ? 'No archived forecasts.' : 'No forecasts match your filters.'}
                   </td>
                 </tr>
               )}
             </tbody>
-          </table>
+          </ResponsiveTable>
         </div>
       </div>
 

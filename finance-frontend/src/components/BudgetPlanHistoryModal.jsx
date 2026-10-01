@@ -1,3 +1,4 @@
+import ModalLoading from './ModalLoading'
 import { useEffect, useState } from 'react'
 import { FileText, Eye, Loader2, AlertTriangle } from 'lucide-react'
 import Modal from './Modal'
@@ -95,9 +96,7 @@ export default function BudgetPlanHistoryModal({ open, onClose, budget, fetchHis
         )}
 
         {loading ? (
-          <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted">
-            <Loader2 size={16} className="animate-spin" /> Loading history...
-          </div>
+          <ModalLoading />
         ) : documents.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted">No plan has been attached to this budget yet.</p>
         ) : (

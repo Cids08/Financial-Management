@@ -1,3 +1,5 @@
+import { TableSkeleton } from '../components/LoadingSkeleton'
+import ResponsiveTable from '../components/ResponsiveTable'
 import { useState, useEffect, useMemo } from 'react'
 import {
   Search, Plus, Pencil, Archive, RotateCcw, Boxes, Wrench,
@@ -444,7 +446,7 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
       {/* Asset Sub-Ledger Table */}
       <div className={`${PANEL} overflow-hidden`}>
         <div className="overflow-hidden rounded-t-xl">
-          <table className="w-full text-sm">
+          <ResponsiveTable className="w-full text-sm">
             <thead className="bg-surface border-b border-border/60 text-[11px] uppercase tracking-wider text-muted font-semibold">
               <tr>
                 <th className="text-left px-4 py-3">Asset Master Record</th>
@@ -457,11 +459,7 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
             </thead>
             <tbody>
               {loading && (
-                <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center text-sm text-muted">
-                    <Loader2 size={18} className="inline animate-spin mr-2 text-primary" /> Loading Asset Sub-Ledger…
-                  </td>
-                </tr>
+                <TableSkeleton columns={6} />
               )}
 
               {!loading && assets.map((a) => {
@@ -596,7 +594,7 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
                 </tr>
               )}
             </tbody>
-          </table>
+          </ResponsiveTable>
         </div>
 
         <Pagination

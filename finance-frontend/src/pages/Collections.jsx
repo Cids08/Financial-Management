@@ -1,3 +1,5 @@
+import { TableSkeleton, ContentSkeleton } from '../components/LoadingSkeleton'
+import ResponsiveTable from '../components/ResponsiveTable'
 import { useEffect, useMemo, useState } from 'react'
 import { Search, Pencil, Archive, RotateCcw, HandCoins, Clock3, Wallet, Info, Printer, CheckCircle2, XCircle, Paperclip, X, RefreshCw, Users, AlertCircle, Lock, Upload } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
@@ -961,7 +963,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
       {/* Table */}
       <div className={PANEL}>
         <div className="overflow-hidden rounded-t-xl">
-          <table className="w-full text-sm">
+          <ResponsiveTable minTableWidth={640} className="w-full text-xs">
             <thead className="bg-surface">
               <tr className="border-b border-border">
                 <th
@@ -1010,17 +1012,13 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">Loading collections…</td></tr>
+                <TableSkeleton columns={6} />
               ) : mergedRows.length === 0 ? (
                 <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">No collections match your filters.</td></tr>
               ) : paginated.map((row) => {
                 // ── Queue row (AR invoice awaiting collection) ─────────────
                 if (row._isQueue) {
-                  // The Awaiting Collection queue is the collector's work list —
-                  // invoices assigned to them that haven't been collected yet.
-                  // Admins use the main Pending/Confirmed list to approve;
-                  // showing the queue to admins just adds noise.
-                  if (isAdmin) return null
+                  // Render every counted queue record for all authorized viewers.
                   const ar = row
                   const bal = Number(ar.balance ?? ar.remaining_balance ?? 0)
                   const isOverdue = ar.due_date && new Date(ar.due_date) < new Date()
@@ -1060,8 +1058,9 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                       <td className="px-4 py-3.5 text-right">
                         <button
                           type="button"
+                          disabled={!hasPermission('collections.manage')}
                           onClick={() => openCollect(ar)}
-                          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-dark active:scale-95 transition-all duration-150 shadow-sm"
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-black hover:bg-primary-hover active:scale-95 transition-all duration-150 shadow-sm"
                         >
                           <HandCoins size={13} />
                           Collect
@@ -1177,7 +1176,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                 )
               })}
             </tbody>
-          </table>
+          </ResponsiveTable>
         </div>
 
         {!loading && mergedRows.length > 0 && (
@@ -1635,7 +1634,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                 </div>
                 <div className="rounded-lg border border-border divide-y divide-border max-h-48 overflow-y-auto bg-slate-50/50 dark:bg-slate-900/30">
                   {auditLogsLoading && (
-                    <p className="px-3 py-3 text-xs text-muted text-center">Loading audit history…</p>
+                    <ContentSkeleton />
                   )}
                   {!auditLogsLoading && auditLogsError && (
                     <p className="px-3 py-3 text-xs text-status-danger text-center">{auditLogsError}</p>

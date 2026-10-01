@@ -1,3 +1,5 @@
+import { TableSkeleton } from '../components/LoadingSkeleton'
+import ResponsiveTable from '../components/ResponsiveTable'
 import { useEffect, useState, useCallback } from 'react'
 import { Search, Plus, Pencil, Archive, RotateCcw, Truck, UserCheck, UserX, Mail, Phone, Eye, EyeOff, Globe, Briefcase, Hash, X, FileText, Layers, Calendar } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
@@ -328,21 +330,22 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
 
       <div className={PANEL}>
         <div className="overflow-hidden rounded-t-xl">
-          <table className="w-full text-sm">
+          <ResponsiveTable minTableWidth={640} className="w-full text-sm">
             <thead className="bg-surface">
               <tr className="border-b border-border">
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Supplier</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Contact & Agreement</th>
-                <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Credit Line & Balance</th>
+                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Contact Person</th>
+                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3">Contract / Terms</th>
+                <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Balance / Credit</th>
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Status</th>
                 <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-muted">Loading suppliers…</td></tr>
+                <TableSkeleton columns={6} />
               ) : suppliers.length === 0 ? (
-                <tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-muted">No suppliers match your filters.</td></tr>
+                <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">No suppliers match your filters.</td></tr>
               ) : (
                 suppliers.slice((page - 1) * PER_PAGE, page * PER_PAGE).map((s) => {
                   const revealed = revealedIds.has(s.supplier_id)
@@ -381,8 +384,20 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
                                 <span className="flex items-center gap-1"><Hash size={11} className="shrink-0" /> TIN: {revealed ? s.tin : maskValue(s.tin)}</span>
                               )}
                             </div>
-                            {(s.contract_ref || s.payment_terms) && (
-                              <div className="mt-1.5 pt-1.5 border-t border-border/60 text-xs flex flex-wrap items-center gap-x-2 gap-y-0.5">
+
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => toggleReveal(s.supplier_id)}
+                            aria-label={revealed ? 'Hide contact details' : 'Show contact details'}
+                            className="shrink-0 mt-0.5 text-muted hover:text-ink transition-colors duration-150"
+                          >
+                            {revealed ? <EyeOff size={13} /> : <Eye size={13} />}
+                          </button>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3.5">                            {(s.contract_ref || s.payment_terms) && (
+                              <div className="mt-1 text-xs flex flex-wrap items-center gap-x-2 gap-y-0.5">
                                 {s.contract_ref && (
                                   <span className="font-mono text-[11px] font-semibold text-ink flex items-center gap-1 bg-surface px-1.5 py-0.5 rounded border border-border">
                                     <FileText size={10} className="text-primary shrink-0" /> {s.contract_ref}
@@ -395,18 +410,7 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
                                   </span>
                                 )}
                               </div>
-                            )}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => toggleReveal(s.supplier_id)}
-                            aria-label={revealed ? 'Hide contact details' : 'Show contact details'}
-                            className="shrink-0 mt-0.5 text-muted hover:text-ink transition-colors duration-150"
-                          >
-                            {revealed ? <EyeOff size={13} /> : <Eye size={13} />}
-                          </button>
-                        </div>
-                      </td>
+                            )}</td>
                       <td className="px-4 py-3.5 whitespace-nowrap text-right">
                         <p className={`font-medium ${balance > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-ink'}`}>
                           {formatCurrency(balance, currency)}
@@ -473,7 +477,7 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
                 })
               )}
             </tbody>
-          </table>
+          </ResponsiveTable>
         </div>
       </div>
 

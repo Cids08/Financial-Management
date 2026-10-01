@@ -1,12 +1,13 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
-import { Search, MapPin, X, Navigation, Globe } from 'lucide-react'
+import { useState, useEffect, useRef, useMemo, useId } from 'react'
+import { Search, MapPin, X, Navigation, Globe, ChevronDown, Loader2 } from 'lucide-react'
 import { GOOGLE_PLACES_INDEX, ALL_COUNTRIES_LIST } from '../data/googlePlacesIndex'
 import { apiFetch } from '../utils/api'
 
 // Street-aware searchable text: description + street route + postal code.
 const isSearchableTextHit = (item, q) => {
   const a = item.address_components || {}
-  return `${item.description} ${a.route || ''} ${a.postal_code || ''}`.toLowerCase().includes(q)
+  const text = [item.description, a.route, a.locality, a.administrative_area_level_1, a.postal_code].filter(Boolean).join(' ').toLowerCase()
+  return q.split(/\s+/).filter(Boolean).every(word => text.includes(word))
 }
 
 /**
@@ -34,6 +35,10 @@ export default function AddressSelector({
   required = false,
   error = '',
 }) {
+  const panelId = useId()
+  const toggleRef = useRef(null)
+  const [expanded, setExpanded] = useState(() => !!error)
+  useEffect(() => { if (error) setExpanded(true) }, [error])
   const [searchQuery, setSearchQuery] = useState('')
   const [isOpen, setIsOpen] = useState(false)
   const [highlightedIndex, setHighlightedIndex] = useState(0)
@@ -71,29 +76,38 @@ export default function AddressSelector({
   // Remote (OpenStreetMap/Nominatim) street hits — the "any street" fallback
   // fetched from the backend once the static index has no street match.
   const [remoteResults, setRemoteResults] = useState([])
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [searchError, setSearchError] = useState('')
 
   // Debounced free-geocoder lookup. Skipped whenever the static index already
   // matches, so common queries never touch the network.
   useEffect(() => {
     const q = searchQuery.trim().toLowerCase()
+    setRemoteResults([])
+    setSearchError('')
     const localHit = q && GOOGLE_PLACES_INDEX.some((item) => isSearchableTextHit(item, q))
 
     if (q.length < 3 || localHit) {
-      setRemoteResults([])
+      setSearchLoading(false)
       return
     }
 
+    setSearchLoading(true)
     let cancelled = false
     const timer = setTimeout(async () => {
       try {
-        const res = await apiFetch(`/geocode?q=${encodeURIComponent(searchQuery.trim())}`, {
+        const res = await apiFetch(`/api/geocode?q=${encodeURIComponent(searchQuery.trim())}`, {
           timeoutMs: 7000,
         })
+        if (!res.ok) throw new Error('Address search is unavailable')
+        const body = await res.json()
         if (cancelled) return
-        const data = Array.isArray(res?.data) ? res.data : []
+        const data = Array.isArray(body.data) ? body.data : []
         setRemoteResults(data.filter((d) => d && d.description))
       } catch {
-        if (!cancelled) setRemoteResults([])
+        if (!cancelled) { setRemoteResults([]); setSearchError('Search is unavailable. You can enter the address manually.') }
+      } finally {
+        if (!cancelled) setSearchLoading(false)
       }
     }, 350)
 
@@ -148,7 +162,7 @@ export default function AddressSelector({
     if (city?.trim()) parts.push(city.trim())
     if (state?.trim() && state !== city) parts.push(state.trim())
     if (zip?.trim()) parts.push(zip.trim())
-    if (cntry?.trim()) parts.push(cntry.trim())
+    if (cntry?.trim() && !parts.some(part => part.toLowerCase().endsWith(cntry.trim().toLowerCase()))) parts.push(cntry.trim())
 
     onChange(parts.join(', '))
   }
@@ -172,7 +186,8 @@ export default function AddressSelector({
     setAdminArea(parsedState)
     setCountry(parsedCountry)
     setPostalCode(parsedZip)
-    setSearchQuery(place.description)
+    setSearchQuery('')
+    setExpanded(true)
     setIsOpen(false)
 
     emitFullAddress({
@@ -218,18 +233,25 @@ export default function AddressSelector({
   const LABEL_STYLE = 'block text-xs font-medium text-muted mb-1.5'
 
   return (
-    <div className="space-y-3" ref={containerRef}>
-      
+    <div className="min-w-0 rounded-xl border border-border bg-surface" ref={containerRef}>
+      <div className="space-y-3 p-3 sm:p-4">
       {/* STEP 1: Main Autocomplete Search Bar at the Very Top */}
       <div className="relative">
         <div className="flex items-center justify-between">
-          <label className={LABEL_STYLE}>
-            Search for Address {required && <span className="text-red-500">*</span>}
+          <label htmlFor={panelId + '-search'} className={LABEL_STYLE}>
+            Find an address {required && <span className="text-red-500">*</span>}
           </label>
         </div>
 
         <div className="relative">
           <input
+            id={panelId + '-search'}
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={isOpen && suggestions.length > 0}
+            aria-controls={panelId + '-suggestions'}
+            aria-activedescendant={isOpen && suggestions[highlightedIndex] ? panelId + '-option-' + highlightedIndex : undefined}
+            autoComplete="off"
             ref={searchInputRef}
             type="text"
             disabled={disabled}
@@ -243,7 +265,7 @@ export default function AddressSelector({
               setHighlightedIndex(0)
             }}
             onKeyDown={handleKeyDown}
-            placeholder="Start typing an address, street, or landmark (e.g. Ortigas, BGC, Ayala, Clark)..."
+            placeholder="Search street, building, city or landmark"
             className={`${INPUT_STYLE} pl-8.5 pr-8`}
           />
           <Search size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
@@ -253,12 +275,10 @@ export default function AddressSelector({
               type="button"
               onClick={() => {
                 setSearchQuery('')
-                setStreetAddress('')
-                setLocality('')
-                setAdminArea('')
-                setPostalCode('')
-                emitFullAddress({ unit: unitFloor, street: '', city: '', state: '', zip: '', cntry: country })
+                setIsOpen(false)
+                searchInputRef.current?.focus()
               }}
+              aria-label="Clear address search"
               className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted hover:text-ink p-0.5"
             >
               <X size={14} />
@@ -268,12 +288,16 @@ export default function AddressSelector({
 
         {/* Dropdown Predictions List (Capped to 5 items with smooth scroll) */}
         {isOpen && suggestions.length > 0 && (
-          <div className="absolute left-0 right-0 z-50 mt-1 rounded-lg border border-border bg-surface shadow-xl overflow-hidden animate-fadeIn">
+          <div id={panelId + '-suggestions'} role="listbox" aria-label="Suggested addresses" className="absolute left-0 right-0 z-50 mt-1 rounded-lg border border-border bg-surface shadow-xl overflow-hidden animate-fadeIn">
             <div className="divide-y divide-border/20 max-h-52 overflow-y-auto">
               {suggestions.map((item, idx) => {
                 const isHighlighted = idx === highlightedIndex
                 return (
                   <button
+                    id={panelId + '-option-' + idx}
+                    role="option"
+                    aria-selected={isHighlighted}
+                    onMouseDown={e => e.preventDefault()}
                     key={item.description}
                     type="button"
                     onClick={() => applyAddressComponents(item)}
@@ -303,10 +327,15 @@ export default function AddressSelector({
         )}
       </div>
 
+      <p className="text-[11px] text-muted">Choose a suggestion to fill the city, province and postal code automatically.</p>
+      {isOpen && searchQuery.trim().length >= 3 && suggestions.length === 0 && <div role="status" className="flex items-center gap-2 rounded-lg bg-bg px-3 py-2 text-xs text-muted">{searchLoading ? <><Loader2 size={14} className="animate-spin" /> Finding addresses...</> : searchError || 'No matching addresses. Try a nearby landmark or enter the details manually.'}</div>}
+      {value?.trim() && <div className="flex items-start gap-2 rounded-lg border border-border bg-bg p-3"><MapPin size={16} className="mt-0.5 shrink-0 text-primary-dark" /><p className="min-w-0 wrap-anywhere text-xs leading-5 text-ink">{value}</p></div>}
+      <button ref={toggleRef} type="button" aria-expanded={expanded} aria-controls={panelId} onClick={() => { setExpanded(open => !open); setIsOpen(false) }} className="flex items-center gap-2 rounded text-xs font-semibold text-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><ChevronDown size={14} className={'transition-transform ' + (expanded ? 'rotate-180' : '')} />{expanded ? 'Hide address details' : value?.trim() ? 'Add unit / floor or edit details' : 'Enter address manually'}</button>
+      <div id={panelId} hidden={!expanded} className="space-y-3 border-t border-border pt-3">
       {/* STEP 2: Secondary Manual Field Strictly for Apt, Suite, Unit, or Floor No. */}
       <div>
-        <label className={LABEL_STYLE}>Apt, Suite, Unit, or Floor No. (Optional)</label>
-        <input
+        <label htmlFor={panelId + '-unit'} className={LABEL_STYLE}>Apt, Suite, Unit, or Floor No. (Optional)</label>
+        <input id={panelId + '-unit'}
           ref={unitInputRef}
           type="text"
           disabled={disabled}
@@ -330,8 +359,8 @@ export default function AddressSelector({
 
       {/* STEP 2 (Cont.): Separated "Street Address" Auto-Injected from Google Places */}
       <div>
-        <label className={LABEL_STYLE}>Street Address</label>
-        <input
+        <label htmlFor={panelId + '-street'} className={LABEL_STYLE}>Street Address</label>
+        <input id={panelId + '-street'}
           type="text"
           disabled={disabled}
           value={streetAddress}
@@ -353,10 +382,10 @@ export default function AddressSelector({
       </div>
 
       {/* STEP 3: Injected City, State, Postal Code & Country Dropdown */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
-          <label className={LABEL_STYLE}>City</label>
-          <input
+          <label htmlFor={panelId + '-city'} className={LABEL_STYLE}>City</label>
+          <input id={panelId + '-city'}
             type="text"
             disabled={disabled}
             value={locality}
@@ -377,8 +406,8 @@ export default function AddressSelector({
         </div>
 
         <div>
-          <label className={LABEL_STYLE}>State / Province</label>
-          <input
+          <label htmlFor={panelId + '-province'} className={LABEL_STYLE}>State / Province</label>
+          <input id={panelId + '-province'}
             type="text"
             disabled={disabled}
             value={adminArea}
@@ -399,8 +428,8 @@ export default function AddressSelector({
         </div>
 
         <div>
-          <label className={LABEL_STYLE}>Postal Code</label>
-          <input
+          <label htmlFor={panelId + '-postal'} className={LABEL_STYLE}>Postal Code</label>
+          <input id={panelId + '-postal'}
             type="text"
             disabled={disabled}
             value={postalCode}
@@ -422,8 +451,8 @@ export default function AddressSelector({
 
         {/* STEP 3: Open Country Dropdown Selection */}
         <div>
-          <label className={LABEL_STYLE}>Country</label>
-          <select
+          <label htmlFor={panelId + '-country'} className={LABEL_STYLE}>Country</label>
+          <select id={panelId + '-country'}
             disabled={disabled}
             value={country}
             onChange={(e) => {
@@ -449,7 +478,13 @@ export default function AddressSelector({
         </div>
       </div>
 
-      {error && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{error}</p>}
+      <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
+        <p className="text-[11px] text-muted">Changes are saved with the main form.</p>
+        <button type="button" onClick={() => { setExpanded(false); setIsOpen(false); toggleRef.current?.focus() }} className="shrink-0 rounded-lg border border-border bg-bg px-3 py-1.5 text-xs font-semibold text-ink hover:border-primary">Done</button>
+      </div>
+      </div>
+      </div>
+      {error && <p role="alert" className="px-3 pb-3 text-xs text-status-danger">{error}</p>}
     </div>
   )
 }

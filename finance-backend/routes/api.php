@@ -284,7 +284,9 @@ Route::middleware(['auth:sanctum', 'require.password.change'])->group(function (
     // Dashboard
     Route::get('/dashboard', [DashboardController::class, 'index']);
     Route::get('/dashboard/charts', [DashboardController::class, 'charts']);
-    Route::get('/dashboard/export', [DashboardController::class, 'exportPdf']);
+    Route::post('/dashboard/export', [DashboardController::class, 'exportPdf'])->middleware('throttle:10,1');
+    Route::post('/exports/csv', [\App\Http\Controllers\Api\ProtectedExportController::class, 'csv'])->middleware('throttle:10,1');
+    Route::post('/exports/pdf', [\App\Http\Controllers\Api\ProtectedExportController::class, 'pdf'])->middleware('throttle:10,1');
 
     // Invoice OCR scan
     Route::post('invoices/scan', [InvoiceScanController::class, 'scan'])->middleware('throttle:10,1');

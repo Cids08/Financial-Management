@@ -1,18 +1,17 @@
 import { useState } from 'react'
 import { useLocation } from 'react-router-dom'
-import { ArrowUpRight, LogIn, Mail, Lock, Eye, EyeOff, AlertCircle, Sun, Moon, ShieldCheck, ArrowLeft, ShieldOff, AlertTriangle, Clock, Timer, RefreshCw } from 'lucide-react'
+import { LogIn, Mail, Lock, Eye, EyeOff, AlertCircle, Sun, Moon, ShieldCheck, ArrowLeft, ShieldOff, AlertTriangle, Clock, Timer, RefreshCw } from 'lucide-react'
 import Button from '../components/Button'
 import OtpInput from '../components/OtpInput'
 import { useAuth } from '../hooks/useAuth'
 import { useCountdown, formatCountdown } from '../hooks/useCountdown'
 import { useTheme } from '../context/ThemeContext'
 
+import companyLogo from '../assets/logo.svg'
+
 function BrandMark() {
   return (
-    <svg viewBox="100 65 280 235" fill="currentColor" className="h-9 w-9" aria-hidden="true">
-      <path d="M235 83 155 281h49l17-42c7-18 18-35 29-51L235 83ZM265 83l-15 105c11 16 22 33 29 51l17 42h49L265 83Z" />
-      <path d="m250 220-22 61h44l-22-61ZM120 267c55-57 128-86 205-84 23 1 32 7 35 29 2 20-2 37-5 56-2-34-15-63-50-67-65-8-127 20-185 66Z" />
-    </svg>
+    <img src={companyLogo} alt="Alibaton Construction Inc." className="h-full w-full rounded-lg object-contain" />
   )
 }
 
@@ -99,8 +98,10 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-surface lg:grid lg:grid-cols-[0.95fr_1.05fr]">
-      <aside className="relative hidden min-h-screen overflow-hidden bg-black p-12 text-white lg:flex lg:flex-col xl:p-16">
+    <div className="login-page min-h-dvh w-full min-w-0 overflow-x-clip bg-surface lg:grid lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+      <aside className="relative hidden min-h-dvh min-w-0 overflow-hidden bg-black p-8 text-white lg:flex lg:flex-col xl:p-16">
+        <img src="/images/alibaton-crane.jpg" alt="" aria-hidden="true" className="absolute inset-0 h-full w-full object-cover object-center" />
+        <div className="absolute inset-0 bg-linear-to-t from-black/95 via-black/70 to-black/40" aria-hidden="true" />
         <div className="relative z-10 flex items-center gap-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-black"><BrandMark /></div>
           <div>
@@ -109,7 +110,7 @@ export default function Login() {
           </div>
         </div>
 
-        <div className="relative z-10 my-auto py-16">
+        <div className="relative z-10 my-auto py-8">
           <p className="mb-6 flex items-center gap-3 text-xs font-semibold tracking-[0.2em] text-primary">
             <span className="h-px w-8 bg-primary" /> FINANCIAL MANAGEMENT
           </p>
@@ -120,21 +121,7 @@ export default function Login() {
             Bring your projects, payments, and people together. Stay in control of what moves your business forward.
           </p>
 
-          <div className="relative mt-12 h-36 max-w-sm border-b border-white/15" aria-hidden="true">
-            <div className="absolute inset-0 flex flex-col justify-between">
-              {[0, 1, 2].map((line) => <div key={line} className="border-t border-dashed border-white/10" />)}
-            </div>
-            <div className="relative flex h-full items-end gap-3 px-2">
-              <div className="h-[24%] flex-1 rounded-t-lg bg-white/10" />
-              <div className="h-[39%] flex-1 rounded-t-lg bg-white/15" />
-              <div className="h-[34%] flex-1 rounded-t-lg bg-white/20" />
-              <div className="h-[57%] flex-1 rounded-t-lg bg-primary/40" />
-              <div className="h-[72%] flex-1 rounded-t-lg bg-primary/65" />
-              <div className="relative h-full flex-1 rounded-t-lg bg-primary">
-                <ArrowUpRight size={24} className="absolute left-1/2 top-4 -translate-x-1/2 text-black" />
-              </div>
-            </div>
-          </div>
+
         </div>
 
         <div className="relative z-10 flex items-center gap-2 text-xs text-white/50">
@@ -144,7 +131,7 @@ export default function Login() {
         <div className="pointer-events-none absolute -right-32 -top-32 h-[352px] w-[352px] rounded-full border border-white/5" aria-hidden="true" />
       </aside>
 
-      <main className="flex min-h-screen flex-col px-6 py-6 sm:px-12 lg:px-16 xl:px-24">
+      <main className="flex min-h-dvh min-w-0 flex-col px-5 py-4 sm:px-10 lg:px-12 xl:px-20">
         <header className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-2.5 lg:invisible">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-black"><BrandMark /></div>
@@ -160,7 +147,7 @@ export default function Login() {
           </button>
         </header>
 
-        <div className="mx-auto my-auto w-full max-w-sm py-14 sm:max-w-md">
+        <div className="mx-auto my-auto w-full max-w-sm py-5 sm:max-w-md">
 
         {!twoFactorPending ? (
           <>

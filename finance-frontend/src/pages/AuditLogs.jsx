@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import ResponsiveTable from '../components/ResponsiveTable'
+import { TableSkeleton } from '../components/LoadingSkeleton'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Search, CalendarRange, X, ChevronDown, ChevronRight, Download, RotateCcw } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
@@ -11,8 +13,8 @@ import { DATE_PRESETS, applyDatePresetChange } from '../utils/datePresets'
 import { useProfileContext } from '../context/ProfileContext'
 
 /* Reuses the same style tokens as Settings.jsx for visual consistency. */
-const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
-const INPUT = `h-9 px-3 rounded-lg border border-border bg-bg text-sm text-ink
+const PANEL = 'rounded-2xl border border-border bg-surface shadow-card'
+const INPUT = `w-full h-10 px-3 rounded-lg border border-border bg-bg text-sm text-ink
   placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary
   transition-all duration-150`
 // Native <input type="date"> calendar popups are OS-rendered and ignore
@@ -58,9 +60,9 @@ function ValueDiff({ oldValues, newValues }) {
         const changed = JSON.stringify(before) !== JSON.stringify(after)
         return (
           <div key={key} className="flex items-start gap-2 text-xs">
-            <span className="w-36 shrink-0 font-medium text-muted">{key}</span>
+            <span className="w-24 shrink-0 break-words font-medium text-muted">{key}</span>
             {changed ? (
-              <span className="text-ink">
+              <span className="min-w-0 wrap-anywhere text-ink">
                 <span className="text-red-500 line-through">{String(before ?? '—')}</span>
                 {' → '}
                 <span className="text-emerald-600">{String(after ?? '—')}</span>
@@ -188,12 +190,12 @@ export default function AuditLogs({ title = 'Audit Logs', crumbs = ['System', 'A
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-5 animate-fadeIn pb-8">
+    <div className="space-y-6 animate-fadeIn">
       <Breadcrumb items={crumbs} />
 
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-ink">{title}</h1>
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-dark">Activity & accountability</p><h1 className="text-2xl font-bold tracking-tight text-ink sm:text-3xl">{title}</h1>
           <p className="mt-1 text-xs text-muted">System-wide record of who did what, and when.</p>
         </div>
         <Button
@@ -217,7 +219,7 @@ export default function AuditLogs({ title = 'Audit Logs', crumbs = ['System', 'A
       <div className={`${PANEL} p-4`}>
         <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end flex-wrap">
           {/* Search */}
-          <div className="relative flex-1 min-w-0">
+          <div className="relative flex-1 min-w-0 sm:min-w-48">
             <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Search</label>
             <div className="relative">
               <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none z-10" />
@@ -237,7 +239,7 @@ export default function AuditLogs({ title = 'Audit Logs', crumbs = ['System', 'A
             </div>
           </div>
           {/* Module */}
-          <div className="w-full sm:w-44 shrink-0">
+          <div className="w-full sm:w-40 shrink-0">
             <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Module</label>
             <select value={module} onChange={(e) => setModule(e.target.value)} className={INPUT}>
               <option value="">All modules</option>
@@ -306,45 +308,23 @@ export default function AuditLogs({ title = 'Audit Logs', crumbs = ['System', 'A
       </div>
 
       <div className={PANEL}>
-        {loading ? (
-          <p className="text-xs text-muted px-5 py-6 text-center">Loading audit logs…</p>
-        ) : error ? (
-          <p className="text-xs text-status-danger px-5 py-6 text-center">{error}</p>
-        ) : logs.length === 0 ? (
-          <p className="text-xs text-muted px-5 py-6 text-center">No audit log entries match these filters.</p>
-        ) : (
-          <div className="divide-y divide-border">
-            {logs.map((log) => {
-              const isExpanded = expandedId === log.id
-              const badgeClass = ACTION_BADGE[log.action] || 'text-muted bg-bg'
-              return (
-                <div key={log.id}>
-                  <button
-                    type="button"
-                    onClick={() => setExpandedId(isExpanded ? null : log.id)}
-                    className="flex w-full items-start gap-3 px-5 py-3 text-left hover:bg-bg transition-colors duration-150"
-                  >
-                    {isExpanded
-                      ? <ChevronDown size={14} className="mt-0.5 shrink-0 text-muted" />
-                      : <ChevronRight size={14} className="mt-0.5 shrink-0 text-muted" />}
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${badgeClass}`}>
-                          {log.action}
-                        </span>
-                        <span className="text-xs font-medium text-ink">{log.module}</span>
-                        {log.user_name && <span className="text-xs text-muted">by {log.user_name}</span>}
-                      </div>
-                      <p className="mt-1 text-sm text-ink truncate">{log.activity_description}</p>
-                    </div>
-                    <p className="shrink-0 text-[11px] text-muted whitespace-nowrap">{formatDateTime(log.created_at)}</p>
-                  </button>
-                  {isExpanded && <ValueDiff oldValues={log.old_values} newValues={log.new_values} />}
-                </div>
-              )
-            })}
-          </div>
-        )}
+
+        <ResponsiveTable minTableWidth={640} className="w-full text-sm">
+          <thead><tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted">{['Date / Time', 'User', 'Module', 'Action', 'Activity', 'Actions'].map(label=><th key={label} className="px-4 py-3">{label}</th>)}</tr></thead>
+          <tbody>
+            {loading ? <TableSkeleton columns={6} /> : error ? <tr><td colSpan={6} className="p-6 text-status-danger">{error}</td></tr> : logs.length === 0 ? <tr><td colSpan={6} className="p-8 text-center text-muted">No audit log entries match these filters.</td></tr> : logs.map(log => <Fragment key={log.id}>
+              <tr className="border-b border-border hover:bg-bg">
+                <td className="px-4 py-3 text-xs text-muted">{formatDateTime(log.created_at)}</td>
+                <td className="px-4 py-3 font-medium">{log.user_name || 'System'}</td>
+                <td className="px-4 py-3">{log.module}</td>
+                <td className="px-4 py-3"><span className={'rounded-full px-2 py-1 text-xs font-medium ' + (ACTION_BADGE[log.action] || 'text-muted bg-bg')}>{log.action}</span></td>
+                <td className="px-4 py-3 wrap-anywhere">{log.activity_description}</td>
+                <td className="px-4 py-3"><button type="button" aria-expanded={expandedId === log.id} onClick={()=>setExpandedId(expandedId === log.id ? null : log.id)} className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-bg">{expandedId === log.id ? 'Hide' : 'Details'}</button></td>
+              </tr>
+              {expandedId === log.id && <tr><td colSpan={6}><ValueDiff oldValues={log.old_values} newValues={log.new_values} /></td></tr>}
+            </Fragment>)}
+          </tbody>
+        </ResponsiveTable>
 
         <Pagination
           page={meta.current_page}

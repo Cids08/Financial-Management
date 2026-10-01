@@ -1,3 +1,5 @@
+import ModalLoading from './ModalLoading'
+import ResponsiveTable from './ResponsiveTable'
 import { useEffect, useState } from 'react'
 import {
   X, Printer, RefreshCw, AlertTriangle, Loader2, ChevronDown, ChevronUp,
@@ -283,7 +285,7 @@ function AgingTable({ rows, onSelectCustomer }) {
 
   return (
     <div className="overflow-hidden rounded-xl border border-border">
-      <table className="w-full text-sm">
+      <ResponsiveTable className="w-full text-sm">
         <thead className="bg-bg border-b border-border sticky top-0 z-10">
           <tr>
             <TH field="customer_name" label="Customer" />
@@ -348,7 +350,7 @@ function AgingTable({ rows, onSelectCustomer }) {
             <td />
           </tr>
         </tfoot>
-      </table>
+      </ResponsiveTable>
     </div>
   )
 }
@@ -392,7 +394,7 @@ function CustomerSOADetail({ soa, onBack, onPrint }) {
 
       {/* Invoice table */}
       <div className="overflow-hidden rounded-xl border border-border">
-        <table className="w-full text-sm">
+        <ResponsiveTable className="w-full text-sm">
           <thead className="bg-bg border-b border-border">
             <tr>
               <th className="px-3 py-3 text-left text-xs font-semibold text-muted uppercase tracking-wide">Invoice #</th>
@@ -436,7 +438,7 @@ function CustomerSOADetail({ soa, onBack, onPrint }) {
               <td colSpan={3} />
             </tr>
           </tfoot>
-        </table>
+        </ResponsiveTable>
       </div>
 
       {/* Print button */}
@@ -565,7 +567,7 @@ export default function StatementOfAccountModal({ open, onClose, fetchAgingSumma
                     type="button"
                     onClick={handleBatchPrint}
                     disabled={loadingBatch || agingRows.length === 0}
-                    className="flex items-center gap-1.5 rounded-lg bg-primary hover:bg-primary-dark px-3 py-1.5 text-xs font-medium text-black transition-colors disabled:opacity-50"
+                    className="flex items-center gap-1.5 rounded-lg bg-primary hover:bg-primary-hover px-3 py-1.5 text-xs font-medium text-black transition-colors disabled:opacity-50"
                     title="Print SOA for all customers"
                   >
                     {loadingBatch ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
@@ -600,10 +602,7 @@ export default function StatementOfAccountModal({ open, onClose, fetchAgingSumma
 
           {/* Loading state */}
           {(loadingAging || loadingSoa) && (
-            <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted">
-              <Loader2 size={16} className="animate-spin" />
-              {loadingAging ? 'Loading aging data…' : 'Loading statement of account…'}
-            </div>
+            <ModalLoading variant="statement" />
           )}
 
           {/* Aging matrix */}

@@ -37,8 +37,10 @@
         thead { display: table-header-group; }
         tr, .overview-grid td { page-break-inside: avoid; }
     </style>
+    @include('pdf.report-style')
 </head>
 <body>
+    @include('pdf.report-footer')
     <table class="letterhead">
         <tr>
             <td class="letterhead-brand">
@@ -194,5 +196,6 @@
         This document is an internal operational summary generated automatically by {{ config('app.name', 'Financial Management System') }}.
         Figures are live as of the run time printed above.
     </div>
+    @include('pdf.signatures')
 </body>
 </html>

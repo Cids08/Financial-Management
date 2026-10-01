@@ -1,3 +1,5 @@
+import { TableSkeleton } from '../components/LoadingSkeleton'
+import ResponsiveTable from '../components/ResponsiveTable'
 import { useEffect, useState, useCallback } from 'react'
 import { Search, Plus, Pencil, Archive, RotateCcw, Users as UsersIcon, UserCheck, UserX, Mail, Phone, Eye, EyeOff, Wallet, Briefcase, Hash, X, FileText, Calendar } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
@@ -334,7 +336,7 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
 
       <div className={PANEL}>
         <div className="overflow-hidden rounded-t-xl">
-          <table className="w-full text-sm">
+          <ResponsiveTable minTableWidth={640} className="w-full text-sm">
             <thead className="bg-surface">
               <tr className="border-b border-border">
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Company</th>
@@ -349,7 +351,7 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={canManage || showArchived ? 6 : 5} className="px-4 py-10 text-center text-sm text-muted">Loading customers…</td></tr>
+                <TableSkeleton columns={canManage || showArchived ? 6 : 5} />
               ) : customers.length === 0 ? (
                 <tr><td colSpan={canManage || showArchived ? 6 : 5} className="px-4 py-10 text-center text-sm text-muted">No customers match your filters.</td></tr>
               ) : (
@@ -474,7 +476,7 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
                 })
               )}
             </tbody>
-          </table>
+          </ResponsiveTable>
         </div>
       </div>
 

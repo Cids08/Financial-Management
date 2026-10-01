@@ -1,3 +1,4 @@
+import { ContentSkeleton } from '../components/LoadingSkeleton'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Bell, BellOff, Check, CheckCheck, Trash2, Loader2, BellPlus, Search, RotateCcw, X, Monitor, Shield, AlertCircle } from 'lucide-react'
@@ -14,7 +15,7 @@ import { notificationTypeMeta, NOTIFICATION_MODULES, NOTIFICATION_SEVERITIES } f
 import { enablePush, disablePush, getBrowserSubscriptionState, fetchVapidKey } from '../utils/pushNotifications'
 
 const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
-const INPUT = `h-9 px-3 rounded-lg border border-border bg-bg text-sm text-ink
+const INPUT = `w-full h-10 px-3 rounded-lg border border-border bg-bg text-sm text-ink
   placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary
   transition-all duration-150`
 
@@ -186,14 +187,14 @@ export default function Notifications({ title = 'Notifications', crumbs = ['Noti
     <div className="space-y-5 animate-fadeIn">
       <Breadcrumb items={crumbs} />
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 rounded-2xl border border-border border-t-4 border-t-primary bg-surface p-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-ink">{title}</h1>
           <p className="mt-1 text-xs text-muted">
             {unreadCount > 0 ? `${unreadCount} unread notification${unreadCount === 1 ? '' : 's'}` : "You're all caught up."}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant={unreadOnly ? 'primary' : 'secondary'}
             size="sm"
@@ -234,44 +235,38 @@ export default function Notifications({ title = 'Notifications', crumbs = ['Noti
               <Button variant="secondary" size="sm" icon={RotateCcw} iconPosition="left" onClick={() => { setSeverity(''); setModule(''); setPage(1) }}>Reset</Button>
             </div>
           )}
+          {/* Push notifications */}
+          <div className="ml-auto flex w-full flex-wrap items-center justify-between gap-3 sm:w-auto sm:max-w-sm">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-ink">Desktop push notifications</p>
+              <p className="mt-0.5 text-xs text-muted">
+                {pushSubscribed
+                  ? 'Desktop alerts are enabled for this browser.'
+                  : pushServerEnabled
+                    ? 'Get notified even when the app tab is not open.'
+                    : 'Desktop alerts are currently unavailable.'}
+              </p>
+              {pushNotice && <p className="mt-1 text-xs text-primary">{pushNotice}</p>}
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              {pushSubscribed ? (
+                <Button variant="secondary" size="sm" icon={BellOff} onClick={handleDisablePush} disabled={pushBusy}>
+                  {pushBusy ? <Loader2 size={14} className="animate-spin" /> : 'Disable'}
+                </Button>
+              ) : (
+                <Button variant="primary" size="sm" icon={BellPlus} onClick={() => setShowPushModal(true)} disabled={pushBusy || !pushServerEnabled}>
+                  {pushBusy ? <Loader2 size={14} className="animate-spin" /> : 'Enable push'}
+                </Button>
+              )}
         </div>
       </div>
 
-      {/* Push notifications */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-xl border border-border bg-surface px-4 py-3 shadow-card">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-ink">Desktop push notifications</p>
-          <p className="mt-0.5 text-xs text-muted">
-            {pushSubscribed
-              ? 'This browser receives OS-level toasts for new notifications.'
-              : pushServerEnabled
-                ? 'Get notified even when the app tab is not open.'
-                : 'Push is not configured on the server yet.'}
-          </p>
-          {pushNotice && <p className="mt-1 text-xs text-primary">{pushNotice}</p>}
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {pushSubscribed ? (
-            <Button variant="secondary" size="sm" icon={BellOff} onClick={handleDisablePush} disabled={pushBusy}>
-              {pushBusy ? <Loader2 size={14} className="animate-spin" /> : 'Disable'}
-            </Button>
-          ) : (
-            <Button variant="primary" size="sm" icon={BellPlus} onClick={() => setShowPushModal(true)} disabled={pushBusy || !pushServerEnabled}>
-              {pushBusy ? <Loader2 size={14} className="animate-spin" /> : 'Enable push'}
-            </Button>
-          )}
         </div>
       </div>
-
-      {error && (
-        <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{error}</div>
-      )}
 
       <div className={PANEL}>
         {loading ? (
-          <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted">
-            <Loader2 size={16} className="animate-spin" /> Loading notifications...
-          </div>
+          <ContentSkeleton rows={5} />
         ) : notifications.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
             <Bell size={28} className="text-muted/40" />
@@ -286,55 +281,51 @@ export default function Notifications({ title = 'Notifications', crumbs = ['Noti
                   const meta = notificationTypeMeta(n.type, n)
                   const Icon = meta.icon
                   return (
-                    <button
+                    <article
                       key={n.id}
-                      type="button"
-                      onClick={() => handleOpen(n)}
-                      className={`relative flex w-full items-start gap-3 rounded-lg border py-3 pl-4 pr-3 text-left transition-all duration-150
+                      className={`grid grid-cols-1 gap-3 rounded-xl border p-4 sm:grid-cols-[minmax(0,1fr)_auto]
                         ${!n.is_read
-                          ? 'border-primary/40 bg-primary/[0.06] shadow-sm ring-1 ring-primary/20'
+                          ? 'border-primary/40 bg-primary/5'
                           : 'border-border bg-surface hover:border-border/80 hover:bg-bg'}`}
                     >
-                      <span
-                        aria-hidden
-                        className={`absolute inset-y-0 left-0 w-1 rounded-l-lg opacity-80 ${meta.color.replaceAll('text-', 'bg-')}`}
-                      />
+                      <button type="button" onClick={() => handleOpen(n)} className="flex min-w-0 items-start gap-3 rounded-lg text-left">
                       <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${meta.bg}`}>
                         <Icon size={16} className={meta.color} />
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <p className={`truncate text-sm ${!n.is_read ? 'font-semibold text-ink' : 'font-medium text-ink'}`}>{n.title}</p>
+                          <p className={`wrap-anywhere text-sm ${!n.is_read ? 'font-semibold text-ink' : 'font-medium text-ink'}`}>{n.title}</p>
                           {!n.is_read && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
                         </div>
-                        <p className="mt-0.5 line-clamp-2 text-xs text-muted">{n.message}</p>
+                        <p className="mt-1 wrap-anywhere text-xs leading-5 text-muted">{n.message}</p>
                         <p className="mt-1 text-xs text-muted/70">{formatDateTime(n.created_at)}</p>
                       </div>
-                      <div className="flex shrink-0 items-center gap-1">
+                      </button>
+                      <div className="flex shrink-0 items-start justify-end gap-1">
                         {!n.is_read && (
                           <Tooltip label="Mark as read" align="end">
-                            <span
-                              role="button"
-                              tabIndex={0}
+                            <button
+                              type="button"
+                              aria-label="Mark as read"
                               onClick={(e) => { e.stopPropagation(); markAsRead(n.id) }}
                               className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
                             >
                               <Check size={15} />
-                            </span>
+                            </button>
                           </Tooltip>
                         )}
                         <Tooltip label="Delete notification" align="end">
-                          <span
-                            role="button"
-                            tabIndex={0}
+                          <button
+                            type="button"
+                            aria-label="Delete notification"
                             onClick={(e) => handleDelete(e, n.id)}
                             className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400 transition-colors duration-150"
                           >
                             <Trash2 size={15} />
-                          </span>
+                          </button>
                         </Tooltip>
                       </div>
-                    </button>
+                    </article>
                   )
                 })}
               </div>
@@ -344,6 +335,10 @@ export default function Notifications({ title = 'Notifications', crumbs = ['Noti
 
         <Pagination page={page} totalPages={totalPages} onPageChange={setPage} total={meta.total} label="notifications" bordered />
       </div>
+
+      {error && (
+        <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{error}</div>
+      )}
 
       {/* Push notification opt-in disclosure & warning modal */}
       <Modal
@@ -364,7 +359,7 @@ export default function Notifications({ title = 'Notifications', crumbs = ['Noti
       >
         <div className="space-y-4 py-1 text-sm text-ink">
           <p className="text-muted text-xs leading-relaxed">
-            Desktop push notifications allow this system to alert you about important financial events in real time, even when this browser tab is minimized or in the background.
+            Alerts may appear on this device?s desktop or lock screen, even when the app is closed. Anyone viewing this device may see them. Continue only if you want to enable notifications for this browser.
           </p>
 
           <div className="space-y-2.5 rounded-lg border border-border bg-bg/50 p-3 text-xs">

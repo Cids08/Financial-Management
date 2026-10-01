@@ -1,3 +1,4 @@
+import ModalLoading from './ModalLoading'
 import { useEffect, useRef, useState } from 'react'
 import { UploadCloud, FileText, X, AlertTriangle, Eye, Loader2 } from 'lucide-react'
 import Modal from './Modal'
@@ -151,9 +152,7 @@ export default function AccountsPayableDocumentModal({ open, onClose, bill, fetc
         )}
 
         {historyLoading ? (
-          <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted">
-            <Loader2 size={16} className="animate-spin" /> Loading history...
-          </div>
+          <ModalLoading />
         ) : documents.length === 0 ? (
           <p className="py-4 text-center text-sm text-muted">No document has been attached to this bill yet.</p>
         ) : (

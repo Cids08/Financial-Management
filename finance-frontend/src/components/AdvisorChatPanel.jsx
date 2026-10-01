@@ -1,3 +1,4 @@
+import { ContentSkeleton } from './LoadingSkeleton'
 import { useEffect, useRef, useState } from 'react'
 import { Sparkles, Send, X, History, SquarePen, Archive, Trash2, RotateCcw } from 'lucide-react'
 import Button from './Button'
@@ -337,16 +338,16 @@ export default function AdvisorChatPanel() {
   const isActiveConversation = (id) => id === activeConversationId
 
   return (
-    <div className="fixed bottom-5 right-5 z-60 flex flex-col items-end gap-3">
+    <div className="fixed bottom-3 right-3 sm:bottom-5 sm:right-5 z-60 flex flex-col items-end gap-3">
       {open && (
         <div
           className={`${
-            historyOpen ? 'w-[min(38rem,calc(100vw-2.5rem))]' : 'w-[min(26rem,calc(100vw-2.5rem))]'
-          } h-[min(40rem,calc(100vh-6rem))] rounded-2xl border border-border/60 bg-surface
-            shadow-2xl shadow-black/20 dark:shadow-black/50 flex overflow-hidden animate-fadeIn`}
+            historyOpen ? 'w-[min(38rem,calc(100vw-1.5rem))]' : 'w-[min(30rem,calc(100vw-1.5rem))]'
+          } h-[min(40rem,calc(100dvh-5rem))] rounded-2xl border border-border/60 bg-surface
+            relative shadow-2xl shadow-black/20 dark:shadow-black/50 flex overflow-hidden animate-fadeIn`}
         >
           {historyOpen && (
-            <div className="w-64 shrink-0 border-r border-border/50 bg-bg/70 flex flex-col min-h-0">
+            <div className="absolute inset-0 z-20 w-full sm:static sm:w-56 shrink-0 border-r border-border/50 bg-surface flex flex-col min-h-0">
               <div className="flex items-center justify-between px-3 pt-3 pb-2.5 border-b border-border/50">
                 <p className="text-xs font-bold uppercase tracking-wider text-muted">Chat History</p>
                 <button
@@ -382,7 +383,7 @@ export default function AdvisorChatPanel() {
               </div>
               <div className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
                 {historyLoading ? (
-                  <p className="text-xs text-muted px-2 py-2">Loading conversations...</p>
+                  <ContentSkeleton />
                 ) : showArchived ? (
                   archivedConversations.length === 0 ? (
                     <p className="text-xs text-muted px-2 py-2">Nothing archived yet.</p>
@@ -500,12 +501,12 @@ export default function AdvisorChatPanel() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-bold text-ink flex items-center gap-2">
-                  AI Financial Advisor
+                  Financial Advisor
                   <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                     LIVE
                   </span>
                 </p>
-                <p className="text-xs text-muted mt-0.5 truncate">Grounded in your recommendations</p>
+                <p className="text-xs text-muted mt-0.5 truncate">Insights from your financial records</p>
               </div>
               <div className="flex items-center gap-1 shrink-0">
                 <Tooltip label="Chat history" position="bottom" align="end">
@@ -589,16 +590,16 @@ export default function AdvisorChatPanel() {
 
             {/* ── Suggested Prompts (fresh chat only) ── */}
             {messages.length <= 1 && (
-              <div className="px-4 pb-3 pt-2.5 flex flex-wrap gap-1.5 border-t border-border bg-surface/50">
+              <div className="px-4 pb-3 pt-2.5 grid grid-cols-1 sm:grid-cols-2 gap-2 border-t border-border bg-surface/50">
                 {SUGGESTED_PROMPTS.map((p) => (
                   <button
                     key={p}
                     type="button"
                     onClick={() => sendMessage(p)}
                     disabled={isThinking}
-                    className="text-xs px-3 py-1.5 rounded-full border border-primary/40 bg-primary/10 text-ink dark:text-primary-light
+                    className="text-left text-xs px-3 py-2.5 rounded-xl border border-border bg-bg text-ink
                       hover:bg-primary/20 hover:border-primary/60
-                      transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed font-medium shadow-xs"
+                      transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed font-medium shadow-xs"
                   >
                     {p}
                   </button>
@@ -618,7 +619,7 @@ export default function AdvisorChatPanel() {
                 placeholder="Ask about cash flow, costs, risk..."
                 aria-label="Ask the AI advisor a question"
                 disabled={isThinking}
-                className="flex-1 h-9 px-3.5 rounded-xl border border-border bg-bg text-ink!
+                className="min-w-0 flex-1 h-10 px-3.5 rounded-xl border border-border bg-bg text-ink!
                   placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary
                   transition-all duration-150 text-sm"
                 style={INPUT_TEXT_STYLE}
@@ -630,7 +631,7 @@ export default function AdvisorChatPanel() {
                 aria-label="Send message"
                 className="flex items-center gap-1.5 h-9 px-3.5 rounded-xl font-bold text-sm
                   bg-primary text-black
-                  hover:bg-primary-dark
+                  hover:bg-primary-hover
                   disabled:opacity-40 disabled:cursor-not-allowed
                   shadow-xs shadow-primary/20
                   transition-all duration-150 active:scale-95 shrink-0"

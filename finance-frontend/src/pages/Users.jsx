@@ -1,3 +1,5 @@
+import { TableSkeleton } from '../components/LoadingSkeleton'
+import ResponsiveTable from '../components/ResponsiveTable'
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
@@ -713,7 +715,7 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
       {/* Table */}
       <div className={PANEL}>
         <div className="overflow-hidden rounded-t-xl">
-          <table className="w-full text-sm">
+          <ResponsiveTable className="w-full text-sm">
             <thead className="bg-surface">
               <tr className="border-b border-border">
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">User</th>
@@ -726,11 +728,7 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
             </thead>
             <tbody>
               {usersLoading && (
-                <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">
-                    Loading users…
-                  </td>
-                </tr>
+                <TableSkeleton columns={6} />
               )}
 
               {!usersLoading && filteredUsers.slice((page - 1) * PER_PAGE, page * PER_PAGE).map((u) => {
@@ -859,7 +857,7 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
                 </tr>
               )}
             </tbody>
-          </table>
+          </ResponsiveTable>
         </div>
       </div>
 

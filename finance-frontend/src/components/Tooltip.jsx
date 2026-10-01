@@ -129,7 +129,7 @@ export default function Tooltip({ label, children, position = 'top', align = 'ce
             role="tooltip"
             style={{ position: 'fixed', top: coords.top, left: coords.left }}
             className={`pointer-events-none ${translateClasses}
-              whitespace-nowrap rounded-md bg-ink px-2.5 py-1.5 text-xs font-medium text-bg
+              max-w-[calc(100vw-12px)] whitespace-normal break-words rounded-md bg-ink px-2.5 py-1.5 text-xs font-medium text-bg
               z-999 shadow-lg transition-opacity duration-150`}
           >
             {label}

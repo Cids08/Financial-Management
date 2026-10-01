@@ -1,3 +1,5 @@
+import { PageSkeleton, ContentSkeleton } from '../components/LoadingSkeleton'
+import { protectedDashboardPdf } from '../utils/secureExport'
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -95,20 +97,20 @@ const CHART_ROUTES = {
 }
 
 const CHART_COLORS = {
-  revenue: '#f4b400',
-  expense: 'var(--color-ink)',
-  inflow: '#f4b400',
-  outflow: 'var(--color-ink)',
-  net: '#a3a3a3',
-  collections: '#f4b400',
-  allocated: '#a3a3a3',
-  used: '#f4b400',
-  aging: '#f4b400',
+  revenue: '#2563eb',
+  expense: '#d97706',
+  inflow: '#0d9488',
+  outflow: '#d97706',
+  net: '#7c3aed',
+  collections: '#0d9488',
+  allocated: '#2563eb',
+  used: '#7c3aed',
+  aging: '#2563eb',
 }
 
 const AXIS_STYLE = { fontSize: 11, fill: 'var(--color-muted, #737373)' }
 const CHART_MARGIN = { top: 5, right: 24, left: 0, bottom: 0 }
-const PIE_COLORS = ['#f4b400', 'var(--color-ink)', '#a3a3a3', '#ffe58a', '#525252', '#b88400', '#d4d4d4', '#694b00', '#737373']
+const PIE_COLORS = ['#2563eb', '#0d9488', '#d97706', '#7c3aed', '#db2777']
 const shortMonthTick = (label) => (typeof label === 'string' ? label.split(' ')[0] : label)
 
 /** Compact Y-axis tick: ₱1.2M, ₱148.5K, ₱500 — prevents the full peso label from being clipped */
@@ -218,7 +220,7 @@ function ChartCard({ title, subtitle, route, navigate, empty, contentClassName =
           navigate(route)
         }
       } : undefined}
-      className={`${PANEL} ${PANEL_PAD} text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${route ? CLICKABLE_ROW : ''}`}
+      className={`${PANEL} ${PANEL_PAD} min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${route ? CLICKABLE_ROW : ''}`}
     >
       <div className="mb-3">
         <p className="text-sm font-semibold text-ink">{title}</p>
@@ -309,6 +311,76 @@ function NewTransactionMenu({ navigate }) {
   )
 }
 
+
+function DistributionChart({ items, otherLabel, privacyMode, formatCurrency }) {
+  const MASKED = maskedAmount()
+  const sorted = items.map(item => ({ ...item, value: Number(item.value) || 0 })).filter(item => item.value > 0).sort((a, b) => b.value - a.value)
+  const total = sorted.reduce((sum, item) => sum + item.value, 0)
+  const grouped = sorted.length > 5
+    ? [...sorted.slice(0, 4), { label: `Other ${otherLabel} (${sorted.length - 4})`, value: sorted.slice(4).reduce((sum, item) => sum + item.value, 0) }]
+    : sorted
+  const data = grouped.map(item => ({ ...item, percent: total ? Number((item.value / total * 100).toFixed(1)) : 0 }))
+  if (!data.length) return <p className="py-12 text-center text-xs text-muted">No positive balances to display.</p>
+  return (
+    <div className="flex min-h-44 items-center gap-2">
+      <div className="h-44 w-24 shrink-0 sm:w-32">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={data}
+              dataKey="value"
+              nameKey="label"
+              cx="50%"
+              cy="50%"
+              innerRadius={28}
+              outerRadius={44}
+              paddingAngle={2}
+              strokeWidth={0}
+            >
+              {data.map((entry, idx) => (
+                <Cell key={entry.label} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
+              ))}
+            </Pie>
+            <RechartsTooltip
+              contentStyle={TOOLTIP_STYLE}
+              formatter={(value, name) => [
+                privacyMode ? MASKED : formatCurrency(value),
+                name,
+              ]}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div className="flex flex-1 flex-col justify-center gap-1.5 min-w-0 pr-1">
+        {data.map((item, idx) => {
+          const color = PIE_COLORS[idx % PIE_COLORS.length]
+          return (
+            <div
+              key={item.label}
+              className="flex items-center justify-between text-xs gap-1.5 min-w-0"
+              title={`${item.label}: ${privacyMode ? MASKED : formatCurrency(item.value)} (${item.percent}%)`}
+            >
+              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                <span
+                  className="h-2 w-2 rounded-full shrink-0"
+                  style={{ backgroundColor: color }}
+                />
+                <span className="min-w-0 wrap-anywhere text-[11px] font-medium text-ink">
+                  {item.label}
+                </span>
+              </div>
+              <span className="shrink-0 text-[10px] font-semibold text-muted">
+                {item.percent}%
+              </span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export default function Dashboard() {
   const navigate = useNavigate()
   const { profile } = useProfile()
@@ -393,7 +465,8 @@ export default function Dashboard() {
     setExporting(true)
     setExportError(null)
     try {
-      const res = await apiFetch(`/api/dashboard/export?year=${year}`)
+      const res = await protectedDashboardPdf(`/api/dashboard/export?year=${year}`)
+      if (!res) return
       if (!res.ok) throw new Error('Export request failed')
       const blob = await res.blob()
       const url = window.URL.createObjectURL(blob)
@@ -411,16 +484,7 @@ export default function Dashboard() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="space-y-5 animate-fadeIn">
-        <Breadcrumb items={['Dashboard']} />
-        <div className={`${PANEL} ${PANEL_PAD} flex items-center justify-center gap-2 py-16 text-sm text-muted`}>
-          <Loader2 size={16} className="animate-spin" /> Loading dashboard…
-        </div>
-      </div>
-    )
-  }
+  if (loading) return <div className="space-y-6"><Breadcrumb items={['Dashboard']} /><PageSkeleton /></div>
 
   if (error || !data) {
     return (
@@ -477,43 +541,6 @@ export default function Dashboard() {
     route: cfg.route,
   }))
 
-  // Process cash distribution data: if more than 5 accounts exist, group into
-  // top 4 largest accounts + aggregated "Other Accounts (N)" slice.
-  // This keeps the donut clean, legible, and prevents legend collisions.
-  const rawCashData = chartData?.cash_distribution || []
-  const totalCashBalance = rawCashData.reduce((sum, item) => sum + (Number(item.value) || 0), 0)
-
-  const processedCashDistribution = (() => {
-    if (!rawCashData.length) return []
-    if (rawCashData.length <= 5) {
-      return rawCashData.map((item) => ({
-        ...item,
-        cleanName: item.label.replace(/\s*\([^)]*\)\s*$/, '').trim() || item.label,
-        percent: totalCashBalance > 0 ? Math.round((Number(item.value) / totalCashBalance) * 100) : 0,
-      }))
-    }
-
-    const sorted = [...rawCashData].sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
-    const top = sorted.slice(0, 4)
-    const others = sorted.slice(4)
-    const othersTotal = others.reduce((sum, item) => sum + (Number(item.value) || 0), 0)
-
-    const result = top.map((item) => ({
-      ...item,
-      cleanName: item.label.replace(/\s*\([^)]*\)\s*$/, '').trim() || item.label,
-      percent: totalCashBalance > 0 ? Math.round((Number(item.value) / totalCashBalance) * 100) : 0,
-    }))
-
-    result.push({
-      label: `Other Accounts (${others.length})`,
-      cleanName: `Other Accounts (${others.length})`,
-      value: othersTotal,
-      percent: totalCashBalance > 0 ? Math.round((othersTotal / totalCashBalance) * 100) : 0,
-      isOthers: true,
-    })
-
-    return result
-  })()
 
   return (
     <div className="space-y-6 animate-fadeIn">
@@ -571,344 +598,6 @@ export default function Dashboard() {
             />
           ))}
         </div>
-      </div>
-
-      {/* AI Insights */}
-      <div className={`${HIGHLIGHT_PANEL} p-5`}>
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/20 text-primary-dark">
-              <Sparkles size={18} />
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-ink">AI Insights</h2>
-              <p className="text-xs text-muted">Powered by predictive analytics</p>
-            </div>
-          </div>
-          <Button variant="primary" size="sm" onClick={() => navigate('/analytics/ai-recommendations')}>
-            View Recommendations
-          </Button>
-        </div>
-        {aiInsights.length === 0 ? (
-          <p className="py-6 text-center text-xs text-muted">No AI insights generated yet.</p>
-        ) : (
-          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
-            {aiInsights.map((insight, idx) => {
-              const Icon = PRIORITY_ICON[insight.priority] || Sparkles
-              return (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => navigate(insight.route || '/analytics/ai-recommendations')}
-                  className="group flex items-start gap-2.5 rounded-lg border border-border bg-surface p-3 text-left
-                    transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
-                >
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/15 text-primary-dark">
-                    <Icon size={15} />
-                  </div>
-                  <p className="text-xs leading-snug text-ink">{normalizeAiCurrencyText(insight.text)}</p>
-                </button>
-              )
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Forecast Summary */}
-      <div className={`${HIGHLIGHT_PANEL} ${PANEL_PAD}`}>
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/20 text-primary-dark">
-              <Target size={18} />
-            </div>
-            <div>
-              <h2 className={SECTION_TITLE}>Forecast Summary</h2>
-              <p className={SECTION_SUBTITLE}>Latest generated forecasts</p>
-            </div>
-          </div>
-          <Button variant="primary" size="sm" onClick={() => navigate('/analytics/forecasting')}>
-            View Detailed Forecast
-          </Button>
-        </div>
-        {forecastSummary.length === 0 ? (
-          <p className="py-6 text-center text-xs text-muted">No forecasts generated yet.</p>
-        ) : (
-          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-            {forecastSummary.map((card) => {
-              const Icon = iconForForecast(card.forecast_target)
-              const hasTrend = card.trend !== null && card.trend !== undefined
-              const TrendIcon = hasTrend && card.trend >= 0 ? ArrowUpRight : ArrowDownRight
-              return (
-                <button
-                  key={card.forecast_target}
-                  type="button"
-                  onClick={() => navigate(card.route)}
-                  className={`rounded-lg border border-border bg-surface p-3 text-left ${CLICKABLE_ROW}`}
-                >
-                  <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-md bg-primary/15 text-primary-dark">
-                    <Icon size={15} />
-                  </div>
-                  <p className="text-xs text-muted">Predicted {card.forecast_target}</p>
-                  <p className="mt-0.5 text-base font-bold text-ink">{privacyMode ? MASKED : formatCurrency(card.predicted_amount)}</p>
-                  {hasTrend && (
-                    <p className={`mt-1 flex items-center gap-1 text-[11px] font-semibold ${card.trend >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-                      <TrendIcon size={12} /> {Math.abs(card.trend)}% vs. actual
-                    </p>
-                  )}
-                </button>
-              )
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Module cards */}
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className={SECTION_TITLE}>Modules</h2>
-          <span className={SECTION_SUBTITLE}>Tap a card to open</span>
-        </div>
-        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
-          {moduleCards.map((card) => {
-            const Icon = card.icon
-            return (
-              <button
-                key={card.title}
-                type="button"
-                onClick={() => handleModuleClick(card.route)}
-                className={`group relative flex min-w-0 flex-col items-start gap-3 sm:flex-row sm:items-center ${PANEL} p-3 text-left ${CLICKABLE_ROW}`}
-              >
-                <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${card.iconBg}`}>
-                  <Icon size={14} className={card.iconColor} />
-                </div>
-                <div className="min-w-0 w-full flex-1">
-                  <p className="truncate text-xs font-medium text-muted">{card.title}</p>
-                  <p className="text-sm font-bold tabular-nums break-words text-ink">{card.value}</p>
-                </div>
-                <ChevronRight
-                  size={14}
-                  className="absolute right-3 top-4 sm:static shrink-0 text-muted opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-hover:text-primary"
-                />
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Charts section  -  real data from /api/dashboard/charts */}
-      <div>
-        <h2 className={`mb-2 ${SECTION_TITLE}`}>Charts &amp; Trends</h2>
-
-        {chartsError && (
-          <div className="mb-3 flex items-center gap-2 rounded-lg border border-status-danger-border bg-status-danger-bg px-4 py-3 text-sm text-status-danger">
-            <AlertTriangle size={15} className="shrink-0" />
-            {chartsError}
-          </div>
-        )}
-
-        {chartsLoading ? (
-          <div className={`${PANEL} ${PANEL_PAD} flex items-center justify-center gap-2 py-16 text-sm text-muted`}>
-            <Loader2 size={16} className="animate-spin" /> Loading charts…
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
-            <ChartCard title="Revenue Trend" subtitle={`${year}, monthly`} route={CHART_ROUTES.revenue_trend} navigate={navigate} empty={!chartData?.revenue_trend?.length}>
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData?.revenue_trend} margin={CHART_MARGIN}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e5e5e5)" />
-                  <XAxis dataKey="label" tick={AXIS_STYLE} interval={0} tickFormatter={shortMonthTick} />
-                  <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={62} />
-                  <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
-                  <Line type="monotone" dataKey="value" name="Revenue" stroke={CHART_COLORS.revenue} strokeWidth={2} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </ChartCard>
-
-            <ChartCard title="Expense Trend" subtitle={`${year}, monthly`} route={CHART_ROUTES.expense_trend} navigate={navigate} empty={!chartData?.expense_trend?.length}>
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData?.expense_trend} margin={CHART_MARGIN}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e5e5e5)" />
-                  <XAxis dataKey="label" tick={AXIS_STYLE} interval={0} tickFormatter={shortMonthTick} />
-                  <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={62} />
-                  <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
-                  <Line type="monotone" dataKey="value" name="Expenses" stroke={CHART_COLORS.expense} strokeWidth={2} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </ChartCard>
-
-            <ChartCard title="Collections Trend" subtitle="Daily, 30 days" route={CHART_ROUTES.collections_trend} navigate={navigate} empty={!chartData?.collections_trend?.length}>
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData?.collections_trend} margin={CHART_MARGIN}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e5e5e5)" />
-                  <XAxis dataKey="label" tick={AXIS_STYLE} interval={0} ticks={evenTicks(chartData?.collections_trend, 7)} />
-                  <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={62} />
-                  <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
-                  <Area type="monotone" dataKey="value" name="Collected" stroke={CHART_COLORS.collections} fill={CHART_COLORS.collections} fillOpacity={0.15} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </ChartCard>
-
-            <ChartCard title="Cash Flow" subtitle="Inflow vs. outflow" route={CHART_ROUTES.cash_flow_trend} navigate={navigate} empty={!chartData?.cash_flow_trend?.length}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData?.cash_flow_trend} margin={CHART_MARGIN}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e5e5e5)" />
-                  <XAxis dataKey="label" tick={AXIS_STYLE} interval={0} tickFormatter={shortMonthTick} />
-                  <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={62} />
-                  <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} formatter={(value) => (value?.length > 16 ? `${value.slice(0, 14)}…` : value)} />
-                  <Bar dataKey="inflow" name="Inflow" fill={CHART_COLORS.inflow} radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="outflow" name="Outflow" fill={CHART_COLORS.outflow} radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartCard>
-
-            <ChartCard
-              title="Cash Account Distribution"
-              subtitle="Available cash by account"
-              route="/master-data/cash-accounts"
-              navigate={navigate}
-              empty={!processedCashDistribution.length}
-            >
-              <div className="flex h-full items-center gap-2">
-                <div className="h-full w-28 shrink-0 sm:w-32">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={processedCashDistribution}
-                        dataKey="value"
-                        nameKey="label"
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={28}
-                        outerRadius={44}
-                        paddingAngle={2}
-                        strokeWidth={0}
-                      >
-                        {processedCashDistribution.map((entry, idx) => (
-                          <Cell key={entry.label} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <RechartsTooltip
-                        contentStyle={TOOLTIP_STYLE}
-                        formatter={(value, name) => [
-                          privacyMode ? MASKED : formatCurrency(value),
-                          name,
-                        ]}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-
-                <div className="flex flex-1 flex-col justify-center gap-1.5 min-w-0 pr-1">
-                  {processedCashDistribution.map((item, idx) => {
-                    const color = PIE_COLORS[idx % PIE_COLORS.length]
-                    return (
-                      <div
-                        key={item.label}
-                        className="flex items-center justify-between text-xs gap-1.5 min-w-0"
-                        title={`${item.label}: ${privacyMode ? MASKED : formatCurrency(item.value)} (${item.percent}%)`}
-                      >
-                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                          <span
-                            className="h-2 w-2 rounded-full shrink-0"
-                            style={{ backgroundColor: color }}
-                          />
-                          <span className="truncate text-[11px] font-medium text-ink">
-                            {item.cleanName}
-                          </span>
-                        </div>
-                        <span className="shrink-0 text-[10px] font-semibold text-muted">
-                          {item.percent}%
-                        </span>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            </ChartCard>
-
-            <ChartCard title="Expenses by Category" subtitle={String(year)} route={CHART_ROUTES.expense_trend} navigate={navigate} empty={!chartData?.expense_breakdown?.length}>
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={chartData?.expense_breakdown}
-                    dataKey="value"
-                    nameKey="label"
-                    cx="50%"
-                    cy="45%"
-                    innerRadius={38}
-                    outerRadius={58}
-                    paddingAngle={2}
-                    strokeWidth={0}
-                  >
-                    {chartData?.expense_breakdown?.map((entry, idx) => (
-                      <Cell key={entry.label} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} formatter={(value) => (value?.length > 16 ? `${value.slice(0, 14)}…` : value)} />
-                </PieChart>
-              </ResponsiveContainer>
-            </ChartCard>
-
-            <ChartCard title="Budget Utilization" subtitle="By department" route={CHART_ROUTES.budget_utilization} navigate={navigate} empty={!chartData?.budget_utilization?.length}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData?.budget_utilization} margin={CHART_MARGIN}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e5e5e5)" />
-                  <XAxis dataKey="label" tick={AXIS_STYLE} interval={0} angle={-15} textAnchor="end" height={40} />
-                  <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={62} />
-                  <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} formatter={(value) => (value?.length > 16 ? `${value.slice(0, 14)}…` : value)} />
-                  <Bar dataKey="allocated" name="Allocated" fill={CHART_COLORS.allocated} radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="used" name="Used" fill={CHART_COLORS.used} radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartCard>
-
-            <ChartCard title="Receivable Aging" subtitle="0-30 / 31-60 / 61-90 / 90+" route={CHART_ROUTES.receivable_aging} navigate={navigate} empty={!chartData?.receivable_aging?.length}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData?.receivable_aging} margin={CHART_MARGIN}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e5e5e5)" />
-                  <XAxis dataKey="label" tick={AXIS_STYLE} interval={0} />
-                  <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={62} />
-                  <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
-                  <Bar dataKey="value" name="Outstanding" fill={CHART_COLORS.aging} radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartCard>
-
-            <ChartCard title="Payable Aging" subtitle="0-30 / 31-60 / 61-90 / 90+" route={CHART_ROUTES.payable_aging} navigate={navigate} empty={!chartData?.payable_aging?.length}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData?.payable_aging} margin={CHART_MARGIN}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e5e5e5)" />
-                  <XAxis dataKey="label" tick={AXIS_STYLE} interval={0} />
-                  <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={62} />
-                  <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
-                  <Bar dataKey="value" name="Outstanding" fill={CHART_COLORS.outflow} radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartCard>
-          </div>
-        )}
-      </div>
-
-      {/* Recent transactions */}
-      <div className={PANEL}>
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <div>
-            <p className={SECTION_TITLE}>Recent Transactions</p>
-            <p className={`mt-0.5 ${SECTION_SUBTITLE}`}>Latest financial activity across all accounts</p>
-          </div>
-          <Button variant="ghost" size="sm" onClick={() => navigate('/reports')}>View all</Button>
-        </div>
-        <Table
-          columns={COLUMNS}
-          data={transactions.map((t) => ({ ...t, date: formatDate(t.date), amount: privacyMode ? MASKED : formatCurrency(t.amount) }))}
-          onRowClick={(row) => row.route && navigate(row.route)}
-        />
-        {transactions.length === 0 && (
-          <p className="px-4 py-8 text-center text-xs text-muted">No recent transactions.</p>
-        )}
       </div>
 
       {/* Approvals, Deadlines, Notifications */}
@@ -1014,6 +703,270 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* Module cards */}
+      <div>
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className={SECTION_TITLE}>Modules</h2>
+          <span className={SECTION_SUBTITLE}>Tap a card to open</span>
+        </div>
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+          {moduleCards.map((card) => {
+            const Icon = card.icon
+            return (
+              <button
+                key={card.title}
+                type="button"
+                onClick={() => handleModuleClick(card.route)}
+                className={`group relative flex min-w-0 flex-col items-start gap-3 sm:flex-row sm:items-center ${PANEL} p-3 text-left ${CLICKABLE_ROW}`}
+              >
+                <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${card.iconBg}`}>
+                  <Icon size={14} className={card.iconColor} />
+                </div>
+                <div className="min-w-0 w-full flex-1">
+                  <p className="truncate text-xs font-medium text-muted">{card.title}</p>
+                  <p className="text-sm font-bold tabular-nums break-words text-ink">{card.value}</p>
+                </div>
+                <ChevronRight
+                  size={14}
+                  className="absolute right-3 top-4 sm:static shrink-0 text-muted opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-hover:text-primary"
+                />
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Charts section  -  real data from /api/dashboard/charts */}
+      <div>
+        <h2 className={`mb-2 ${SECTION_TITLE}`}>Charts &amp; Trends</h2>
+
+        {chartsError && (
+          <div className="mb-3 flex items-center gap-2 rounded-lg border border-status-danger-border bg-status-danger-bg px-4 py-3 text-sm text-status-danger">
+            <AlertTriangle size={15} className="shrink-0" />
+            {chartsError}
+          </div>
+        )}
+
+        {chartsLoading ? (
+          <ContentSkeleton rows={5} />
+        ) : (
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
+            <ChartCard title="Revenue Trend" subtitle={`${year}, monthly`} route={CHART_ROUTES.revenue_trend} navigate={navigate} empty={!chartData?.revenue_trend?.length}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData?.revenue_trend} margin={CHART_MARGIN}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e5e5e5)" />
+                  <XAxis dataKey="label" tick={AXIS_STYLE} interval={0} tickFormatter={shortMonthTick} />
+                  <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={62} />
+                  <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
+                  <Line type="monotone" dataKey="value" name="Revenue" stroke={CHART_COLORS.revenue} strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </ChartCard>
+
+            <ChartCard title="Expense Trend" subtitle={`${year}, monthly`} route={CHART_ROUTES.expense_trend} navigate={navigate} empty={!chartData?.expense_trend?.length}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData?.expense_trend} margin={CHART_MARGIN}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e5e5e5)" />
+                  <XAxis dataKey="label" tick={AXIS_STYLE} interval={0} tickFormatter={shortMonthTick} />
+                  <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={62} />
+                  <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
+                  <Line type="monotone" dataKey="value" name="Expenses" stroke={CHART_COLORS.expense} strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </ChartCard>
+
+            <ChartCard title="Collections Trend" subtitle="Daily, 30 days" route={CHART_ROUTES.collections_trend} navigate={navigate} empty={!chartData?.collections_trend?.length}>
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData?.collections_trend} margin={CHART_MARGIN}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e5e5e5)" />
+                  <XAxis dataKey="label" tick={AXIS_STYLE} interval={0} ticks={evenTicks(chartData?.collections_trend, 7)} />
+                  <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={62} />
+                  <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
+                  <Area type="monotone" dataKey="value" name="Collected" stroke={CHART_COLORS.collections} fill={CHART_COLORS.collections} fillOpacity={0.15} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </ChartCard>
+
+            <ChartCard title="Cash Flow" subtitle="Inflow vs. outflow" route={CHART_ROUTES.cash_flow_trend} navigate={navigate} empty={!chartData?.cash_flow_trend?.length}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData?.cash_flow_trend} margin={CHART_MARGIN}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e5e5e5)" />
+                  <XAxis dataKey="label" tick={AXIS_STYLE} interval={0} tickFormatter={shortMonthTick} />
+                  <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={62} />
+                  <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} formatter={(value) => (value?.length > 16 ? `${value.slice(0, 14)}…` : value)} />
+                  <Bar dataKey="inflow" name="Inflow" fill={CHART_COLORS.inflow} radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="outflow" name="Outflow" fill={CHART_COLORS.outflow} radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartCard>
+
+            <ChartCard
+              title="Cash Account Distribution"
+              subtitle="Available cash by account"
+              route="/master-data/cash-accounts"
+              navigate={navigate}
+              empty={!chartData?.cash_distribution?.length}
+              contentClassName="min-h-44"
+            >
+              <DistributionChart items={chartData?.cash_distribution || []} otherLabel="accounts" privacyMode={privacyMode} formatCurrency={formatCurrency} />
+            </ChartCard>
+
+            <ChartCard title="Expenses by Category" subtitle={String(year)} route={CHART_ROUTES.expense_trend} navigate={navigate} empty={!chartData?.expense_breakdown?.length} contentClassName="min-h-44">
+              <DistributionChart items={chartData?.expense_breakdown || []} otherLabel="categories" privacyMode={privacyMode} formatCurrency={formatCurrency} />
+            </ChartCard>
+
+            <ChartCard title="Budget Utilization" subtitle="By department" route={CHART_ROUTES.budget_utilization} navigate={navigate} empty={!chartData?.budget_utilization?.length}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData?.budget_utilization} margin={CHART_MARGIN}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e5e5e5)" />
+                  <XAxis dataKey="label" tick={AXIS_STYLE} interval={0} angle={-15} textAnchor="end" height={40} />
+                  <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={62} />
+                  <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} formatter={(value) => (value?.length > 16 ? `${value.slice(0, 14)}…` : value)} />
+                  <Bar dataKey="allocated" name="Allocated" fill={CHART_COLORS.allocated} radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="used" name="Used" fill={CHART_COLORS.used} radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartCard>
+
+            <ChartCard title="Receivable Aging" subtitle="0-30 / 31-60 / 61-90 / 90+" route={CHART_ROUTES.receivable_aging} navigate={navigate} empty={!chartData?.receivable_aging?.length}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData?.receivable_aging} margin={CHART_MARGIN}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e5e5e5)" />
+                  <XAxis dataKey="label" tick={AXIS_STYLE} interval={0} />
+                  <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={62} />
+                  <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
+                  <Bar dataKey="value" name="Outstanding" fill={CHART_COLORS.aging} radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartCard>
+
+            <ChartCard title="Payable Aging" subtitle="0-30 / 31-60 / 61-90 / 90+" route={CHART_ROUTES.payable_aging} navigate={navigate} empty={!chartData?.payable_aging?.length}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData?.payable_aging} margin={CHART_MARGIN}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #e5e5e5)" />
+                  <XAxis dataKey="label" tick={AXIS_STYLE} interval={0} />
+                  <YAxis domain={[0, (dataMax) => (dataMax > 0 ? dataMax : 1)]} allowDecimals={false} tick={AXIS_STYLE} tickFormatter={chartTick} width={62} />
+                  <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={chartTooltip} />
+                  <Bar dataKey="value" name="Outstanding" fill={CHART_COLORS.outflow} radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartCard>
+          </div>
+        )}
+      </div>
+
+      {/* Recent transactions */}
+      <div className={PANEL}>
+        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+          <div>
+            <p className={SECTION_TITLE}>Recent Transactions</p>
+            <p className={`mt-0.5 ${SECTION_SUBTITLE}`}>Latest financial activity across all accounts</p>
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => navigate('/reports')}>View all</Button>
+        </div>
+        <Table
+          columns={COLUMNS}
+          data={transactions.map((t) => ({ ...t, date: formatDate(t.date), amount: privacyMode ? MASKED : formatCurrency(t.amount) }))}
+          onRowClick={(row) => row.route && navigate(row.route)}
+        />
+        {transactions.length === 0 && (
+          <p className="px-4 py-8 text-center text-xs text-muted">No recent transactions.</p>
+        )}
+      </div>
+
+      {/* AI Insights */}
+      <div className={`${HIGHLIGHT_PANEL} p-5`}>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/20 text-primary-dark">
+              <Sparkles size={18} />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-ink">AI Insights</h2>
+              <p className="text-xs text-muted">Powered by predictive analytics</p>
+            </div>
+          </div>
+          <Button variant="primary" size="sm" onClick={() => navigate('/analytics/ai-recommendations')}>
+            View Recommendations
+          </Button>
+        </div>
+        {aiInsights.length === 0 ? (
+          <p className="py-6 text-center text-xs text-muted">No AI insights generated yet.</p>
+        ) : (
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+            {aiInsights.map((insight, idx) => {
+              const Icon = PRIORITY_ICON[insight.priority] || Sparkles
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => navigate(insight.route || '/analytics/ai-recommendations')}
+                  className="group flex items-start gap-2.5 rounded-lg border border-border bg-surface p-3 text-left
+                    transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+                >
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/15 text-primary-dark">
+                    <Icon size={15} />
+                  </div>
+                  <p className="text-xs leading-snug text-ink">{normalizeAiCurrencyText(insight.text)}</p>
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Forecast Summary */}
+      <div className={`${HIGHLIGHT_PANEL} ${PANEL_PAD}`}>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/20 text-primary-dark">
+              <Target size={18} />
+            </div>
+            <div>
+              <h2 className={SECTION_TITLE}>Forecast Summary</h2>
+              <p className={SECTION_SUBTITLE}>Latest generated forecasts</p>
+            </div>
+          </div>
+          <Button variant="primary" size="sm" onClick={() => navigate('/analytics/forecasting')}>
+            View Detailed Forecast
+          </Button>
+        </div>
+        {forecastSummary.length === 0 ? (
+          <p className="py-6 text-center text-xs text-muted">No forecasts generated yet.</p>
+        ) : (
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+            {forecastSummary.map((card) => {
+              const Icon = iconForForecast(card.forecast_target)
+              const hasTrend = card.trend !== null && card.trend !== undefined
+              const favorable = /expense/i.test(card.forecast_target) ? card.trend < 0 : card.trend > 0
+              const TrendIcon = hasTrend && card.trend >= 0 ? ArrowUpRight : ArrowDownRight
+              return (
+                <button
+                  key={card.forecast_target}
+                  type="button"
+                  onClick={() => navigate(card.route)}
+                  className={`rounded-lg border border-border bg-surface p-3 text-left ${CLICKABLE_ROW}`}
+                >
+                  <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-md bg-primary/15 text-primary-dark">
+                    <Icon size={15} />
+                  </div>
+                  <p className="text-xs text-muted">Predicted {card.forecast_target}</p>
+                  <p className="mt-0.5 text-base font-bold text-ink">{privacyMode ? MASKED : formatCurrency(card.predicted_amount)}</p>
+                  {hasTrend && (
+                    <p className={`mt-1 flex items-center gap-1 text-[11px] font-semibold ${Number(card.trend) === 0 ? 'text-muted' : favorable ? 'text-status-success' : 'text-status-danger'}`}>
+                      <TrendIcon size={12} /> {Math.abs(card.trend)}% vs. actual
+                    </p>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
     </div>
   )
 }

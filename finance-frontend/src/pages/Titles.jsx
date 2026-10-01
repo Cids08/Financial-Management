@@ -1,3 +1,4 @@
+import { ContentSkeleton } from '../components/LoadingSkeleton'
 import { useEffect, useState, useCallback } from 'react'
 import { Search, Plus, Pencil, Archive, RotateCcw, Briefcase, Users, X } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
@@ -184,7 +185,7 @@ export default function Titles({ title = 'Titles', crumbs = ['Master Data', 'Tit
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {loading ? (
-          <div className={`${PANEL} p-10 text-center text-sm text-muted sm:col-span-2 xl:col-span-3`}>Loading positions...</div>
+          <ContentSkeleton rows={4} />
         ) : titles.length === 0 ? (
           <div className={`${PANEL} p-10 text-center text-sm text-muted sm:col-span-2 xl:col-span-3`}>
             {showArchived ? 'No archived positions.' : 'No positions match your search.'}

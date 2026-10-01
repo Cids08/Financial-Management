@@ -1,3 +1,5 @@
+import { TableSkeleton, ContentSkeleton } from '../components/LoadingSkeleton'
+import ResponsiveTable from '../components/ResponsiveTable'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search, Plus, Pencil, Archive, RotateCcw, FileText, Wallet, AlertTriangle, Info, Printer, CheckCircle2, XCircle, Paperclip, Upload, ScanLine, X, Sparkles } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
@@ -880,7 +882,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {statCards.map((card) => {
           const Icon = card.icon
           return (
@@ -897,7 +899,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
               </div>
               <div className="min-w-0">
                 <p className="text-xs text-muted">{card.label}</p>
-                <p className="text-lg font-bold text-ink">{statsLoading ? '—' : card.value}</p>
+                <p className="text-lg font-bold text-ink wrap-anywhere">{statsLoading ? '—' : card.value}</p>
               </div>
             </button>
           )
@@ -949,21 +951,21 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
 
       <div className={PANEL}>
         <div className="overflow-hidden rounded-t-xl">
-          <table className="w-full text-sm table-fixed">
+          <ResponsiveTable minTableWidth={1050} className="w-full text-sm table-fixed">
             <thead className="bg-surface">
               <tr className="border-b border-border">
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2.5 py-3 w-[16%] whitespace-nowrap">Bill</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[14%] whitespace-nowrap">Supplier</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2.5 py-3 w-[15%] whitespace-nowrap">Bill</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[13%] whitespace-nowrap">Supplier</th>
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[10%] whitespace-nowrap">Due Date</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[12%] whitespace-nowrap">Amount Due</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[12%] whitespace-nowrap">Penalty</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[12%] whitespace-nowrap">Status</th>
-                <th className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wider px-2.5 py-3 w-[19%] whitespace-nowrap">Actions</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[14%] whitespace-nowrap">Amount Due</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[10%] whitespace-nowrap">Penalty</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[13%] whitespace-nowrap">Status</th>
+                <th className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wider px-2.5 py-3 w-[25%] whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody>
               {billsLoading && (
-                <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-muted">Loading bills…</td></tr>
+                <TableSkeleton columns={7} />
               )}
 
               {!billsLoading && filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE).map((r) => (
@@ -973,7 +975,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                       <button
                         type="button"
                         onClick={() => openDetail(r)}
-                        className="font-semibold text-xs sm:text-sm text-ink hover:text-primary transition-colors text-left truncate block shrink-0"
+                        className="font-semibold text-xs sm:text-sm text-ink hover:text-primary transition-colors text-left truncate block min-w-0"
                         title="Click to view bill details"
                       >
                         {r.invoice_number}
@@ -1152,10 +1154,10 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                 </tr>
               ))}
               {!billsLoading && filtered.length === 0 && (
-                <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">No bills match your filters.</td></tr>
+                <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-muted">No bills match your filters.</td></tr>
               )}
             </tbody>
-          </table>
+          </ResponsiveTable>
         </div>
       </div>
 
@@ -1582,7 +1584,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
               </div>
               <div className="rounded-lg border border-border divide-y divide-border max-h-48 overflow-y-auto bg-slate-50/50 dark:bg-slate-900/30">
                 {billDisbursementsLoading && (
-                  <p className="px-3 py-3 text-xs text-muted text-center">Loading disbursements…</p>
+                  <ContentSkeleton />
                 )}
                 {!billDisbursementsLoading && billDisbursements.length === 0 && (
                   <p className="px-3 py-3 text-xs text-muted text-center">No disbursements recorded against this bill yet.</p>
@@ -1614,7 +1616,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
               </div>
               <div className="rounded-lg border border-border divide-y divide-border max-h-48 overflow-y-auto bg-slate-50/50 dark:bg-slate-900/30">
                 {auditLogsLoading && (
-                  <p className="px-3 py-3 text-xs text-muted text-center">Loading audit history…</p>
+                  <ContentSkeleton />
                 )}
                 {!auditLogsLoading && auditLogsError && (
                   <p className="px-3 py-3 text-xs text-status-danger text-center">{auditLogsError}</p>

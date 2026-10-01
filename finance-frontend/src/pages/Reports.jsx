@@ -1,3 +1,5 @@
+import { ContentSkeleton } from '../components/LoadingSkeleton'
+import ResponsiveTable from '../components/ResponsiveTable'
 import { Fragment, useMemo, useState, useEffect } from 'react'
 import {
   FileBarChart, TrendingUp, Wallet, Users, Truck, PiggyBank, Download, ChevronRight, Loader2,
@@ -16,7 +18,8 @@ import { useDataUpdates } from '../hooks/useDataUpdates'
 import { useProfile } from '../hooks/useProfile'
 import { useCompany } from '../context/CompanyContext'
 import { usePrivacy } from '../context/PrivacyContext'
-import { escapeHtml, currencyLabel } from '../utils/print'
+import { downloadProtectedPdf } from '../utils/secureExport'
+import { downloadCsv, escapeHtml, currencyLabel } from '../utils/print'
 
 const PANEL = 'rounded-2xl border border-border bg-surface shadow-card'
 const PANEL_PAD = 'p-4 sm:p-5'
@@ -90,9 +93,7 @@ function AgingTotalCell({ value }) {
 
 function ReportLoading() {
   return (
-    <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted">
-      <Loader2 size={16} className="animate-spin" /> Loading report…
-    </div>
+    <ContentSkeleton rows={4} />
   )
 }
 
@@ -511,7 +512,7 @@ function buildDocHeader(company, title, subtitle, generatedAt, generatedBy, user
       </div>
       <div class="doc-header-meta-box">
         <div class="doc-title">${escapeHtml(title)}</div>
-        <div class="doc-meta-row"><span class="doc-meta-label">Period:</span> <span class="doc-meta-val">${escapeHtml(subtitle || 'All Records')}</span></div>
+        <div class="doc-meta-row"><span class="doc-meta-label">Period:</span> <span class="doc-meta-val">${escapeHtml((subtitle || 'All Records').replace(/^Period:\s*/i, ''))}</span></div>
         <div class="doc-meta-row"><span class="doc-meta-label">Run Date:</span> <span class="doc-meta-val">${escapeHtml(generatedAt)}</span></div>
         ${userMeta}
         <div class="doc-meta-row"><span class="doc-meta-label">Currency:</span> <span class="doc-meta-val">${escapeHtml(currencyLabel())}</span></div>
@@ -556,6 +557,58 @@ function buildSignatureBlock(userName, userRole, dateStr) {
 `
 }
 
+
+const REPORT_DOCUMENT_STYLES = `
+    @page { size: A4 landscape; margin: 12mm; }
+    body { font-family: DejaVu Sans, sans-serif; font-size: 9pt; color: #111; }
+    .report-page { page-break-after: always; } .report-page:last-child { page-break-after: auto; }
+    .doc-header { border-bottom: 3px solid #e5ac00; padding-bottom: 10px; margin-bottom: 12px; }
+    .doc-header-brand { display: table; width: 100%; }
+    .doc-header-company { display: table-cell; vertical-align: middle; }
+    .doc-header-logo { max-width: 64px; max-height: 48px; margin-right: 12px; }
+    .doc-header-logo-init { display: none; }
+    .section-row td, .total-row td { background: #f3f3f3; font-weight: bold; }
+    .grand-total td { border-top: 2px solid #111; font-weight: bold; }
+    .doc-header-company-name { font-size: 18px; font-weight: bold; }
+    .doc-title { font-size: 15px; font-weight: bold; margin-top: 8px; }
+    table { width: 100%; border-collapse: collapse; margin: 10px 0; table-layout: fixed; }
+    th,td { padding: 6px; border-bottom: 1px solid #ddd; overflow-wrap: break-word; }
+    th { background: #f3f3f3; text-align: left; } .num { text-align: right; }
+    thead { display: table-header-group; } tr { page-break-inside: avoid; }
+    .signature-section { page-break-inside: avoid; margin-top: 24px; }
+    .signature-section-title { font-weight: bold; margin-bottom: 8px; }
+    .signature-row { display: table; width: 100%; } .signature-box { display: table-cell; width: 33%; padding-right: 18px; }
+    .sig-line { height: 32px; border-bottom: 1px solid #111; margin-bottom: 5px; }
+    .doc-footer { border-top: 1px solid #bbb; margin-top: 15px; padding-top: 6px; font-size: 8pt; }
+    .doc-footer span { margin-right: 15px; }
+  `
+
+async function outputReport(mode, title, subtitle, pagesHtml, company) {
+  if (mode === 'print') return printReport(title, subtitle, pagesHtml, company)
+  const filename = title.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+  const doc = new DOMParser().parseFromString(pagesHtml, 'text/html')
+  if (mode === 'csv') {
+    const rows = []
+    doc.querySelectorAll('.report-page').forEach(page => {
+      rows.push([page.querySelector('.doc-title')?.textContent?.trim() || title])
+      page.querySelectorAll('.report-table-wrapper tr').forEach(row => {
+        const cells = []
+        Array.from(row.children).forEach(cell => {
+          cells.push(cell.textContent.replace(/\s+/g, ' ').trim())
+          for (let n = 1; n < cell.colSpan; n++) cells.push('')
+        })
+        rows.push(cells)
+      })
+      rows.push([])
+    })
+    return downloadCsv({ filename: filename + '.csv', rows, provenance: [['Company', company?.name || ''], ['Report', title], ['Period', subtitle], ['Generated', new Date().toLocaleString()]] })
+  }
+  // PDF renderer intentionally blocks external resources; use the company wordmark.
+  doc.querySelectorAll('img, .doc-header-logo-init').forEach(img => img.remove())
+
+  return downloadProtectedPdf('<!doctype html><html><head><meta charset="utf-8"><style>' + REPORT_DOCUMENT_STYLES + '</style></head><body>' + doc.body.innerHTML + '</body></html>', filename + '.pdf')
+}
+
 function printReport(title, subtitle, pagesHtml, company) {
   const win = window.open('', '_blank', 'width=950,height=1100')
   if (!win) return
@@ -565,7 +618,7 @@ function printReport(title, subtitle, pagesHtml, company) {
   <head>
     <meta charset="utf-8" />
     <title>${title} — ${company?.name ?? 'FMS'}</title>
-    <style>${PRINT_STYLES}</style>
+    <style>${REPORT_DOCUMENT_STYLES}</style>
   </head>
   <body>
     ${pagesHtml}
@@ -599,6 +652,7 @@ function agingRowHtml(label, r) {
 
 export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
   const [activeReport, setActiveReport] = useState('income-statement')
+  const [exportFormat, setExportFormat] = useState('pdf')
   const [exporting, setExporting] = useState(false)
   const [exportingActive, setExportingActive] = useState(false)
 
@@ -631,7 +685,7 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
     setReportPage(1)
   }, [activeReport])
 
-  const { data, loading, error, fetchReport, fetchAll } = useReports()
+  const { data, loading, error, fetchAll } = useReports()
 
   const { name: companyName, logoUrl: companyLogoUrl, address: companyAddress, loading: companyLoading } = useCompany()
 
@@ -654,8 +708,8 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
 
   // Fetch when active tab or applied filters change
   useEffect(() => {
-    fetchReport(activeReport, appliedFilters)
-  }, [activeReport, appliedFilters, fetchReport, refreshKey])
+    fetchAll(appliedFilters)
+  }, [appliedFilters, fetchAll, refreshKey])
 
   const handleApplyFilter = () => {
     let newFilter = {
@@ -1163,7 +1217,7 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
     'budget-vs-actual': { title: 'Budget vs. Actual', table: buildBudgetTable },
   }
 
-  const handleExportActive = async () => {
+  const handleExportActive = async (mode = exportFormat) => {
     setExportingActive(true)
     try {
       const { title: reportTitle, table } = REPORT_BUILDERS[activeReport]
@@ -1197,16 +1251,16 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
           </div>
         </div>
       `
-      printReport(reportTitle, sub, pageHtml, company)
+      await outputReport(mode, reportTitle, sub, pageHtml, company)
     } finally {
       setExportingActive(false)
     }
   }
 
-  const handleExportAll = async () => {
+  const handleExportAll = async (mode = exportFormat) => {
     setExporting(true)
     try {
-      await Promise.all([fetchAll(appliedFilters), preloadImage(company?.logoUrl)])
+      await preloadImage(company?.logoUrl)
       const generatedAt = new Date().toLocaleString('en-PH', {
         year: 'numeric', month: 'short', day: 'numeric',
         hour: '2-digit', minute: '2-digit',
@@ -1239,7 +1293,7 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
         </div>
       `).join('')
 
-      printReport('Financial Reports Package', sub, pagesHtml, company)
+      await outputReport(mode, 'Financial Reports Package', sub, pagesHtml, company)
     } finally {
       setExporting(false)
     }
@@ -1396,15 +1450,20 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 min-w-0">
+            <select aria-label="Export format" value={exportFormat} onChange={e => setExportFormat(e.target.value)} className={INPUT}>
+              <option value="pdf">PDF (password protected)</option>
+              <option value="csv">CSV (encrypted ZIP)</option>
+            </select>
+            <Button variant="secondary" size="sm" onClick={() => handleExportAll('print')} disabled={exporting || Object.values(loading).some(Boolean) || !!error}>Print All</Button>
             <Button
               variant="secondary"
               size="sm"
               icon={Download}
-              onClick={handleExportAll}
+              onClick={() => handleExportAll()}
               loading={exporting}
-              disabled={exporting}
-              title="Print complete 5-part financial report package"
+              disabled={exporting || Object.values(loading).some(Boolean) || !!error}
+              title="Download a password-protected report package"
             >
               {exporting ? 'Preparing…' : 'Export All'}
             </Button>
@@ -1450,12 +1509,13 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
               <GitCompare size={12} /> Comparing vs. {appliedFilters.compareMode === 'prior_year' ? 'Prior Year' : 'Prior Period'}
             </span>
           )}
+          <Button variant="secondary" size="sm" onClick={() => handleExportActive('print')} disabled={isActiveLoading || exportingActive}>Print</Button>
           <button
             type="button"
-            onClick={handleExportActive}
+            onClick={() => handleExportActive()}
             disabled={isActiveLoading || exportingActive}
             className="ml-auto flex items-center gap-1.5 text-xs font-semibold text-primary-dark hover:underline disabled:opacity-40 disabled:pointer-events-none"
-            title="Print or export currently active statement"
+            title="Download this statement with password protection"
           >
             {exportingActive ? (
               <>
@@ -1536,7 +1596,7 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                   </ChartPanel>
                 </div>
               <div className="overflow-hidden rounded-t-xl">
-                <table className="w-full text-sm">
+                <ResponsiveTable className="w-full text-sm">
                   {isComparing && (
                     <thead>
                       <tr className="border-b border-border bg-bg/40 text-xs font-semibold uppercase tracking-wide text-muted">
@@ -1634,7 +1694,7 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                       )}
                     </tr>
                   </tfoot>
-                </table>
+                </ResponsiveTable>
                 {incomeRows.length > REPORT_PAGE_SIZE && (
                   <Pagination page={reportPage} totalPages={Math.max(1, Math.ceil(incomeRows.length / REPORT_PAGE_SIZE))} onPageChange={setReportPage} total={incomeRows.length} label="lines" showRange rangeStart={reportStart + 1} rangeEnd={Math.min(reportEnd, incomeRows.length)} bordered />
                 )}
@@ -1673,7 +1733,7 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                   )}
                 </div>
               <div className="overflow-hidden rounded-t-xl">
-                <table className="w-full text-sm">
+                <ResponsiveTable className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border bg-bg/40 text-xs font-semibold uppercase tracking-wide text-muted">
                       <th className="px-4 py-3 text-left">Cash Account</th>
@@ -1740,7 +1800,7 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                       )}
                     </tr>
                   </tfoot>
-                </table>
+                </ResponsiveTable>
                 {cashFlow.length > REPORT_PAGE_SIZE && (
                   <Pagination page={reportPage} totalPages={Math.max(1, Math.ceil(cashFlow.length / REPORT_PAGE_SIZE))} onPageChange={setReportPage} total={cashFlow.length} label="cash accounts" showRange rangeStart={reportStart + 1} rangeEnd={Math.min(reportEnd, cashFlow.length)} bordered />
                 )}
@@ -1781,7 +1841,7 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                   </ChartPanel>
                 </div>
               <div className="overflow-hidden rounded-t-xl">
-                <table className="w-full text-sm">
+                <ResponsiveTable className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border">
                       <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3">Customer</th>
@@ -1816,7 +1876,7 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                       <td colSpan={6} className="px-4 pb-3 text-right tabular-nums text-ink font-bold">{formatCurrency(arTotal)}</td>
                     </tr>
                   </tfoot>
-                </table>
+                </ResponsiveTable>
                 {arAging.length > REPORT_PAGE_SIZE && (
                   <Pagination page={reportPage} totalPages={Math.max(1, Math.ceil(arAging.length / REPORT_PAGE_SIZE))} onPageChange={setReportPage} total={arAging.length} label="customers" showRange rangeStart={reportStart + 1} rangeEnd={Math.min(reportEnd, arAging.length)} bordered />
                 )}
@@ -1857,7 +1917,7 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                   </ChartPanel>
                 </div>
               <div className="overflow-hidden rounded-t-xl">
-                <table className="w-full text-sm">
+                <ResponsiveTable className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border">
                       <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3">Supplier</th>
@@ -1888,7 +1948,7 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                       <td colSpan={6} className="px-4 py-3 text-right tabular-nums text-ink font-bold border-t-2 border-border">Total Outstanding: {formatCurrency(apTotal)}</td>
                     </tr>
                   </tfoot>
-                </table>
+                </ResponsiveTable>
                 {apAging.length > REPORT_PAGE_SIZE && (
                   <Pagination page={reportPage} totalPages={Math.max(1, Math.ceil(apAging.length / REPORT_PAGE_SIZE))} onPageChange={setReportPage} total={apAging.length} label="suppliers" showRange rangeStart={reportStart + 1} rangeEnd={Math.min(reportEnd, apAging.length)} bordered />
                 )}
@@ -1939,7 +1999,7 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                   </ChartPanel>
                 </div>
               <div className="overflow-hidden rounded-t-xl">
-                <table className="w-full text-sm">
+                <ResponsiveTable className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border bg-bg/40 text-xs font-semibold uppercase tracking-wide text-muted">
                       <th className="px-4 py-3 text-left">Department</th>
@@ -2014,7 +2074,7 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
                       )}
                     </tr>
                   </tfoot>
-                </table>
+                </ResponsiveTable>
                 {budgetVsActual.length > REPORT_PAGE_SIZE && (
                   <Pagination page={reportPage} totalPages={Math.max(1, Math.ceil(budgetVsActual.length / REPORT_PAGE_SIZE))} onPageChange={setReportPage} total={budgetVsActual.length} label="departments" showRange rangeStart={reportStart + 1} rangeEnd={Math.min(reportEnd, budgetVsActual.length)} bordered />
                 )}

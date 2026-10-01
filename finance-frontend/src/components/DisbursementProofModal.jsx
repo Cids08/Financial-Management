@@ -1,3 +1,4 @@
+import ModalLoading from './ModalLoading'
 import { useEffect, useRef, useState } from 'react'
 import { UploadCloud, FileText, X, AlertTriangle, Eye, Loader2 } from 'lucide-react'
 import Modal from './Modal'
@@ -211,10 +212,7 @@ export default function DisbursementProofModal({ open, onClose, disbursement, fe
           </p>
 
           {historyLoading ? (
-            <div className="flex items-center justify-center py-6 text-muted gap-2 text-xs">
-              <Loader2 size={16} className="animate-spin text-primary" />
-              <span>Loading proof files...</span>
-            </div>
+            <ModalLoading />
           ) : historyError ? (
             <div className="rounded-lg border border-status-danger-border bg-status-danger-bg p-3 text-xs text-status-danger">
               {historyError}

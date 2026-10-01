@@ -1,3 +1,4 @@
+import ModalLoading from './ModalLoading'
 import { useEffect, useRef, useState } from 'react'
 import { UploadCloud, FileText, X, AlertTriangle, Eye, Loader2 } from 'lucide-react'
 import Modal from './Modal'
@@ -200,9 +201,7 @@ export default function AccountsReceivableDocumentModal({ open, onClose, invoice
         <div>
           <p className="text-xs font-medium text-ink mb-1.5">Document History</p>
           {historyLoading ? (
-            <div className="flex items-center justify-center py-6 text-xs text-muted">
-              <Loader2 size={16} className="animate-spin mr-2" /> Loading document history...
-            </div>
+            <ModalLoading />
           ) : historyError ? (
             <div className="rounded-lg border border-status-danger-border bg-status-danger-bg p-2 text-xs text-status-danger">
               {historyError}

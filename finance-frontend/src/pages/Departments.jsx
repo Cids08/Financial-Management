@@ -1,3 +1,4 @@
+import { ContentSkeleton } from '../components/LoadingSkeleton'
 import { useEffect, useState, useCallback } from 'react'
 import { Search, Plus, Pencil, Archive, RotateCcw, Building2, Users, Mail, Phone, UserCog, Eye, EyeOff, X } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
@@ -273,7 +274,7 @@ export default function Departments({ title = 'Departments', crumbs = ['Master D
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {loading ? (
-          <div className={`${PANEL} p-10 text-center text-sm text-muted sm:col-span-2 xl:col-span-3`}>Loading departments…</div>
+          <ContentSkeleton rows={4} />
         ) : departments.length === 0 ? (
           <div className={`${PANEL} p-10 text-center text-sm text-muted sm:col-span-2 xl:col-span-3`}>
             {showArchived ? 'No archived departments.' : 'No departments match your search.'}

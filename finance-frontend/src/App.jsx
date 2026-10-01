@@ -1,3 +1,4 @@
+import { PageSkeleton } from './components/LoadingSkeleton'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import ProtectedRoute from './components/ProtectedRoute'
 import RequirePermission from './components/RequirePermission'
@@ -43,7 +44,7 @@ import Login from './pages/Login'
  *  My Profile instead of a page that would render as an empty shell. */
 function SettingsGate({ children }) {
   const { hasPermission, loading } = usePermissions()
-  if (loading) return null
+  if (loading) return <PageSkeleton />
   return hasPermission('settings.manage') ? children : <Navigate to="/profile" replace />
 }
 

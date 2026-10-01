@@ -1,3 +1,4 @@
+import { ContentSkeleton } from '../components/LoadingSkeleton'
 import { useMemo, useState, useEffect } from 'react'
 import {
   Search, Sparkles, AlertTriangle, Wallet, TrendingUp, PiggyBank, Info, LineChart,
@@ -317,9 +318,8 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {loading && (
-              <div className={`${PANEL} ${PANEL_PAD} col-span-full text-center text-sm text-muted py-10`}>
-                Loading recommendations…
-              </div>
+              <><ContentSkeleton /><ContentSkeleton /></>
+
             )}
             {!loading && paginated.map((r) => {
               const meta = TYPE_META[r.recommendation_type] || DEFAULT_TYPE_META

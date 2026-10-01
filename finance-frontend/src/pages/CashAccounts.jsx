@@ -1,3 +1,5 @@
+import { TableSkeleton } from '../components/LoadingSkeleton'
+import ResponsiveTable from '../components/ResponsiveTable'
 import { useState, useEffect } from 'react'
 import { Search, Plus, Pencil, Archive, RotateCcw, Wallet, PiggyBank, Landmark, CreditCard, Eye, EyeOff, Loader2, X } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
@@ -227,7 +229,7 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
 
       <div className={PANEL}>
         <div className="overflow-hidden rounded-t-xl">
-          <table className="w-full text-sm">
+          <ResponsiveTable className="w-full text-sm">
             <thead className="bg-surface">
               <tr className="border-b border-border">
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Account</th>
@@ -239,9 +241,7 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-muted">
-                  <Loader2 size={16} className="inline animate-spin mr-2" /> Loading cash accounts…
-                </td></tr>
+                <TableSkeleton columns={5} />
               )}
               {!loading && accounts.map((a) => {
                 const TypeIcon = TYPE_ICON[a.account_type] || Wallet
@@ -327,7 +327,7 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
                 <tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-muted">No cash accounts match your filters.</td></tr>
               )}
             </tbody>
-          </table>
+          </ResponsiveTable>
         </div>
 
         <Pagination

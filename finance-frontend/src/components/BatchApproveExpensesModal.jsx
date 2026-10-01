@@ -1,3 +1,4 @@
+import ResponsiveTable from './ResponsiveTable'
 // src/components/BatchApproveExpensesModal.jsx
 // 3-step Expense Batch Approval Wizard  -  modeled after PaymentWizardModal.jsx
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -509,7 +510,7 @@ export default function BatchApproveExpensesModal({
                 </div>
               ) : (
                 <div className="overflow-hidden rounded-xl border border-border bg-surface">
-                  <table className="w-full text-sm">
+                  <ResponsiveTable className="w-full text-sm">
                     <thead className="bg-bg/60 border-b border-border">
                       <tr>
                         <th className="px-3 py-3 text-left">
@@ -587,7 +588,7 @@ export default function BatchApproveExpensesModal({
                         <td />
                       </tr>
                     </tfoot>
-                  </table>
+                  </ResponsiveTable>
                 </div>
               )}
 
@@ -629,7 +630,7 @@ export default function BatchApproveExpensesModal({
                 <div>
                   <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-2">Cash Account Drawdown</p>
                   <div className="rounded-xl border border-border bg-surface overflow-hidden">
-                    <table className="w-full text-sm">
+                    <ResponsiveTable className="w-full text-sm">
                       <thead className="bg-bg/60 border-b border-border">
                         <tr>
                           <th className="px-4 py-2.5 text-left font-semibold text-muted text-xs uppercase">Account</th>
@@ -659,7 +660,7 @@ export default function BatchApproveExpensesModal({
                           </tr>
                         ))}
                       </tbody>
-                    </table>
+                    </ResponsiveTable>
                   </div>
                 </div>
               )}
@@ -669,7 +670,7 @@ export default function BatchApproveExpensesModal({
                 <div>
                   <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-2">Budget Utilization</p>
                   <div className="rounded-xl border border-border bg-surface overflow-hidden">
-                    <table className="w-full text-sm">
+                    <ResponsiveTable className="w-full text-sm">
                       <thead className="bg-bg/60 border-b border-border">
                         <tr>
                           <th className="px-4 py-2.5 text-left font-semibold text-muted text-xs uppercase">Budget</th>
@@ -691,7 +692,7 @@ export default function BatchApproveExpensesModal({
                           </tr>
                         ))}
                       </tbody>
-                    </table>
+                    </ResponsiveTable>
                   </div>
                 </div>
               )}

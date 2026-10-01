@@ -68,11 +68,21 @@ const renderRow = ([label, value, opt = '']) => {
   </tr>`
 }
 
-const renderGroup = (group) => `
-<table class="pf-kv">
-  ${group.heading ? `<tr class="pf-section"><td colspan="2">${escapeHtml(group.heading)}</td></tr>` : ''}
-  ${group.rows.map(renderRow).join('')}
-</table>`
+const renderGroup = (group) => {
+  const paired = group.columns === 2 || (group.columns !== 1 && group.rows.length >= 4 && !group.rows.some(row => row[2] === 'total' || row[2] === 'span') && !/amount|total|balance/i.test(group.heading || ''))
+  const rows = []
+  if (paired) {
+    for (let i = 0; i < group.rows.length; i += 2) {
+      const pair = group.rows.slice(i, i + 2)
+      rows.push(`<tr>${pair.map(([label, value]) => `<td class="pf-k">${escapeHtml(label)}</td><td class="pf-v"${pair.length === 1 ? ' colspan="3"' : ''}>${renderValue(value)}</td>`).join('')}</tr>`)
+    }
+  }
+  return `<table class="pf-kv ${paired ? 'pf-kv-paired' : ''} ${group.heading === 'Amounts' ? 'pf-amounts' : ''}">
+    ${paired ? '<colgroup><col style="width:16%"><col style="width:34%"><col style="width:16%"><col style="width:34%"></colgroup>' : ''}
+    ${group.heading ? `<tr class="pf-section"><td colspan="${paired ? 4 : 2}">${escapeHtml(group.heading)}</td></tr>` : ''}
+    ${paired ? rows.join('') : group.rows.map(renderRow).join('')}
+  </table>`
+}
 
 /**
  * Builds and prints a single-record detail slip.

@@ -1,3 +1,5 @@
+import { TableSkeleton } from '../components/LoadingSkeleton'
+import ResponsiveTable from '../components/ResponsiveTable'
 import { useState, useEffect, useRef } from 'react'
 import { Search, Plus, Pencil, Power, BookText, Activity, Layers, Loader2, Info, RotateCcw, X } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
@@ -296,7 +298,7 @@ export default function ChartOfAccounts({ title = 'Chart of Accounts', crumbs = 
 
       <div className={PANEL}>
         <div className="overflow-hidden rounded-t-xl">
-          <table className="w-full text-sm">
+          <ResponsiveTable className="w-full text-sm">
             <thead className="bg-surface">
               <tr className="border-b border-border">
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Code</th>
@@ -311,9 +313,7 @@ export default function ChartOfAccounts({ title = 'Chart of Accounts', crumbs = 
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-muted">
-                  <Loader2 size={16} className="inline animate-spin mr-2" /> Loading chart of accounts…
-                </td></tr>
+                <TableSkeleton columns={8} />
               )}
               {!loading && accounts.map((a) => (
                 <tr key={a.id} className="border-b border-border last:border-0 transition-colors duration-300 hover:bg-bg">
@@ -377,7 +377,7 @@ export default function ChartOfAccounts({ title = 'Chart of Accounts', crumbs = 
                 <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-muted">No accounts match your filters.</td></tr>
               )}
             </tbody>
-          </table>
+          </ResponsiveTable>
         </div>
 
         <Pagination

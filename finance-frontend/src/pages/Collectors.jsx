@@ -1,3 +1,6 @@
+import ModalLoading from '../components/ModalLoading'
+import { TableSkeleton } from '../components/LoadingSkeleton'
+import ResponsiveTable from '../components/ResponsiveTable'
 import { useEffect, useState } from 'react'
 import { Search, Plus, Pencil, Archive, RotateCcw, UserCheck, UserX, Phone, Mail, MapPin, Target, Eye, EyeOff, Loader2, BarChart3, Copy, Check, ShieldCheck, X } from 'lucide-react'
 import {
@@ -178,7 +181,7 @@ function EfficiencyModal({ collector, onClose, getEfficiency }) {
               type="button"
               onClick={() => setPeriod(p.key)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors duration-150
-                ${period === p.key ? 'bg-primary text-white' : 'bg-bg text-muted hover:text-ink'}`}
+                ${period === p.key ? 'bg-primary text-black' : 'bg-bg text-muted hover:text-ink'}`}
             >
               {p.label}
             </button>
@@ -190,9 +193,7 @@ function EfficiencyModal({ collector, onClose, getEfficiency }) {
         )}
 
         {loading ? (
-          <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted">
-            <Loader2 size={16} className="animate-spin" /> Loading…
-          </div>
+          <ModalLoading variant="chart" label="Loading collection efficiency" />
         ) : rows.length === 0 ? (
           <p className="text-xs text-muted py-16 text-center">No confirmed collections in this range yet.</p>
         ) : (
@@ -492,7 +493,7 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
 
       <div className={PANEL}>
         <div className="overflow-hidden rounded-t-xl">
-          <table className="w-full text-sm">
+          <ResponsiveTable className="w-full text-sm">
             <thead className="bg-surface">
               <tr className="border-b border-border">
                 <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Collector</th>
@@ -505,9 +506,7 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">
-                  <Loader2 size={16} className="inline animate-spin mr-2" /> Loading collectors…
-                </td></tr>
+                <TableSkeleton columns={6} />
               )}
               {!loading && collectors.map((c) => {
                 const revealed = revealedIds.has(c.collector_id)
@@ -568,7 +567,7 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
                       <div className="flex items-center justify-end gap-1">
                         {!showArchived && (
                         <Tooltip2 label="View efficiency" align="start">
-                          <button type="button" onClick={() => setEfficiencyTarget(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                          <button type="button" onClick={() => setEfficiencyTarget(c)} aria-label="View efficiency" className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                             <BarChart3 size={15} />
                           </button>
                         </Tooltip2>
@@ -613,7 +612,7 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
                 <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">No collectors match your filters.</td></tr>
               )}
             </tbody>
-          </table>
+          </ResponsiveTable>
         </div>
 
         <Pagination page={page} totalPages={meta.last_page} onPageChange={setPage} total={meta.total} label="collectors" bordered />

@@ -1,3 +1,5 @@
+import { TableSkeleton, ContentSkeleton } from '../components/LoadingSkeleton'
+import ResponsiveTable from '../components/ResponsiveTable'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search, Plus, Pencil, Archive, RotateCcw, Receipt, Wallet, AlertTriangle, Info, Printer, Upload, ScanLine, X, CheckCircle2, FileText, Paperclip } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
@@ -574,6 +576,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
       groups: [
         {
           heading: 'Customer & Invoice Information',
+          columns: 2,
           rows: [
             ['Customer', customer, 'span'],
             ['Collector', r.collector_id ? collectorName(r.collector_id) : '—', 'span'],
@@ -716,7 +719,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {statCards.map((card) => {
           const Icon = card.icon
           return (
@@ -733,7 +736,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
               </div>
               <div className="min-w-0">
                 <p className="text-xs text-muted">{card.label}</p>
-                <p className="text-lg font-bold text-ink">{loading ? '—' : card.value}</p>
+                <p className="text-lg font-bold text-ink wrap-anywhere">{loading ? '—' : card.value}</p>
               </div>
             </button>
           )
@@ -795,22 +798,20 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
 
       <div className={PANEL}>
         <div className="overflow-hidden rounded-t-xl">
-          <table className="w-full text-sm table-fixed">
+          <ResponsiveTable minTableWidth={640} className="w-full text-xs table-fixed">
             <thead className="bg-surface">
               <tr className="border-b border-border">
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3 w-[13%] whitespace-nowrap">Invoice</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3 w-[15%] whitespace-nowrap">Customer / Collector</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3 w-[11%] whitespace-nowrap">Terms / PO</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3 w-[10%] whitespace-nowrap">Due Date</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3 w-[13%] whitespace-nowrap">Original / Balance</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3 w-[9%] whitespace-nowrap">Penalty</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3 w-[11%] whitespace-nowrap">Status</th>
-                <th className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wide px-3 xl:px-4 py-3 w-[18%] whitespace-nowrap">Actions</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-2 py-3 w-[18%] whitespace-nowrap">Invoice</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-2 py-3 w-[20%] whitespace-nowrap">Customer / Collector</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-2 py-3 w-[13%] whitespace-nowrap">Due Date</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-2 py-3 w-[19%] whitespace-nowrap">Original / Balance</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wide px-2 py-3 w-[14%] whitespace-nowrap">Status</th>
+                <th className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wide px-2 py-3 w-[16%] whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-muted">Loading invoices…</td></tr>
+                <TableSkeleton columns={6} />
               )}
               {!loading && paginated.map((r) => {
                 const locked = isLocked(r)
@@ -821,44 +822,29 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                   className={`border-b border-border last:border-0 transition-colors duration-300
                     ${highlightedId === r.ar_id ? 'bg-primary/10' : 'hover:bg-bg'}`}
                 >
-                  <td className="px-3 xl:px-4 py-3.5 min-w-0">
+                  <td className="px-2 py-3 min-w-0">
                     <p className="font-medium text-ink truncate" title={r.invoice_number}>{r.invoice_number}</p>
                     <p className="text-xs text-muted truncate" title={`${r.reference_no} · ${r.payment_method}`}>{r.reference_no} &middot; {r.payment_method}</p>
+                    <p className="text-[10px] text-muted wrap-anywhere">{r.payment_terms}{r.purchase_order_no ? ` / ${r.purchase_order_no}` : ''}</p>
                   </td>
-                  <td className="px-3 xl:px-4 py-3.5 text-ink min-w-0">
+                  <td className="px-2 py-3 text-ink min-w-0">
                     <p className="truncate font-medium" title={customerName(r.customer_id)}>{customerName(r.customer_id)}</p>
                     <p className={`text-xs truncate ${r.collector_id ? 'text-muted' : 'text-status-warning'}`} title={collectorName(r.collector_id)}>
                       {collectorName(r.collector_id)}
                     </p>
                   </td>
-                  <td className="px-3 xl:px-4 py-3.5 text-ink text-xs min-w-0">
-                    <p className="truncate">{r.payment_terms}</p>
-                    <p className="text-muted truncate" title={r.purchase_order_no}>{r.purchase_order_no || '—'}</p>
-                  </td>
-                  <td className="px-3 xl:px-4 py-3.5 text-ink min-w-0">
+
+                  <td className="px-2 py-3 text-ink min-w-0">
                     <p className="whitespace-nowrap">{formatDate(r.due_date)}</p>
                     <p className="text-xs text-muted whitespace-nowrap">Inv: {formatDate(r.invoice_date)}</p>
                   </td>
-                  <td className="px-3 xl:px-4 py-3.5 min-w-0">
+                  <td className="px-2 py-3 min-w-0">
                     <p className="text-ink tabular-nums whitespace-nowrap font-medium">{formatCurrency(r.original_amount)}</p>
                     <p className="text-xs text-muted tabular-nums whitespace-nowrap">Bal: {formatCurrency(r.balance)}</p>
+                    {r.penalty_rate > 0 && <p className={`mt-1 text-[10px] wrap-anywhere ${isOverdueRecord(r) ? 'text-status-danger' : 'text-muted'}`}>Penalty: {r.penalty_rate}% {isOverdueRecord(r) ? formatCurrency(r.penalty_amount) : '(on overdue)'}</p>}
                   </td>
-                  <td className="px-3 xl:px-4 py-3.5 text-xs min-w-0">
-                    {r.penalty_rate > 0 ? (
-                      isOverdueRecord(r) ? (
-                        <>
-                          <p className="text-status-danger tabular-nums whitespace-nowrap">{r.penalty_rate}%</p>
-                          <p className="text-muted tabular-nums whitespace-nowrap">{formatCurrency(r.penalty_amount)}</p>
-                        </>
-                      ) : (
-                        <>
-                          <p className="text-muted tabular-nums whitespace-nowrap">{r.penalty_rate}%</p>
-                          <p className="text-[10px] text-muted whitespace-nowrap">On overdue</p>
-                        </>
-                      )
-                    ) : <span className="text-muted">—</span>}
-                  </td>
-                  <td className="px-3 xl:px-4 py-3.5 min-w-0">
+
+                  <td className="px-2 py-3 min-w-0">
                     {(() => {
                       const arStatus = getArDisplayStatus(r)
                       return (
@@ -866,7 +852,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                       )
                     })()}
                   </td>
-                  <td className="px-3 xl:px-4 py-3.5 text-right min-w-0">
+                  <td className="px-2 py-3 text-right min-w-0">
                     <div className="flex items-center justify-end gap-1">
                       {/* Active rows keep the full working set. Only ARCHIVED
                           rows get trimmed to Info + Restore + countdown + purge,
@@ -942,10 +928,10 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                 )
               })}
               {!loading && filtered.length === 0 && (
-                <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-muted">No invoices match your filters.</td></tr>
+                <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">No invoices match your filters.</td></tr>
               )}
             </tbody>
-          </table>
+          </ResponsiveTable>
         </div>
 
         {!loading && filtered.length > 0 && (
@@ -1326,7 +1312,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
               </div>
               <div className="rounded-lg border border-border divide-y divide-border max-h-48 overflow-y-auto bg-slate-50/50 dark:bg-slate-900/30">
                 {invoiceCollectionsLoading && (
-                  <p className="px-3 py-3 text-xs text-muted text-center">Loading collections…</p>
+                  <ContentSkeleton />
                 )}
                 {!invoiceCollectionsLoading && invoiceCollections.length === 0 && (
                   <p className="px-3 py-3 text-xs text-muted text-center">No collections recorded against this invoice yet.</p>
@@ -1358,7 +1344,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
               </div>
               <div className="rounded-lg border border-border divide-y divide-border max-h-48 overflow-y-auto bg-slate-50/50 dark:bg-slate-900/30">
                 {invoiceAuditLogsLoading && (
-                  <p className="px-3 py-3 text-xs text-muted text-center">Loading audit history…</p>
+                  <ContentSkeleton />
                 )}
                 {!invoiceAuditLogsLoading && invoiceAuditLogs.length === 0 && (
                   <p className="px-3 py-3 text-xs text-muted text-center">No audit trail recorded for this invoice.</p>

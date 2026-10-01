@@ -1,3 +1,5 @@
+import { runProtectedExport, requireExportResponse } from './secureExport'
+import { apiFetch } from './api'
 // Shared printing/export toolkit.
 //
 // Every printable document in the app used to hand-roll its own HTML string,
@@ -159,8 +161,8 @@ export const printStyles = ({
   density = 'normal',
   footerSpace = true,
 } = {}) => {
-  const cellPad = density === 'compact' ? '5px 7px' : '7px 9px'
-  const fontSize = density === 'compact' ? '10pt' : '10.5pt'
+  const cellPad = density === 'compact' ? '4px 6px' : '5px 8px'
+  const fontSize = density === 'compact' ? '8.5pt' : '9pt'
 
   // The running footer is ~6mm tall including its rule and padding.
   const footerPad = footerSpace ? 'padding-bottom: 9mm;' : ''
@@ -190,65 +192,71 @@ body {
   print-color-adjust: exact;
 }
 
-.pf-root { padding: 0 4mm 14mm; }
+.pf-root { padding: 0 0 2mm; }
 
 /* --- letterhead ------------------------------------------------- */
 .pf-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 12mm;
-  border-bottom: 2px solid #0f2744;
+  gap: 6mm;
+  border-bottom: 3px solid #f4b400;
   padding-bottom: 4mm;
   margin-bottom: 5mm;
 }
-.pf-brand { display: flex; align-items: center; gap: 4mm; }
+.pf-brand { display: flex; flex: 1; min-width: 0; align-items: flex-start; gap: 3mm; }
 .pf-logo { max-height: 16mm; max-width: 45mm; object-fit: contain; }
 .pf-logo-init {
-  width: 13mm; height: 13mm; border: 1.5px solid #0f2744; border-radius: 2px;
+  width: 13mm; height: 13mm; border: 1.5px solid #171717; border-radius: 2px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 17pt; font-weight: 700; color: #0f2744;
+  font-size: 17pt; font-weight: 700; color: #171717;
 }
-.pf-company-name { font-size: 13pt; font-weight: 700; color: #0f2744; text-transform: uppercase; letter-spacing: 0.4px; }
-.pf-company-meta { font-size: 8.5pt; color: #475569; margin-top: 1mm; }
-.pf-doc-meta { text-align: right; min-width: 62mm; }
-.pf-doc-title { font-size: 12pt; font-weight: 700; color: #0f2744; text-transform: uppercase; }
+.pf-company-name { font-size: 11pt; font-weight: 700; color: #171717; text-transform: uppercase; letter-spacing: 0.4px; }
+.pf-company-meta { font-size: 8.5pt; color: #525252; margin-top: 1mm; }
+.pf-doc-meta { text-align: right; flex: 0 0 42%; min-width: 0; }
+.pf-meta-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1mm 7mm; padding: 0 0 4mm; margin-bottom: 3mm; border-bottom: 1px solid #e5e5e5; }
+.pf-meta-grid .pf-meta-row { overflow-wrap: anywhere; }
+.pf-doc-title { font-size: 12pt; font-weight: 700; color: #171717; text-transform: uppercase; }
 .pf-meta-row { font-size: 8.5pt; color: #334155; margin-top: 1.2mm; }
-.pf-meta-label { color: #64748b; }
+.pf-meta-label { color: #737373; }
 .pf-meta-val { color: #111827; font-weight: 600; }
 .pf-confidential {
   display: inline-block; margin-top: 2mm; padding: 0.8mm 2.5mm;
-  border: 1px solid #0f2744; font-size: 7.5pt; font-weight: 700;
-  letter-spacing: 0.6px; color: #0f2744; text-transform: uppercase;
+  border: 1px solid #171717; font-size: 7.5pt; font-weight: 700;
+  letter-spacing: 0.6px; color: #171717; text-transform: uppercase;
 }
 
 /* --- document title block --------------------------------------- */
-.pf-title { font-size: 15pt; font-weight: 700; color: #0f2744; text-align: center; margin: 2mm 0 1mm; }
-.pf-subtitle { font-size: 9.5pt; color: #475569; text-align: center; margin-bottom: 4mm; }
+.pf-title { font-size: 15pt; font-weight: 700; color: #171717; text-align: center; margin: 2mm 0 1mm; }
+.pf-subtitle { font-size: 9.5pt; color: #525252; text-align: center; margin-bottom: 4mm; }
 
 /* --- key/value detail tables ------------------------------------ */
 table.pf-kv { width: 100%; border-collapse: collapse; }
-table.pf-kv td { padding: ${cellPad} 3mm; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
-table.pf-kv td.pf-k { width: 34%; color: #64748b; }
-table.pf-kv td.pf-v { font-weight: 600; text-align: right; }
+table.pf-kv td { padding: ${cellPad} 3mm; border-bottom: 1px solid #e5e5e5; vertical-align: top; }
+table.pf-kv td.pf-k { width: 28%; color: #737373; }
+table.pf-kv td.pf-v { font-weight: 500; text-align: left; }
+table.pf-kv-paired { table-layout: fixed; }
+table.pf-kv-paired td.pf-k { width: 16%; }
+table.pf-kv-paired td.pf-v { width: 34%; overflow-wrap: anywhere; }
+table.pf-amounts td.pf-v { text-align: right; font-variant-numeric: tabular-nums; }
 table.pf-kv tr.pf-section td {
-  background: #f1f5f9; font-weight: 700; color: #0f2744; font-size: 8.5pt;
+  background: #f5f5f5; font-weight: 700; color: #171717; font-size: 8.5pt;
   text-transform: uppercase; letter-spacing: 0.5px; text-align: left;
 }
-table.pf-kv tr.pf-total td { border-top: 1.5px solid #0f2744; border-bottom: 3px double #0f2744; font-weight: 700; font-size: 11pt; }
-table.pf-kv tr.pf-total td.pf-v { color: #0f2744; }
+table.pf-kv tr.pf-total td { border-top: 1.5px solid #171717; border-bottom: 3px double #171717; font-weight: 700; font-size: 11pt; }
+table.pf-kv tr.pf-total td.pf-v { color: #171717; text-align: right; font-weight: 700; }
 
 /* --- data tables ------------------------------------------------ */
 table.pf-grid { width: 100%; border-collapse: collapse; margin-top: 3mm; }
 table.pf-grid th {
-  background: #0f2744; color: #fff; font-size: 8.5pt; font-weight: 700;
+  background: #171717; color: #fff; font-size: 8.5pt; font-weight: 700;
   text-transform: uppercase; letter-spacing: 0.4px;
-  padding: ${cellPad}; text-align: left; border: 1px solid #0f2744;
+  padding: ${cellPad}; text-align: left; border: 1px solid #171717;
 }
-table.pf-grid td { padding: ${cellPad}; border: 1px solid #e2e8f0; }
+table.pf-grid td { padding: ${cellPad}; border: 1px solid #e5e5e5; }
 table.pf-grid td.pf-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 table.pf-grid tfoot td {
-  border-top: 1.5px solid #0f2744; border-bottom: 3px double #0f2744;
+  border-top: 1.5px solid #171717; border-bottom: 3px double #171717;
   font-weight: 700; background: #f8fafc;
 }
 table.pf-grid tfoot td.pf-num { font-weight: 700; }
@@ -270,21 +278,21 @@ thead { break-inside: avoid; }
 .pf-badge-paid { color: #166534; background: #dcfce7; }
 .pf-badge-pending { color: #854d0e; background: #fef9c3; }
 .pf-badge-overdue { color: #991b1b; background: #fee2e2; }
-.pf-badge-neutral { color: #334155; background: #f1f5f9; }
+.pf-badge-neutral { color: #334155; background: #f5f5f5; }
 
 /* --- signature block -------------------------------------------- */
-.pf-signatures { margin-top: 12mm; break-inside: avoid; page-break-inside: avoid; }
+.pf-signatures { margin-top: 8mm; break-inside: avoid; page-break-inside: avoid; }
 .pf-signatures-title {
-  font-size: 9pt; font-weight: 700; color: #0f2744; text-transform: uppercase;
+  font-size: 9pt; font-weight: 700; color: #171717; text-transform: uppercase;
   letter-spacing: 0.6px; border-bottom: 1px solid #cbd5e1;
-  padding-bottom: 1.5mm; margin-bottom: 6mm;
+  padding-bottom: 1.5mm; margin-bottom: 4mm;
 }
 .pf-sig-row { display: flex; gap: 8mm; }
 .pf-sig-box { flex: 1 1 0; min-width: 0; }
 .pf-sig-label { font-size: 8.5pt; font-weight: 700; color: #334155; }
-.pf-sig-rule { border-bottom: 1px solid #111827; height: 13mm; }
+.pf-sig-rule { border-bottom: 1px solid #111827; height: 11mm; }
 .pf-sig-name { font-size: 9.5pt; font-weight: 600; color: #111827; margin-top: 1.5mm; }
-.pf-sig-role { font-size: 8pt; color: #64748b; }
+.pf-sig-role { font-size: 8pt; color: #737373; }
 .pf-sig-date { font-size: 8pt; color: #334155; margin-top: 1.5mm; }
 
 /* --- certification / oath --------------------------------------- */
@@ -293,7 +301,7 @@ thead { break-inside: avoid; }
   font-size: 8.5pt; line-height: 1.6; color: #1f2937;
   break-inside: avoid; page-break-inside: avoid;
 }
-.pf-certification-title { font-weight: 700; color: #0f2744; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 1.5mm; }
+.pf-certification-title { font-weight: 700; color: #171717; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 1.5mm; }
 
 /* --- running footer --------------------------------------------- */
 /* position:fixed in print repeats this on EVERY physical page, which is
@@ -302,7 +310,7 @@ thead { break-inside: avoid; }
   position: fixed; bottom: 0; left: 0; right: 0;
   display: flex; justify-content: space-between; align-items: center;
   border-top: 1px solid #cbd5e1; padding: 2mm 4mm 0;
-  font-size: 7.5pt; color: #64748b; background: #fff;
+  font-size: 7.5pt; color: #737373; background: #fff;
 }
 .pf-footer-brand { font-weight: 600; }
 .pf-footer-note { text-transform: uppercase; letter-spacing: 0.4px; }
@@ -311,24 +319,24 @@ thead { break-inside: avoid; }
 .pf-customer {
   display: flex; flex-wrap: wrap; gap: 3mm 8mm;
   padding: 3mm 4mm; margin-bottom: 4mm;
-  background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 2px;
+  background: #f8fafc; border: 1px solid #e5e5e5; border-radius: 2px;
 }
 .pf-customer > div { font-size: 9pt; }
-.pf-customer span { display: block; color: #64748b; font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.4px; }
+.pf-customer span { display: block; color: #737373; font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.4px; }
 .pf-customer strong { color: #111827; }
 
 .pf-aging-row { display: flex; flex-wrap: wrap; gap: 2mm; margin-bottom: 4mm; }
 .pf-aging-box {
   flex: 1 1 0; min-width: 28mm; text-align: center; padding: 2.5mm 2mm;
-  background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 2px;
+  background: #f8fafc; border: 1px solid #e5e5e5; border-radius: 2px;
 }
-.pf-aging-label { font-size: 7.5pt; color: #64748b; text-transform: uppercase; letter-spacing: 0.4px; }
-.pf-aging-val { font-size: 11pt; font-weight: 700; color: #0f2744; }
+.pf-aging-label { font-size: 7.5pt; color: #737373; text-transform: uppercase; letter-spacing: 0.4px; }
+.pf-aging-val { font-size: 11pt; font-weight: 700; color: #171717; }
 
 .pf-chip-row { display: flex; flex-wrap: wrap; gap: 2mm; margin-bottom: 4mm; }
 .pf-chip {
-  padding: 1.2mm 3mm; font-size: 8.5pt; background: #f1f5f9;
-  border: 1px solid #e2e8f0; border-radius: 2px;
+  padding: 1.2mm 3mm; font-size: 8.5pt; background: #f5f5f5;
+  border: 1px solid #e5e5e5; border-radius: 2px;
 }
 
 /* --- pagination (multi-sheet documents) ------------------------ */
@@ -340,15 +348,15 @@ thead { break-inside: avoid; }
 .pf-batch-head { margin-bottom: 4mm; }
 
 /* --- misc -------------------------------------------------------- */
-.pf-note { font-size: 8pt; color: #64748b; margin-top: 3mm; }
+.pf-note { font-size: 8pt; color: #737373; margin-top: 3mm; }
 
 /* 'span' row option: value starts in the label column instead of being
    right-aligned  -  used for long free-text fields (addresses, remarks). */
 .pf-kv .pf-span { text-align: left; }
 /* 'muted' row option: secondary/optional field, printed in grey. */
-.pf-kv .pf-muted { color: #64748b; }
+.pf-kv .pf-muted { color: #737373; }
 .pf-disclaimer {
-  margin-top: 6mm; padding-top: 2mm; border-top: 1px solid #e2e8f0;
+  margin-top: 3mm; padding-top: 2mm; border-top: 1px solid #e5e5e5;
   font-size: 7.5pt; color: #94a3b8; line-height: 1.5;
 }
 .pf-empty { padding: 8mm; text-align: center; color: #94a3b8; font-style: italic; }
@@ -440,10 +448,10 @@ export const buildHeader = ({
   <div class="pf-doc-meta">
     <div class="pf-doc-title">${escapeHtml(title)}</div>
     ${subtitle ? `<div class="pf-meta-row">${escapeHtml(subtitle)}</div>` : ''}
-    ${metaRows}
     ${confidential ? `<div class="pf-confidential">${escapeHtml(confidential)}</div>` : ''}
   </div>
-</div>`
+</div>
+${metaRows ? `<div class="pf-meta-grid">${metaRows}</div>` : ''}`
 }
 
 /**
@@ -516,28 +524,28 @@ export const SIGNATURE_PRESETS = {
   // Bills, invoices, receipts: we prepared it, we approved it, and the
   // counterparty acknowledges receipt.
   voucher: ({ preparedName, preparedRole, approvedName, counterpartyLabel = 'Received By' }) => [
-    { label: 'Prepared By', name: preparedName || 'Accounting Staff', role: preparedRole || 'Finance Officer', date: `Date: ${printTimestamp().split(',')[0]}` },
+    { label: 'Prepared By', name: preparedName || 'Accounting Staff', role: preparedRole || 'Finance Officer', date: `Date: ${printTimestamp().split(',').slice(0, 2).join(',')}` },
     { label: 'Approved By', name: approvedName || 'Finance Manager', role: 'Reviewed & Approved', date: 'Date: ____________________' },
     blankRule(counterpartyLabel, 'Signature over printed name'),
   ],
 
   // Internal expense/budget documents: no third party signs.
   internal: ({ preparedName, preparedRole, approvedName }) => [
-    { label: 'Prepared By', name: preparedName || 'Accounting Staff', role: preparedRole || 'Finance Officer', date: `Date: ${printTimestamp().split(',')[0]}` },
+    { label: 'Prepared By', name: preparedName || 'Accounting Staff', role: preparedRole || 'Finance Officer', date: `Date: ${printTimestamp().split(',').slice(0, 2).join(',')}` },
     { label: 'Reviewed By', name: 'Internal Auditor / Controller', role: 'Internal Audit', date: 'Date: ____________________' },
     { label: 'Approved By', name: approvedName || 'Finance Manager / CFO', role: 'Management Approval', date: 'Date: ____________________' },
   ],
 
   // Management/statutory reports: the three-step audit chain.
   report: ({ preparedName, preparedRole, approvedName }) => [
-    { label: 'Prepared By', name: preparedName || 'Accounting Staff / Bookkeeper', role: preparedRole || 'Finance Officer', date: `Date: ${printTimestamp().split(',')[0]}` },
+    { label: 'Prepared By', name: preparedName || 'Accounting Staff / Bookkeeper', role: preparedRole || 'Finance Officer', date: `Date: ${printTimestamp().split(',').slice(0, 2).join(',')}` },
     { label: 'Verified & Reviewed By', name: 'Internal Auditor / Controller', role: 'Internal Audit Department', date: 'Date: ____________________' },
     { label: 'Approved By', name: approvedName || 'Chief Financial Officer / Managing Director', role: 'Executive Management', date: 'Date: ____________________' },
   ],
 
   // Customer-facing statement: we certify the ledger, the customer receives.
   statement: ({ preparedName, preparedRole, customerName }) => [
-    { label: 'Certified Correct By', name: preparedName || 'Accounting Staff / Bookkeeper', role: preparedRole || 'Finance Officer', date: `Date: ${printTimestamp().split(',')[0]}` },
+    { label: 'Certified Correct By', name: preparedName || 'Accounting Staff / Bookkeeper', role: preparedRole || 'Finance Officer', date: `Date: ${printTimestamp().split(',').slice(0, 2).join(',')}` },
     { label: 'Received By', name: ' ', blank: true, line: `${customerName || 'Customer'}  ·  Date: ____________________` },
   ],
 }
@@ -668,6 +676,7 @@ export const buildDocument = ({
 <body>
   <div class="pf-root">
     ${body}
+    ${/<(?:div|table|section)\b[^>]*class=["'][^"']*(?:pf-signatures|signature-section|signature-table|signatures)[^"']*["']/i.test(body) ? '' : buildSignatureBlock({ blocks: [{ label: 'Prepared by', line: 'Signature / Date' }, { label: 'Reviewed by', line: 'Signature / Date' }, { label: 'Approved by', line: 'Signature / Date' }] })}
   </div>
 </body>
 </html>`
@@ -735,7 +744,7 @@ const csvCell = (value) => {
   const s = String(value)
   // Prefix formula characters so a customer named "=cmd|..." can't be
   // executed by Excel/CSheets when the file is opened.
-  const safe = /^[=+\-@]/.test(s) ? `'${s}` : s
+  const safe = typeof value !== 'number' && /^[\s]*[=+\-@]/.test(s) ? `'${s}` : s
   return /[",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe
 }
 
@@ -752,11 +761,10 @@ const csvCell = (value) => {
  * @param {Array<Array>} o.rows      Data rows
  * @param {string[]} o.provenance    Leading label/value pairs
  */
-export const downloadCsv = ({ filename, rows = [], provenance = [] }) => {
+export const downloadCsv = async ({ filename, rows = [], provenance = [] }) => {
   const lines = []
 
   if (provenance.length) {
-    lines.push(csvCell(provenance[0][0] || 'Report'))
     provenance.forEach(([k, v]) => {
       if (!k) return
       lines.push(`${csvCell(k)},${csvCell(v)}`)
@@ -766,14 +774,18 @@ export const downloadCsv = ({ filename, rows = [], provenance = [] }) => {
 
   rows.forEach((row) => lines.push(row.map(csvCell).join(',')))
 
-  // BOM so Excel detects UTF-8 and renders ₱ / accented names correctly.
-  const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' })
-  const url = window.URL.createObjectURL(blob)
+  const contents = '\uFEFF' + lines.join('\r\n')
+  const res = await runProtectedExport('CSV', async password => requireExportResponse(await apiFetch('/api/exports/csv', {
+    method: 'POST', body: JSON.stringify({ export_password: password, contents }),
+  })))
+  if (!res) return false
+  const url = window.URL.createObjectURL(await res.blob())
   const link = document.createElement('a')
   link.href = url
-  link.download = filename
+  link.download = filename.replace(/\.csv$/i, '') + '.zip'
   document.body.appendChild(link)
   link.click()
   link.remove()
   window.URL.revokeObjectURL(url)
+  return true
 }

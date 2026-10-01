@@ -1,3 +1,5 @@
+import ModalLoading from './ModalLoading'
+import ResponsiveTable from './ResponsiveTable'
 import { useEffect, useState } from 'react'
 import { AlertTriangle, ArrowDownRight, CheckCircle2, Info, Loader2, Maximize2, Users } from 'lucide-react'
 import { formatCurrency, formatDate } from '../utils/formatters'
@@ -37,10 +39,7 @@ export default function BudgetUtilizationLedger({ budgetId, fetchUtilization, cu
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted">
-        <Loader2 size={15} className="animate-spin" />
-        Loading transactions behind this total…
-      </div>
+      <ModalLoading />
     )
   }
 
@@ -148,8 +147,8 @@ export default function BudgetUtilizationLedger({ budgetId, fetchUtilization, cu
           </span>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full text-left text-xs">
+        <div className="min-w-0 rounded-lg border border-border">
+          <ResponsiveTable className="w-full text-left text-xs">
             <thead className="bg-surface text-[10px] font-semibold uppercase tracking-wider text-muted">
               <tr>
                 <th className="px-2.5 py-2">Date</th>
@@ -194,7 +193,7 @@ export default function BudgetUtilizationLedger({ budgetId, fetchUtilization, cu
                 </tr>
               ))}
             </tbody>
-          </table>
+          </ResponsiveTable>
         </div>
       )}
 

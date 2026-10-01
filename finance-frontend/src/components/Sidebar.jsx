@@ -22,9 +22,9 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
   // previous version passed useAuth()'s `user` object here instead, which
   // has no .includes() method, so every gated item's hasPermission() check
   // failed and only ungated items (Dashboard, Settings, Logout) survived.
-  const { permissions } = usePermissions()
+  const { permissions, loading: permissionsLoading, error: permissionsError, refetch: reloadPermissions } = usePermissions()
 
-  const visibleMenuData = filterMenuByPermissions(menuData, permissions)
+  const visibleMenuData = filterMenuByPermissions(menuData, permissions).filter(item => item.id !== 'settings')
   const mainItems = visibleMenuData.filter((item) => !FOOTER_IDS.includes(item.id))
   const footerItems = visibleMenuData.filter((item) => FOOTER_IDS.includes(item.id))
 
@@ -60,7 +60,7 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
       window.removeEventListener('resize', handle)
       clearTimeout(timeout)
     }
-  }, [collapsed, mobileOpen])
+  }, [collapsed, mobileOpen, permissionsLoading, permissions])
 
   const scrollBy = (amount) => {
     navRef.current?.scrollBy({ top: amount, behavior: 'smooth' })
@@ -129,13 +129,26 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
           <nav
             ref={navRef}
             aria-label="Main navigation"
+            aria-busy={permissionsLoading}
             className="h-full overflow-y-auto overflow-x-hidden scrollbar-none py-5 px-3"
           >
             <p className={`px-3 pb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-sidebar-muted ${collapsed ? 'lg:hidden' : ''}`}>
               Workspace
             </p>
+            {permissionsError && <div role="alert" className="mb-3 rounded-lg border border-sidebar-muted/30 p-3 text-xs text-sidebar-ink"><p>Navigation could not load.</p><button type="button" onClick={reloadPermissions} className="mt-2 font-semibold text-primary">Retry</button></div>}
             <ul className="space-y-1">
-              {mainItems.map((item) => (
+              {permissionsLoading ? menuData.filter(item => !FOOTER_IDS.includes(item.id)).map(item => {
+                const pendingItems = item.children || [item]
+                return <li key={item.id} aria-busy="true" className={item.children ? 'pt-4 mt-3 border-t border-sidebar-border' : ''}>
+                  {item.children && <p className={'px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-sidebar-muted ' + (collapsed ? 'lg:hidden' : '')}>{item.label}</p>}
+                  <ul className="space-y-1">{pendingItems.map(entry => <li key={entry.id}>
+                    <div aria-disabled="true" className={'flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium text-sidebar-muted ' + (collapsed ? 'lg:justify-center lg:px-0' : '')}>
+                      <entry.icon size={17} strokeWidth={1.8} className="shrink-0" />
+                      <span className={'truncate ' + (collapsed ? 'lg:hidden' : '')}>{entry.label}</span>
+                    </div>
+                  </li>)}</ul>
+                </li>
+              }) : mainItems.map((item) => (
                 <SidebarItem
                   key={item.id}
                   item={item}

@@ -1,3 +1,4 @@
+import ModalLoading from './ModalLoading'
 // src/components/BatchPayTaxWizardModal.jsx
 // 2-step Batch Tax Payment Wizard  -  Step 1 Review & Select (filter pills,
 // live total), Step 2 Payment Details (cash account, date, reference, shared
@@ -477,9 +478,7 @@ export default function BatchPayTaxWizardModal({
               </div>
 
               {loadingAccounts && !obligations.length && (
-                <div className="px-4 py-8 text-center text-sm text-muted">
-                  <Loader2 size={16} className="inline animate-spin mr-2" /> Loading obligations…
-                </div>
+                <ModalLoading />
               )}
 
               {!filteredList.length ? (

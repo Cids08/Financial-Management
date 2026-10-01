@@ -1,3 +1,4 @@
+import { PageSkeleton } from '../components/LoadingSkeleton'
 import { useProfileContext } from '../context/ProfileContext'
 import Dashboard from './Dashboard'
 import CollectorDashboard from './CollectorDashboard'
@@ -14,13 +15,11 @@ import StaffDashboard from './StaffDashboard'
  * Comparisons below match that exactly.
  */
 export default function DashboardRouter() {
-  const { profile, loading } = useProfileContext()
+  const { profile, loading, error, refetch } = useProfileContext()
 
-  // Profile hasn't loaded yet (e.g. hard refresh)  -  render nothing rather
-  // than flashing the wrong dashboard before we know the real role.
-  if (loading || !profile) {
-    return null
-  }
+  // Show the workspace skeleton until the role has been resolved.
+  if (loading) return <PageSkeleton />
+  if (!profile) return <div role="alert" className="rounded-xl border border-border bg-surface p-6"><p className="text-sm text-ink">{error || 'Could not load your workspace.'}</p><button type="button" onClick={refetch} className="mt-3 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-black">Retry</button></div>
 
   switch (profile.role) {
     case 'Collector':

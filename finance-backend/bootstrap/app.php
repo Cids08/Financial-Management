@@ -44,6 +44,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->command('records:purge-archived')->dailyAt('02:30');
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->dontFlash(['export_password']);
         $exceptions->render(function (ThrottleRequestsException $e, $request) {
             if (! $request->is('api/*')) {
                 return null;

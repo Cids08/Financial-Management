@@ -1,0 +1,1 @@
+<div class="report-footer">{{ $company['name'] ?? config('app.name') }} &middot; Internal financial report &middot; {{ $generated_at->format('d M Y, H:i') }}<span class="report-page">Page </span></div>

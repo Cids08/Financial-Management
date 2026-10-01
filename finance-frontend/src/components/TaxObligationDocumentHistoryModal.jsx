@@ -1,3 +1,4 @@
+import ModalLoading from './ModalLoading'
 // src/components/TaxObligationDocumentHistoryModal.jsx
 import { useEffect, useState } from 'react'
 import { FileText, Eye, Loader2, AlertTriangle } from 'lucide-react'
@@ -91,9 +92,7 @@ export default function TaxObligationDocumentHistoryModal({ open, onClose, oblig
         )}
 
         {loading ? (
-          <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted">
-            <Loader2 size={16} className="animate-spin" /> Loading history...
-          </div>
+          <ModalLoading />
         ) : documents.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted">No document has been attached to this tax obligation yet.</p>
         ) : (

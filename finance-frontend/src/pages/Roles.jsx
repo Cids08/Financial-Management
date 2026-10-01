@@ -1,3 +1,4 @@
+import { ContentSkeleton } from '../components/LoadingSkeleton'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Pencil, Archive, RotateCcw, ShieldCheck, Users, Lock, Search, ShieldAlert, X } from 'lucide-react'
@@ -330,9 +331,7 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
       {/* Role cards  -  click anywhere on an active card to view its users */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {rolesLoading && (
-          <div className={`${PANEL} p-4 text-center text-sm text-muted sm:col-span-2 xl:col-span-3`}>
-            Loading roles…
-          </div>
+          <ContentSkeleton rows={4} />
         )}
 
         {!rolesLoading && filteredRoles.slice((page - 1) * PER_PAGE, page * PER_PAGE).map((role) => (
@@ -548,7 +547,7 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
           )}
 
           {(permModalLoading || permissionsLoading) && (
-            <p className="text-sm text-muted">Loading permissions…</p>
+            <ContentSkeleton />
           )}
 
           {!permModalLoading && !permissionsLoading && permissions.length === 0 && (

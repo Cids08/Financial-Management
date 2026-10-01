@@ -1,3 +1,5 @@
+import ModalLoading from './ModalLoading'
+import { ContentSkeleton } from './LoadingSkeleton'
 /**
  * CollectionEfficiencyPanel
  *
@@ -133,7 +135,7 @@ export default function CollectionEfficiencyPanel() {
 
       {/* Chart */}
       {loading ? (
-        <p className="py-8 text-center text-sm text-muted">Loading efficiency data…</p>
+        <ModalLoading variant="chart" label="Loading collection efficiency" />
       ) : buckets.length === 0 ? (
         <p className="py-8 text-center text-sm text-muted">No confirmed collections for this period yet.</p>
       ) : (

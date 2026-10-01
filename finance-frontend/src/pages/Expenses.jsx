@@ -1,3 +1,5 @@
+import { TableSkeleton, ContentSkeleton } from '../components/LoadingSkeleton'
+import ResponsiveTable from '../components/ResponsiveTable'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { usePermissions } from '../context/PermissionsContext'
 import { useProfileContext } from '../context/ProfileContext'
@@ -808,7 +810,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
 
       <div className={PANEL}>
         <div className="overflow-hidden rounded-t-xl">
-          <table className="w-full text-sm">
+          <ResponsiveTable className="w-full text-sm">
             <thead className="bg-surface">
               <tr className="border-b border-border">
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-3.5 py-3">Expense</th>
@@ -822,7 +824,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
             </thead>
             <tbody>
               {listLoading ? (
-                <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-muted">Loading expenses…</td></tr>
+                <TableSkeleton columns={7} />
               ) : expenses.length === 0 ? (
                 <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-muted">
                   {hasDateFilter ? 'No expenses fall within the selected date range.' : 'No expenses match your filters.'}
@@ -971,7 +973,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                 </tr>
               ))}
             </tbody>
-          </table>
+          </ResponsiveTable>
         </div>
 
         <Pagination
@@ -1513,7 +1515,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                 nothing here; this only renders once the detail fetch
                 (GET /api/expenses/{id}) returns linked records. */}
             {detailLoading ? (
-              <p className="text-xs text-muted text-center py-2">Loading linked records…</p>
+              <ContentSkeleton />
             ) : detailRecord.tax_obligations?.length > 0 && (
               <div className="rounded-lg border border-border divide-y divide-border">
                 <p className="px-3 py-2 text-xs font-medium text-muted">Linked Tax Obligations</p>

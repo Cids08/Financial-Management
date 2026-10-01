@@ -1,3 +1,4 @@
+import { ContentSkeleton } from '../components/LoadingSkeleton'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   User, Mail, Phone, Briefcase, Camera, Save, X, Upload, Trash2, AlertCircle,
@@ -359,7 +360,7 @@ export default function Profile() {
   if (loading) {
     return (
       <div className="max-w-3xl mx-auto py-8 px-4 lg:px-0">
-        <p className="text-sm text-muted">Loading profile…</p>
+        <ContentSkeleton />
       </div>
     )
   }
@@ -430,7 +431,7 @@ export default function Profile() {
               type="submit"
               disabled={saving}
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-ink text-sm font-semibold
-                hover:bg-primary-dark hover:text-white transition-colors duration-150 disabled:opacity-60"
+                hover:bg-primary-hover hover:text-black transition-colors duration-150 disabled:opacity-60"
             >
               <Save size={15} />
               {saving ? 'Saving…' : 'Save Changes'}
@@ -594,7 +595,7 @@ export default function Profile() {
         <InlineError message={security.sessionsError} />
 
         {security.sessionsLoading ? (
-          <p className="text-xs text-muted py-2">Loading sessions…</p>
+          <ContentSkeleton />
         ) : security.sessions.length === 0 ? (
           <p className="text-xs text-muted py-2">No active sessions found.</p>
         ) : (
@@ -683,7 +684,7 @@ export default function Profile() {
         </div>
 
         {security.activityLoading ? (
-          <p className="text-xs text-muted px-5 py-4">Loading activity…</p>
+          <ContentSkeleton />
         ) : filteredActivity.length === 0 ? (
           <p className="text-xs text-muted px-5 py-4">
             {hasActivityDateFilter ? 'No activity in the selected date range.' : 'No recent activity.'}
@@ -1022,7 +1023,7 @@ function AvatarUploadModal({ currentUrl, onClose, onUpload, onRemove }) {
               onClick={handleSave}
               disabled={!file || busy}
               className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-primary text-ink
-                hover:bg-primary-dark hover:text-white transition-colors duration-150 disabled:opacity-40 disabled:pointer-events-none"
+                hover:bg-primary-hover hover:text-black transition-colors duration-150 disabled:opacity-40 disabled:pointer-events-none"
             >
               {busy ? 'Saving…' : 'Save Photo'}
             </button>

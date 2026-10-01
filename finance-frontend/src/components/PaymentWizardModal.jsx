@@ -1,3 +1,4 @@
+import ResponsiveTable from './ResponsiveTable'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   AlertTriangle,
@@ -426,7 +427,7 @@ export default function PaymentWizardModal({
                 </div>
               ) : (
                 <div className="overflow-hidden rounded-xl border border-border bg-surface">
-                  <table className="w-full text-sm">
+                  <ResponsiveTable className="w-full text-sm">
                     <thead className="bg-bg/60 border-b border-border">
                       <tr>
                         <th className="px-3 py-3 text-left">
@@ -498,7 +499,7 @@ export default function PaymentWizardModal({
                         <td className="px-3 py-3 text-right font-bold text-primary-dark dark:text-primary font-mono">{fmt(selectedTotal)}</td>
                       </tr>
                     </tfoot>
-                  </table>
+                  </ResponsiveTable>
                 </div>
               )}
 
@@ -528,7 +529,7 @@ export default function PaymentWizardModal({
               </div>
 
               <div className="rounded-xl border border-border bg-surface overflow-hidden">
-                <table className="w-full text-sm">
+                <ResponsiveTable className="w-full text-sm">
                   <thead className="bg-bg/60 border-b border-border">
                     <tr>
                       <th className="px-4 py-3 text-left font-semibold text-muted text-xs uppercase tracking-wider">Voucher #</th>
@@ -560,7 +561,7 @@ export default function PaymentWizardModal({
                       <td />
                     </tr>
                   </tfoot>
-                </table>
+                </ResponsiveTable>
               </div>
 
               <p className="text-xs text-muted text-center">
@@ -602,7 +603,7 @@ export default function PaymentWizardModal({
               type="button"
               disabled={!cashAccountId || !paymentDate || loadingProposals}
               onClick={loadProposals}
-              className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-primary hover:bg-primary-dark disabled:opacity-50 text-black rounded-lg transition-colors"
+              className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-primary hover:bg-primary-hover disabled:opacity-50 text-black rounded-lg transition-colors"
             >
               {loadingProposals ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
               {loadingProposals ? 'Loading…' : 'Load Proposals'}
@@ -614,7 +615,7 @@ export default function PaymentWizardModal({
               type="button"
               disabled={selectedCount === 0 || isOverdraft || executing}
               onClick={handleExecute}
-              className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-primary hover:bg-primary-dark disabled:opacity-50 text-black rounded-lg transition-colors"
+              className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-primary hover:bg-primary-hover disabled:opacity-50 text-black rounded-lg transition-colors"
             >
               {executing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
               {executing ? 'Processing…' : `Execute Run · ${fmt(selectedTotal)}`}

@@ -1,3 +1,4 @@
+import ResponsiveTable from '../components/ResponsiveTable'
 import { useEffect, useMemo, useState } from 'react'
 import { Search, BookOpen, Scale, TrendingUp, TrendingDown, Info, ExternalLink, ListTree, Layers, Rows3, Loader2, AlertTriangle, ChevronDown, ChevronRight, X, RotateCcw, Filter, Printer, Download } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
@@ -1103,7 +1104,7 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
       {!loading && view === 'journal' && (
         <div className={PANEL}>
         <div className="overflow-hidden rounded-t-xl">
-          <table className="w-full text-sm table-fixed">
+          <ResponsiveTable className="w-full text-sm table-fixed">
             <thead className="bg-surface">
                 <tr className="border-b border-border">
                   <th className="w-28 text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Date</th>
@@ -1176,7 +1177,7 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
                   <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-muted">No journal entries match your filters.</td></tr>
                 )}
               </tbody>
-            </table>
+            </ResponsiveTable>
           </div>
 
           <Pagination
@@ -1239,7 +1240,7 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
 
                   {!isCollapsed && acc.lines.length > 0 && (
                     <div className="mt-1.5 overflow-hidden rounded-lg border border-border">
-                      <table className="w-full text-sm table-fixed">
+                      <ResponsiveTable className="w-full text-sm table-fixed">
                         <thead className="bg-bg">
                           <tr className="border-b border-border">
                             <th className="w-24 text-left font-semibold text-muted text-[10.5px] uppercase tracking-wide px-3 py-2 whitespace-nowrap">Date</th>
@@ -1328,7 +1329,7 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
                             <td className="px-3 py-2"></td>
                           </tr>
                         </tfoot>
-                      </table>
+                      </ResponsiveTable>
                     </div>
                   )}
 
@@ -1360,7 +1361,7 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
       {!loading && view === 'trial-balance' && (
         <div className={PANEL}>
         <div className="overflow-hidden rounded-t-xl">
-          <table className="w-full text-sm">
+          <ResponsiveTable className="w-full text-sm">
             <thead className="bg-surface">
                 <tr className="border-b border-border">
                   <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Account</th>
@@ -1403,7 +1404,7 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
                   </tr>
                 </tfoot>
               )}
-            </table>
+            </ResponsiveTable>
           </div>
         </div>
       )}

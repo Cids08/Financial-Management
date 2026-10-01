@@ -1,3 +1,5 @@
+import { ContentSkeleton } from './LoadingSkeleton'
+import ResponsiveTable from './ResponsiveTable'
 import { useEffect, useState, useMemo } from 'react'
 import {
   Printer,
@@ -590,7 +592,7 @@ export default function DisbursementPrintModal({
           {loading ? (
             <div className="flex flex-col items-center justify-center py-20 text-muted">
               <Loader2 className="w-8 h-8 animate-spin text-primary mb-2" />
-              <p className="text-sm font-medium">Loading document and accounting entries…</p>
+              <ContentSkeleton />
             </div>
           ) : error ? (
             <div className="p-4 bg-status-danger-bg border border-status-danger-border rounded-xl text-status-danger text-sm flex items-center gap-3">
@@ -734,7 +736,7 @@ export default function DisbursementPrintModal({
                   </span>
                 </div>
                 <div className="border border-border rounded-xl overflow-hidden shadow-sm bg-surface">
-                  <table className="w-full text-sm">
+                  <ResponsiveTable className="w-full text-sm">
                     <thead className="bg-bg/60 border-b border-border">
                       <tr>
                         <th className="px-4 py-2.5 text-left font-semibold text-muted text-xs uppercase">Account Code</th>
@@ -771,7 +773,7 @@ export default function DisbursementPrintModal({
                         </td>
                       </tr>
                     </tfoot>
-                  </table>
+                  </ResponsiveTable>
                 </div>
               </div>
 
@@ -890,7 +892,7 @@ export default function DisbursementPrintModal({
                 </div>
 
                 <div className="border border-border rounded-lg overflow-hidden text-xs">
-                  <table className="w-full">
+                  <ResponsiveTable className="w-full">
                     <thead className="bg-bg/60 border-b border-border font-semibold text-muted">
                       <tr>
                         <th className="px-3 py-2 text-left">Nature of Payment</th>
@@ -911,7 +913,7 @@ export default function DisbursementPrintModal({
                         <td className="px-3 py-2 text-right font-mono font-bold text-ink">{fmt(taxWithheld)}</td>
                       </tr>
                     </tbody>
-                  </table>
+                  </ResponsiveTable>
                 </div>
 
                 <p className="text-[11px] text-muted italic text-center">
@@ -937,7 +939,7 @@ export default function DisbursementPrintModal({
                 type="button"
                 disabled={loading || !voucherData}
                 onClick={printVoucher}
-                className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-primary hover:bg-primary-dark disabled:opacity-50 text-black rounded-lg transition-colors shadow-sm"
+                className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-primary hover:bg-primary-hover disabled:opacity-50 text-black rounded-lg transition-colors shadow-sm"
               >
                 <Printer className="w-4 h-4" />
                 Print Voucher
@@ -947,7 +949,7 @@ export default function DisbursementPrintModal({
                 type="button"
                 disabled={loading || !birData}
                 onClick={printBir2307}
-                className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-primary hover:bg-primary-dark disabled:opacity-50 text-black rounded-lg transition-colors shadow-sm"
+                className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-primary hover:bg-primary-hover disabled:opacity-50 text-black rounded-lg transition-colors shadow-sm"
               >
                 <Printer className="w-4 h-4" />
                 Print BIR Form 2307

@@ -1,3 +1,5 @@
+import { ContentSkeleton } from '../components/LoadingSkeleton'
+import { protectedDashboardPdf } from '../utils/secureExport'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -128,7 +130,8 @@ export default function StaffDashboard({ title = 'Dashboard', crumbs = ['Dashboa
     setExporting(true)
     setExportError(null)
     try {
-      const res = await apiFetch('/api/dashboard/export')
+      const res = await protectedDashboardPdf('/api/dashboard/export')
+      if (!res) return
       if (!res.ok) throw new Error('Export request failed')
       const blob = await res.blob()
       const url = window.URL.createObjectURL(blob)
@@ -219,9 +222,7 @@ export default function StaffDashboard({ title = 'Dashboard', crumbs = ['Dashboa
       <div>
         <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">Needs Attention</p>
         {loading ? (
-          <div className={`${PANEL} ${PANEL_PAD} flex items-center justify-center gap-2 py-10 text-sm text-muted`}>
-            <Loader2 size={16} className="animate-spin" /> Loading...
-          </div>
+          <ContentSkeleton rows={4} />
         ) : (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <AttentionSection
@@ -315,7 +316,7 @@ export default function StaffDashboard({ title = 'Dashboard', crumbs = ['Dashboa
         </div>
         <div className="divide-y divide-border">
           {loading ? (
-            <p className="px-4 py-6 text-center text-xs text-muted">Loading...</p>
+            <ContentSkeleton />
           ) : recentActivity.length === 0 ? (
             <p className="px-4 py-6 text-center text-xs text-muted">No recent activity yet.</p>
           ) : (

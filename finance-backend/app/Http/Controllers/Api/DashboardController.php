@@ -111,6 +111,7 @@ class DashboardController extends Controller
      */
     public function exportPdf(Request $request): Response
     {
+        $request->validate(['export_password' => ['required', 'string', 'min:12', 'max:64']]);
         $year = $this->resolveYear($request);
 
         // Letterhead + active currency come from Settings so the PDF matches
@@ -167,11 +168,15 @@ class DashboardController extends Controller
         ];
 
         $pdf = Pdf::loadView('pdf.dashboard-summary', $data)
-            ->setPaper('a4', 'portrait');
+            ->setPaper('a4', 'landscape');
 
         $filename = 'dashboard-summary-' . $year . '-' . now()->format('m-d') . '.pdf';
 
-        return $pdf->download($filename);
+        return response(app(\App\Services\ProtectedExportService::class)->pdf($pdf->output(), $request->input('export_password')), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+            'Cache-Control' => 'no-store, private',
+        ]);
     }
 
     /**
@@ -279,7 +284,11 @@ class DashboardController extends Controller
 
         $filename = 'collector-dashboard-summary-' . $year . '-' . now()->format('m-d') . '.pdf';
 
-        return $pdf->download($filename);
+        return response(app(\App\Services\ProtectedExportService::class)->pdf($pdf->output(), $request->input('export_password')), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+            'Cache-Control' => 'no-store, private',
+        ]);
     }
 
     /**
@@ -313,7 +322,11 @@ class DashboardController extends Controller
 
         $filename = 'staff-dashboard-summary-' . now()->format('Y-m-d') . '.pdf';
 
-        return $pdf->download($filename);
+        return response(app(\App\Services\ProtectedExportService::class)->pdf($pdf->output(), $request->input('export_password')), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+            'Cache-Control' => 'no-store, private',
+        ]);
     }
 
     /**

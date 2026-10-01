@@ -1,3 +1,5 @@
+import { ContentSkeleton } from '../components/LoadingSkeleton'
+import { protectedDashboardPdf } from '../utils/secureExport'
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -228,7 +230,8 @@ export default function CollectorDashboard({ title = 'Dashboard', crumbs = ['Das
     setExporting(true)
     setExportError(null)
     try {
-      const res = await apiFetch(`/api/dashboard/export?year=${year}`)
+      const res = await protectedDashboardPdf(`/api/dashboard/export?year=${year}`)
+      if (!res) return
       if (!res.ok) throw new Error('Export request failed')
       const blob = await res.blob()
       const url = window.URL.createObjectURL(blob)
@@ -401,7 +404,7 @@ export default function CollectorDashboard({ title = 'Dashboard', crumbs = ['Das
             </button>
           </div>
           <div className="divide-y divide-border">
-            {loading && <p className="px-4 py-6 text-center text-sm text-muted">Loading…</p>}
+            {loading && <ContentSkeleton />}
             {!loading && outstandingInvoices.length === 0 && (
               <p className="px-4 py-6 text-center text-sm text-muted">No outstanding invoices — all assigned accounts are settled.</p>
             )}
@@ -459,7 +462,7 @@ export default function CollectorDashboard({ title = 'Dashboard', crumbs = ['Das
             </button>
           </div>
           <div className="divide-y divide-border">
-            {loading && <p className="px-4 py-6 text-center text-sm text-muted">Loading…</p>}
+            {loading && <ContentSkeleton />}
             {!loading && recentCollections.length === 0 && (
               <p className="px-4 py-6 text-center text-sm text-muted">No collections recorded for {year}.</p>
             )}
