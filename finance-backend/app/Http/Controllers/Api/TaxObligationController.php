@@ -49,6 +49,21 @@ class TaxObligationController extends Controller
     }
 
     /**
+     * GET /api/tax-obligations/stats
+     * Global counts for the page's stat cards and compliance banner —
+     * these must not be derived from the current page's rows, or page 2+
+     * would silently undercount overdue/paid/due-amount.
+     */
+    public function stats(): JsonResponse
+    {
+        return response()->json([
+            'success' => true,
+            'message' => '',
+            'data'    => $this->taxObligationService->stats(),
+        ]);
+    }
+
+    /**
      * GET /api/tax-obligations/calculate-base?tax_type=VAT&period_year=2026&period_month=3&period_quarter=1
      */
     public function calculateBase(Request $request): JsonResponse

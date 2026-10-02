@@ -24,7 +24,12 @@ export default function DashboardLayout() {
   // Idle logout is silent (no LogoutConfirmModal) since by definition
   // nobody's present to confirm it; that modal is only for the manual
   // "Log out" button in Header/Sidebar.
-  useIdleLogout({ onIdle: () => logout('sessionIdle'), timeoutMinutes: 3 })
+  // Stable identity so useIdleLogout doesn't re-arm its listeners and
+  // restart the 3-minute countdown on every DashboardLayout re-render
+  // (mobile drawer, logout modal open/close, ...). logout() is itself
+  // useCallback'd in useAuth, so this ref is stable across renders.
+  const handleIdle = useCallback(() => logout('sessionIdle'), [logout])
+  useIdleLogout({ onIdle: handleIdle, timeoutMinutes: 3 })
 
   // On desktop the hamburger toggles collapse; on mobile it opens the drawer.
   const handleHeaderToggle = useCallback(() => {

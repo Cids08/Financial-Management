@@ -132,6 +132,44 @@ class TaxObligationService
         return $paginated;
     }
 
+    /**
+     * Global stat card numbers, independent of the paginated page.
+     * Overdue mirrors derivedStatus() exactly (a Paid record is never
+     * reclassified regardless of due date).
+     *
+     * @return array{total:int,paid:int,overdue:int,due:int,due_amount:float,due_soon:int}
+     */
+    public function stats(): array
+    {
+        $visible = TaxObligation::query(); // exclude trashed
+        $today = now()->toDateString();
+
+        $total     = (clone $visible)->count();
+        $paid      = (clone $visible)->where('status', 'Paid')->count();
+        $overdue   = (clone $visible)
+            ->where('status', 'Pending')
+            ->where('due_date', '<', $today)
+            ->count();
+        $dueSoon   = (clone $visible)
+            ->where('status', 'Pending')
+            ->where('due_date', '>=', $today)
+            ->where('due_date', '<=', now()->addDays(7)->toDateString())
+            ->count();
+        $dueAmount = (clone $visible)
+            ->where('status', 'Pending')
+            ->sum('tax_amount');
+
+        return [
+            'total'      => $total,
+            'paid'       => $paid,
+            'overdue'    => $overdue,
+            'due_soon'   => $dueSoon,
+            'due'        => $total - $paid,
+            // Frontend displays this as "Due Amount" (non-Paid obligations).
+            'due_amount' => (float) $dueAmount,
+        ];
+    }
+
     public function create(User $user, array $data): TaxObligation
     {
         return DB::transaction(function () use ($user, $data) {

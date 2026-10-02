@@ -1,3 +1,4 @@
+import KpiValue from '../components/KpiValue'
 import { ContentSkeleton } from '../components/LoadingSkeleton'
 import { useMemo, useState, useEffect } from 'react'
 import {
@@ -231,7 +232,7 @@ export default function AIRecommendations({ title = 'AI Financial Recommendation
               </div>
               <div className="min-w-0">
                 <p className="text-xs text-muted">{card.label}</p>
-                <p className="text-lg font-bold text-ink">{card.value}</p>
+                <p className="text-lg font-bold text-ink"><KpiValue loading={loading}>{card.value}</KpiValue></p>
               </div>
             </button>
           )

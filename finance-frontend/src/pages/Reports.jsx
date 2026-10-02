@@ -1,4 +1,4 @@
-import { ContentSkeleton } from '../components/LoadingSkeleton'
+import { PageSkeleton } from '../components/LoadingSkeleton'
 import ResponsiveTable from '../components/ResponsiveTable'
 import { Fragment, useMemo, useState, useEffect } from 'react'
 import {
@@ -34,7 +34,7 @@ const REPORT_CARDS = [
   { key: 'cash-flow', title: 'Cash Flow Summary', description: 'Inflows and outflows across every cash account.', icon: Wallet, iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-50 dark:bg-blue-500/10' },
   { key: 'ar-aging', title: 'Accounts Receivable Aging', description: 'Outstanding customer balances by age bucket.', icon: Users, iconColor: 'text-purple-600 dark:text-purple-400', iconBg: 'bg-purple-50 dark:bg-purple-500/10' },
   { key: 'ap-aging', title: 'Accounts Payable Aging', description: 'Outstanding supplier balances by age bucket.', icon: Truck, iconColor: 'text-orange-600 dark:text-orange-400', iconBg: 'bg-orange-50 dark:bg-orange-500/10' },
-  { key: 'budget-vs-actual', title: 'Budget vs. Actual', description: 'Allocated budget against actual spend, by department.', icon: PiggyBank, iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-50 dark:bg-amber-500/10' },
+  { key: 'budget-vs-actual', title: 'Budget vs. Actual', description: 'Approved budgets against posted G/L expense and capital usage, by department.', icon: PiggyBank, iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-50 dark:bg-amber-500/10' },
 ]
 
 // -- Chart config -------------------------------------------------------
@@ -93,7 +93,7 @@ function AgingTotalCell({ value }) {
 
 function ReportLoading() {
   return (
-    <ContentSkeleton rows={4} />
+    <div className="p-4"><PageSkeleton /></div>
   )
 }
 
@@ -683,7 +683,7 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
 
   useEffect(() => {
     setReportPage(1)
-  }, [activeReport])
+  }, [activeReport, appliedFilters])
 
   const { data, loading, error, fetchAll } = useReports()
 
@@ -706,9 +706,11 @@ export default function Reports({ title = 'Reports', crumbs = ['Reports'] }) {
     companyName ? { name: companyName, logoUrl: companyLogoUrl, address: companyAddress } : null
   ), [companyName, companyLogoUrl, companyAddress])
 
-  // Fetch when active tab or applied filters change
+  // Fetch when active tab or applied filters change. refreshKey is bumped by
+  // the Refresh button AND by live updates -  force=true bypasses the report
+  // cache so those actually re-fetch instead of short-circuiting.
   useEffect(() => {
-    fetchAll(appliedFilters)
+    fetchAll(appliedFilters, true)
   }, [appliedFilters, fetchAll, refreshKey])
 
   const handleApplyFilter = () => {

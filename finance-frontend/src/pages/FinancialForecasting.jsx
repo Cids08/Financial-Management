@@ -1,3 +1,4 @@
+import KpiValue from '../components/KpiValue'
 import { TableSkeleton, ContentSkeleton } from '../components/LoadingSkeleton'
 import ResponsiveTable from '../components/ResponsiveTable'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -131,7 +132,7 @@ function isMapeUnreliable(mape) {
   return mape != null && mape > MAPE_WARNING_THRESHOLD
 }
 
-const StatCard = memo(function StatCard({ label, value, icon: Icon, iconBg, iconColor, isActive, onClick }) {
+const StatCard = memo(function StatCard({ loading, label, value, icon: Icon, iconBg, iconColor, isActive, onClick }) {
   return (
     <button
       type="button"
@@ -145,7 +146,7 @@ const StatCard = memo(function StatCard({ label, value, icon: Icon, iconBg, icon
       </div>
       <div className="min-w-0">
         <p className="text-xs text-muted">{label}</p>
-        <p className="wrap-anywhere text-lg font-bold text-ink">{value}</p>
+        <p className="wrap-anywhere text-lg font-bold text-ink"><KpiValue loading={loading}>{value}</KpiValue></p>
       </div>
     </button>
   )
@@ -656,7 +657,7 @@ export default function FinancialForecasting({ title = 'Financial Forecasting', 
       )}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {statCards.map(({ key, ...card }) => <StatCard key={key} {...card} />)}
+        {statCards.map(({ key, ...card }) => <StatCard key={key} {...card} loading={forecastsLoading} />)}
       </div>
 
       {activeStat !== 'all' && (

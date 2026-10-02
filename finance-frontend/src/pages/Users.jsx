@@ -1,3 +1,4 @@
+import KpiValue from '../components/KpiValue'
 import { TableSkeleton } from '../components/LoadingSkeleton'
 import ResponsiveTable from '../components/ResponsiveTable'
 import { useEffect, useMemo, useState } from 'react'
@@ -664,7 +665,7 @@ export default function Users({ title = 'Users', crumbs = ['User Management', 'U
               </div>
               <div className="min-w-0">
                 <p className="text-xs text-muted">{card.label}</p>
-                <p className="text-lg font-bold text-ink">{usersLoading ? '…' : card.value}</p>
+                <p className="text-lg font-bold text-ink"><KpiValue loading={usersLoading}>{card.value}</KpiValue></p>
               </div>
             </button>
           )

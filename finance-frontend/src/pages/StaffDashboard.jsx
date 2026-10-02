@@ -1,3 +1,4 @@
+import KpiValue from '../components/KpiValue'
 import { ContentSkeleton } from '../components/LoadingSkeleton'
 import { protectedDashboardPdf } from '../utils/secureExport'
 import { useEffect, useState } from 'react'
@@ -60,7 +61,7 @@ function StatCard({ label, value, icon: Icon, iconBg, iconColor, loading, onClic
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-xs text-muted group-hover:text-ink truncate transition-colors">{label}</p>
-        <p className="mt-1 text-xl font-bold tracking-tight text-ink tabular-nums truncate">{loading ? '—' : value}</p>
+        <p className="mt-1 text-xl font-bold tracking-tight text-ink tabular-nums truncate"><KpiValue loading={loading}>{value}</KpiValue></p>
       </div>
     </button>
   )

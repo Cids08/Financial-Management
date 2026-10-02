@@ -19,6 +19,7 @@ class StoreExpenseRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'gl_account_id' => ['required', 'integer', 'exists:chart_of_accounts,id'],
             'budget_id' => ['required', 'integer', 'exists:budgets,id'],
             'expense_category_id' => ['required', 'integer', 'exists:expense_categories,id'],
             'supplier_id' => ['nullable', 'integer', 'exists:suppliers,id'],

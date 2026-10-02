@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { getEcho } from '../utils/echo'
 
 /**
@@ -13,26 +13,33 @@ import { getEcho } from '../utils/echo'
  * Usage:
  *   useCollectionUpdates(refetch)
  *
- * The channel is left unconditionally  -  Echo's authorizer will deny
- * unauthenticated sockets at the Reverb level before any event fires.
- *
- * Cleanup: the channel is left (unsubscribed) when the component that
- * uses this hook unmounts, so no stale listeners accumulate across
- * page navigations.
+ * onUpdate is kept in a ref (like useDataUpdates) so the listener always
+ * calls the LATEST refetch -  not the first-render one, which would close
+ * over stale filters like `trashed` and silently reload the un-trashed
+ * list on top of the archived view.
  */
 export function useCollectionUpdates(onUpdate) {
+  const onUpdateRef = useRef(onUpdate)
+  onUpdateRef.current = onUpdate
+
   useEffect(() => {
     const echo    = getEcho()
     const channel = echo.private('collections')
 
     // broadcastAs() in CollectionStatusChanged returns 'collection.status.changed',
     // which Laravel Echo prefixes with a dot when listening  -  hence '.collection.status.changed'.
-    channel.listen('.collection.status.changed', () => {
-      onUpdate()
-    })
+    const handler = () => onUpdateRef.current()
+
+    channel.listen('.collection.status.changed', handler)
 
     return () => {
-      echo.leave('collections')
+      // stopListening only (same as useDataUpdates): leave() tears the
+      // channel object down out of Echo's cache entirely, which could kill
+      // a subscription another component still relies on. The captured
+      // `echo`/`channel` are used here (never a fresh getEcho()) so a
+      // disconnect that already nulled the module singleton isn't undone
+      // by this cleanup constructing a brand-new socket.
+      channel.stopListening('.collection.status.changed', handler)
     }
-  }, []) // onUpdate is refetch() from useCollections  -  stable ref, no dep needed
+  }, [])
 }

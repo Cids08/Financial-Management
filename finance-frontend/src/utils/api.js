@@ -1,6 +1,6 @@
 import { getToken, clearToken } from './authToken'
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 function isOnLoginPage() {
   return window.location.pathname === '/' || window.location.pathname === '/login'
@@ -39,7 +39,7 @@ export async function apiFetch(path, options = {}) {
 
   let response
   try {
-    response = await fetch(`${BASE_URL}${path}`, {
+    response = await fetch(`${API_BASE_URL}${path}`, {
       ...fetchOptions,
       headers,
       ...(signal ? { signal } : {}),

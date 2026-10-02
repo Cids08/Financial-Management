@@ -64,22 +64,42 @@ export const setPrivacyMasking = (on) => {
   privacymasking = on
 }
 
+/**
+ * Usable rate for `currency` (base units per 1 unit of `currency`), or
+ * null when no positive rate is configured. Used both for the actual
+ * conversion and by the formatters to fall back to base currency instead
+ * of labelling an unconverted number with the wrong symbol.
+ */
+const rateFor = (currency) => {
+  if (!currency || currency === activeBaseCurrency) return 1
+  const rate = Number(activeExchangeRates?.[currency])
+  return Number.isFinite(rate) && rate > 0 ? rate : null
+}
+
 /** Converts a stored (base-currency) value into the requested display currency. */
 export const convertAmount = (value, currency = activeCurrency) => {
   const amount = Number(value) || 0
   if (!currency || currency === activeBaseCurrency) return amount
-  const rate = Number(activeExchangeRates?.[currency])
-  return Number.isFinite(rate) && rate > 0 ? amount / rate : amount
+  const rate = rateFor(currency)
+  return rate == null ? amount : amount / rate
 }
 
 const realFormatCurrency = (value, currency = activeCurrency) => {
-  const amount = convertAmount(value, currency)
+  // If a non-base currency is requested but no usable rate is set, the
+  // stored value canNOT be converted  -  render it in the BASE currency so
+  // the amount is at least labelled correctly, instead of slapping a
+  // target-currency symbol on an unconverted base number.
+  const effectiveCurrency =
+    currency && currency !== activeBaseCurrency && rateFor(currency) == null
+      ? activeBaseCurrency
+      : currency
+  const amount = convertAmount(value, effectiveCurrency)
   const sign = amount < 0 ? '-' : ''
   const body = Math.abs(amount).toLocaleString('en-PH', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })
-  return `${sign}${currencySymbol(currency)}${body}`
+  return `${sign}${currencySymbol(effectiveCurrency)}${body}`
 }
 
 export const formatCurrency = (value, currency = activeCurrency) =>

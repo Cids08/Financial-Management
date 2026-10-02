@@ -1,5 +1,6 @@
+import { useLocation } from 'react-router-dom'
 import { useEffect, useRef, useState } from 'react'
-import { Landmark, ChevronsLeft, ChevronsRight, ChevronUp, ChevronDown, X } from 'lucide-react'
+import { Landmark, ChevronsLeft, ChevronsRight, ChevronUp, ChevronDown, Search, X } from 'lucide-react'
 import { menuData } from '../utils/menuData'
 import { filterMenuByPermissions } from '../utils/permissions'
 import { useCompany } from '../context/CompanyContext'
@@ -12,6 +13,9 @@ const FOOTER_IDS = ['settings', 'logout']
 
 export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onCloseMobile, onLogoutClick }) {
   const navRef = useRef(null)
+  const location = useLocation()
+  const [menuSearch, setMenuSearch] = useState('')
+  const [openGroup, setOpenGroup] = useState(null)
   const [canScrollUp, setCanScrollUp] = useState(false)
   const [canScrollDown, setCanScrollDown] = useState(false)
   const { name, tagline, logoUrl } = useCompany()
@@ -27,6 +31,18 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
   const visibleMenuData = filterMenuByPermissions(menuData, permissions).filter(item => item.id !== 'settings')
   const mainItems = visibleMenuData.filter((item) => !FOOTER_IDS.includes(item.id))
   const footerItems = visibleMenuData.filter((item) => FOOTER_IDS.includes(item.id))
+  const term = menuSearch.trim().toLowerCase()
+  const searchedItems = mainItems.flatMap(item => {
+    if (!term || item.label.toLowerCase().includes(term)) return [item]
+    if (!item.children) return []
+    const children = item.children.filter(child => child.label.toLowerCase().includes(term))
+    return children.length ? [{ ...item, children }] : []
+  })
+  useEffect(() => {
+    const active = menuData.find(item => item.children?.some(child => child.path === location.pathname))
+    setOpenGroup(active?.id || null)
+    setMenuSearch('')
+  }, [location.pathname])
 
   // Unread badge for the Notifications sidebar item. Reads the shared
   // NotificationsContext (mounted once in DashboardLayout) instead of its
@@ -60,7 +76,7 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
       window.removeEventListener('resize', handle)
       clearTimeout(timeout)
     }
-  }, [collapsed, mobileOpen, permissionsLoading, permissions])
+  }, [collapsed, mobileOpen, permissionsLoading, permissions, openGroup, menuSearch])
 
   const scrollBy = (amount) => {
     navRef.current?.scrollBy({ top: amount, behavior: 'smooth' })
@@ -132,13 +148,17 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
             aria-busy={permissionsLoading}
             className="h-full overflow-y-auto overflow-x-hidden scrollbar-none py-5 px-3"
           >
+            <div className={'relative mb-4 ' + (collapsed ? 'lg:hidden' : '')}>
+              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sidebar-muted" />
+              <input type="search" aria-label="Find a menu item" placeholder="Find a menu item..." value={menuSearch} onChange={e => setMenuSearch(e.target.value)} className="h-9 w-full min-w-0 rounded-lg border border-sidebar-border bg-sidebar pl-9 pr-3 text-xs text-sidebar-ink placeholder:text-sidebar-muted focus:outline-none focus:ring-2 focus:ring-primary/50" />
+            </div>
             <p className={`px-3 pb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-sidebar-muted ${collapsed ? 'lg:hidden' : ''}`}>
               Workspace
             </p>
             {permissionsError && <div role="alert" className="mb-3 rounded-lg border border-sidebar-muted/30 p-3 text-xs text-sidebar-ink"><p>Navigation could not load.</p><button type="button" onClick={reloadPermissions} className="mt-2 font-semibold text-primary">Retry</button></div>}
             <ul className="space-y-1">
               {permissionsLoading ? menuData.filter(item => !FOOTER_IDS.includes(item.id)).map(item => {
-                const pendingItems = item.children || [item]
+                const pendingItems = item.children ? [] : [item]
                 return <li key={item.id} aria-busy="true" className={item.children ? 'pt-4 mt-3 border-t border-sidebar-border' : ''}>
                   {item.children && <p className={'px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-sidebar-muted ' + (collapsed ? 'lg:hidden' : '')}>{item.label}</p>}
                   <ul className="space-y-1">{pendingItems.map(entry => <li key={entry.id}>
@@ -148,16 +168,23 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
                     </div>
                   </li>)}</ul>
                 </li>
-              }) : mainItems.map((item) => (
+              }) : searchedItems.map((item) => (
                 <SidebarItem
                   key={item.id}
                   item={item}
+                  groupOpen={!!term || openGroup === item.id}
+                  onToggleGroup={() => {
+                    if (collapsed && !mobileOpen) { onToggleCollapse(); setOpenGroup(item.id); return }
+                    if (term) { setMenuSearch(''); setOpenGroup(item.id); return }
+                    setOpenGroup(current => current === item.id ? null : item.id)
+                  }}
                   collapsed={collapsed}
-                  onNavigate={onCloseMobile}
+                  onNavigate={() => { setMenuSearch(''); onCloseMobile?.() }}
                   badge={item.id === 'notifications' ? unreadCount : undefined}
                 />
               ))}
             </ul>
+            {!permissionsLoading && searchedItems.length === 0 && <p role="status" className="px-3 py-6 text-xs text-sidebar-muted">No menu items match your search.</p>}
           </nav>
 
           {/* Scroll-down indicator */}

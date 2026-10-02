@@ -1,3 +1,4 @@
+import KpiValue from '../components/KpiValue'
 import { TableSkeleton } from '../components/LoadingSkeleton'
 import ResponsiveTable from '../components/ResponsiveTable'
 import { useState, useMemo, useEffect } from 'react'
@@ -614,7 +615,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs text-muted">{card.label}</p>
-                  <p className="text-lg font-bold text-ink">{card.value}</p>
+                  <p className="text-lg font-bold text-ink"><KpiValue loading={loading}>{card.value}</KpiValue></p>
                 </div>
               </button>
             )

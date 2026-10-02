@@ -330,24 +330,15 @@ class ReportService
 
     protected function queryBudgetData(int $fiscalYear): array
     {
-        return Budget::query()
-            ->join('departments', 'departments.id', '=', 'budgets.department_id')
-            ->where('budgets.fiscal_year', $fiscalYear)
-            ->whereNull('budgets.deleted_at')
-            ->select(
-                'departments.department_name',
-                DB::raw('SUM(budgets.allocated_amount) as allocated'),
-                DB::raw('SUM(budgets.used_amount) as actual'),
-            )
-            ->groupBy('departments.id', 'departments.department_name')
-            ->get()
-            ->map(fn ($r) => [
-                'department' => $r->department_name,
-                'allocated'  => (float) $r->allocated,
-                'actual'     => (float) $r->actual,
-            ])
-            ->values()
-            ->all();
+        $groups = [];
+        $gl = app(BudgetGlService::class);
+        foreach (Budget::with(['department', 'accountAllocations.account'])->where('fiscal_year', $fiscalYear)->whereIn('status', ['Active', 'Closed'])->get() as $budget) {
+            $id = $budget->department_id;
+            $groups[$id] ??= ['department' => $budget->department?->department_name ?? 'Unassigned', 'allocated' => 0.0, 'actual' => 0.0];
+            $groups[$id]['allocated'] = (float) \App\Support\Money::add($groups[$id]['allocated'], $budget->allocated_amount);
+            $groups[$id]['actual'] = (float) \App\Support\Money::add($groups[$id]['actual'], $gl->summary($budget)['actual']);
+        }
+        return array_values($groups);
     }
 
     /**

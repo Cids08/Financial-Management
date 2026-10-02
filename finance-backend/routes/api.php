@@ -264,6 +264,7 @@ Route::middleware(['auth:sanctum', 'require.password.change'])->group(function (
 
     // Expenses
     Route::prefix('expenses')->group(function () {
+        Route::get('/posting-accounts', [ExpenseController::class, 'postingAccounts'])->middleware('permission:expenses.manage|expenses.approve');
         Route::get('/stats', [ExpenseController::class, 'stats'])->middleware('permission:expenses.view');
         Route::get('/', [ExpenseController::class, 'index'])->middleware('permission:expenses.view');
         Route::get('/approval-proposals', [ExpenseController::class, 'getApprovalProposals'])->middleware('permission:expenses.view');
@@ -304,6 +305,7 @@ Route::middleware(['auth:sanctum', 'require.password.change'])->group(function (
     // Tax obligations
     Route::prefix('tax-obligations')->group(function () {
         Route::get('/', [TaxObligationController::class, 'index'])->middleware('permission:tax.view');
+        Route::get('/stats', [TaxObligationController::class, 'stats'])->middleware('permission:tax.view');
         Route::get('/calculate-base', [TaxObligationController::class, 'calculateBase'])->middleware('permission:tax.view');
         Route::post('/generate-schedule', [TaxObligationController::class, 'generateSchedule'])->middleware('permission:tax.manage');
         Route::post('/batch-pay', [TaxObligationController::class, 'batchRecordPayment'])->middleware('permission:tax.manage');
@@ -389,6 +391,9 @@ Route::middleware(['auth:sanctum', 'require.password.change'])->group(function (
 
     // Budgets
     Route::prefix('budgets')->group(function () {
+        Route::get('/allocation-accounts', [BudgetController::class, 'allocationAccounts'])->middleware('permission:budgets.manage');
+        Route::put('/{budget}/account-allocations', [BudgetController::class, 'saveAllocations'])->middleware('permission:budgets.manage');
+        Route::get('/{budget}/gl-utilization', [BudgetController::class, 'glUtilization'])->middleware('permission:budgets.view');
         Route::get('/stats', [BudgetController::class, 'stats'])->middleware('permission:budgets.view');
         Route::get('/', [BudgetController::class, 'index'])->middleware('permission:budgets.view');
         Route::get('/{budget}', [BudgetController::class, 'show'])->middleware('permission:budgets.view');

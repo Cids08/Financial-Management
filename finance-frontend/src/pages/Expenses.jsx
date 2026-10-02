@@ -1,3 +1,5 @@
+import ExpenseGlAccountField from '../components/ExpenseGlAccountField'
+import KpiValue from '../components/KpiValue'
 import { TableSkeleton, ContentSkeleton } from '../components/LoadingSkeleton'
 import ResponsiveTable from '../components/ResponsiveTable'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -34,6 +36,7 @@ const MAX_DOC_MB = 10
 
 const EMPTY_FORM = {
   budget_id: '',
+  gl_account_id: '',
   expense_category_id: '',
   expense_date: '',
   description: '',
@@ -423,6 +426,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
   const openEdit = (x) => {
     setForm({
       budget_id: x.budget_id,
+      gl_account_id: x.gl_account_id || '',
       expense_category_id: x.expense_category_id,
       expense_date: x.expense_date,
       description: x.description,
@@ -472,6 +476,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
   const handleSubmit = async (e) => {
     e.preventDefault()
     const errors = {}
+    if (!form.gl_account_id) errors.gl_account_id = 'Please select a posting G/L account.'
     if (!form.budget_id) errors.budget_id = 'Please select a budget.'
     if (!form.expense_category_id) errors.expense_category_id = 'Please select a category.'
     if (!form.description.trim()) errors.description = 'Description is required.'
@@ -497,6 +502,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
     if (form.budget_id) {
       const selectedBudget = budgets.find((b) => Number(b.budget_id) === Number(form.budget_id))
       if (selectedBudget) {
+        if (form.expense_date && ((selectedBudget.start_date && form.expense_date < selectedBudget.start_date) || (selectedBudget.end_date && form.expense_date > selectedBudget.end_date))) errors.expense_date = 'Expense date must fall within the selected budget period.'
         if (Number(selectedBudget.remaining_amount) <= 0) {
           errors.budget_id = 'Cannot select this budget: Budget funds are exhausted.'
         } else if (amt > 0 && amt > Number(selectedBudget.remaining_amount)) {
@@ -531,6 +537,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
     const payload = {
       ...form,
       budget_id: Number(form.budget_id),
+      gl_account_id: Number(form.gl_account_id),
       expense_category_id: Number(form.expense_category_id),
       supplier_id: validSupplierId,
       cash_account_id: form.cash_account_id ? Number(form.cash_account_id) : null,
@@ -628,6 +635,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
             ['Expense Date', formatDate(x.expense_date)],
             ['Supplier / Payee', supplierName(x.supplier_id), 'span'],
             ['Budget', budgetLabel(x.budget_id), 'span'],
+            ['Posting G/L account', x.gl_account_code ? x.gl_account_code + ' - ' + x.gl_account_name : 'Legacy posting - see general ledger', 'span'],
             ['Receipt No.', x.receipt_number || '—'],
             [
               'Cash Account',
@@ -700,7 +708,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
               </div>
               <div className="min-w-0">
                 <p className="text-xs text-muted">{card.label}</p>
-                <p className="text-lg font-bold text-ink">{card.value}</p>
+                <p className="text-lg font-bold text-ink"><KpiValue loading={statsLoading}>{card.value}</KpiValue></p>
               </div>
             </>
           )
@@ -843,6 +851,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                     <span className="truncate block max-w-32.5" title={x.budget_name || budgetLabel(x.budget_id)}>
                       {x.budget_name || budgetLabel(x.budget_id)}
                     </span>
+                    {x.gl_account_code && <span className="mt-1 block text-xs text-muted" title={x.gl_account_name}>G/L {x.gl_account_code}</span>}
                   </td>
                   <td className="px-2.5 py-3 whitespace-nowrap">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${CATEGORY_STYLES}`}>{x.expense_category_name || categoryName(x.expense_category_id)}</span>
@@ -1032,7 +1041,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                 value={form.budget_id}
                 onChange={(e) => {
                   const selectedB = budgets.find((b) => Number(b.budget_id) === Number(e.target.value))
-                  setForm((f) => ({ ...f, budget_id: e.target.value }))
+                  setForm((f) => ({ ...f, budget_id: e.target.value, gl_account_id: '' }))
                   setFieldErrors((fe) => {
                     const next = { ...fe, budget_id: '' }
                     if (selectedB && Number(selectedB.remaining_amount) <= 0) {
@@ -1083,6 +1092,8 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
               {fieldErrors.expense_category_id && <p className="mt-1 text-xs text-status-danger">{fieldErrors.expense_category_id}</p>}
             </div>
           </div>
+
+          <ExpenseGlAccountField budgetId={form.budget_id} value={form.gl_account_id} onChange={id => {setForm(f => ({...f,gl_account_id:id}));setFieldErrors(fe => ({...fe,gl_account_id:''}))}} error={fieldErrors.gl_account_id} disabled={mutating} />
 
           {(() => {
             const b = budgets.find((item) => Number(item.budget_id) === Number(form.budget_id))
@@ -1158,8 +1169,8 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
               <label className={LABEL}>Expense Date <span className="text-status-danger">*</span></label>
               <input
                 type="date"
-                min="2017-01-01"
-                max={`${new Date().getFullYear() + 1}-12-31`}
+                min={budgets.find(b => Number(b.budget_id) === Number(form.budget_id))?.start_date || '2017-01-01'}
+                max={budgets.find(b => Number(b.budget_id) === Number(form.budget_id))?.end_date || `${new Date().getFullYear() + 1}-12-31`}
                 value={form.expense_date}
                 onChange={(e) => { setForm((f) => ({ ...f, expense_date: e.target.value })); setFieldErrors((fe) => ({ ...fe, expense_date: '' })) }}
                 onBlur={(e) => validateDate('expense_date', e.target.value)}
@@ -1457,6 +1468,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
             <div className="rounded-lg border border-border divide-y divide-border">
               <div className="px-3 py-2">
                 <DetailRow label="Record ID" value={`#${detailRecord.id}`} />
+                <DetailRow label="Posting G/L account" value={detailRecord.gl_account_code ? `${detailRecord.gl_account_code} - ${detailRecord.gl_account_name}` : 'Legacy posting - see general ledger'} />
                 <DetailRow label="Expense Date" value={formatDate(detailRecord.expense_date)} />
                 <DetailRow label="Amount" value={formatCurrency(detailRecord.expense_amount)} />
                 <DetailRow label="Over Budget" value={detailRecord.is_over_budget ? 'Yes' : 'No'} />

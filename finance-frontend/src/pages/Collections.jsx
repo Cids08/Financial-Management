@@ -1,3 +1,4 @@
+import KpiValue from '../components/KpiValue'
 import { TableSkeleton, ContentSkeleton } from '../components/LoadingSkeleton'
 import ResponsiveTable from '../components/ResponsiveTable'
 import { useEffect, useMemo, useState } from 'react'
@@ -186,6 +187,15 @@ function useLookups() {
 // ---------------------------------------------------------------------------
 const QUEUE_EXCLUDE_STATUSES = new Set(['Paid'])
 
+// Matches the overdue definition used on the Collector dashboard stat card
+// (CollectorDashboard.jsx): an invoice is overdue if its status is 'Overdue',
+// or it's open (not Paid/Cancelled) and its due date is before today.
+// Used to power the ?overdue=1 deep-link so the "Overdue Invoices" card
+// actually opens a filtered queue instead of a text search that can't match.
+const isOverdueAR = (r) =>
+  r.status === 'Overdue' ||
+  (r.status !== 'Paid' && r.status !== 'Cancelled' && r.due_date && new Date(r.due_date) < new Date(new Date().toDateString()))
+
 function useAssignedInvoices() {
   const [invoices,      setInvoices]      = useState([])
   const [queueLoading,  setQueueLoading]  = useState(true)
@@ -289,6 +299,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
 
   const [search,          setSearch]          = useState('')
   const [statusFilter,    setStatusFilter]    = useState('all')
+  const [overdueOnly,     setOverdueOnly]     = useState(false)
   const [collectorFilter, setCollectorFilter] = useState('all')
   const [sortBy,          setSortBy]          = useState('date') // 'date' | 'collector' | 'amount'
   const [sortDir,         setSortDir]         = useState('desc') // 'asc' | 'desc'
@@ -368,30 +379,38 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
   // filter (or when explicitly filtering for 'Awaiting Collection') and not trashed.
   // Each item is tagged _isQueue so the table can render it with an Awaiting badge + Collect button.
   const mergedRows = useMemo(() => {
-    if (trashed) return filtered
-    if (statusFilter !== 'all' && statusFilter !== 'Awaiting Collection') return filtered
+    let list
 
-    const q = search.toLowerCase()
-    const queueRows = assignedInvoices
-      .filter((ar) => {
-        if (isCollectorUser && userCollectorId && String(ar.collector_id) !== String(userCollectorId)) {
-          return false
-        }
-        if (collectorFilter !== 'all' && String(ar.collector_id) !== String(collectorFilter)) {
-          return false
-        }
-        const bal = Number(ar.balance ?? ar.remaining_balance ?? 0)
-        if (bal <= 0) return false // fully paid — skip
-        if (!search) return true
-        return (
-          ar.invoice_number?.toLowerCase().includes(q) ||
-          ar.customer_name?.toLowerCase().includes(q) ||
-          (ar.collector_name || collectorName(ar.collector_id))?.toLowerCase().includes(q)
-        )
-      })
-      .map((ar) => ({ ...ar, _isQueue: true, _qKey: `q-${ar.ar_id ?? ar.id}` }))
+    if (trashed) {
+      list = [...filtered]
+    } else if (statusFilter !== 'all' && statusFilter !== 'Awaiting Collection') {
+      // Filtered views (Pending/Confirmed/Cancelled) are collections only.
+      // Copy before sorting -  filtered is a memoized array, never mutate it.
+      list = [...filtered]
+    } else {
+      const q = search.toLowerCase()
+      const queueRows = assignedInvoices
+        .filter((ar) => {
+          if (isCollectorUser && userCollectorId && String(ar.collector_id) !== String(userCollectorId)) {
+            return false
+          }
+          if (collectorFilter !== 'all' && String(ar.collector_id) !== String(collectorFilter)) {
+            return false
+          }
+          const bal = Number(ar.balance ?? ar.remaining_balance ?? 0)
+          if (bal <= 0) return false // fully paid — skip
+          if (overdueOnly && !isOverdueAR(ar)) return false
+          if (!search) return true
+          return (
+            ar.invoice_number?.toLowerCase().includes(q) ||
+            ar.customer_name?.toLowerCase().includes(q) ||
+            (ar.collector_name || collectorName(ar.collector_id))?.toLowerCase().includes(q)
+          )
+        })
+        .map((ar) => ({ ...ar, _isQueue: true, _qKey: `q-${ar.ar_id ?? ar.id}` }))
 
-    let list = statusFilter === 'Awaiting Collection' ? queueRows : [...queueRows, ...filtered]
+      list = statusFilter === 'Awaiting Collection' ? queueRows : [...queueRows, ...filtered]
+    }
 
     if (sortBy === 'collector') {
       list.sort((a, b) => {
@@ -416,10 +435,10 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
     }
 
     return list
-  }, [assignedInvoices, filtered, statusFilter, collectorFilter, sortBy, sortDir, trashed, search, collectors, isCollectorUser, userCollectorId])
+  }, [assignedInvoices, filtered, statusFilter, overdueOnly, collectorFilter, sortBy, sortDir, trashed, search, collectors, isCollectorUser, userCollectorId])
 
   const [page, setPage] = useState(1)
-  useEffect(() => { setPage(1) }, [search, statusFilter, collectorFilter, sortBy, sortDir, trashed])
+  useEffect(() => { setPage(1) }, [search, statusFilter, collectorFilter, sortBy, sortDir, trashed, overdueOnly])
 
   // Global search / General Ledger jump navigates here with a highlightId
   // (and, since this table is filtered client-side over the fetched page, a
@@ -430,6 +449,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
     setSearch(highlightSearch)
     setStatusFilter('all')
     setTrashed(false)
+    setOverdueOnly(false)
     setPage(1)
   }, [highlightSearch])
 
@@ -511,6 +531,8 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
   // 1. /?new=1 opens the create form directly
   // 2. /?status=Awaiting+Collection (or Pending, Confirmed) sets the status filter
   // 3. /?search=... sets the search query
+  // 4. /?overdue=1 (used by the Collector dashboard's "Overdue Invoices" card)
+  //    filters the awaiting-collection queue down to past-due invoices.
   const [searchParams, setSearchParams] = useSearchParams()
   useEffect(() => {
     let shouldUpdateParams = false
@@ -520,6 +542,13 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
       openAdd()
       next.delete('new')
       shouldUpdateParams = true
+    }
+
+    const overdueParam = searchParams.get('overdue')
+    if (overdueParam === '1') {
+      setOverdueOnly(true)
+      setStatusFilter('Awaiting Collection')
+      setTrashed(false)
     }
 
     const statusParam = searchParams.get('status')
@@ -819,11 +848,11 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
   }
 
   const statCards = [
-    { key: 'total',     label: 'All Records',          value: stats.total + stats.awaiting,                  icon: HandCoins, iconBg: 'bg-primary/15',                        iconColor: 'text-primary-dark',                          isActive: statusFilter === 'all'                 && !trashed, onClick: () => { setStatusFilter('all');                 setTrashed(false) } },
-    { key: 'awaiting',  label: 'Awaiting Collection',  value: stats.awaiting,                             icon: Users,     iconBg: 'bg-violet-50 dark:bg-violet-500/10',     iconColor: 'text-violet-600 dark:text-violet-400',     isActive: statusFilter === 'Awaiting Collection' && !trashed, onClick: () => { setStatusFilter('Awaiting Collection'); setTrashed(false) } },
-    { key: 'collected', label: 'Confirmed Amount',     value: formatCurrency(stats.collected),              icon: Wallet,    iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: statusFilter === 'Confirmed'            && !trashed, onClick: () => { setStatusFilter('Confirmed');           setTrashed(false) } },
-    { key: 'pending',   label: 'Awaiting Confirmation', value: stats.pending,                             icon: Clock3,    iconBg: 'bg-amber-50 dark:bg-amber-500/10',     iconColor: 'text-amber-600 dark:text-amber-400',     isActive: statusFilter === 'Pending'             && !trashed, onClick: () => { setStatusFilter('Pending');             setTrashed(false) } },
-    { key: 'archived',  label: 'Archived',             value: '—',                                        icon: Archive,   iconBg: 'bg-slate-100 dark:bg-slate-800',       iconColor: 'text-slate-500 dark:text-slate-400',     isActive: trashed,                                            onClick: () => { setTrashed(true);                   setStatusFilter('all') } },
+    { key: 'total',     label: 'All Records',          value: stats.total + stats.awaiting,                  icon: HandCoins, iconBg: 'bg-primary/15',                        iconColor: 'text-primary-dark',                          isActive: statusFilter === 'all'                 && !trashed, onClick: () => { setStatusFilter('all');                 setTrashed(false); setOverdueOnly(false) } },
+    { key: 'awaiting',  label: 'Awaiting Collection',  value: stats.awaiting,                             icon: Users,     iconBg: 'bg-violet-50 dark:bg-violet-500/10',     iconColor: 'text-violet-600 dark:text-violet-400',     isActive: statusFilter === 'Awaiting Collection' && !trashed, onClick: () => { setStatusFilter('Awaiting Collection'); setTrashed(false); setOverdueOnly(false) } },
+    { key: 'collected', label: 'Confirmed Amount',     value: formatCurrency(stats.collected),              icon: Wallet,    iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: statusFilter === 'Confirmed'            && !trashed, onClick: () => { setStatusFilter('Confirmed');           setTrashed(false); setOverdueOnly(false) } },
+    { key: 'pending',   label: 'Awaiting Confirmation', value: stats.pending,                             icon: Clock3,    iconBg: 'bg-amber-50 dark:bg-amber-500/10',     iconColor: 'text-amber-600 dark:text-amber-400',     isActive: statusFilter === 'Pending'             && !trashed, onClick: () => { setStatusFilter('Pending');             setTrashed(false); setOverdueOnly(false) } },
+    { key: 'archived',  label: 'Archived',             value: '—',                                        icon: Archive,   iconBg: 'bg-slate-100 dark:bg-slate-800',       iconColor: 'text-slate-500 dark:text-slate-400',     isActive: trashed,                                            onClick: () => { setTrashed(true);                   setStatusFilter('all'); setOverdueOnly(false) } },
   ]
 
   const isModalOpen = modalMode !== null
@@ -870,7 +899,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
               </div>
               <div className="min-w-0">
                 <p className="text-xs text-muted">{card.label}</p>
-                <p className="text-lg font-bold text-ink">{card.value}</p>
+                <p className="text-lg font-bold text-ink"><KpiValue loading={loading || queueLoading}>{card.value}</KpiValue></p>
               </div>
             </button>
           )
@@ -889,7 +918,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
               <input
                 type="text"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => { setOverdueOnly(false); setSearch(e.target.value) }}
                 placeholder="Search by receipt no., customer, or collector..."
                 className={`${INPUT} pl-9 pr-9`}
                 autoComplete="off"
@@ -897,7 +926,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
               {search && (
                 <button
                   type="button"
-                  onClick={() => setSearch('')}
+                  onClick={() => { setOverdueOnly(false); setSearch('') }}
                   title="Clear search"
                   className="absolute right-2 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-border hover:text-ink transition-colors duration-150"
                 >
@@ -910,7 +939,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
             <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Status</label>
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+              onChange={(e) => { setOverdueOnly(false); setStatusFilter(e.target.value) }}
               className={INPUT}
             >
               <option value="all">All Statuses</option>
@@ -951,7 +980,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                 size="sm"
                 icon={RotateCcw}
                 iconPosition="left"
-                onClick={() => { setSearch(''); setStatusFilter('all'); setCollectorFilter('all') }}
+                onClick={() => { setSearch(''); setStatusFilter('all'); setCollectorFilter('all'); setOverdueOnly(false) }}
               >
                 Reset
               </Button>
@@ -1021,7 +1050,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                   // Render every counted queue record for all authorized viewers.
                   const ar = row
                   const bal = Number(ar.balance ?? ar.remaining_balance ?? 0)
-                  const isOverdue = ar.due_date && new Date(ar.due_date) < new Date()
+                  const isOverdue = isOverdueAR(ar)
                   return (
                     <tr key={ar._qKey} className="border-b border-border last:border-0 bg-violet-50/20 dark:bg-violet-500/[0.04] hover:bg-violet-50/40 dark:hover:bg-violet-500/[0.08] transition-colors duration-150">
                       <td className="px-4 py-3.5">

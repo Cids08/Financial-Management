@@ -1,7 +1,8 @@
+import KpiValue from '../components/KpiValue'
 import { TableSkeleton } from '../components/LoadingSkeleton'
 import ResponsiveTable from '../components/ResponsiveTable'
 import { useState, useEffect, useRef } from 'react'
-import { Search, Plus, Pencil, Power, BookText, Activity, Layers, Loader2, Info, RotateCcw, X } from 'lucide-react'
+import { Search, Plus, Pencil, Power, BookText, Activity, Layers, Info, RotateCcw, X } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
@@ -29,13 +30,7 @@ const INPUT = `w-full h-9 px-3 rounded-lg border border-border bg-bg text-sm tex
   transition-all duration-150`
 const LABEL = 'block text-xs font-medium text-muted mb-1.5'
 
-const TYPE_STYLES = {
-  Asset: 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400',
-  Liability: 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400',
-  Equity: 'bg-purple-50 text-purple-600 dark:bg-purple-500/10 dark:text-purple-400',
-  Revenue: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
-  Expense: 'bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400',
-}
+const TYPE_STYLES = Object.fromEntries(ACCOUNT_TYPES.map(type => [type, 'bg-bg text-ink border border-border']))
 
 const STATUS_STYLES = {
   true: 'bg-status-success-bg text-status-success',
@@ -210,10 +205,10 @@ export default function ChartOfAccounts({ title = 'Chart of Accounts', crumbs = 
   const postedThisPage = accounts.filter((a) => a.entries_count > 0).length
 
   const statCards = [
-    { key: 'total', label: 'All Accounts', value: meta.total, icon: BookText, iconBg: 'bg-primary/15', iconColor: 'text-primary-dark', isActive: view === 'total', onClick: () => setView('total') },
+    { key: 'total', label: 'Matching accounts', value: meta.total, icon: BookText, iconBg: 'bg-primary/15', iconColor: 'text-primary-dark', isActive: view === 'total', onClick: () => setView('total') },
     { key: 'active', label: 'Active (this page)', value: activeThisPage, icon: Activity, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: view === 'active', onClick: () => setView((v) => (v === 'active' ? 'total' : 'active')) },
-    { key: 'inactive', label: 'Inactive (this page)', value: inactiveThisPage, icon: Power, iconBg: 'bg-red-50 dark:bg-red-500/10', iconColor: 'text-red-600 dark:text-red-400', isActive: view === 'inactive', onClick: () => setView((v) => (v === 'inactive' ? 'total' : 'inactive')) },
-    { key: 'posted', label: 'With Postings (this page)', value: postedThisPage, icon: Layers, iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-500 dark:text-slate-400', isActive: view === 'posted', onClick: () => setView((v) => (v === 'posted' ? 'total' : 'posted')) },
+    { key: 'inactive', label: 'Inactive (this page)', value: inactiveThisPage, icon: Power, iconBg: 'bg-bg', iconColor: 'text-muted', isActive: view === 'inactive', onClick: () => setView((v) => (v === 'inactive' ? 'total' : 'inactive')) },
+    { key: 'posted', label: 'With Postings (this page)', value: postedThisPage, icon: Layers, iconBg: 'bg-primary/10', iconColor: 'text-primary-dark', isActive: view === 'posted', onClick: () => setView((v) => (v === 'posted' ? 'total' : 'posted')) },
   ]
 
   const isModalOpen = modalMode !== null
@@ -225,8 +220,8 @@ export default function ChartOfAccounts({ title = 'Chart of Accounts', crumbs = 
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-ink">{title}</h1>
-          <p className="mt-1 text-xs text-muted">The official chart of accounts behind every GL posting — revenue, expenses, assets and payables all resolve from here.</p>
+          <h1 className="text-2xl font-bold tracking-tight text-ink">{title}</h1>
+          <p className="mt-1 text-sm text-muted">Manage account codes, classifications and the structure of your general ledger.</p>
         </div>
         {isAdmin && (
           <div className="flex items-center gap-2">
@@ -239,7 +234,7 @@ export default function ChartOfAccounts({ title = 'Chart of Accounts', crumbs = 
         <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{error}</div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:grid-cols-4">
         {statCards.map((card) => {
           const Icon = card.icon
           return (
@@ -247,6 +242,7 @@ export default function ChartOfAccounts({ title = 'Chart of Accounts', crumbs = 
               key={card.key}
               type="button"
               onClick={card.onClick}
+              aria-pressed={card.isActive}
               className={`${PANEL} p-4 flex items-center gap-2.5 text-left cursor-pointer
                 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0
                 ${card.isActive ? 'ring-2 ring-primary/50 border-primary/50' : ''}`}
@@ -256,7 +252,7 @@ export default function ChartOfAccounts({ title = 'Chart of Accounts', crumbs = 
               </div>
               <div className="min-w-0">
                 <p className="text-xs text-muted">{card.label}</p>
-                <p className="text-lg font-bold text-ink">{card.value}</p>
+                <p className="text-2xl font-semibold tabular-nums text-ink"><KpiValue loading={loading}>{card.value}</KpiValue></p>
               </div>
             </button>
           )
@@ -264,22 +260,23 @@ export default function ChartOfAccounts({ title = 'Chart of Accounts', crumbs = 
       </div>
 
       <div className={`${PANEL} p-4`}>
-        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end flex-wrap">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(150px,220px)_auto] sm:items-end">
           <div className="relative flex-1 min-w-0">
-            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Search</label>
+            <label htmlFor="coa-search" className={LABEL}>Search accounts</label>
             <div className="relative">
               <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none z-10" />
-              <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by code, name, type or category..." className={`${INPUT} pl-9 pr-9`} autoComplete="off" />
+              <input id="coa-search" type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search code, name or category..." className={`${INPUT} pl-9 pr-9`} autoComplete="off" />
               {search && (
-                <button type="button" onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-border hover:text-ink transition-colors duration-150">
+                <button type="button" onClick={() => setSearch('')} aria-label="Clear search" className="absolute right-2 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-border hover:text-ink transition-colors duration-150">
                   <X size={13} />
                 </button>
               )}
             </div>
           </div>
-          <div className="w-full sm:w-44 shrink-0">
-            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Account Type</label>
+          <div className="min-w-0">
+            <label htmlFor="coa-type" className={LABEL}>Account type</label>
             <select
+              id="coa-type"
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
               className={INPUT}
@@ -288,94 +285,62 @@ export default function ChartOfAccounts({ title = 'Chart of Accounts', crumbs = 
               {ACCOUNT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
-          {(search || typeFilter !== 'all') && (
+          {(search || typeFilter !== 'all' || view !== 'total') && (
             <div className="shrink-0">
-              <Button variant="secondary" size="sm" icon={RotateCcw} iconPosition="left" onClick={() => { setSearch(''); setTypeFilter('all') }}>Reset</Button>
+              <Button variant="secondary" size="sm" icon={RotateCcw} iconPosition="left" onClick={() => { setSearch(''); setTypeFilter('all'); setView('total') }}>Reset</Button>
             </div>
           )}
         </div>
       </div>
 
       <div className={PANEL}>
-        <div className="overflow-hidden rounded-t-xl">
-          <ResponsiveTable className="w-full text-sm">
-            <thead className="bg-surface">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-ink"><BookText size={16} className="text-primary-dark" /> Account directory</div>
+          <p className="text-xs text-muted">{view === 'total' ? 'All statuses' : view === 'posted' ? 'With GL postings' : view === 'active' ? 'Active accounts' : 'Inactive accounts'}{typeFilter !== 'all' ? ' / ' + typeFilter : ''}</p>
+        </div>
+        <div className="overflow-hidden">
+          <ResponsiveTable minTableWidth={640} className="w-full text-sm">
+            <colgroup><col style={{ width: '30%' }} /><col style={{ width: '20%' }} /><col style={{ width: '16%' }} /><col style={{ width: '10%' }} /><col style={{ width: '11%' }} /><col style={{ width: '13%' }} /></colgroup>
+            <thead className="bg-bg">
               <tr className="border-b border-border">
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Code</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Account</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Type</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Category</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Parent</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Postings</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Status</th>
-                <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Actions</th>
+                {['Account', 'Classification', 'Parent account', 'Postings', 'Status', 'Actions'].map(label => <th key={label} className={`px-3 py-3 text-xs font-semibold uppercase tracking-wide text-muted ${label === 'Actions' ? 'text-right' : 'text-left'}`}>{label}</th>)}
               </tr>
             </thead>
             <tbody>
-              {loading && (
-                <TableSkeleton columns={8} />
-              )}
-              {!loading && accounts.map((a) => (
-                <tr key={a.id} className="border-b border-border last:border-0 transition-colors duration-300 hover:bg-bg">
-                  <td className="px-4 py-3.5 whitespace-nowrap">
-                    <span className="font-mono text-xs bg-bg border border-border rounded px-1.5 py-0.5 text-ink">{a.account_code}</span>
+              {loading && <TableSkeleton columns={6} />}
+              {!loading && accounts.map(a => (
+                <tr key={a.id} className="border-b border-border last:border-0 transition-colors hover:bg-bg/70">
+                  <td className="px-3 py-3">
+                    <button type="button" onClick={() => openDetail(a)} className="max-w-full text-left rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                      <span className="mb-1 inline-block rounded border border-border bg-bg px-1.5 py-0.5 font-mono text-xs text-muted">{a.account_code}</span>
+                      <span className="block font-semibold text-ink hover:underline">{a.account_name}</span>
+                    </button>
+                    {a.description && <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted" title={a.description}>{a.description}</p>}
                   </td>
-                  <td className="px-4 py-3.5 cursor-pointer select-none" onClick={() => openDetail(a)}>
-                    <p className="font-medium text-ink group-hover:text-primary-dark transition-colors duration-150">{a.account_name}</p>
-                    {a.description && <p className="text-xs text-muted truncate max-w-xs" title={a.description}>{a.description}</p>}
+                  <td className="px-3 py-3">
+                    <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-medium ${TYPE_STYLES[a.account_type]}`}>{a.account_type}</span>
+                    <p className="mt-1.5 text-xs text-muted">{a.account_category || 'Uncategorized'}</p>
                   </td>
-                  <td className="px-4 py-3.5 whitespace-nowrap">
-                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${TYPE_STYLES[a.account_type]}`}>{a.account_type}</span>
+                  <td className="px-3 py-3 text-xs text-muted">
+                    {a.parent ? <><span className="font-mono text-ink">{a.parent.account_code}</span><span className="mt-1 block">{a.parent.account_name}</span></> : 'Top-level account'}
                   </td>
-                  <td className="px-4 py-3.5 whitespace-nowrap text-xs text-ink">{a.account_category}</td>
-                  <td className="px-4 py-3.5 whitespace-nowrap text-xs text-muted">
-                    {a.parent ? <span className="font-mono">{a.parent.account_code}</span> : <span className="italic">—</span>}
+                  <td className="px-3 py-3 text-xs tabular-nums">
+                    <span className="font-semibold text-ink">{a.entries_count || 0}</span>
+                    <span className="mt-1 block text-muted">journal lines</span>
                   </td>
-                  <td className="px-4 py-3.5 whitespace-nowrap">
-                    {a.entries_count > 0 ? (
-                      <span className="inline-flex items-center gap-1 text-xs font-medium text-ink bg-bg border border-border rounded-full px-2.5 py-1">
-                        <Activity size={12} className="text-primary-dark" /> {a.entries_count}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-muted italic">Unused</span>
-                    )}
+                  <td className="px-3 py-3">
+                    <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${STATUS_STYLES[a.is_active]}`}>{a.is_active ? 'Active' : 'Inactive'}</span>
                   </td>
-                  <td className="px-4 py-3.5 whitespace-nowrap">
-                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[a.is_active]}`}>
-                      {a.is_active ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3.5 whitespace-nowrap text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <Tooltip label="View details" align="start">
-                        <button type="button" onClick={() => openDetail(a)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                          <Info size={15} />
-                        </button>
-                      </Tooltip>
-                      <Tooltip label="Edit account" align="start">
-                        <button type="button" onClick={() => openEdit(a)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                          <Pencil size={15} />
-                        </button>
-                      </Tooltip>
-                      {isAdmin && (
-                        <Tooltip label={a.is_active ? 'Deactivate account' : 'Activate account'} align="end">
-                          <button
-                            type="button"
-                            onClick={() => handleToggle(a)}
-                            className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors duration-150
-                              ${a.is_active ? 'text-muted hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10' : 'text-muted hover:bg-bg hover:text-ink'}`}
-                          >
-                            <Power size={15} />
-                          </button>
-                        </Tooltip>
-                      )}
+                  <td className="px-2 py-3 text-right">
+                    <div className="flex flex-wrap items-center justify-end gap-0.5">
+                      <Tooltip label="View details" align="end"><button type="button" aria-label={`View account ${a.account_code}`} onClick={() => openDetail(a)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-primary/10 hover:text-primary-dark"><Info size={15} /></button></Tooltip>
+                      <Tooltip label="Edit account" align="end"><button type="button" aria-label={`Edit account ${a.account_code}`} onClick={() => openEdit(a)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-primary/10 hover:text-primary-dark"><Pencil size={15} /></button></Tooltip>
+                      {isAdmin && <Tooltip label={a.is_active ? 'Deactivate account' : 'Activate account'} align="end"><button type="button" aria-label={`${a.is_active ? 'Deactivate' : 'Activate'} account ${a.account_code}`} onClick={() => handleToggle(a)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink"><Power size={15} /></button></Tooltip>}
                     </div>
                   </td>
                 </tr>
               ))}
-              {!loading && accounts.length === 0 && (
-                <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-muted">No accounts match your filters.</td></tr>
-              )}
+              {!loading && accounts.length === 0 && <tr><td colSpan={6} className="px-4 py-12 text-center"><BookText size={26} className="mx-auto mb-3 text-muted" /><p className="font-medium text-ink">No accounts found</p><p className="mt-1 text-xs text-muted">Try another account code or adjust your filters.</p></td></tr>}
             </tbody>
           </ResponsiveTable>
         </div>
@@ -400,7 +365,7 @@ export default function ChartOfAccounts({ title = 'Chart of Accounts', crumbs = 
         footer={
           <>
             <Button variant="secondary" size="md" onClick={closeModal}>Cancel</Button>
-            <Button variant="primary" size="md" onClick={handleSubmit} disabled={saving}>{saving ? 'Saving…' : isEditing ? 'Save Changes' : 'Add Account'}</Button>
+            <Button variant="primary" size="md" onClick={handleSubmit} loading={saving}>{saving ? 'Saving...' : isEditing ? 'Save Changes' : 'Add Account'}</Button>
           </>
         }
       >
@@ -408,32 +373,32 @@ export default function ChartOfAccounts({ title = 'Chart of Accounts', crumbs = 
           {formError && (
             <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{formError}</div>
           )}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Account Code</label>
-              <input type="text" value={form.account_code} onChange={(e) => setForm((f) => ({ ...f, account_code: e.target.value }))} className={`${INPUT} font-mono`} placeholder="5000" />
+              <label htmlFor="coa-account_code" className={LABEL}>Account Code</label>
+              <input type="text" id="coa-account_code" value={form.account_code} onChange={(e) => setForm((f) => ({ ...f, account_code: e.target.value }))} className={`${INPUT} font-mono`} placeholder="5000" />
             </div>
             <div>
-              <label className={LABEL}>Account Type</label>
-              <select value={form.account_type} onChange={(e) => setForm((f) => ({ ...f, account_type: e.target.value }))} className={INPUT}>
+              <label htmlFor="coa-account_type" className={LABEL}>Account Type</label>
+              <select id="coa-account_type" value={form.account_type} onChange={(e) => setForm((f) => ({ ...f, account_type: e.target.value }))} className={INPUT}>
                 {ACCOUNT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
           </div>
           <div>
-            <label className={LABEL}>Account Name</label>
-            <input type="text" value={form.account_name} onChange={(e) => setForm((f) => ({ ...f, account_name: e.target.value }))} className={INPUT} placeholder="Miscellaneous Income" />
+            <label htmlFor="coa-account_name" className={LABEL}>Account Name</label>
+            <input type="text" id="coa-account_name" value={form.account_name} onChange={(e) => setForm((f) => ({ ...f, account_name: e.target.value }))} className={INPUT} placeholder="Miscellaneous Income" />
           </div>
           <div>
-            <label className={LABEL}>Category</label>
-            <input type="text" list="coa-categories" value={form.account_category} onChange={(e) => setForm((f) => ({ ...f, account_category: e.target.value }))} className={INPUT} placeholder="Operating Revenue" />
+            <label htmlFor="coa-account_category" className={LABEL}>Category</label>
+            <input type="text" list="coa-categories" id="coa-account_category" value={form.account_category} onChange={(e) => setForm((f) => ({ ...f, account_category: e.target.value }))} className={INPUT} placeholder="Operating Revenue" />
             <datalist id="coa-categories">
               {CATEGORY_SUGGESTIONS.map((c) => <option key={c} value={c} />)}
             </datalist>
           </div>
           <div>
-            <label className={LABEL}>Parent Account</label>
-            <select value={form.parent_account_id} onChange={(e) => setForm((f) => ({ ...f, parent_account_id: e.target.value }))} className={INPUT}>
+            <label htmlFor="coa-parent_account_id" className={LABEL}>Parent Account</label>
+            <select id="coa-parent_account_id" value={form.parent_account_id} onChange={(e) => setForm((f) => ({ ...f, parent_account_id: e.target.value }))} className={INPUT}>
               <option value="">— None (top-level) —</option>
               {parentOptions
                 .filter((o) => !isEditing || o.id !== modalMode.id)
@@ -443,12 +408,12 @@ export default function ChartOfAccounts({ title = 'Chart of Accounts', crumbs = 
             </select>
           </div>
           <div>
-            <label className={LABEL}>Description</label>
-            <textarea value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} rows={2} className={`${INPUT} h-auto py-2 resize-none`} placeholder="Optional note about when this account is used." />
+            <label htmlFor="coa-description" className={LABEL}>Description</label>
+            <textarea id="coa-description" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} rows={2} className={`${INPUT} h-auto py-2 resize-none`} placeholder="Optional note about when this account is used." />
           </div>
           <div>
-            <label className={LABEL}>Status</label>
-            <select value={form.is_active} onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.value === 'true' }))} className={INPUT}>
+            <label htmlFor="coa-is_active" className={LABEL}>Status</label>
+            <select id="coa-is_active" value={form.is_active} onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.value === 'true' }))} className={INPUT}>
               <option value="true">Active</option>
               <option value="false">Inactive</option>
             </select>
@@ -480,7 +445,7 @@ export default function ChartOfAccounts({ title = 'Chart of Accounts', crumbs = 
               <p className="mt-1.5 text-sm font-medium text-ink">{detailAccount.account_name}</p>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
               <div>
                 <p className="text-xs text-muted">Category</p>
                 <p className="mt-0.5 font-medium text-ink">{detailAccount.account_category || '—'}</p>

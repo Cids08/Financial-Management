@@ -233,6 +233,32 @@ class AuthService
 
         $user = User::findOrFail($pending['user_id']);
 
+        // The pending ticket lives independently of the password check that
+        // created it. An account can be deactivated or locked AFTER the login
+        // attempt that issued the ticket, so step 2 must re-enforce the same
+        // boundaries the login() flow enforces — otherwise a deactivated or
+        // locked account would still complete sign-in with a stale code.
+        if ($this->isLocked($user)) {
+            throw new AccountLockedException(now()->diffInSeconds($user->locked_until));
+        }
+
+        if ($user->status !== 'Active') {
+            Log::channel('security')->warning('2FA verification on non-active account', [
+                'user_id' => $user->id,
+                'email'   => $user->email,
+                'status'  => $user->status,
+                'ip'      => request()->ip(),
+                'agent'   => request()->userAgent(),
+            ]);
+
+            Cache::forget($this->pendingCacheKey($pendingToken));
+            Cache::forget($this->codeCacheKey($pendingToken));
+
+            throw ValidationException::withMessages([
+                'code' => ['This account is not active. Contact your administrator.'],
+            ]);
+        }
+
         Cache::forget($this->pendingCacheKey($pendingToken));
         Cache::forget($this->codeCacheKey($pendingToken));
 

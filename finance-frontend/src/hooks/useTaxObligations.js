@@ -4,6 +4,7 @@ import { apiFetch } from '../utils/api'
 export function useTaxObligations() {
   const [obligations, setObligations] = useState([])
   const [meta, setMeta] = useState({ current_page: 1, last_page: 1, total: 0 })
+  const [stats, setStats] = useState({ total: 0, paid: 0, overdue: 0, due_amount: 0 })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
@@ -32,6 +33,16 @@ export function useTaxObligations() {
     setPage(1)
   }, [debouncedSearch, statusFilter, showArchived, dateFrom, dateTo])
 
+  const fetchStats = useCallback(async () => {
+    try {
+      const res = await apiFetch('/api/tax-obligations/stats')
+      const json = await res.json()
+      if (res.ok && json.success) setStats(json.data)
+    } catch {
+      // Non-critical — stat cards keep their last known values.
+    }
+  }, [])
+
   const fetchObligations = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -51,12 +62,13 @@ export function useTaxObligations() {
 
       setObligations(json.data)
       setMeta(json.meta)
+      fetchStats()
     } catch (err) {
       setError(err.message)
     } finally {
       setLoading(false)
     }
-  }, [page, debouncedSearch, statusFilter, showArchived, dateFrom, dateTo])
+  }, [page, debouncedSearch, statusFilter, showArchived, dateFrom, dateTo, fetchStats])
 
   useEffect(() => {
     fetchObligations()
@@ -284,7 +296,7 @@ export function useTaxObligations() {
   }, [fetchObligations])
 
   return {
-    obligations, meta, loading, saving, error,
+    obligations, meta, stats, loading, saving, error,
     search, setSearch,
     statusFilter, setStatusFilter,
     showArchived, setShowArchived,

@@ -45,10 +45,20 @@ export function useDisbursements() {
     setDPage(1)
   }, [debouncedSearch, dStatusFilter, dShowArchived, dDateFrom, dDateTo])
 
+  // Latest filter+page snapshot, so an in-flight response for an older
+  // combination (e.g. the request fired for page 2 just before a filter
+  // change reset the page) can be identified and dropped instead of
+  // overwriting the newer, correct payload.
+  const latestFiltersRef = useRef({})
+  useEffect(() => {
+    latestFiltersRef.current = { debouncedSearch, dStatusFilter, dShowArchived, dDateFrom, dDateTo, dPage }
+  })
+
   const fetchList = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
+      const started = { debouncedSearch, dStatusFilter, dShowArchived, dDateFrom, dDateTo, dPage }
       const params = new URLSearchParams()
       params.set('page', dPage)
       params.set('per_page', 10)
@@ -61,6 +71,17 @@ export function useDisbursements() {
       const res = await apiFetch(`/api/disbursements?${params.toString()}`)
       const json = await res.json()
       if (!res.ok || !json.success) throw new Error(json.message || 'Failed to load disbursements.')
+
+      const current = latestFiltersRef.current
+      if (current.debouncedSearch !== started.debouncedSearch ||
+          current.dStatusFilter !== started.dStatusFilter ||
+          current.dShowArchived !== started.dShowArchived ||
+          current.dDateFrom !== started.dDateFrom ||
+          current.dDateTo !== started.dDateTo ||
+          current.dPage !== started.dPage) {
+        return
+      }
+
       setDisbursements(json.data ?? [])
       setMeta(json.meta ?? { current_page: 1, last_page: 1, total: (json.data ?? []).length })
     } catch (err) {

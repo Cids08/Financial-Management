@@ -1,3 +1,4 @@
+import KpiValue from '../components/KpiValue'
 import { TableSkeleton } from '../components/LoadingSkeleton'
 import ResponsiveTable from '../components/ResponsiveTable'
 import { useState, useEffect, useMemo } from 'react'
@@ -339,7 +340,7 @@ export default function FixedAssets({ title = 'Fixed Assets', crumbs = ['Master 
             >
               <div className="min-w-0 pr-2">
                 <p className="text-[11px] font-medium uppercase tracking-wider text-muted">{card.label}</p>
-                <p className="text-xl font-bold text-ink mt-0.5 tabular-nums truncate">{card.value}</p>
+                <p className="text-xl font-bold text-ink mt-0.5 tabular-nums truncate"><KpiValue loading={loading}>{card.value}</KpiValue></p>
                 <p className="text-[11px] text-muted mt-1 truncate">{card.sublabel}</p>
               </div>
               <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${card.iconBg}`}>

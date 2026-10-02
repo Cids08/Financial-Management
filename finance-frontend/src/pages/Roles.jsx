@@ -209,7 +209,8 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
     const filtered = term
       ? permissions.filter((p) =>
           p.display_name.toLowerCase().includes(term) ||
-          (p.description || '').toLowerCase().includes(term))
+          (p.description || '').toLowerCase().includes(term) ||
+          (p.module || '').toLowerCase().includes(term))
       : permissions
     return groupByModule(filtered)
   }, [permissions, permSearch])
@@ -524,6 +525,7 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
         open={permRole !== null}
         onClose={closePermissionsModal}
         title={`Permissions for ${permRole?.role_name ?? ''}`}
+        maxWidth="max-w-3xl"
         footer={
           <Button variant="secondary" size="md" onClick={closePermissionsModal}>Done</Button>
         }
@@ -556,74 +558,40 @@ export default function Roles({ title = 'Roles', crumbs = ['User Management', 'R
 
           {!permModalLoading && !permissionsLoading && permissions.length > 0 && (
             <>
-              {/* Search + live selected count  -  the count updates from
-                  checkedIds directly, not from what's currently visible
-                  under a search filter, so it always reflects the true
-                  total that will be saved. */}
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1">
-                  <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-                  <input
-                    type="text"
-                    value={permSearch}
-                    onChange={(e) => setPermSearch(e.target.value)}
-                    placeholder="Search permissions..."
-                    className={`${INPUT} h-8 pl-7 text-xs`}
-                  />
+
+              <div className="sticky -top-4 z-20 space-y-3 border-b border-border bg-surface pb-4 pt-1">
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-bg p-3">
+                  <div className="flex min-w-0 items-center gap-2.5"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary-dark"><ShieldCheck size={18} /></span><div><p className="text-sm font-semibold text-ink">Role access</p><p className="text-xs text-muted">Review access by module. Changes require your password.</p></div></div>
+                  <span aria-live="polite" className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary-dark">{checkedIds.size} / {permissions.length} enabled</span>
                 </div>
-                <span className="shrink-0 whitespace-nowrap text-xs font-medium text-muted">
-                  {checkedIds.size} of {permissions.length} selected
-                </span>
+                <div className="relative min-w-0">
+                  <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
+                  <input type="text" value={permSearch} onChange={e => setPermSearch(e.target.value)} aria-label="Search permissions" placeholder="Find a permission or module..." className={INPUT + ' h-10 pl-9 pr-10'} />
+                  {permSearch && <button type="button" aria-label="Clear permission search" onClick={()=>setPermSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-muted hover:bg-bg"><X size={14} /></button>}
+                </div>
               </div>
-
-              <div className="max-h-[55vh] overflow-y-auto space-y-4 -mx-1 px-1">
+              <div className="min-w-0 space-y-4">
                 {Object.entries(filteredPermissionGroups).map(([module, perms]) => {
-                  const allChecked = perms.every((p) => checkedIds.has(p.permission_id))
-                  return (
-                    <div key={module}>
-                      <div className="sticky top-0 z-10 -mx-1 flex items-center justify-between gap-2 bg-surface px-1 py-1.5 border-b border-border">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted">{module}</p>
-                        <button
-                          type="button"
-                          onClick={() => toggleModuleAll(perms)}
-                          disabled={permLocked}
-                          className="shrink-0 text-[11px] font-medium text-primary-dark hover:underline disabled:cursor-not-allowed disabled:text-muted disabled:hover:no-underline"
-                        >
-                          {allChecked ? 'Deselect all' : 'Select all'}
-                        </button>
-                      </div>
-                      <div className="space-y-0.5 mt-1.5">
-                        {perms.map((p) => {
-                          const checked = checkedIds.has(p.permission_id)
-                          return (
-                            <label
-                              key={p.permission_id}
-                              className={`flex items-start gap-2.5 rounded-lg px-2 py-1.5 -mx-2 transition-colors duration-150
-                                ${permLocked ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}
-                                ${checked ? 'bg-primary/5' : 'hover:bg-bg'}`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() => togglePermission(p.permission_id)}
-                                disabled={permLocked}
-                                className="mt-0.5 rounded border-border accent-primary disabled:cursor-not-allowed"
-                              />
-                              <span>
-                                <span className="block text-sm text-ink">{p.display_name}</span>
-                                {p.description && <span className="block text-xs text-muted">{p.description}</span>}
-                              </span>
-                            </label>
-                          )
-                        })}
-                      </div>
+                  const selected = perms.filter(p => checkedIds.has(p.permission_id)).length
+                  const allChecked = selected === perms.length
+                  return <section key={module} className="min-w-0 rounded-xl border border-border">
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-t-xl border-b border-border bg-bg px-3 py-3">
+                      <div className="flex min-w-0 items-center gap-2"><h3 className="wrap-anywhere text-xs font-bold uppercase tracking-wide text-ink">{module}</h3><span className="shrink-0 rounded-md border border-border bg-surface px-1.5 py-0.5 text-[10px] tabular-nums text-muted">{selected}/{perms.length}</span></div>
+                      <button type="button" onClick={()=>toggleModuleAll(perms)} disabled={permLocked} className="rounded-md px-2 py-1 text-xs font-semibold text-primary-dark hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50">{allChecked ? (permSearch ? 'Clear matching' : 'Clear group') : (permSearch ? 'Select matching' : 'Select group')}</button>
                     </div>
-                  )
+                    <div className="grid min-w-0 grid-cols-1 gap-2 p-3 sm:grid-cols-2">
+                      {perms.map(p => {
+                        const checked = checkedIds.has(p.permission_id)
+                        const description = p.description?.replace(/[.\s]+$/g, '').toLowerCase() !== p.display_name?.replace(/[.\s]+$/g, '').toLowerCase() ? p.description : ''
+                        return <label key={p.permission_id} className={'flex min-w-0 items-start gap-3 rounded-xl border p-3 transition-colors ' + (permLocked ? 'cursor-not-allowed opacity-60 ' : 'cursor-pointer ') + (checked ? 'border-primary/40 bg-primary/10' : 'border-border bg-surface hover:border-primary/30 hover:bg-bg')}>
+                          <input type="checkbox" checked={checked} onChange={()=>togglePermission(p.permission_id)} disabled={permLocked} className="mt-0.5 h-4 w-4 shrink-0 rounded border-border accent-primary focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed" />
+                          <span className="min-w-0"><span className="block wrap-anywhere text-xs font-semibold leading-5 text-ink">{p.display_name}</span>{description && <span className="mt-1 block wrap-anywhere text-xs leading-5 text-muted">{description}</span>}</span>
+                        </label>
+                      })}
+                    </div>
+                  </section>
                 })}
-
-                {Object.keys(filteredPermissionGroups).length === 0 && (
-                  <p className="py-6 text-center text-sm text-muted">No permissions match "{permSearch}".</p>
-                )}
+                {Object.keys(filteredPermissionGroups).length === 0 && <div className="rounded-xl border border-dashed border-border p-8 text-center"><Search size={24} className="mx-auto mb-3 text-muted" /><p className="text-sm text-muted">No permissions match your search.</p><button type="button" onClick={()=>setPermSearch('')} className="mt-3 text-xs font-semibold text-primary-dark">Clear search</button></div>}
               </div>
             </>
           )}

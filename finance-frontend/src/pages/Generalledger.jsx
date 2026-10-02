@@ -1,5 +1,7 @@
+import { Skeleton, TableSkeleton } from '../components/LoadingSkeleton'
+import KpiValue from '../components/KpiValue'
 import ResponsiveTable from '../components/ResponsiveTable'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search, BookOpen, Scale, TrendingUp, TrendingDown, Info, ExternalLink, ListTree, Layers, Rows3, Loader2, AlertTriangle, ChevronDown, ChevronRight, X, RotateCcw, Filter, Printer, Download } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useDataUpdates } from '../hooks/useDataUpdates'
@@ -184,9 +186,20 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
   // Reset to page 1 whenever a filter changes (not on page changes themselves).
   useEffect(() => { setPage(1) }, [filterParams])
 
+  // Stale-response guard (same pattern as useDisbursements.js): filters +
+  // page captured at request time are compared to the latest snapshot when
+  // the response lands. A request fired for the old page (just before the
+  // filter reset above kicks in) therefore can't overwrite the newer
+  // page-1 payload with out-of-order data.
+  const glFiltersRef = useRef({})
+  useEffect(() => {
+    glFiltersRef.current = { filterParams, page }
+  })
+
   // Journal lines  -  depends on filters + page.
   useEffect(() => {
     if (view !== 'journal') return
+    const started = { filterParams, page }
     setLoading(true)
     setError(null)
     const params = new URLSearchParams(filterParams)
@@ -195,6 +208,8 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
     apiFetch(`/api/general-ledger/lines?${params.toString()}`)
       .then((res) => res.json())
       .then((json) => {
+        const current = glFiltersRef.current
+        if (current.page !== started.page || current.filterParams !== started.filterParams) return
         setLines(json.data || [])
         setMeta(json.meta || meta)
       })
@@ -876,7 +891,7 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs text-muted truncate" title={card.label}>{card.label}</p>
-                <p className="text-lg font-bold text-ink truncate" title={String(card.value)}>{card.value}</p>
+                <p className="text-lg font-bold text-ink truncate" title={loading ? undefined : String(card.value)}><KpiValue loading={loading}>{card.value}</KpiValue></p>
               </div>
             </button>
           )
@@ -1096,8 +1111,23 @@ export default function GeneralLedger({ title = 'General Ledger', crumbs = ['Fin
       </div>
 
       {loading && (
-        <div className={`${PANEL} ${PANEL_PAD} flex items-center justify-center gap-2 py-10 text-sm text-muted`}>
-          <Loader2 size={16} className="animate-spin" /> Loading…
+        <div role="status" aria-label="Loading general ledger" aria-busy="true" className="space-y-4">
+          <span className="sr-only">Loading general ledger</span>
+          {(view === 'ledger' ? [0, 1] : [0]).map(section => {
+            const columns = view === 'trial-balance'
+              ? ['Account Code', 'Account Title', 'Total Debit', 'Total Credit', 'Net Balance']
+              : view === 'ledger'
+                ? ['Date', 'Trans No.', 'Description', 'Source', 'Debit', 'Credit', 'Balance']
+                : ['Date', 'Account', 'Description', 'Source', 'Debit', 'Credit', 'Actions']
+            return <div key={section} className={PANEL}>
+              {view === 'ledger' && <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4"><Skeleton className="h-4 w-48 max-w-full" /><Skeleton className="h-3 w-24" /></div>}
+              <ResponsiveTable minTableWidth={640} className="w-full table-fixed text-sm">
+                <thead><tr className="border-b border-border">{columns.map(label => <th key={label} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted">{label}</th>)}</tr></thead>
+                <tbody><TableSkeleton columns={columns.length} rows={view === 'ledger' ? 3 : 5} /></tbody>
+              </ResponsiveTable>
+              <div aria-hidden="true" className="flex flex-wrap items-center justify-between gap-3 border-t border-border p-4"><Skeleton className="h-3 w-32" /><Skeleton className="h-7 w-36" /></div>
+            </div>
+          })}
         </div>
       )}
 

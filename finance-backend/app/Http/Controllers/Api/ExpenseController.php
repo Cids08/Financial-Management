@@ -23,6 +23,13 @@ class ExpenseController extends Controller
     {
     }
 
+    public function postingAccounts(Request $request): JsonResponse
+    {
+        $data = $request->validate(['budget_id' => ['required', 'integer', 'exists:budgets,id']]);
+        $budget = \App\Models\Budget::findOrFail($data['budget_id']);
+        return response()->json(['success' => true, 'data' => app(\App\Services\ExpenseGlAccountService::class)->options($budget), 'budget_mapped' => $budget->accountAllocations()->exists()]);
+    }
+
     public function index(Request $request): JsonResponse
     {
         $paginated = $this->expenses->list([

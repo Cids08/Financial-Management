@@ -79,6 +79,12 @@ class AuthController extends Controller
                 $request->string('pendingToken'),
                 $request->string('code')
             );
+        } catch (\App\Exceptions\AccountLockedException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Too many failed attempts. Your account is temporarily locked.',
+                'data'    => ['locked' => true, 'retryAfter' => $e->secondsRemaining],
+            ], 423);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,

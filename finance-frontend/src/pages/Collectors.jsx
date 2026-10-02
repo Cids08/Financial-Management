@@ -1,3 +1,4 @@
+import KpiValue from '../components/KpiValue'
 import ModalLoading from '../components/ModalLoading'
 import { TableSkeleton } from '../components/LoadingSkeleton'
 import ResponsiveTable from '../components/ResponsiveTable'
@@ -460,7 +461,7 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
               </div>
               <div className="min-w-0">
                 <p className="text-xs text-muted">{card.label}</p>
-                <p className="text-lg font-bold text-ink">{card.value}</p>
+                <p className="text-lg font-bold text-ink"><KpiValue loading={loading}>{card.value}</KpiValue></p>
               </div>
             </button>
           )

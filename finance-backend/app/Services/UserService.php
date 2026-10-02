@@ -121,6 +121,15 @@ class UserService
             ]);
             $user->save();
 
+            // A deactivated account must not keep working sessions alive.
+            // Sanctum tokens are the only session mechanism here (single-active
+            // session policy in AuthService), so revoking them all immediately
+            // locks the user out everywhere, including any collector mobile app
+            // holding this user's token.
+            if (($original['status'] ?? '') === 'Active' && $user->status === 'Inactive') {
+                $user->tokens()->delete();
+            }
+
             AuditLog::create([
                 'user_id' => $actor->id,
                 'module' => 'Users',
@@ -165,6 +174,10 @@ class UserService
         DB::transaction(function () use ($actor, $user) {
             $user->update(['deleted_by' => $actor->id, 'status' => 'Inactive']);
             $user->delete(); // soft delete — sets deleted_at
+
+            // Same token revocation as update() - an archived user's existing
+            // sessions must die immediately, not at the next login.
+            $user->tokens()->delete();
 
             AuditLog::create([
                 'user_id' => $actor->id,

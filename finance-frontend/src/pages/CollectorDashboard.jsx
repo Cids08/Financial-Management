@@ -1,3 +1,4 @@
+import KpiValue from '../components/KpiValue'
 import { ContentSkeleton } from '../components/LoadingSkeleton'
 import { protectedDashboardPdf } from '../utils/secureExport'
 import { useEffect, useMemo, useState, useCallback } from 'react'
@@ -274,7 +275,7 @@ export default function CollectorDashboard({ title = 'Dashboard', crumbs = ['Das
       iconBg: 'bg-red-50 dark:bg-red-500/10',
       iconColor: 'text-red-600 dark:text-red-400',
       tooltip: 'Click to view overdue invoices needing collection',
-      onClick: () => navigate('/transactions/collections?status=Awaiting+Collection&search=Overdue'),
+      onClick: () => navigate('/transactions/collections?status=Awaiting+Collection&overdue=1'),
     },
     {
       key: 'collected',
@@ -348,7 +349,7 @@ export default function CollectorDashboard({ title = 'Dashboard', crumbs = ['Das
           <StatCard
             key={card.key}
             label={card.label}
-            value={loading ? '—' : card.value}
+            value={<KpiValue loading={loading}>{card.value}</KpiValue>}
             subtitle={card.subtitle}
             icon={card.icon}
             iconBg={card.iconBg}

@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { apiFetch } from '../utils/api'
-import { setToken, clearToken, getClientSessionId } from '../utils/authToken'
+import { apiFetch, API_BASE_URL } from '../utils/api'
+import { setToken, clearToken, getToken, getClientSessionId } from '../utils/authToken'
 import { disconnectEcho } from '../utils/echo'
 
 // Re-exported here so existing imports of `isAuthenticated` from
@@ -12,6 +12,20 @@ export function useAuth() {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+
+  // In-flight locks for the two-step auth flow. The credential form can
+  // double-fire (Enter key + button click, or a fast double click) before
+  // the loading state re-renders, and the OTP input's onComplete + the
+  // form's onSubmit can both fire. Without these, two /api/login requests
+  // would race: TWO codes get emailed and the second response's
+  // pendingToken supersedes the first, so the first email's code fails as
+  // "incorrect" at the exact moment a fresh code lands  -  which looks
+  // exactly like "a new code was sent after I entered a wrong one."
+  // A duplicate in-flight call returns immediately and leaves loading to
+  // the request that actually owns it.
+  const loginInFlightRef = useRef(false)
+  const verifyInFlightRef = useRef(false)
+  const resendInFlightRef = useRef(false)
 
   // Two DISTINCT countdowns, deliberately not shared  -  they mean different
   // things and have very different durations:
@@ -65,6 +79,10 @@ export function useAuth() {
   }, [])
 
   const login = useCallback(async ({ email, password, remember, website, form_rendered_at }) => {
+    if (loginInFlightRef.current) {
+      return { success: false, message: 'Login already in progress.' }
+    }
+    loginInFlightRef.current = true
     setLoading(true)
     setError(null)
     try {
@@ -125,6 +143,7 @@ export function useAuth() {
       setError(err.message)
       return { success: false, message: err.message }
     } finally {
+      loginInFlightRef.current = false
       setLoading(false)
     }
   }, [navigate, startCountdown])
@@ -135,7 +154,12 @@ export function useAuth() {
   // cached against the pendingToken back in step 1's login() call.
   const verifyTwoFactor = useCallback(async (code) => {
     if (!twoFactorPending) return { success: false, message: 'No login in progress.' }
-
+    // OtpInput's onComplete and the form's onSubmit both call this on a
+    // 6-digit entry  -  drop the duplicate while one verify is in flight.
+    if (verifyInFlightRef.current) {
+      return { success: false, message: 'Verification already in progress.' }
+    }
+    verifyInFlightRef.current = true
     setLoading(true)
     setError(null)
     try {
@@ -146,6 +170,13 @@ export function useAuth() {
         skipAuthRedirect: true,
       })
       const json = await res.json()
+
+      if (res.status === 423) {
+        // Account-level lockout (reached at step 2 via max 2FA tries).
+        const seconds = json.data?.retryAfter ?? 900
+        startCountdown(seconds, setAccountLockedFor, lockIntervalRef)
+        throw new Error(json.message || 'Too many failed attempts. Your account is temporarily locked.')
+      }
 
       if (res.status === 429) {
         const seconds = json.data?.retryAfter ?? 60
@@ -184,6 +215,7 @@ export function useAuth() {
       setError(err.message)
       return { success: false, message: err.message }
     } finally {
+      verifyInFlightRef.current = false
       setLoading(false)
     }
   }, [twoFactorPending, navigate, startCountdown])
@@ -192,6 +224,11 @@ export function useAuth() {
   // Mirrors AuthController::resendTwoFactor.
   const resendTwoFactor = useCallback(async () => {
     if (!twoFactorPending) return { success: false, message: 'No login in progress.' }
+    // Stop a fast double-click on Resend from emailing two codes.
+    if (resendInFlightRef.current) {
+      return { success: false, message: 'A code is already being sent.' }
+    }
+    resendInFlightRef.current = true
 
     setError(null)
     try {
@@ -229,6 +266,8 @@ export function useAuth() {
     } catch (err) {
       setError(err.message)
       return { success: false, message: err.message }
+    } finally {
+      resendInFlightRef.current = false
     }
   }, [twoFactorPending])
 
@@ -243,6 +282,24 @@ export function useAuth() {
   // (idle timeout, server expiry, etc.) instead of dumping the user at the
   // form with no context.
   const logout = useCallback((reason) => {
+    // Revoke the Sanctum token SERVER-SIDE before wiping it locally, so a
+    // leaked/captured token can't keep working for its full TTL. Raw fetch
+    // (not apiFetch) with keepalive: this must fire even as the navigation
+    // below tears the app down, and a 401 here is expected (we're logging
+    // out anyway), so it must not trip the auth:expired redirect.
+    const token = getToken()
+    if (token) {
+      try {
+        fetch(`${API_BASE_URL}/api/logout`, {
+          method: 'POST',
+          keepalive: true,
+          headers: {
+            Accept: 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+        }).catch(() => { /* best-effort  -  token is cleared regardless */ })
+      } catch { /* best-effort */ }
+    }
     disconnectEcho()
     clearToken()
     navigate('/', { state: reason ? { authNotice: reason } : undefined })

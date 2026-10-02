@@ -100,7 +100,7 @@ class SearchController extends Controller
 
         $groups = [];
 
-        foreach ($this->searchableEntities() as $entity) {
+        foreach ($this->searchableEntities($user) as $entity) {
             if (! $user->hasPermission($entity['permission'])) {
                 continue;
             }
@@ -147,7 +147,7 @@ class SearchController extends Controller
      *
      * @return array<int, array{type:string,label:string,route:string,permission:string,query:callable,map:callable}>
      */
-    private function searchableEntities(): array
+    private function searchableEntities(User $user): array
     {
         return [
             [
@@ -310,7 +310,25 @@ class SearchController extends Controller
                 'label' => 'Collections',
                 'route' => '/transactions/collections',
                 'permission' => 'collections.view',
-                'query' => fn (string $term) => Collection::query()->search($term),
+                // collections.view IS granted to the Collector role (it's
+                // their primary module), so a naive search term here would
+                // leak every collection's receipt/OR number + amount to any
+                // collector. Mirror CollectionPolicy::view() exactly:
+                // collectors may only surface their own records.
+                'query' => function (string $term) use ($user) {
+                    $query = Collection::query()->search($term);
+
+                    if ($user->hasRole('collector')) {
+                        $collectorId = $user->collector?->id ?? -1;
+
+                        $query->where(function (Builder $q) use ($collectorId, $user) {
+                            $q->where('collector_id', $collectorId)
+                                ->orWhere('created_by', $user->id);
+                        });
+                    }
+
+                    return $query;
+                },
                 'map' => fn (Collection $c) => [
                     'id' => $c->id,
                     'title' => $c->receipt_number,

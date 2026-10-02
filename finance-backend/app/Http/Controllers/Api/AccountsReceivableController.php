@@ -111,8 +111,17 @@ class AccountsReceivableController extends Controller
         ]);
     }
 
-    public function documentHistory(AccountsReceivable $accountsReceivable): JsonResponse
+    public function documentHistory(Request $request, AccountsReceivable $accountsReceivable): JsonResponse
     {
+        // Same collector boundary as every other AR read path (index /
+        // agingSummary / customerSoa). Collector-role users may only reach
+        // documents for invoices assigned to them; an unlinked collector
+        // account fails closed (-1).
+        $scope = $this->collectorScope($request);
+        if ($scope === -1 || ($scope !== null && (int) $accountsReceivable->collector_id !== $scope)) {
+            abort(403, 'You can only access supporting documents for invoices assigned to you.');
+        }
+
         $documents = $this->service->getDocumentHistory($accountsReceivable);
 
         return response()->json([
@@ -151,8 +160,16 @@ class AccountsReceivableController extends Controller
         ], 201);
     }
 
-    public function viewDocument(AccountsReceivable $accountsReceivable, SupportingDocument $document): JsonResponse
+    public function viewDocument(Request $request, AccountsReceivable $accountsReceivable, SupportingDocument $document): JsonResponse
     {
+        // Collector boundary identical to documentHistory() — enforced here
+        // too because the signed URL this returns is a bearer of the same
+        // authorization level as the caller.
+        $scope = $this->collectorScope($request);
+        if ($scope === -1 || ($scope !== null && (int) $accountsReceivable->collector_id !== $scope)) {
+            abort(403, 'You can only access supporting documents for invoices assigned to you.');
+        }
+
         if ($document->reference_type !== 'accounts_receivable' || (int) $document->reference_id !== $accountsReceivable->id) {
             abort(404, 'This document does not belong to this invoice.');
         }

@@ -65,6 +65,11 @@ class Budget extends Model
             ->where('reference_type', 'budget');
     }
 
+    public function accountAllocations()
+    {
+        return $this->hasMany(BudgetAccountAllocation::class);
+    }
+
     public function department()
     {
         return $this->belongsTo(Department::class);

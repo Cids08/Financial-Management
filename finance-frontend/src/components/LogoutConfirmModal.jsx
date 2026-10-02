@@ -1,16 +1,17 @@
-import { useNavigate } from 'react-router-dom'
 import { LogOut } from 'lucide-react'
 import Modal from './Modal'
 import Button from './Button'
-import { clearToken } from '../utils/authToken'
+import { useAuth } from '../hooks/useAuth'
 
 export default function LogoutConfirmModal({ open, onClose }) {
-  const navigate = useNavigate()
+  const { logout } = useAuth()
 
   const confirmLogout = () => {
-    clearToken()
     onClose()
-    navigate('/logout')
+    // Centralized logout  -  revokes the Sanctum token server-side,
+    // disconnects the websocket, clears the local token, and navigates
+    // with the authNotice so the login screen can explain the exit.
+    logout('manual')
   }
 
   return (

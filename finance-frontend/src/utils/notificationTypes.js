@@ -118,8 +118,37 @@ export const NOTIFICATION_MODULES = [
 // Severity types — the DB CHECK constraint allows exactly these four.
 export const NOTIFICATION_SEVERITIES = ['Success', 'Warning', 'Info', 'Error']
 
+// Authoritative routes for the backend-written `module` column (mirrors
+// NotificationService::LEGACY_MODULES / normalizeModule). Severity alone is
+// coarse - Success/Info/etc. can describe any module - so whenever the
+// backend supplies a module we route on that instead of guessing from the
+// title/message copy below.
+const NOTIFICATION_MODULE_ROUTES = {
+  collection:        '/transactions/collections',
+  disbursement:      '/transactions/disbursements',
+  receivable:        '/transactions/receivable',
+  payable:           '/transactions/payable',
+  budget:            '/transactions/budgets',
+  budget_over:       '/transactions/budgets',
+  budget_warning:    '/transactions/budgets',
+  expense:           '/transactions/expenses',
+  tax:               '/transactions/tax-obligations',
+  forecast:          '/analytics/forecasting',
+  ai_recommendation: '/analytics/ai-recommendations',
+  general:           '/reports',
+}
+
 export function notificationTypeMeta(type, item = null) {
   const base = NOTIFICATION_TYPE_META[type] ?? DEFAULT_NOTIFICATION_TYPE_META
+
+  // Prefer the authoritative backend module. Module-keyed meta entries give
+  // a proper icon/label too; otherwise reuse the severity base and just swap
+  // in the module's route.
+  const moduleRoute = item && item.module && NOTIFICATION_MODULE_ROUTES[item.module]
+  if (moduleRoute) {
+    const moduleBase = NOTIFICATION_TYPE_META[item.module]
+    return moduleBase ? { ...moduleBase, route: moduleRoute } : { ...base, route: moduleRoute }
+  }
 
   if (item && (item.title || item.message)) {
     const text = `${item.title ?? ''} ${item.message ?? ''}`.toLowerCase()

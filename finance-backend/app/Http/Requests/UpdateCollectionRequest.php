@@ -40,16 +40,15 @@ class UpdateCollectionRequest extends FormRequest
             ],
             'remarks'          => ['nullable', 'string'],
 
-            // Status changes via the edit form are restricted to the
-            // defined constants. 'Voided' is intentionally absent — there
-            // is no void workflow; cancellation goes through the dedicated
-            // cancel() endpoint, not a free-form status edit.
-            // Note: confirmed collections are blocked entirely by
-            // withValidator() below regardless of what status is sent.
+            // Status changes have dedicated endpoints: confirm() and cancel() apply
+            // the financial side effects (AR balance, cash credit, journal
+            // entry) and broadcast changes. The edit form must NOT be able
+            // to transition a collection's status — sending the current
+            // status is harmless (no-op in the service), anything else is
+            // rejected there. Only Pending remains a legal value here so
+            // the rule surface can't be widened later by mistake.
             'status' => ['sometimes', 'string', Rule::in([
                 Collection::STATUS_PENDING,
-                Collection::STATUS_CONFIRMED,
-                Collection::STATUS_CANCELLED,
             ])],
         ];
     }

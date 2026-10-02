@@ -23,8 +23,24 @@ export default function ForcedLogoutListener() {
   useEffect(() => {
     if (!isAuthenticated()) return
 
+    let echo
     let channel
     let cancelled = false
+
+    const handler = (event) => {
+      // This broadcast includes every session kill for this user  - 
+      // including the one that JUST happened because THIS tab is the
+      // one that logged in. Ignore that case; only react when some
+      // other tab/device triggered it.
+      if (event.originSessionId === getClientSessionId()) return
+
+      // Hold AuthExpiredListener off: the token is being revoked
+      // right now, and the next 401 would yank this modal away a
+      // split second after it appears. This tab's logout should be
+      // driven by the modal button, not by a racing redirect.
+      setForcedLogoutVisible(true)
+      setNotice({ deviceLabel: event.deviceLabel })
+    }
 
     apiFetch('/api/profile')
       .then((res) => res.json())
@@ -32,23 +48,9 @@ export default function ForcedLogoutListener() {
         if (cancelled || !json.success) return
 
         const userId = json.data.id
-        const echo = getEcho()
-
+        echo = getEcho()
         channel = echo.private(`user.${userId}`)
-          .listen('.forced.logout', (event) => {
-            // This broadcast includes every session kill for this user  - 
-            // including the one that JUST happened because THIS tab is the
-            // one that logged in. Ignore that case; only react when some
-            // other tab/device triggered it.
-            if (event.originSessionId === getClientSessionId()) return
-
-            // Hold AuthExpiredListener off: the token is being revoked
-            // right now, and the next 401 would yank this modal away a
-            // split second after it appears. This tab's logout should be
-            // driven by the modal button, not by a racing redirect.
-            setForcedLogoutVisible(true)
-            setNotice({ deviceLabel: event.deviceLabel })
-          })
+          .listen('.forced.logout', handler)
       })
       .catch(() => {
         // Profile fetch failing here isn't worth surfacing to the user  - 
@@ -60,8 +62,15 @@ export default function ForcedLogoutListener() {
     return () => {
       cancelled = true
       setForcedLogoutVisible(false)
-      if (channel) {
-        getEcho().leave(`user.${channel.name?.replace('private-', '') ?? ''}`)
+      // stopListening on the captured channel only -  never getEcho() here
+      // (a disconnected socket must not be re-created during teardown) and
+      // never leave() (NotificationsContext shares this same channel).
+      if (channel && echo) {
+        try {
+          channel.stopListening('.forced.logout', handler)
+        } catch {
+          // ignore
+        }
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

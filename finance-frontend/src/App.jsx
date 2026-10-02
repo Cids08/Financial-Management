@@ -114,12 +114,12 @@ export default function App() {
             </RequirePermission>
           } />
           <Route path="/master-data/departments" element={
-            <RequirePermission permission="departments.view">
+            <RequirePermission permission="departments.manage">
               <Departments crumbs={['Master Data', 'Departments']} />
             </RequirePermission>
           } />
           <Route path="/master-data/cash-accounts" element={
-            <RequirePermission permission="cash-accounts.view">
+            <RequirePermission permission="cash-accounts.manage">
               <CashAccounts crumbs={['Master Data', 'Cash Accounts']} />
             </RequirePermission>
           } />
@@ -132,12 +132,12 @@ export default function App() {
               expense-categories.view/.manage permissions already
               enforced by routes/api.php + ExpenseCategoryPolicy. */}
           <Route path="/master-data/expense-categories" element={
-            <RequirePermission permission="expense-categories.view">
+            <RequirePermission permission="expense-categories.manage">
               <ExpenseCategories crumbs={['Master Data', 'Expense Categories']} />
             </RequirePermission>
           } />
           <Route path="/master-data/chart-of-accounts" element={
-            <RequirePermission permission="chart-of-accounts.view">
+            <RequirePermission permission="chart-of-accounts.manage">
               <ChartOfAccounts crumbs={['Master Data', 'Chart of Accounts']} />
             </RequirePermission>
           } />
@@ -171,16 +171,17 @@ export default function App() {
               <Disbursements crumbs={['Financial Transactions', 'Disbursements']} />
             </RequirePermission>
           } />
-          {/* /transactions/budgets has no entry in menuData.js (no sidebar
-              link, and its comment there says Budgets was folded into the
-              combined Disbursements module/permission)  -  left UNGATED
-              since there's no confirmed permission slug for it. If this
-              route is still meant to be reachable, decide whether it
-              should share disbursements.view or get its own budgets.view
-              (the routes/api.php comment mentions budgets.* permissions
-              already exist in RoleSeeder even though no route uses them
-              yet) and I'll wire it the same way as the others. */}
-          <Route path="/transactions/budgets" element={<Budgets crumbs={['Financial Transactions', 'Budgets']} />} />
+          {/* Budgets is a normal gated module  -  menuxified in menuData.js
+              (budgets.view sidebar entry), its budgets.view/.manage/.approve
+              permissions are seeded by RolesAndPermissionsSeeder, and
+              routes/api.php enforces them server-side. It MUST be gated here
+              like its siblings, otherwise a user without budgets.view can
+              reach the page shell and hit 403'd API calls. */}
+          <Route path="/transactions/budgets" element={
+            <RequirePermission permission="budgets.view">
+              <Budgets crumbs={['Financial Transactions', 'Budgets']} />
+            </RequirePermission>
+          } />
           <Route path="/transactions/expenses" element={
             <RequirePermission permission="expenses.view">
               <Expenses crumbs={['Financial Transactions', 'Expenses']} />

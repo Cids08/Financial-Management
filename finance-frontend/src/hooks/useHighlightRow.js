@@ -60,14 +60,34 @@ export function useHighlightRow() {
   const clearTimerRef = useRef(null)
   const scrollTimerRef = useRef(null)
 
+  // Highlight timers live as long as the mounted page. The state-scrub
+  // navigation below MUST NOT cancel them -  if they were torn down there,
+  // the highlight would persist forever and the row would never scroll
+  // (the scrub re-renders with a null state, re-running the other effect,
+  // and its cleanup used to cancel both pending timers before they fired).
+  useEffect(() => {
+    return () => {
+      clearTimeout(scrollTimerRef.current)
+      clearTimeout(clearTimerRef.current)
+    }
+  }, [])
+
   useEffect(() => {
     if (incomingId == null) return
+
+    // A fresh highlight arriving while a previous one is still pending
+    // (search > click, search again > click another row) -  drop the old
+    // timers so its auto-clear can't cancel the new highlight.
+    if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current)
+    if (clearTimerRef.current) clearTimeout(clearTimerRef.current)
 
     setHighlightedId(incomingId)
     setHighlightSearch(incomingSearch)
 
     // Scrub immediately so back/refresh doesn't replay the same highlight.
-    navigate(location.pathname, { replace: true, state: {} })
+    // Preserve the query string  -  some pages (Collections, Expenses,
+    // Users, ...) hold their filters in the URL.
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: {} })
 
     scrollTimerRef.current = setTimeout(() => {
       document
@@ -76,13 +96,8 @@ export function useHighlightRow() {
     }, incomingSearch ? SEEDED_SCROLL_DELAY_MS : SCROLL_DELAY_MS)
 
     clearTimerRef.current = setTimeout(() => setHighlightedId(null), HIGHLIGHT_DURATION_MS)
-
-    return () => {
-      clearTimeout(scrollTimerRef.current)
-      clearTimeout(clearTimerRef.current)
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [incomingId])
+  }, [incomingId, incomingSearch])
 
   return { highlightedId, highlightSearch }
 }

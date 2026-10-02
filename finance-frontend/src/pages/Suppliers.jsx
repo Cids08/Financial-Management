@@ -1,3 +1,4 @@
+import KpiValue from '../components/KpiValue'
 import { TableSkeleton } from '../components/LoadingSkeleton'
 import ResponsiveTable from '../components/ResponsiveTable'
 import { useEffect, useState, useCallback } from 'react'
@@ -16,6 +17,7 @@ import DeletePermanentButton from '../components/DeletePermanentButton'
 import RetentionCountdown from '../components/RetentionCountdown'
 import { formatCurrency, formatDate } from '../utils/formatters'
 import { useProfile } from '../hooks/useProfile'
+import { usePrivacy } from '../context/PrivacyContext'
 import AddressSelector from '../components/AddressSelector'
 
 // Masks every character (keeps dashes/spaces as visual separators)
@@ -69,15 +71,21 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
   const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin' || profile?.role_slug === 'admin' || profile?.role_slug === 'super-admin'
   const canManage = hasPermission ? (hasPermission('suppliers.manage') || isAdmin || profile?.role === 'Staff' || profile?.role_slug === 'staff') : true
   const { currency } = useCompany()
+  // Subscribe to Privacy Mode so the balance column re-renders (and masks)
+  // the moment the header toggle is flipped.
+  usePrivacy()
   const [suppliers, setSuppliers] = useState([])
   const [stats, setStats] = useState({ total: 0, active: 0, inactive: 0, archived: 0 })
   const [loading, setLoading] = useState(true)
+  const [statsLoading, setStatsLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [showArchived, setShowArchived] = useState(false)
   const [page, setPage] = useState(1)
+  const [meta, setMeta] = useState({ total: 0, last_page: 1 })
+  const PER_PAGE = 10
 
   const [modalMode, setModalMode] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
@@ -119,7 +127,8 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
       if (search) params.set('search', search)
       if (statusFilter !== 'all') params.set('status', statusFilter)
       if (showArchived) params.set('archived', '1')
-      params.set('per_page', '100')
+      params.set('page', String(page))
+      params.set('per_page', String(PER_PAGE))
 
       const res = await apiFetch(`/api/suppliers?${params.toString()}`)
       const json = await res.json()
@@ -129,14 +138,16 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
       }
 
       setSuppliers(json.data || [])
+      setMeta(json.meta || { total: 0, last_page: 1 })
     } catch (err) {
       setLoadError(err.message || 'Failed to load suppliers.')
     } finally {
       setLoading(false)
     }
-  }, [search, statusFilter, showArchived])
+  }, [search, statusFilter, showArchived, page])
 
   const fetchStats = useCallback(async () => {
+    setStatsLoading(true)
     try {
       const res = await apiFetch('/api/suppliers/stats')
       const json = await res.json()
@@ -145,6 +156,8 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
       }
     } catch {
       // Non-critical  -  stat cards just keep their last known values.
+    } finally {
+      setStatsLoading(false)
     }
   }, [])
 
@@ -257,10 +270,9 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
   const isModalOpen = modalMode !== null
   const isEditing = modalMode !== null && modalMode !== 'add'
 
-  const PER_PAGE = 10
-  const totalPages = Math.max(1, Math.ceil(suppliers.length / PER_PAGE))
-  const rangeStart = (page - 1) * PER_PAGE + 1
-  const rangeEnd = Math.min(page * PER_PAGE, suppliers.length)
+  const totalPages = Math.max(1, meta.last_page ?? 1)
+  const rangeStart = meta.total === 0 ? 0 : (page - 1) * PER_PAGE + 1
+  const rangeEnd = Math.min(page * PER_PAGE, meta.total || 0)
 
   return (
     <div className="space-y-5 animate-fadeIn">
@@ -291,7 +303,7 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
               </div>
               <div className="min-w-0">
                 <p className="text-xs text-muted">{card.label}</p>
-                <p className="text-lg font-bold text-ink">{card.value}</p>
+                <p className="text-lg font-bold text-ink"><KpiValue loading={statsLoading}>{card.value}</KpiValue></p>
               </div>
             </button>
           )
@@ -347,7 +359,7 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
               ) : suppliers.length === 0 ? (
                 <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">No suppliers match your filters.</td></tr>
               ) : (
-                suppliers.slice((page - 1) * PER_PAGE, page * PER_PAGE).map((s) => {
+                suppliers.map((s) => {
                   const revealed = revealedIds.has(s.supplier_id)
                   const hasCreditLimit = Number(s.credit_limit) > 0
                   const balance = Number(s.current_balance || 0)
@@ -485,7 +497,7 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
         page={page}
         totalPages={totalPages}
         onPageChange={setPage}
-        total={suppliers.length}
+        total={meta.total}
         label="suppliers"
         showRange
         rangeStart={rangeStart}

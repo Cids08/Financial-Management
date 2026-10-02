@@ -37,7 +37,7 @@ class BudgetService
     public function paginate(array $filters, int $perPage = 20)
     {
         $query = Budget::query()
-            ->with(['department', 'creator', 'approver'])
+            ->with(['department', 'creator', 'approver', 'accountAllocations.account'])
             ->withCount(['supportingDocuments as supporting_documents_count']);
 
         if (! empty($filters['status'])) {
@@ -142,13 +142,16 @@ class BudgetService
             $data['budget_code'] = $code;
         }
 
-        return DB::transaction(fn () => Budget::create([
-            ...$data,
-            'used_amount' => 0,
-            'remaining_amount' => $data['allocated_amount'],
-            'status' => 'Draft', // was 'Pending' — not a legal value per budgets_status_check
-            'created_by' => $userId,
-        ]));
+        $allocations = app(BudgetGlService::class)->validateAllocations($data['account_allocations'] ?? [], (string) $data['allocated_amount']);
+        unset($data['account_allocations']);
+        return DB::transaction(function () use ($data, $userId, $allocations) {
+            $budget = Budget::create([
+                ...$data, 'used_amount' => 0, 'remaining_amount' => $data['allocated_amount'],
+                'status' => 'Draft', 'created_by' => $userId,
+            ]);
+            $budget->accountAllocations()->createMany($allocations);
+            return $budget;
+        });
     }
 
     public function update(Budget $budget, array $data, int $userId): Budget
@@ -162,7 +165,12 @@ class BudgetService
             ]);
         }
 
-        return DB::transaction(function () use ($budget, $data) {
+        $allocations = app(BudgetGlService::class)->validateAllocations($data['account_allocations'] ?? [], (string) $data['allocated_amount']);
+        return DB::transaction(function () use ($budget, $data, $allocations) {
+            $budget = Budget::query()->lockForUpdate()->findOrFail($budget->id);
+            if ($budget->status !== 'Draft') throw ValidationException::withMessages(['status' => 'Only a Draft budget can be edited.']);
+            $budget->accountAllocations()->delete();
+            $budget->accountAllocations()->createMany($allocations);
             $budget->update([
                 'allocated_amount' => $data['allocated_amount'],
                 'remaining_amount' => $data['allocated_amount'] - $budget->used_amount,
@@ -204,6 +212,9 @@ class BudgetService
         }
 
         return DB::transaction(function () use ($budget, $approverId) {
+            $budget = Budget::query()->lockForUpdate()->findOrFail($budget->id);
+            if ($budget->status !== 'Draft') throw ValidationException::withMessages(['status' => 'Only a Draft budget can be approved.']);
+            app(BudgetGlService::class)->assertReady($budget);
             // 'Approved' is not a legal status value — Active is the
             // approved/spendable state per budgets_status_check.
             $budget->update(['status' => 'Active', 'approved_by' => $approverId, 'approved_at' => now()]);

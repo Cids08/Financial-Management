@@ -26,6 +26,16 @@ class CashAccountService
             $query->where('account_type', $filters['type']);
         }
 
+        // Search was plumbed through by the controller but never applied —
+        // the frontend's search box appeared to do nothing.
+        if (! empty($filters['search'])) {
+            $term = $filters['search'];
+            $query->where(function ($q) use ($term) {
+                $q->where('account_name', 'ilike', "%{$term}%")
+                    ->orWhere('account_code', 'ilike', "%{$term}%");
+            });
+        }
+
         $perPage = ! empty($filters['per_page']) ? min((int) $filters['per_page'], 200) : self::PER_PAGE;
 
         return $query->paginate($perPage);

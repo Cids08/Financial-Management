@@ -412,6 +412,11 @@ export default function Dashboard() {
   // range of transaction dates rather than a hardcoded span.
   const [year, setYear] = useState(() => new Date().getFullYear())
   const [availableYears, setAvailableYears] = useState([])
+  // Guards against out-of-order responses when the year is switched quickly:
+  // each in-flight request captures the year it was fired for; if the user
+  // has moved on by the time it resolves, the stale payload is dropped.
+  const yearRef = useRef(year)
+  useEffect(() => { yearRef.current = year }, [year])
 
   useEffect(() => {
     setLoading(true)
@@ -419,6 +424,7 @@ export default function Dashboard() {
     apiFetch(`/api/dashboard?year=${year}`)
       .then((res) => res.json())
       .then((json) => {
+        if (yearRef.current !== year) return
         setData(json.data)
         if (json.data?.available_years?.length) setAvailableYears(json.data.available_years)
       })
@@ -431,7 +437,10 @@ export default function Dashboard() {
     setChartsError(null)
     apiFetch(`/api/dashboard/charts?year=${year}`)
       .then((res) => res.json())
-      .then((json) => setChartData(json.data))
+      .then((json) => {
+        if (yearRef.current !== year) return
+        setChartData(json.data)
+      })
       .catch(() => setChartsError('Could not load charts.'))
       .finally(() => setChartsLoading(false))
   }, [year])
@@ -443,14 +452,18 @@ export default function Dashboard() {
     setLoading(true)
     apiFetch(`/api/dashboard?year=${year}`)
       .then((res) => res.json())
-      .then((json) => setData(json.data))
+      .then((json) => {
+        if (yearRef.current === year) setData(json.data)
+      })
       .catch(() => setError('Could not load the dashboard. Please try again.'))
       .finally(() => setLoading(false))
 
     setChartsLoading(true)
     apiFetch(`/api/dashboard/charts?year=${year}`)
       .then((res) => res.json())
-      .then((json) => setChartData(json.data))
+      .then((json) => {
+        if (yearRef.current === year) setChartData(json.data)
+      })
       .catch(() => setChartsError('Could not load charts.'))
       .finally(() => setChartsLoading(false))
   }, [year])

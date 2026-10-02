@@ -19,6 +19,24 @@ class BudgetController extends Controller
     {
     }
 
+    public function allocationAccounts()
+    {
+        return response()->json(['success' => true, 'data' => app(\App\Services\BudgetGlService::class)->eligibleAccounts()]);
+    }
+
+    public function saveAllocations(Request $request, Budget $budget)
+    {
+        $data = $request->validate(['account_allocations' => ['required', 'array', 'min:1']]);
+        $budget = app(\App\Services\BudgetGlService::class)->save($budget, $data['account_allocations'], $request->user()->id, $request->user()->hasPermission('budgets.approve'));
+        return response()->json(['success' => true, 'data' => new BudgetResource($budget)]);
+    }
+
+    public function glUtilization(Request $request, Budget $budget)
+    {
+        $data = $request->validate(['account_id' => ['nullable', 'integer', 'exists:chart_of_accounts,id']]);
+        return response()->json(['success' => true, 'data' => app(\App\Services\BudgetGlService::class)->ledger($budget, isset($data['account_id']) ? (int) $data['account_id'] : null)]);
+    }
+
     public function stats(Request $request)
     {
         return response()->json([

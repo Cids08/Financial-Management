@@ -17,6 +17,11 @@ class BudgetResource extends JsonResource
             'budget_name' => $this->budget_name,
             'budget_type' => $this->budget_type,
             'fiscal_year' => $this->fiscal_year,
+            'account_allocations' => $this->resource->loadMissing('accountAllocations.account')->accountAllocations->map(fn ($a) => [
+                'account_id' => $a->account_id, 'account_code' => $a->account?->account_code,
+                'account_name' => $a->account?->account_name, 'allocated_amount' => (float) $a->allocated_amount,
+            ]),
+            'gl_report' => $this->when($request->boolean('gl_report'), fn () => app(\App\Services\BudgetGlService::class)->summary($this->resource)),
             'allocated_amount' => (float) $this->allocated_amount,
             'used_amount' => (float) $this->used_amount,
             'remaining_amount' => (float) $this->remaining_amount,

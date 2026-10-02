@@ -161,6 +161,18 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
     e.preventDefault()
     setDefaultsSaved(false)
     setDefaultsError('')
+    // A display currency different from the base currency is unusable
+    // without a positive rate -  without one, the app falls back to
+    // rendering amounts in the base currency, so block the misconfig
+    // instead of silently saving it.
+    if (brandForm.currency && brandForm.currency !== brandForm.baseCurrency) {
+      const rate = Number(brandForm.exchangeRates?.[brandForm.currency])
+      if (!Number.isFinite(rate) || rate <= 0) {
+        setDefaultsError(`Set a valid exchange rate for ${brandForm.currency} before saving.`)
+        setDefaultsSubmitting(false)
+        return
+      }
+    }
     setDefaultsSubmitting(true)
     const result = await updateBranding({
       currency: brandForm.currency,

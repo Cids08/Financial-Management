@@ -37,6 +37,7 @@ class Expense extends Model
 
     protected $fillable = [
         'budget_id',
+        'gl_account_id',
         'expense_category_id',
         'supplier_id',
         'cash_account_id',
@@ -81,6 +82,11 @@ class Expense extends Model
                 $expense->saveQuietly();
             }
         });
+    }
+
+    public function glAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'gl_account_id')->withTrashed();
     }
 
     public function budget(): BelongsTo

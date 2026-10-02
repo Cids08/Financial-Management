@@ -1,3 +1,4 @@
+import KpiValue from '../components/KpiValue'
 import { TableSkeleton } from '../components/LoadingSkeleton'
 import ResponsiveTable from '../components/ResponsiveTable'
 import { useMemo, useState, useEffect } from 'react'
@@ -145,7 +146,7 @@ function DetailRow({ label, value }) {
 
 export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['Compliance', 'Tax Obligations'] }) {
   const {
-    obligations, meta, loading, saving, error,
+    obligations, meta, stats, loading, saving, error,
     search, setSearch,
     statusFilter, setStatusFilter,
     showArchived, setShowArchived,
@@ -234,20 +235,15 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
   const [scheduleNotice, setScheduleNotice] = useState('')
   const [showReportModal, setShowReportModal] = useState(false)
 
-  // Statutory deadline compliance monitor
+  // Statutory deadline compliance monitor — backed by the global stats
+  // endpoint so the banner reflects ALL records, not just the page loaded.
   const complianceAlert = useMemo(() => {
-    const overdue = obligations.filter(
-      (o) => o.status === 'Overdue' || (daysUntil(o.due_date) < 0 && o.status !== 'Paid')
-    )
-    const dueSoon = obligations.filter(
-      (o) => o.status !== 'Paid' && daysUntil(o.due_date) >= 0 && daysUntil(o.due_date) <= 7
-    )
     return {
-      overdueCount: overdue.length,
-      dueSoonCount: dueSoon.length,
-      hasUrgent: overdue.length > 0 || dueSoon.length > 0,
+      overdueCount: stats?.overdue ?? 0,
+      dueSoonCount: stats?.due_soon ?? 0,
+      hasUrgent: (stats?.overdue ?? 0) > 0 || (stats?.due_soon ?? 0) > 0,
     }
-  }, [obligations])
+  }, [stats])
 
   const filterUrgent = () => {
     if (complianceAlert.overdueCount > 0) {
@@ -291,13 +287,14 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
   const hasDateFilter = Boolean(dateFrom || dateTo)
   const clearDateFilter = () => { setDateFrom(''); setDateTo('') }
 
-  // Page-scoped  -  meta.total (Total Obligations card) is the one
-  // accurate global number; see Collectors.jsx for the same caveat.
+  // Global figures from the dedicated /stats endpoint (full table, not the
+  // current page) — see TaxObligationService::stats().
   const pageStats = useMemo(() => ({
-    paid: obligations.filter((o) => o.status === 'Paid').length,
-    overdue: obligations.filter((o) => o.status === 'Overdue').length,
-    dueAmount: obligations.filter((o) => o.status !== 'Paid').reduce((sum, o) => sum + o.amount, 0),
-  }), [obligations])
+    total: meta.total,
+    paid: stats?.paid ?? 0,
+    overdue: stats?.overdue ?? 0,
+    dueAmount: stats?.due_amount ?? 0,
+  }), [stats, meta.total])
 
   // AUTOMATION: changing tax type or period recomputes tax_period + due_date
   // together  -  the person never types either one directly.
@@ -660,7 +657,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs text-muted truncate" title={card.label}>{card.label}</p>
-                <p className="text-lg font-bold text-ink truncate" title={String(card.value)}>{card.value}</p>
+                <p className="text-lg font-bold text-ink truncate" title={loading ? undefined : String(card.value)}><KpiValue loading={loading}>{card.value}</KpiValue></p>
               </div>
             </button>
           )

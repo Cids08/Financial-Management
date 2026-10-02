@@ -29,6 +29,7 @@ const isSearchableTextHit = (item, q) => {
  *    - Enter (↵) selects and auto-shifts cursor focus straight to "Apt, Suite, Unit, or Floor No.".
  */
 export default function AddressSelector({
+  label = 'Address',
   value = '',
   onChange,
   disabled = false,
@@ -55,12 +56,20 @@ export default function AddressSelector({
   const unitInputRef = useRef(null)
   const containerRef = useRef(null)
 
+  const lastEmittedValue = useRef(null)
+
   // Initialize from existing address if editing
   useEffect(() => {
-    if (value && !streetAddress && !unitFloor && !locality) {
-      setStreetAddress(value)
-    }
-  }, [value, streetAddress, unitFloor, locality])
+    if (value === lastEmittedValue.current) return
+    setStreetAddress(value || '')
+    setUnitFloor('')
+    setLocality('')
+    setAdminArea('')
+    setPostalCode('')
+    setCountry('Philippines')
+    setSearchQuery('')
+    setIsOpen(false)
+  }, [value])
 
   // Close on outside click
   useEffect(() => {
@@ -164,7 +173,8 @@ export default function AddressSelector({
     if (zip?.trim()) parts.push(zip.trim())
     if (cntry?.trim() && !parts.some(part => part.toLowerCase().endsWith(cntry.trim().toLowerCase()))) parts.push(cntry.trim())
 
-    onChange(parts.join(', '))
+    lastEmittedValue.current = parts.join(', ')
+    onChange(lastEmittedValue.current)
   }
 
   // Parse address_components and inject:
@@ -239,7 +249,7 @@ export default function AddressSelector({
       <div className="relative">
         <div className="flex items-center justify-between">
           <label htmlFor={panelId + '-search'} className={LABEL_STYLE}>
-            Find an address {required && <span className="text-red-500">*</span>}
+            {label} {required && <span className="text-red-500">*</span>}
           </label>
         </div>
 

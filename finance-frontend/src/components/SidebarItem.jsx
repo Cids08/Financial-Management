@@ -1,6 +1,7 @@
+import { ChevronDown } from 'lucide-react'
 import { NavLink, useLocation } from 'react-router-dom'
 
-export default function SidebarItem({ item, collapsed, onNavigate, onLogoutClick, badge }) {
+export default function SidebarItem({ item, collapsed, onNavigate, onLogoutClick, badge, groupOpen = false, onToggleGroup }) {
   const location = useLocation()
   const hasChildren = Array.isArray(item.children) && item.children.length > 0
 
@@ -42,19 +43,17 @@ export default function SidebarItem({ item, collapsed, onNavigate, onLogoutClick
       <span className="absolute -right-1 -top-1 hidden h-2 w-2 rounded-full bg-white ring-2 ring-sidebar lg:block" />
     ) : null
 
-  // Parent item with children  -  static section, no dropdown
+  // Grouped modules keep the navigation compact; the current route opens its group.
   if (hasChildren) {
     return (
-      <li className="pt-4 mt-3 border-t border-sidebar-border first:mt-0 first:pt-0 first:border-t-0">
-        <p
-          className={`px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.14em] truncate
-            ${collapsed ? 'lg:hidden' : ''}
-            ${isChildActive ? 'text-primary' : 'text-sidebar-muted'}`}
-        >
-          {item.label}
-        </p>
-
-        <ul className="space-y-1">
+      <li className="pt-2 mt-2 border-t border-sidebar-border">
+        <button type="button" onClick={onToggleGroup} aria-expanded={groupOpen} aria-controls={'nav-group-' + item.id} aria-label={item.label} title={collapsed ? item.label : undefined}
+          className={'flex w-full min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[12px] font-semibold transition-colors hover:bg-sidebar-hover ' + (isChildActive ? 'text-primary ' : 'text-sidebar-ink ') + (collapsed ? 'lg:justify-center lg:px-0' : '')}>
+          <Icon size={17} strokeWidth={1.8} className="shrink-0" />
+          <span className={'min-w-0 flex-1 truncate ' + (collapsed ? 'lg:hidden' : '')}>{item.label}</span>
+          <ChevronDown size={14} className={'shrink-0 text-sidebar-muted transition-transform ' + (groupOpen ? 'rotate-180 ' : '') + (collapsed ? 'lg:hidden' : '')} />
+        </button>
+        <ul id={'nav-group-' + item.id} hidden={!groupOpen} className={'space-y-0.5 pt-1 ' + (collapsed ? 'lg:hidden' : '')}>
           {item.children.map((child) => (
             <li key={child.id}>
               <NavLink

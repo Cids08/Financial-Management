@@ -28,6 +28,7 @@ class ExpenseService
     {
         $query = Expense::query()
             ->with([
+                'glAccount:id,account_code,account_name',
                 'budget:id,budget_name,remaining_amount,allocated_amount',
                 'category:id,category_name',
                 'supplier:id,supplier_name',
@@ -85,6 +86,8 @@ class ExpenseService
     public function create(array $data, User $creator): Expense
     {
         return DB::transaction(function () use ($data, $creator) {
+            $budget = Budget::query()->lockForUpdate()->findOrFail($data['budget_id']);
+            $data['gl_account_id'] = app(ExpenseGlAccountService::class)->selected($budget, isset($data['gl_account_id']) ? (int) $data['gl_account_id'] : null)->id;
             $validSources = [Expense::SOURCE_CASH, Expense::SOURCE_BANK, Expense::SOURCE_PETTY_CASH];
             if (empty($data['expense_source']) || ! in_array($data['expense_source'], $validSources, true)) {
                 $cashAcc = ! empty($data['cash_account_id']) ? CashAccount::find($data['cash_account_id']) : null;
@@ -116,7 +119,7 @@ class ExpenseService
                 'action' => 'create',
                 'record_id' => $expense->id,
                 'activity_description' => "Recorded expense #{$expense->id}.",
-                'new_values' => $expense->only(['budget_id', 'expense_category_id', 'expense_amount', 'status']),
+                'new_values' => $expense->only(['budget_id', 'gl_account_id', 'expense_category_id', 'expense_amount', 'status']),
                 'ip_address' => request()->ip(),
                 'user_agent' => request()->userAgent(),
             ]);
@@ -136,9 +139,14 @@ class ExpenseService
             ]);
         }
 
-        $original = $expense->only(['budget_id', 'expense_category_id', 'expense_amount', 'status']);
+        $original = $expense->only(['budget_id', 'gl_account_id', 'expense_category_id', 'expense_amount', 'status']);
 
         DB::transaction(function () use ($expense, $data, $actor, $original) {
+            $expense = Expense::query()->lockForUpdate()->findOrFail($expense->id);
+            if ($expense->status !== Expense::STATUS_PENDING) throw ValidationException::withMessages(['status' => 'Only Pending expenses can be edited.']);
+            $budget = Budget::query()->lockForUpdate()->findOrFail($data['budget_id'] ?? $expense->budget_id);
+            $selectedId = $data['gl_account_id'] ?? $expense->gl_account_id;
+            $data['gl_account_id'] = app(ExpenseGlAccountService::class)->selected($budget, $selectedId ? (int) $selectedId : null)->id;
             $validSources = [Expense::SOURCE_CASH, Expense::SOURCE_BANK, Expense::SOURCE_PETTY_CASH];
             if (isset($data['expense_source']) && ! in_array($data['expense_source'], $validSources, true)) {
                 $cashAccountId = $data['cash_account_id'] ?? $expense->cash_account_id;
@@ -166,7 +174,7 @@ class ExpenseService
                 'record_id' => $expense->id,
                 'activity_description' => "Updated expense #{$expense->id}.",
                 'old_values' => $original,
-                'new_values' => $expense->only(['budget_id', 'expense_category_id', 'expense_amount', 'status']),
+                'new_values' => $expense->only(['budget_id', 'gl_account_id', 'expense_category_id', 'expense_amount', 'status']),
                 'ip_address' => request()->ip(),
                 'user_agent' => request()->userAgent(),
             ]);
@@ -260,6 +268,8 @@ class ExpenseService
         $expense->loadMissing('creator');
 
         return DB::transaction(function () use ($expense, $approver, $skipDepartmentCheck) {
+            $expense = Expense::query()->lockForUpdate()->findOrFail($expense->id);
+            if ($expense->status !== Expense::STATUS_PENDING) throw ValidationException::withMessages(['status' => 'Only Pending expenses can be approved.']);
             if (! $expense->budget_id) {
                 throw ValidationException::withMessages([
                     'budget' => "Cannot approve expense #{$expense->id}: No budget is assigned to this expense.",
@@ -279,6 +289,11 @@ class ExpenseService
                 throw ValidationException::withMessages([
                     'budget' => "Cannot approve expenses against a budget with status \"{$budget->status}\". The budget must be Active.",
                 ]);
+            }
+
+            $expense->setRelation('budget', $budget);
+            if (! $expense->expense_date || $expense->expense_date->lt($budget->start_date) || $expense->expense_date->gt($budget->end_date)) {
+                throw ValidationException::withMessages(['expense_date' => 'Expense date must fall within the selected budget period before posting.']);
             }
 
             $newUsed = Money::add((string) $budget->used_amount, (string) $expense->expense_amount, 2);
@@ -638,24 +653,37 @@ class ExpenseService
     }
 
     /**
-     * Posts Debit Expense / Credit Cash Account for the approved expense.
+     * Posts Debit selected expense/fixed-asset account / Credit Cash Account.
      * Deducts the expense amount from the selected CashAccount's current_balance.
      */
     private function postJournalEntry(Expense $expense, User $approver): void
     {
         // ── Debit: pick the most specific Expense account available ──────────
-        $categoryName = $expense->category?->category_name; // e.g. 'Utilities'
+        $budget = $expense->budget;
+        if ($expense->gl_account_id) {
+            $debitAccount = app(ExpenseGlAccountService::class)->selected($budget, (int) $expense->gl_account_id);
+        } elseif ($budget->accountAllocations()->exists()) {
+            // Legacy/system-generated pending expenses can only be resolved
+            // automatically when the budget has one possible posting account.
+            $options = app(ExpenseGlAccountService::class)->options($budget);
+            if ($options->count() !== 1) throw ValidationException::withMessages(['gl_account_id' => 'Edit this pending expense and select its G/L account before approval.']);
+            $debitAccount = $options->first();
+        } else {
+            // Preserve the legacy internal tax/pending-expense path only.
+            // New requests require an explicit account and never reach this.
+            $categoryName = $expense->category?->category_name; // e.g. 'Utilities'
 
-        // Try to match by name fragment first (e.g. 'Utilities' hits '5400 Utilities Expense')
-        $debitAccount = $categoryName
-            ? ChartOfAccount::where('account_type', 'Expense')
-                ->where('account_name', 'like', "%{$categoryName}%")
-                ->first()
-            : null;
+            // Try to match by name fragment first (e.g. 'Utilities' hits '5400 Utilities Expense')
+            $debitAccount = $categoryName
+                ? ChartOfAccount::where('is_active', true)->where('account_type', 'Expense')
+                    ->where('account_name', 'like', "%{$categoryName}%")
+                    ->first()
+                : null;
 
-        // Fall back to the first Expense-type account (mirrors AP pattern)
-        $debitAccount ??= ChartOfAccount::where('account_type', 'Expense')->first();
+            // Fall back to the first Expense-type account (mirrors AP pattern)
+            $debitAccount ??= ChartOfAccount::where('is_active', true)->where('account_type', 'Expense')->first();
 
+        }
         if (! $debitAccount) {
             throw new \RuntimeException(
                 "Expense #{$expense->id} cannot be approved: no Expense account exists in the Chart of Accounts. Seed ChartOfAccountSeeder first."
@@ -700,6 +728,8 @@ class ExpenseService
         }
 
         // ── Post the double-entry ─────────────────────────────────────────────
+        $expense->update(['gl_account_id' => $debitAccount->id]);
+
         $entry = JournalEntry::create([
             'transaction_no'   => 'JE-EXP-' . $expense->id . '-' . now()->format('YmdHis'),
             'transaction_date' => $expense->expense_date,
@@ -715,6 +745,8 @@ class ExpenseService
                 'account_id'     => $debitAccount->id,
                 'debit'          => $expense->expense_amount,
                 'credit'         => 0,
+                'budget_id' => $expense->budget_id,
+                'department_id' => $expense->budget?->department_id,
                 'reference_type' => 'Expenses',
                 'reference_id'   => $expense->id,
                 'remarks'        => "Expense recognized ({$debitAccount->account_name})",
@@ -725,6 +757,8 @@ class ExpenseService
                 'credit'         => $expense->expense_amount,
                 'reference_type' => 'Expenses',
                 'reference_id'   => $expense->id,
+                'budget_id' => $expense->budget_id,
+                'department_id' => $expense->budget?->department_id,
                 'remarks'        => "Expense settled ({$creditAccount->account_name})" . ($cashAccount ? " [{$cashAccount->account_code}]" : ''),
             ],
         ]);

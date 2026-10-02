@@ -1,10 +1,14 @@
+import BudgetAccountAllocations from '../components/BudgetAccountAllocations'
+import { apiFetch } from '../utils/api'
+import BudgetComparisonReport from '../components/BudgetComparisonReport'
+import KpiValue from '../components/KpiValue'
 import { TableSkeleton } from '../components/LoadingSkeleton'
 import ResponsiveTable from '../components/ResponsiveTable'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Search, Plus, Pencil, Archive, RotateCcw, PiggyBank, TrendingDown, Building2, Info, Printer,
   CheckCircle2, XCircle, Clock, AlertTriangle, Paperclip, Loader2,
-  FileText, History, Activity, TrendingUp, LayoutGrid, List, Filter, ArrowUpRight, Sparkles,
+  FileText, History, Activity, Sparkles,
   CalendarRange, X,
 } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
@@ -15,7 +19,7 @@ import Pagination from '../components/Pagination'
 import Tooltip from '../components/Tooltip'
 import BudgetPlanUploadModal from '../components/BudgetPlanUploadModal'
 import BudgetPlanHistoryModal from '../components/BudgetPlanHistoryModal'
-import { formatCurrency, currencySymbol, convertAmount, getActiveCurrency } from '../utils/formatters'
+import { formatCurrency, currencySymbol, convertAmount, getActiveCurrency, maskedAmount } from '../utils/formatters'
 import { printSlip } from '../utils/printSlip'
 import { money, SIGNATURE_PRESETS } from '../utils/print'
 import { MIN_INVOICE_AMOUNT, minHint } from '../utils/business'
@@ -41,6 +45,7 @@ const APPROVAL_STYLES = {
   Draft: 'bg-status-warning-bg text-status-warning',
   Active: 'bg-status-success-bg text-status-success',
   Cancelled: 'bg-status-danger-bg text-status-danger',
+  Closed: 'bg-status-neutral-bg text-status-neutral',
 }
 const APPROVAL_ICONS = { Draft: Clock, Active: CheckCircle2, Cancelled: XCircle }
 
@@ -69,6 +74,7 @@ const EMPTY_FORM = {
   start_date: '',
   end_date: '',
   remarks: '',
+  account_allocations: [],
 }
 
 const PANEL = 'rounded-xl border border-border bg-surface shadow-card'
@@ -121,199 +127,6 @@ function getBudgetMetrics(b) {
   }
 }
 
-function usedPct(allocated, remaining) {
-  const alloc = Number(allocated) || 0
-  if (!alloc) return 0
-  const rem = Number(remaining) || 0
-  return Math.round(((alloc - rem) / alloc) * 100)
-}
-
-function TableUtilizationCell({ budget }) {
-  if (budget.status !== 'Active') {
-    return <span className="text-xs text-muted">Not yet active</span>
-  }
-
-  const {
-    allocated,
-    used,
-    remaining,
-    warningPct,
-    displayPct,
-    barPct,
-    isOver,
-    isWarning,
-    healthLabel,
-  } = getBudgetMetrics(budget)
-
-  const barColor = isOver
-    ? 'bg-gradient-to-r from-rose-500 to-red-600'
-    : isWarning
-    ? 'bg-gradient-to-r from-amber-400 to-amber-500'
-    : 'bg-gradient-to-r from-emerald-400 to-emerald-500'
-
-  const badgeStyles = isOver
-    ? 'bg-status-danger-bg text-status-danger border-status-danger-border'
-    : isWarning
-    ? 'bg-status-warning-bg text-status-warning border-status-warning-border'
-    : 'bg-status-success-bg text-status-success border-status-success-border'
-
-  const tooltipText = `${formatCurrency(used)} spent of ${formatCurrency(allocated)} (${displayPct}%) · ${remaining < 0 ? 'Deficit: ' + formatCurrency(Math.abs(remaining)) : 'Left: ' + formatCurrency(remaining)} · Threshold: ${warningPct}%`
-
-  return (
-    <Tooltip label={tooltipText}>
-      <div className="w-36 space-y-1 py-0.5">
-        <div className="flex items-center justify-between gap-1 text-xs">
-          <span className="font-semibold text-ink tabular-nums">{displayPct}%</span>
-          <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-[10px] font-semibold leading-none ${badgeStyles}`}>
-            {isOver && <AlertTriangle size={10} className="shrink-0" />}
-            {isWarning && <Clock size={10} className="shrink-0" />}
-            {!isOver && !isWarning && <CheckCircle2 size={10} className="shrink-0" />}
-            {healthLabel}
-          </span>
-        </div>
-
-        {/* Multi-tier progress track with warning threshold line */}
-        <div className="relative h-2 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden shadow-inner">
-          <div
-            className={`h-full rounded-full transition-all duration-300 ${barColor}`}
-            style={{ width: `${barPct}%` }}
-          />
-          {warningPct > 0 && warningPct < 100 && (
-            <div
-              className="absolute top-0 bottom-0 w-0.5 bg-slate-400/60 dark:bg-slate-400/60 z-10 pointer-events-none"
-              style={{ left: `${warningPct}%` }}
-              title={`Warning threshold: ${warningPct}%`}
-            />
-          )}
-        </div>
-      </div>
-    </Tooltip>
-  )
-}
-
-function BudgetHealthCard({ budget, onOpenDetail, onPrint }) {
-  const m = getBudgetMetrics(budget)
-
-  const barColor = m.isOver
-    ? 'bg-gradient-to-r from-rose-500 to-red-600'
-    : m.isWarning
-    ? 'bg-gradient-to-r from-amber-400 to-amber-500'
-    : 'bg-gradient-to-r from-emerald-400 to-emerald-500'
-
-  const badgeStyles = m.isOver
-    ? 'bg-status-danger-bg text-status-danger border-status-danger-border'
-    : m.isWarning
-    ? 'bg-status-warning-bg text-status-warning border-status-warning-border'
-    : 'bg-status-success-bg text-status-success border-status-success-border'
-
-  return (
-    <div className={`${PANEL} p-4 flex flex-col justify-between space-y-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md border border-border/80`}>
-      {/* Header Row */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-primary-dark dark:text-primary-light text-[11px] font-semibold">
-              <Building2 size={11} />
-              {budget.department_name || 'Department'}
-            </span>
-            <span className="text-[11px] font-medium text-muted">FY{budget.fiscal_year}</span>
-          </div>
-          <h3 className="text-sm font-bold text-ink mt-1 truncate" title={budget.budget_name}>
-            {budget.budget_name}
-          </h3>
-          <p className="text-xs text-muted font-mono mt-0.5">{budget.budget_code} &middot; {budget.budget_type}</p>
-        </div>
-
-        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-xs font-semibold shrink-0 ${badgeStyles}`}>
-          {m.isOver && <AlertTriangle size={12} className="shrink-0" />}
-          {m.isWarning && <Clock size={12} className="shrink-0" />}
-          {!m.isOver && !m.isWarning && <CheckCircle2 size={12} className="shrink-0" />}
-          {m.healthLabel}
-        </span>
-      </div>
-
-      {/* 3 KPI mini-tiles */}
-      <div className="grid grid-cols-3 gap-2 pt-0.5">
-        <div className="rounded-lg border border-border bg-bg/60 p-2 text-left">
-          <span className="text-[10px] text-muted block font-medium">Allocated</span>
-          <p className="text-xs font-bold text-ink mt-0.5 tabular-nums truncate">{formatCurrency(m.allocated)}</p>
-        </div>
-        <div className="rounded-lg border border-border bg-bg/60 p-2 text-left">
-          <span className="text-[10px] text-muted block font-medium">Utilized ({m.displayPct}%)</span>
-          <p className={`text-xs font-bold mt-0.5 tabular-nums truncate ${m.isOver ? 'text-status-danger' : m.isWarning ? 'text-status-warning' : 'text-ink'}`}>
-            {formatCurrency(m.used)}
-          </p>
-        </div>
-        <div className="rounded-lg border border-border bg-bg/60 p-2 text-left">
-          <span className="text-[10px] text-muted block font-medium">Remaining</span>
-          <p className={`text-xs font-bold mt-0.5 tabular-nums truncate ${m.remaining < 0 ? 'text-status-danger' : 'text-status-success'}`}>
-            {formatCurrency(m.remaining)}
-          </p>
-        </div>
-      </div>
-
-      {/* Visual Tracking Progress Gauge */}
-      <div className="space-y-1 pt-1">
-        <div className="flex items-center justify-between text-xs">
-          <span className="text-[11px] font-semibold text-ink flex items-center gap-1">
-            <Activity size={12} className="text-primary" />
-            Utilization Rate
-          </span>
-          <span className="text-[11px] font-bold text-ink tabular-nums">{m.displayPct}%</span>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => onOpenDetail(budget)}
-          title="See the transactions behind this figure"
-          className="block w-full text-left cursor-pointer group"
-        >
-        <div className="relative h-2.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden shadow-inner">
-          <div
-            className={`h-full rounded-full transition-all duration-500 ${barColor}`}
-            style={{ width: `${m.barPct}%` }}
-          />
-          {m.warningPct > 0 && m.warningPct < 100 && (
-            <div
-              className="absolute top-0 bottom-0 w-0.5 bg-slate-500/70 dark:bg-slate-300/70 z-10 pointer-events-none"
-              style={{ left: `${m.warningPct}%` }}
-              title={`Warning threshold: ${m.warningPct}%`}
-            />
-          )}
-        </div>
-
-        <div className="flex items-center justify-between text-[10px] text-muted">
-          <span>0%</span>
-          <span className="font-medium text-status-warning">Warning at {m.warningPct}%</span>
-          <span>100% (Ceiling)</span>
-        </div>
-        </button>
-      </div>
-
-      {/* Card Actions */}
-      <div className="pt-2 border-t border-border flex items-center justify-between gap-2">
-        <button
-          type="button"
-          onClick={() => onOpenDetail(budget)}
-          className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline cursor-pointer"
-        >
-          What Drove This Total
-          <ArrowUpRight size={13} />
-        </button>
-
-        <button
-          type="button"
-          onClick={() => onPrint(budget)}
-          className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors cursor-pointer"
-          title="Print Budget Report"
-        >
-          <Printer size={13} />
-        </button>
-      </div>
-    </div>
-  )
-}
-
 function formatDateTime(value) {
   if (!value) return '—'
   return new Date(value).toLocaleString('en-PH', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -359,15 +172,21 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
   } = useBudgets()
 
   const { departments, fetchDepartments } = useDepartments()
-  const { permissions, role } = usePermissions()
+  const { permissions } = usePermissions()
   const { profile } = useProfile()
   const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin' || profile?.role_slug === 'admin' || profile?.role_slug === 'super-admin'
-  const canApproveBudgets = hasPermission(permissions, 'budgets.approve') || role === 'super-admin'
-  const canManageBudgets = hasPermission(permissions, 'budgets.manage') || role === 'super-admin'
+  // Note: PermissionsContext does NOT expose a `role` field  -  the old
+  // `role === 'super-admin'` fallback below was permanently false. isAdmin
+  // from the profile covers the same admin/super-admin escape, and the
+  // backend already grants super-admin every permission via its controller,
+  // so hasPermission(permissions, ...) succeeds for them anyway.
+  const canApproveBudgets = hasPermission(permissions, 'budgets.approve') || isAdmin
+  const canManageBudgets = hasPermission(permissions, 'budgets.manage') || isAdmin
 
-  usePrivacy()
+  const { privacyOn } = usePrivacy()
 
   const [search, setSearch] = useState('')
+  const [fiscalYearFilter, setFiscalYearFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all') // Draft / Active / Cancelled / Closed / all
   const [showArchived, setShowArchived] = useState(false)
   const [dateFrom, setDateFrom] = useState('')
@@ -389,6 +208,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
   const { highlightedId, highlightSearch } = useHighlightRow()
   useEffect(() => {
     if (highlightSearch == null) return
+    setFiscalYearFilter('all')
     setSearch(highlightSearch)
     setStatusFilter('all')
     setShowArchived(false)
@@ -397,6 +217,10 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
     setPage(1)
   }, [highlightSearch])
 
+  const [allocationTarget, setAllocationTarget] = useState(null)
+  const [allocationRows, setAllocationRows] = useState([])
+  const [allocationSaving, setAllocationSaving] = useState(false)
+  const [allocationError, setAllocationError] = useState('')
   const [modalMode, setModalMode] = useState(null) // null | 'add' | budget object being edited
   const [form, setForm] = useState(EMPTY_FORM)
   // Company default fiscal year (Settings) seeds new budgets; falls back to
@@ -438,15 +262,12 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
 
   // ── Dedicated Utilization & Health Tracker State ──────────────────
   const [activeTab, setActiveTab] = useState('budgets') // 'budgets' | 'tracker'
-  const [trackerHealthFilter, setTrackerHealthFilter] = useState('all') // 'all' | 'healthy' | 'warning' | 'over'
-  const [trackerDeptFilter, setTrackerDeptFilter] = useState('all')
-  const [trackerSearch, setTrackerSearch] = useState('')
-  const [trackerViewMode, setTrackerViewMode] = useState('cards') // 'cards' | 'table'
 
   const load = () => {
     fetchBudgets(
       {
         status: statusFilter !== 'all' ? statusFilter : undefined,
+        fiscal_year: fiscalYearFilter !== 'all' ? fiscalYearFilter : undefined,
         search: search || undefined,
         archived: showArchived ? 1 : undefined,
         date_from: dateFrom || undefined,
@@ -457,64 +278,22 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
     )
   }
 
-  useEffect(() => { load() }, [statusFilter, showArchived, dateFrom, dateTo, page]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load() }, [statusFilter, fiscalYearFilter, showArchived, dateFrom, dateTo, page]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { fetchStats() }, []) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { fetchDepartments({}, 1, 100) }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Live updates: budget list/stats and the utilization figures refresh in
   // place when budgets or their underlying expenses/disbursements change.
-  useDataUpdates(['budgets', 'expenses', 'disbursements'], () => { fetchBudgets(); fetchStats() })
+  // load() (NOT fetchBudgets()) so the refetch re-uses the CURRENT filters
+  // and page  -  calling fetchBudgets() bare requested page 1 with no
+  // search/status/date filters, silently discarding the user's view.
+  useDataUpdates(['budgets', 'expenses', 'disbursements'], () => { load(); fetchStats() })
 
   // Debounce free-text search instead of firing a request per keystroke.
   useEffect(() => {
     const t = setTimeout(() => { setPage(1); load() }, 350)
     return () => clearTimeout(t)
   }, [search]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Filtered list specifically for the dedicated Utilization & Health Tracker
-  const trackerBudgets = useMemo(() => {
-    return budgets.filter((b) => {
-      // Focus on spendable / active budgets (or closed if needed)
-      if (b.status !== 'Active') return false
-
-      if (trackerDeptFilter !== 'all' && String(b.department_id) !== String(trackerDeptFilter)) {
-        return false
-      }
-
-      if (trackerSearch.trim()) {
-        const term = trackerSearch.toLowerCase()
-        const matchName = (b.budget_name || '').toLowerCase().includes(term)
-        const matchCode = (b.budget_code || '').toLowerCase().includes(term)
-        const matchDept = (b.department_name || '').toLowerCase().includes(term)
-        if (!matchName && !matchCode && !matchDept) return false
-      }
-
-      if (trackerHealthFilter !== 'all') {
-        const m = getBudgetMetrics(b)
-        if (trackerHealthFilter === 'healthy' && (m.isOver || m.isWarning)) return false
-        if (trackerHealthFilter === 'warning' && !m.isWarning) return false
-        if (trackerHealthFilter === 'over' && !m.isOver) return false
-      }
-
-      return true
-    })
-  }, [budgets, trackerDeptFilter, trackerSearch, trackerHealthFilter])
-
-  // Count health distribution across all active budgets in current dataset
-  const healthDistribution = useMemo(() => {
-    let healthy = 0
-    let warning = 0
-    let over = 0
-    for (const b of budgets) {
-      if (b.status === 'Active') {
-        const m = getBudgetMetrics(b)
-        if (m.isOver) over++
-        else if (m.isWarning) warning++
-        else healthy++
-      }
-    }
-    return { healthy, warning, over, total: healthy + warning + over }
-  }, [budgets])
 
   // Proactively detects if the department, fiscal year, and budget type in the Add form already has an existing budget
   const duplicateBudgetWarning = useMemo(() => {
@@ -558,6 +337,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
     const num = Number(val)
     if (isNaN(num)) return val
     const converted = convertAmount(num)
+    if (privacyOn) return maskedAmount()
     if (Math.abs(converted) >= 1_000_000_000) {
       return `${currencySymbol()}${(converted / 1_000_000_000).toLocaleString('en-PH', { maximumFractionDigits: 2 })}B`
     }
@@ -579,12 +359,12 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
     return [
       { key: 'total', label: 'Total Budgets', value: stats?.total ?? '—', icon: PiggyBank, iconBg: 'bg-primary/15', iconColor: 'text-primary-dark', isActive: activeTab === 'budgets' && statusFilter === 'all' && !showArchived, onClick: () => { setActiveTab('budgets'); setShowArchived(false); setStatusFilter('all') } },
       { key: 'pending', label: 'Draft', value: stats?.pending ?? '—', icon: Clock, iconBg: 'bg-amber-50 dark:bg-amber-500/10', iconColor: 'text-amber-600 dark:text-amber-400', isActive: activeTab === 'budgets' && statusFilter === 'Draft', onClick: () => { setActiveTab('budgets'); setShowArchived(false); setStatusFilter('Draft') } },
-      { key: 'allocated', label: 'Total Allocated', value: stats?.allocated != null ? formatKpiCurrency(stats.allocated) : '—', fullValue: stats?.allocated != null ? formatCurrency(stats.allocated) : '—', icon: Building2, iconBg: 'bg-blue-50 dark:bg-blue-500/10', iconColor: 'text-blue-600 dark:text-blue-400', isActive: false, onClick: () => { setActiveTab('budgets'); setShowArchived(false); setStatusFilter('all') } },
-      { key: 'utilized', label: 'Total Utilized', value: stats?.allocated != null ? formatKpiCurrency(totalUsed) : '—', subBadge: stats?.allocated != null ? `${overallPct}%` : null, fullValue: stats?.allocated != null ? `${formatCurrency(totalUsed)} (${overallPct}%)` : '—', icon: Activity, iconBg: overallPct >= 80 ? 'bg-amber-50 dark:bg-amber-500/10' : 'bg-violet-50 dark:bg-violet-500/10', iconColor: overallPct >= 80 ? 'text-amber-600 dark:text-amber-400' : 'text-violet-600 dark:text-violet-400', isActive: activeTab === 'tracker', onClick: () => { setActiveTab('tracker') } },
+      { key: 'allocated', label: 'Total Allocated', value: stats?.allocated != null ? formatKpiCurrency(stats.allocated) : '—', fullValue: stats?.allocated != null ? formatCurrency(stats.allocated) : '—', icon: Building2, iconBg: 'bg-primary/10', iconColor: 'text-primary-dark', isActive: false, onClick: () => { setActiveTab('budgets'); setShowArchived(false); setStatusFilter('all') } },
+      { key: 'utilized', label: 'Operational usage', value: stats?.allocated != null ? formatKpiCurrency(totalUsed) : '—', subBadge: stats?.allocated != null ? `${overallPct}%` : null, fullValue: stats?.allocated != null ? `${formatCurrency(totalUsed)} (${overallPct}%)` : '—', icon: Activity, iconBg: overallPct >= 80 ? 'bg-amber-50 dark:bg-amber-500/10' : 'bg-primary/10', iconColor: overallPct >= 80 ? 'text-amber-600 dark:text-amber-400' : 'text-primary-dark', isActive: activeTab === 'tracker', onClick: () => { setActiveTab('tracker') } },
       { key: 'remaining', label: 'Total Remaining', value: stats?.remaining != null ? formatKpiCurrency(stats.remaining) : '—', fullValue: stats?.remaining != null ? formatCurrency(stats.remaining) : '—', icon: TrendingDown, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: false, onClick: () => { setActiveTab('budgets'); setShowArchived(false); setStatusFilter('all') } },
-      { key: 'archived', label: 'Archived', value: stats?.archived ?? '—', icon: Archive, iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-500 dark:text-slate-400', isActive: activeTab === 'budgets' && showArchived, onClick: () => { setActiveTab('budgets'); setShowArchived(true) } },
+      { key: 'archived', label: 'Archived', value: stats?.archived ?? '—', icon: Archive, iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-500 dark:text-slate-400', isActive: activeTab === 'budgets' && showArchived, onClick: () => { setActiveTab('budgets'); setShowArchived(true); setPage(1) } },
     ]
-  }, [stats, statusFilter, showArchived, activeTab])
+  }, [stats, statusFilter, showArchived, activeTab, privacyOn])
 
   const validateDate = (field, value) => {
     if (!value) {
@@ -685,6 +465,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
       start_date: b.start_date?.slice(0, 10) ?? '',
       end_date: b.end_date?.slice(0, 10) ?? '',
       remarks: b.remarks ?? '',
+      account_allocations: b.account_allocations || [],
     })
     setServerError('')
     setFieldErrors({})
@@ -843,6 +624,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
         budget_name: form.budget_name,
         budget_type: resolvedBudgetType,
         fiscal_year: Number(form.fiscal_year),
+        account_allocations: form.account_allocations,
         allocated_amount: Number(form.allocated_amount),
         warning_percentage: form.warning_percentage === '' ? undefined : Number(form.warning_percentage),
         start_date: form.start_date,
@@ -862,6 +644,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
       }
     } else {
       result = await updateBudget(modalMode.budget_id, {
+        account_allocations: form.account_allocations,
         allocated_amount: Number(form.allocated_amount),
         warning_percentage: form.warning_percentage === '' ? undefined : Number(form.warning_percentage),
         start_date: form.start_date,
@@ -1012,13 +795,13 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
   }
 
   const handlePrint = (b) => {
-    const m = getBudgetMetrics(b)
+    const m = getBudgetMetrics(b.gl_report ? {...b, used_amount:b.gl_report.actual, remaining_amount:b.gl_report.difference} : b)
 
     printSlip({
       company,
       profile,
       spec: 'budget',
-      title: 'Budget Report',
+      title: b.gl_report ? 'Budget vs Actual - Posted G/L' : 'Budget Report - Operational Usage',
       subtitle: `${b.department_name || 'All Departments'} · FY${b.fiscal_year}`,
       status: b.status,
       meta: [
@@ -1027,6 +810,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
         ['Department', b.department_name || '—'],
       ],
       groups: [
+        ...(b.gl_report ? [{ heading: 'G/L account allocations and actuals', rows: b.gl_report.accounts.map(a => [a.account_code + ' - ' + a.account_name, 'Budget: ' + money(a.allocated_amount) + ' / Actual: ' + money(a.actual) + ' / Difference: ' + money(a.difference)]) }] : []),
         {
           heading: 'Budget Details',
           rows: [
@@ -1069,7 +853,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
         preparedRole: profile?.role,
         approvedName: b.approved_by_name || null,
       }),
-      disclaimer: 'Utilization figures reflect expense vouchers posted against this budget as of the time of printing. A budget remains "active" only while today falls within its start and end dates and it has been approved.',
+      disclaimer: b.gl_report ? 'Actuals include posted expense and fixed-asset entries linked to this budget and department within its start and end dates. Cash and liability payments are excluded. Unallocated budget: ' + money(b.gl_report.unallocated) : 'Utilization figures reflect expense vouchers posted against this budget as of the time of printing. A budget remains "active" only while today falls within its start and end dates and it has been approved.',
     })
   }
 
@@ -1087,8 +871,8 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-ink">{title}</h1>
-          <p className="mt-1 text-xs text-muted">Allocate, approve, and monitor department budgets by fiscal year.</p>
+          <h1 className="text-2xl font-bold tracking-tight text-ink">{title}</h1>
+          <p className="mt-1 text-sm text-muted">Review allocations, spending and available balances by department and fiscal year.</p>
         </div>
         {canManageBudgets && (
           <Button variant="primary" size="sm" icon={Plus} onClick={openAdd}>Add Budget</Button>
@@ -1120,7 +904,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {statCards.map((card) => {
           const Icon = card.icon
           return (
@@ -1128,6 +912,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
               key={card.key}
               type="button"
               onClick={card.onClick}
+              aria-pressed={card.isActive}
               className={`${PANEL} p-3 flex items-center gap-2.5 text-left cursor-pointer
                 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0
                 ${card.isActive ? 'ring-2 ring-primary/50 border-primary/50' : ''}`}
@@ -1144,8 +929,8 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                     </span>
                   )}
                 </div>
-                <p className="text-sm xl:text-[13px] 2xl:text-sm font-bold text-ink truncate tabular-nums tracking-tight mt-0.5" title={card.fullValue || String(card.value)}>
-                  {card.value}
+                <p className="text-xl font-semibold text-ink truncate tabular-nums tracking-tight mt-0.5" title={card.fullValue || String(card.value)}>
+                  <KpiValue loading={loading}>{card.value}</KpiValue>
                 </p>
               </div>
             </button>
@@ -1153,62 +938,16 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
         })}
       </div>
 
-      {/* View Tabs: Budget Governance vs. Real-Time Utilization & Health Tracker */}
-      <div className="flex items-center justify-between border-b border-border">
-        <div className="flex items-center gap-2 sm:gap-3 py-2">
-          <button
-            type="button"
-            onClick={() => setActiveTab('budgets')}
-            className={`flex items-center gap-2 px-3 sm:px-4 py-1.5 text-sm font-semibold rounded-lg border transition-all duration-150 cursor-pointer active:scale-95 ${
-              activeTab === 'budgets'
-                ? 'border-primary bg-primary/10 text-primary dark:text-primary-light shadow-sm ring-1 ring-primary/20'
-                : 'border-border bg-surface text-muted hover:bg-muted/10 hover:text-ink hover:border-muted/50 hover:shadow-sm'
-            }`}
-          >
-            <Building2 size={15} />
-            <span>Budget Management</span>
-            <span className={`ml-0.5 text-xs px-1.5 py-0.5 rounded-full font-semibold ${
-              activeTab === 'budgets'
-                ? 'bg-primary/15 text-primary dark:text-primary-light'
-                : 'bg-slate-100 dark:bg-slate-800 text-muted'
-            }`}>
-              {stats?.total ?? budgets.length}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('tracker')}
-            className={`flex items-center gap-2 px-3 sm:px-4 py-1.5 text-sm font-semibold rounded-lg border transition-all duration-150 cursor-pointer active:scale-95 relative ${
-              activeTab === 'tracker'
-                ? 'border-primary bg-primary/10 text-primary dark:text-primary-light shadow-sm ring-1 ring-primary/20'
-                : 'border-border bg-surface text-muted hover:bg-muted/10 hover:text-ink hover:border-muted/50 hover:shadow-sm'
-            }`}
-          >
-            <Activity size={15} />
-            <span>Utilization & Health Tracker</span>
-            {healthDistribution.warning > 0 || healthDistribution.over > 0 ? (
-              <span className="inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full text-[10px] font-bold bg-status-warning text-white leading-none">
-                {healthDistribution.warning + healthDistribution.over}
-              </span>
-            ) : (
-              <span className={`ml-0.5 text-xs px-1.5 py-0.5 rounded-full font-semibold ${
-                activeTab === 'tracker'
-                  ? 'bg-status-success-bg text-status-success'
-                  : 'bg-status-success-bg text-status-success'
-              }`}>
-                {healthDistribution.healthy} Active
-              </span>
-            )}
-          </button>
-        </div>
+      <div className="flex flex-wrap gap-1 border-b border-border" aria-label="Budget views">
+        {[['budgets', 'Budget register', Building2], ['tracker', 'Budget utilization', Activity]].map(([key, label, Icon]) => (
+          <button key={key} type="button" aria-pressed={activeTab === key} onClick={() => setActiveTab(key)} className={`flex items-center gap-2 border-b-2 px-3 py-3 text-sm font-semibold transition-colors ${activeTab === key ? 'border-primary text-ink' : 'border-transparent text-muted hover:text-ink'}`}><Icon size={16} />{label}</button>
+        ))}
       </div>
 
-      {/* ── TAB 1: BUDGET MANAGEMENT & GOVERNANCE ─────────────────────── */}
       {activeTab === 'budgets' && (
         <div className="space-y-4 animate-fadeIn">
           <div className={`${PANEL} ${PANEL_PAD}`}>
-            <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end flex-wrap">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 items-end">
               {/* Search */}
               <div className="relative flex-1 min-w-0">
                 <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Search</label>
@@ -1216,6 +955,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                   <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none z-10" />
                   <input
                     type="text"
+                    aria-label="Search budgets"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="Search by budget name or code..."
@@ -1230,14 +970,22 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                   )}
                 </div>
               </div>
+              <div className="min-w-0">
+                <label htmlFor="budget-fiscal-year" className={LABEL}>Fiscal year</label>
+                <select id="budget-fiscal-year" value={fiscalYearFilter} onChange={e => { setFiscalYearFilter(e.target.value); setPage(1) }} className={INPUT}>
+                  <option value="all">All fiscal years</option>
+                  {Array.from({length: MAX_FISCAL_YEAR - 2000 + 1}, (_,i) => MAX_FISCAL_YEAR-i).map(year => <option key={year} value={year}>{year}</option>)}
+                </select>
+              </div>
               {/* Status */}
-              <div className="w-full sm:w-48 shrink-0">
+              <div className="min-w-0">
                 <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Status</label>
-                <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }} className={INPUT} style={INPUT_TEXT_STYLE}>
-                  <option value="all">All Approval States</option>
-                  <option value="Draft">Pending</option>
-                  <option value="Active">Approved</option>
-                  <option value="Cancelled">Rejected</option>
+                <select aria-label="Budget status" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }} className={INPUT} style={INPUT_TEXT_STYLE}>
+                  <option value="all">All statuses</option>
+                  <option value="Draft">Draft / Pending approval</option>
+                  <option value="Active">Active / Approved</option>
+                  <option value="Cancelled">Cancelled / Rejected</option>
+                  <option value="Closed">Closed</option>
                 </select>
               </div>
               {/* Date From */}
@@ -1250,7 +998,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                   max={dateTo || undefined}
                   aria-label="Filter budget start date from"
                   className={`${INPUT} scheme-light dark:scheme-dark`}
-                  style={{ ...INPUT_TEXT_STYLE, width: '9.5rem' }}
+                  style={{ ...INPUT_TEXT_STYLE, maxWidth: '100%' }}
                 />
               </div>
               {/* Date To */}
@@ -1263,13 +1011,13 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                   min={dateFrom || undefined}
                   aria-label="Filter budget end date to"
                   className={`${INPUT} scheme-light dark:scheme-dark`}
-                  style={{ ...INPUT_TEXT_STYLE, width: '9.5rem' }}
+                  style={{ ...INPUT_TEXT_STYLE, maxWidth: '100%' }}
                 />
               </div>
               {/* Reset */}
-              {(search || statusFilter !== 'all' || hasDateFilter) && (
+              {(search || statusFilter !== 'all' || fiscalYearFilter !== 'all' || hasDateFilter) && (
                 <div className="shrink-0">
-                  <Button variant="secondary" size="sm" icon={RotateCcw} iconPosition="left" onClick={() => { setSearch(''); setStatusFilter('all'); clearDateFilter(); setPage(1) }}>Reset</Button>
+                  <Button variant="secondary" size="sm" icon={RotateCcw} iconPosition="left" onClick={() => { setSearch(''); setStatusFilter('all'); setFiscalYearFilter('all'); clearDateFilter(); setPage(1) }}>Reset</Button>
                 </div>
               )}
             </div>
@@ -1292,24 +1040,22 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
 
           <div className={PANEL}>
             <div className="overflow-hidden rounded-t-xl">
-              <ResponsiveTable className="w-full text-sm">
-                <thead>
+              <ResponsiveTable minTableWidth={640} className="w-full text-sm">
+                <colgroup>{[26,14,14,14,13,19].map((width,i) => <col key={i} style={{width: width + '%'}} />)}</colgroup>
+                <thead className="bg-bg">
                   <tr className="border-b border-border">
-                    <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Budget</th>
-                    <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Fiscal Year</th>
-                    <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Allocated / Remaining</th>
-                    <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Approval</th>
-                    <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Actions</th>
+                    {['Budget / Fiscal year', 'Allocated', 'Operational used', 'Remaining', 'Status', 'Actions'].map((label,i) => <th key={label} className={`px-3 py-3 font-semibold text-muted text-xs uppercase tracking-wide ${i > 0 && i < 4 || i === 5 ? 'text-right' : 'text-left'}`}>{label}</th>)}
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
-                    <TableSkeleton columns={5} />
+                    <TableSkeleton columns={6} />
                   ) : budgets.length === 0 ? (
-                    <tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-muted">No budgets match your filters.</td></tr>
+                    <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">No budgets match your filters.</td></tr>
                   ) : budgets.map((b) => {
                     const isPending = b.status === 'Draft'
-                    const isOverspent = Number(b.remaining_amount) < 0
+                    const m = getBudgetMetrics(b)
+                    const isOverspent = m.remaining < 0
                     return (
                       <tr
                         key={b.budget_id}
@@ -1317,8 +1063,9 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                         className={`border-b border-border last:border-0 transition-colors duration-300
                           ${highlightedId === b.budget_id ? 'bg-primary/10' : 'hover:bg-bg'}`}
                       >
-                        <td className="px-4 py-3.5">
-                          <p className="font-medium text-ink">{b.budget_name}</p>
+                        <td className="px-3 py-3">
+                          <p className="mb-1 font-mono text-xs text-muted">{b.budget_code} / FY {b.fiscal_year}</p>
+                          <button type="button" onClick={() => openDetail(b)} className="max-w-full text-left font-semibold text-ink hover:underline focus-visible:ring-2 focus-visible:ring-primary rounded">{b.budget_name}</button>
                           <p className="text-xs text-muted">{b.department_name || '—'} · {b.budget_code} · {b.budget_type}</p>
                           {isPending && !b.has_plan && (
                             <p className="mt-0.5 flex items-center gap-1 text-xs text-status-warning">
@@ -1327,16 +1074,13 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                             </p>
                           )}
                         </td>
-                        <td className="px-4 py-3.5 whitespace-nowrap text-ink">{b.fiscal_year}</td>
-                        <td className="px-4 py-3.5 whitespace-nowrap">
-                          <p className="font-semibold text-ink tabular-nums">{formatCurrency(b.allocated_amount)}</p>
-                          <p className={`text-xs tabular-nums mt-0.5 ${isOverspent ? 'text-status-danger font-semibold' : 'text-muted'}`}>
-                            {isOverspent ? `Deficit: -${formatCurrency(Math.abs(b.remaining_amount))}` : `Remaining: ${formatCurrency(b.remaining_amount)}`}
-                          </p>
-                        </td>
-                        <td className="px-4 py-3.5 whitespace-nowrap"><ApprovalBadge status={b.status} /></td>
+                        <td className="px-3 py-3 text-right font-semibold tabular-nums text-ink">{formatCurrency(m.allocated)}</td>
+                        <td className="px-3 py-3 text-right tabular-nums text-ink"><p>{formatCurrency(m.used)}</p><p className="mt-1 text-xs text-muted">{m.displayPct}% used</p></td>
+                        <td className={`px-3 py-3 text-right font-semibold tabular-nums ${isOverspent ? 'text-status-danger' : 'text-ink'}`}>{formatCurrency(m.remaining)}{isOverspent && <p className="mt-1 text-xs font-normal">Over budget</p>}</td>
+                        <td className="px-3 py-3"><ApprovalBadge status={b.status} /></td>
                         <td className="px-4 py-3.5 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
+                          <div className="flex flex-wrap items-center justify-end gap-1.5">
+                            {canManageBudgets && !b.deleted_at && (b.status === 'Draft' || b.status === 'Active' && canApproveBudgets) && <Tooltip label="G/L allocations" align="end"><button type="button" aria-label={`G/L allocations: ${b.budget_code}`} onClick={() => {setAllocationTarget(b);setAllocationRows(b.account_allocations || []);setAllocationError('')}} className="rounded-lg p-2 text-primary-dark hover:bg-primary/10"><Activity size={15} /></button></Tooltip>}
                             {isPending && canApproveBudgets && (
                               <>
                                 <Tooltip label={b.has_plan ? 'Approve budget & set Active' : 'Attach a budget plan before approving'} align="start">
@@ -1385,20 +1129,20 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                               </>
                             )}
                             <Tooltip label="View full record" align="start">
-                              <button type="button" onClick={() => openDetail(b)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                              <button type="button" aria-label={`View budget ${b.budget_code}`} onClick={() => openDetail(b)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                                 <Info size={15} />
                               </button>
                             </Tooltip>
                             {!b.deleted_at && (
                             <Tooltip label="Print budget report" align="start">
-                              <button type="button" onClick={() => handlePrint(b)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                              <button type="button" aria-label={`Print budget ${b.budget_code}`} onClick={() => handlePrint(b)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                                 <Printer size={15} />
                               </button>
                             </Tooltip>
                             )}
                             {canManageBudgets && b.status !== 'Active' && !b.deleted_at && (
                               <Tooltip label="Edit budget" align="start">
-                                <button type="button" onClick={() => openEdit(b)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                                <button type="button" aria-label={`Edit budget ${b.budget_code}`} onClick={() => openEdit(b)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                                   <Pencil size={15} />
                                 </button>
                               </Tooltip>
@@ -1448,229 +1192,26 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
       )}
 
       {/* ── TAB 2: DEDICATED UTILIZATION & HEALTH TRACKER ─────────────── */}
-      {activeTab === 'tracker' && (
-        <div className="space-y-4 animate-fadeIn">
-          {/* Health Distribution Pills */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-semibold text-muted mr-1">Filter by Health:</span>
-            <button
-              type="button"
-              onClick={() => setTrackerHealthFilter('all')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all duration-150 cursor-pointer active:scale-95 ${
-                trackerHealthFilter === 'all'
-                  ? 'border-primary bg-primary/10 text-primary-dark dark:text-primary-light shadow-sm ring-1 ring-primary/30'
-                  : 'border-border bg-surface text-muted hover:bg-muted/10 hover:text-ink hover:border-muted/50 hover:shadow-sm'
-              }`}
-            >
-              All Active ({healthDistribution.total})
-            </button>
-            <button
-              type="button"
-              onClick={() => setTrackerHealthFilter('healthy')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all duration-150 cursor-pointer active:scale-95 ${
-                trackerHealthFilter === 'healthy'
-                  ? 'border-status-success-border bg-status-success-bg text-status-success shadow-sm ring-1 ring-status-success-border'
-                  : 'border-border bg-surface text-muted hover:bg-status-success-bg hover:text-status-success hover:border-status-success-border hover:shadow-sm'
-              }`}
-            >
-              <CheckCircle2 size={13} className={trackerHealthFilter === 'healthy' ? 'text-status-success' : 'text-status-success'} />
-              Healthy ({healthDistribution.healthy})
-            </button>
-            <button
-              type="button"
-              onClick={() => setTrackerHealthFilter('warning')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all duration-150 cursor-pointer active:scale-95 ${
-                trackerHealthFilter === 'warning'
-                  ? 'border-status-warning-border bg-status-warning-bg text-status-warning shadow-sm ring-1 ring-status-warning-border'
-                  : 'border-border bg-surface text-muted hover:bg-status-warning-bg hover:text-status-warning hover:border-status-warning-border hover:shadow-sm'
-              }`}
-            >
-              <Clock size={13} className={trackerHealthFilter === 'warning' ? 'text-status-warning' : 'text-status-warning'} />
-              Near Limit ({healthDistribution.warning})
-            </button>
-            <button
-              type="button"
-              onClick={() => setTrackerHealthFilter('over')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all duration-150 cursor-pointer active:scale-95 ${
-                trackerHealthFilter === 'over'
-                  ? 'border-status-danger-border bg-status-danger-bg text-status-danger shadow-sm ring-1 ring-status-danger-border'
-                  : 'border-border bg-surface text-muted hover:bg-status-danger-bg hover:text-status-danger hover:border-status-danger-border hover:shadow-sm'
-              }`}
-            >
-              <AlertTriangle size={13} className={trackerHealthFilter === 'over' ? 'text-status-danger' : 'text-status-danger'} />
-              Over Budget ({healthDistribution.over})
-            </button>
-          </div>
+      {activeTab === 'tracker' && <BudgetComparisonReport onDetail={openDetail} onLedger={setLedgerTarget} onPrint={handlePrint} />}
 
-          {/* Dedicated Tracker Filter Toolbar */}
-          <div className={`${PANEL} ${PANEL_PAD}`}>
-            <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end flex-wrap">
-              {/* Search */}
-              <div className="relative flex-1 min-w-0">
-                <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Search</label>
-                <div className="relative">
-                  <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none z-10" />
-                  <input
-                    type="text"
-                    value={trackerSearch}
-                    onChange={(e) => setTrackerSearch(e.target.value)}
-                    placeholder="Search active budgets by name, code, or department..."
-                    className={`${INPUT} pl-9 pr-9`}
-                    style={{ ...INPUT_TEXT_STYLE, minWidth: 0 }}
-                    autoComplete="off"
-                  />
-                  {trackerSearch && (
-                    <button type="button" onClick={() => setTrackerSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-border hover:text-ink transition-colors duration-150">
-                      <X size={13} />
-                    </button>
-                  )}
-                </div>
-              </div>
-              {/* Department Filter */}
-              <div className="w-full sm:w-52 shrink-0">
-                <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Department</label>
-                <select
-                  value={trackerDeptFilter}
-                  onChange={(e) => setTrackerDeptFilter(e.target.value)}
-                  className={INPUT}
-                  style={INPUT_TEXT_STYLE}
-                >
-                  <option value="all">All Departments</option>
-                  {departments.map((d) => (
-                    <option key={d.id} value={String(d.id)}>{d.department_name}</option>
-                  ))}
-                </select>
-              </div>
-              {/* View Mode Switcher (Cards vs Table) */}
-              <div className="shrink-0">
-                <div className="flex items-center rounded-lg border border-border bg-bg p-0.5">
-                  <button
-                    type="button"
-                    onClick={() => setTrackerViewMode('cards')}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                      trackerViewMode === 'cards'
-                        ? 'bg-surface text-primary shadow-sm'
-                        : 'text-muted hover:text-ink'
-                    }`}
-                    title="Cards Visualizer"
-                  >
-                    <LayoutGrid size={14} />
-                    <span>Cards</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTrackerViewMode('table')}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                      trackerViewMode === 'table'
-                        ? 'bg-surface text-primary shadow-sm'
-                        : 'text-muted hover:text-ink'
-                    }`}
-                    title="Table Comparison"
-                  >
-                    <List size={14} />
-                    <span>Table</span>
-                  </button>
-                </div>
-              </div>
-              {/* Reset */}
-              {(trackerSearch || trackerDeptFilter !== 'all') && (
-                <div className="shrink-0">
-                  <Button variant="secondary" size="sm" icon={RotateCcw} iconPosition="left" onClick={() => { setTrackerSearch(''); setTrackerDeptFilter('all') }}>Reset</Button>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Cards View */}
-          {trackerViewMode === 'cards' && (
-            trackerBudgets.length === 0 ? (
-              <div className={`${PANEL} p-12 text-center text-muted space-y-2`}>
-                <Activity size={32} className="mx-auto text-muted/50" />
-                <p className="text-sm font-semibold text-ink">No active budgets match your filters.</p>
-                <p className="text-xs text-muted">Try clearing the search or changing the health status.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {trackerBudgets.map((b) => (
-                  <BudgetHealthCard
-                    key={b.budget_id}
-                    budget={b}
-                    onOpenDetail={openDetail}
-                    onPrint={handlePrint}
-                  />
-                ))}
-              </div>
-            )
-          )}
-
-          {/* Table View */}
-          {trackerViewMode === 'table' && (
-            <div className={PANEL}>
-              <div className="overflow-hidden rounded-t-xl">
-                <ResponsiveTable className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border">
-                      <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Department & Budget</th>
-                      <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Ceiling</th>
-                      <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Used / Spent</th>
-                      <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Remaining Balance</th>
-                      <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Utilization & Health</th>
-                      <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {trackerBudgets.length === 0 ? (
-                      <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">No active budgets match your filters.</td></tr>
-                    ) : (
-                      trackerBudgets.map((b) => {
-                        const m = getBudgetMetrics(b)
-                        return (
-                          <tr key={b.budget_id} className="border-b border-border last:border-0 hover:bg-bg transition-colors duration-150">
-                            <td className="px-4 py-3.5">
-                              <p className="font-medium text-ink">{b.budget_name}</p>
-                              <p className="text-xs text-muted">{b.department_name || '—'} · {b.budget_code} · FY{b.fiscal_year}</p>
-                            </td>
-                            <td className="px-4 py-3.5 whitespace-nowrap font-semibold text-ink tabular-nums">{formatCurrency(m.allocated)}</td>
-                            <td className="px-4 py-3.5 whitespace-nowrap font-medium text-ink tabular-nums">{formatCurrency(m.used)}</td>
-                            <td className="px-4 py-3.5 whitespace-nowrap font-medium tabular-nums">
-                              <span className={m.isOver ? 'text-status-danger font-bold' : 'text-status-success'}>
-                                {m.remaining < 0 ? `-${formatCurrency(Math.abs(m.remaining))} (Deficit)` : formatCurrency(m.remaining)}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3.5 whitespace-nowrap">
-                              <TableUtilizationCell budget={b} />
-                            </td>
-                            <td className="px-4 py-3.5 text-right">
-                              <div className="flex items-center justify-end gap-1">
-                                <Tooltip label="View full record" align="start">
-                                  <button type="button" onClick={() => openDetail(b)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 cursor-pointer">
-                                    <Info size={15} />
-                                  </button>
-                                </Tooltip>
-                                <Tooltip label="Print budget report" align="start">
-                                  <button type="button" onClick={() => handlePrint(b)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 cursor-pointer">
-                                    <Printer size={15} />
-                                  </button>
-                                </Tooltip>
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      })
-                    )}
-                  </tbody>
-                </ResponsiveTable>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+      <Modal open={!!allocationTarget} onClose={() => { if (!allocationSaving) setAllocationTarget(null) }} title="Link budget to G/L accounts" size="xl" footer={<><Button variant="secondary" disabled={allocationSaving} onClick={() => setAllocationTarget(null)}>Cancel</Button><Button loading={allocationSaving} onClick={async () => {
+        setAllocationSaving(true); setAllocationError('')
+        try {
+          const res = await apiFetch(`/api/budgets/${allocationTarget.budget_id}/account-allocations`, {method:'PUT',body:JSON.stringify({account_allocations:allocationRows})})
+          const json = await res.json()
+          if(!res.ok || !json.success) throw new Error(Object.values(json.errors || {}).flat()[0] || json.message || 'Unable to save allocations.')
+          setAllocationTarget(null); load(); fetchStats()
+        } catch(e) {setAllocationError(e.message)} finally {setAllocationSaving(false)}
+      }}>Save allocations</Button></>}>
+        {allocationTarget && <><p className="mb-3 text-sm text-muted">{allocationTarget.budget_name} / {formatCurrency(allocationTarget.allocated_amount)}. Active-budget changes require approval permission and are recorded in the audit log.</p>{allocationError && <p role="alert" className="mb-3 text-sm text-status-danger">{allocationError}</p>}<BudgetAccountAllocations value={allocationRows} onChange={setAllocationRows} total={allocationTarget.allocated_amount} disabled={allocationSaving} /></>}
+      </Modal>
 
       {/* Add / Edit modal */}
       <Modal
         open={modalMode !== null}
         onClose={closeModal}
         title={isEditing ? 'Edit Budget' : 'Add Budget'}
+        size="xl"
         footer={
           <>
             <Button variant="secondary" size="md" onClick={closeModal}>Cancel</Button>
@@ -1686,6 +1227,8 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
         }
       >
         <form onSubmit={handleSubmit} className="space-y-4">
+          <BudgetAccountAllocations value={form.account_allocations || []} onChange={rows => setForm(f => ({...f,account_allocations:rows}))} total={form.allocated_amount} disabled={saving} />
+
           {serverError && (
             <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{serverError}</div>
           )}
@@ -2306,7 +1849,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                       </span>
                     </div>
 
-                    <div className="relative h-2.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden shadow-inner">
+                    <div className="relative h-2.5 w-full rounded-full bg-border overflow-hidden shadow-inner">
                       <div
                         className={`h-full rounded-full transition-all duration-500 ${
                           m.isOver

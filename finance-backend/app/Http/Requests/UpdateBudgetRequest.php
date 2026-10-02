@@ -32,6 +32,9 @@ class UpdateBudgetRequest extends FormRequest
             // department_id, fiscal_year, and budget_code are intentionally
             // absent — those are locked once a budget exists, same as the
             // frontend form.
+            'account_allocations' => ['required', 'array', 'min:1'],
+            'account_allocations.*.account_id' => ['required', 'integer', 'distinct'],
+            'account_allocations.*.allocated_amount' => ['required', 'numeric', 'decimal:0,2', 'gt:0'],
             'allocated_amount' => ['required', 'numeric', 'min:' . config('business.min_invoice_amount')],
             'warning_percentage' => ['nullable', 'numeric', 'min:1', 'max:100'],
             // Fix: start_date had no relationship to the budget's own

@@ -1,3 +1,4 @@
+import KpiValue from '../components/KpiValue'
 import { TableSkeleton, ContentSkeleton } from '../components/LoadingSkeleton'
 import ResponsiveTable from '../components/ResponsiveTable'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -736,7 +737,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
               </div>
               <div className="min-w-0">
                 <p className="text-xs text-muted">{card.label}</p>
-                <p className="text-lg font-bold text-ink wrap-anywhere">{loading ? '—' : card.value}</p>
+                <p className="text-lg font-bold text-ink wrap-anywhere"><KpiValue loading={loading}>{card.value}</KpiValue></p>
               </div>
             </button>
           )

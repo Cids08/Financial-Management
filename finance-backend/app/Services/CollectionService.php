@@ -155,6 +155,39 @@ class CollectionService
             ]);
         }
 
+        // Status has dedicated endpoints (confirm() / cancel()) that apply
+        // the financial side effects — AR remaining-balance reduction, cash
+        // credit, double-entry journal entry, notifications. Writing the
+        // status field through the EDIT endpoint would let a collections.
+        // manage holder (collector/staff) "confirm" a collection without
+        // ANY of that happening. Reject any transition here; a status value
+        // equal to the current one is a no-op and dropped.
+        if (array_key_exists('status', $data)) {
+            if ($data['status'] !== $collection->status) {
+                throw ValidationException::withMessages([
+                    'status' => 'Change the collection status via the confirm/cancel actions, not the edit form.',
+                ]);
+            }
+            unset($data['status']);
+        }
+
+        // Same over-collection guard as create(). Editing a pending
+        // collection's amount past the AR's remaining balance used to pass
+        // here and then get silently floored at confirm() — while the cash
+        // account and journal entry still carried the inflated figure.
+        if (array_key_exists('amount_received', $data)) {
+            $ar = AccountsReceivable::query()->find($collection->ar_id);
+            if ($ar && Money::comp((string) $data['amount_received'], (string) $ar->remaining_balance, 2) > 0) {
+                throw ValidationException::withMessages([
+                    'amount_received' => sprintf(
+                        'Amount received (%.2f) exceeds the invoice\'s remaining balance (%.2f).',
+                        $data['amount_received'],
+                        $ar->remaining_balance
+                    ),
+                ]);
+            }
+        }
+
         $original = $collection->only(['amount_received', 'collection_date', 'cash_account_id']);
 
         DB::transaction(function () use ($collection, $data, $actor, $original) {

@@ -33,20 +33,25 @@ export function NotificationsProvider({ children }) {
     if (!isAuthenticated() || !profile?.id) return
 
     let channel
+    let handler
     try {
       const echo = getEcho()
+      handler = () => fetchUnreadCount()
       channel = echo.private(`user.${profile.id}`)
-      channel.listen('.notification.created', () => {
-        fetchUnreadCount()
-      })
+      channel.listen('.notification.created', handler)
     } catch {
       // Websocket unavailable — poll/focus fallback still covers us.
     }
 
     return () => {
-      if (channel) {
+      // stopListening on the captured channel/echo only -  calling getEcho()
+      // here after a logout disconnect() would RECREATE the socket just to
+      // tear it down (and resurrect the connection the logout just killed),
+      // and leave() would rip the shared private-user.{id} channel out from
+      // under ForcedLogoutListener.
+      if (channel && handler) {
         try {
-          getEcho().leave(`user.${profile.id}`)
+          channel.stopListening('.notification.created', handler)
         } catch {
           // ignore
         }

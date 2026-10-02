@@ -61,11 +61,14 @@ export function useReports() {
 
   const cachedPeriod = useRef({})
 
-  const fetchReport = useCallback(async (reportKey, filterParams) => {
+  const fetchReport = useCallback(async (reportKey, filterParams, force = false) => {
     const config = ENDPOINTS[reportKey]
     const cacheKey = getCacheKey(config, filterParams)
 
-    if (cachedPeriod.current[reportKey] === cacheKey) {
+    // `force` lets the Refresh button and live-update refetches bypass the
+    // cache  -  without it, refetching with the SAME filters hits this early
+    // return and the "Refresh" action silently does nothing.
+    if (!force && cachedPeriod.current[reportKey] === cacheKey) {
       return // already have this exact cached data
     }
 
@@ -87,8 +90,8 @@ export function useReports() {
   }, [])
 
   // Ensures every report type is loaded for the given filter parameters
-  const fetchAll = useCallback(async (filterParams) => {
-    await Promise.all(Object.keys(ENDPOINTS).map((key) => fetchReport(key, filterParams)))
+  const fetchAll = useCallback(async (filterParams, force = false) => {
+    await Promise.all(Object.keys(ENDPOINTS).map((key) => fetchReport(key, filterParams, force)))
   }, [fetchReport])
 
   return { data, loading, error, fetchReport, fetchAll }

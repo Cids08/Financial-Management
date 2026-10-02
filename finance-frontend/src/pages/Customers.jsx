@@ -1,3 +1,4 @@
+import KpiValue from '../components/KpiValue'
 import { TableSkeleton } from '../components/LoadingSkeleton'
 import ResponsiveTable from '../components/ResponsiveTable'
 import { useEffect, useState, useCallback } from 'react'
@@ -14,6 +15,7 @@ import { useDataUpdates } from '../hooks/useDataUpdates'
 import { formatCurrency, formatDate } from '../utils/formatters'
 import { usePermissions } from '../context/PermissionsContext'
 import { useProfile } from '../hooks/useProfile'
+import { usePrivacy } from '../context/PrivacyContext'
 import AddressSelector from '../components/AddressSelector'
 import DeletePermanentButton from '../components/DeletePermanentButton'
 import RetentionCountdown from '../components/RetentionCountdown'
@@ -71,9 +73,14 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
   const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin' || profile?.role_slug === 'admin' || profile?.role_slug === 'super-admin'
   const canManage = hasPermission('customers.manage')
   const { currency } = useCompany()
+  // Subscribe to Privacy Mode so the balance column re-renders (and masks)
+  // the moment the header toggle is flipped — formatCurrency reads the
+  // module flag at render time, so this page just needs to re-render.
+  usePrivacy()
   const [customers, setCustomers] = useState([])
   const [stats, setStats] = useState({ total: 0, active: 0, inactive: 0, archived: 0 })
   const [loading, setLoading] = useState(true)
+  const [statsLoading, setStatsLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
 
   const [search, setSearch] = useState('')
@@ -147,6 +154,7 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
   }, [search, statusFilter, showArchived, page])
 
   const fetchStats = useCallback(async () => {
+    setStatsLoading(true)
     try {
       const res = await apiFetch('/api/customers/stats')
       const json = await res.json()
@@ -155,6 +163,8 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
       }
     } catch {
       // Non-critical  -  stat cards just keep their last known values.
+    } finally {
+      setStatsLoading(false)
     }
   }, [])
 
@@ -304,7 +314,7 @@ export default function Customers({ title = 'Customers', crumbs = ['Master Data'
               </div>
               <div className="min-w-0">
                 <p className="text-xs text-muted">{card.label}</p>
-                <p className="text-lg font-bold text-ink">{card.value}</p>
+                <p className="text-lg font-bold text-ink"><KpiValue loading={statsLoading}>{card.value}</KpiValue></p>
               </div>
             </button>
           )
