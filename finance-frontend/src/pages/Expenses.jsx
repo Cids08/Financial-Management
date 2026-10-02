@@ -267,31 +267,43 @@ function DetailRow({ label, value }) {
   )
 }
 
-/**
- * Budgets and expense categories don't have their own API routes in
- * api.php yet (only /api/suppliers does)  -  these are simple GET lookups
- * assuming the same {success, data:[...]} envelope every other module
- * uses. Add Route::prefix('budgets') / Route::prefix('expense-categories')
- * groups (same shape as the expenses block) if they 404.
- */
-function useLookup(path) {
+// Load every page before publishing choices, including after live changes.
+function useLookup(path, modules) {
   const [options, setOptions] = useState([])
   const [loading, setLoading] = useState(true)
-
+  const [error, setError] = useState('')
+  const [revision, setRevision] = useState(0)
+  const reload = () => setRevision(v => v + 1)
+  useDataUpdates(modules, reload)
   useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    apiFetch(path)
-      .then((res) => res.json())
-      .then((json) => {
-        if (!cancelled && json.success) setOptions(json.data)
-      })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, [path])
-
-  return { options, loading }
+    const controller = new AbortController()
+    setLoading(true); setError('')
+    const load = async () => {
+      try {
+        const [base, query] = path.split('?')
+        const rows = []
+        let lastPage = 1
+        for (let page = 1; page <= lastPage; page++) {
+          const params = new URLSearchParams(query)
+          params.set('per_page', '100'); params.set('page', String(page))
+          const res = await apiFetch(base + '?' + params, { signal: controller.signal })
+          const json = await res.json()
+          if (!res.ok || !json.success || !Array.isArray(json.data)) throw new Error(json.message || 'Unable to load available choices.')
+          if (controller.signal.aborted) return
+          rows.push(...json.data)
+          lastPage = Number(json.meta?.last_page) || 1
+        }
+        setOptions(rows)
+      } catch(e) {
+        if (!controller.signal.aborted) { setOptions([]); setError(e.message) }
+      } finally {
+        if (!controller.signal.aborted) setLoading(false)
+      }
+    }
+    load()
+    return () => controller.abort()
+  }, [path, revision])
+  return { options, loading, error, reload }
 }
 
 export default function Expenses({ title = 'Expenses', crumbs = ['Financial Transactions', 'Expenses'] }) {
@@ -324,10 +336,17 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
   // Staff/makers have day-to-day data entry permissions but must not approve/reject expenses.
   const canApprove = isAdmin || hasPermission(permissions, 'expenses.approve')
 
-  const { options: budgets } = useLookup('/api/budgets')
-  const { options: categories } = useLookup('/api/expense-categories')
-  const { options: suppliers } = useLookup('/api/suppliers')
-  const { options: cashAccounts } = useLookup('/api/cash-accounts?per_page=100')
+  const budgetLookup = useLookup('/api/budgets', ['budgets', 'expenses', 'disbursements'])
+  const categoryLookup = useLookup('/api/expense-categories', ['expense-categories'])
+  const supplierLookup = useLookup('/api/suppliers', ['suppliers'])
+  const cashLookup = useLookup('/api/cash-accounts', ['cash-accounts', 'expenses', 'disbursements', 'collections'])
+  const budgets = budgetLookup.options
+  const categories = categoryLookup.options
+  const suppliers = supplierLookup.options
+  const cashAccounts = cashLookup.options
+  const lookups = [['Budgets', budgetLookup], ['Categories', categoryLookup], ['Suppliers', supplierLookup], ['Cash accounts', cashLookup]]
+  const lookupPending = [budgetLookup, categoryLookup, cashLookup].some(lookup => lookup.loading || lookup.error)
+
 
   const budgetLabel = (id) => budgets.find((b) => b.budget_id === Number(id))?.budget_name || '—'
   const categoryName = (id) => categories.find((c) => c.id === Number(id))?.category_name || '—'
@@ -475,6 +494,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (lookupPending) { setFormError('Wait for the form choices to load, or retry the failed lookup.'); return }
     const errors = {}
     if (!form.gl_account_id) errors.gl_account_id = 'Please select a posting G/L account.'
     if (!form.budget_id) errors.budget_id = 'Please select a budget.'
@@ -1005,11 +1025,14 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
         footer={
           <>
             <Button variant="secondary" size="md" onClick={closeModal}>Cancel</Button>
-            <Button variant="primary" size="md" loading={mutating} onClick={handleSubmit}>{isEditing ? 'Save Changes' : 'Add Expense'}</Button>
+            <Button variant="primary" size="md" loading={mutating} disabled={lookupPending} onClick={handleSubmit}>{isEditing ? 'Save Changes' : 'Add Expense'}</Button>
           </>
         }
       >
         <form onSubmit={handleSubmit} className="space-y-4">
+          {lookups.some(([, lookup]) => lookup.loading) && <p role="status" className="text-xs text-muted">Updating available budgets and account balances...</p>}
+          {lookups.filter(([, lookup]) => lookup.error).map(([name, lookup]) => <div key={name} role="alert" className="rounded-lg border border-status-danger-border bg-status-danger-bg p-3 text-xs text-status-danger">{name}: {lookup.error} <button type="button" onClick={lookup.reload} className="ml-2 font-semibold underline">Retry {name.toLowerCase()}</button></div>)}
+
           {formError && (
             <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{formError}</div>
           )}
@@ -1038,6 +1061,8 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
             <div>
               <label className={LABEL}>Budget <span className="text-status-danger">*</span></label>
               <select
+                aria-label="Expense budget"
+                disabled={budgetLookup.loading || !!budgetLookup.error}
                 value={form.budget_id}
                 onChange={(e) => {
                   const selectedB = budgets.find((b) => Number(b.budget_id) === Number(e.target.value))
@@ -1077,6 +1102,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
             <div>
               <label className={LABEL}>Category <span className="text-status-danger">*</span></label>
               <select
+                disabled={categoryLookup.loading || !!categoryLookup.error}
                 value={form.expense_category_id}
                 onChange={(e) => { setForm((f) => ({ ...f, expense_category_id: e.target.value })); setFieldErrors((fe) => ({ ...fe, expense_category_id: '' })) }}
                 className={`${INPUT} ${fieldErrors.expense_category_id ? 'border-status-danger-border' : ''}`}
@@ -1219,6 +1245,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
             <div>
               <label className={LABEL}>Payment Cash Account <span className="text-status-danger">*</span></label>
               <select
+                disabled={cashLookup.loading || !!cashLookup.error}
                 value={form.cash_account_id}
                 onChange={(e) => {
                   const selectedAcc = cashAccounts.find((a) => String(a.id) === e.target.value)
@@ -1302,7 +1329,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
             </div>
             <div>
               <label className={LABEL}>Supplier (optional)</label>
-              <select value={form.supplier_id} onChange={(e) => setForm((f) => ({ ...f, supplier_id: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE}>
+              <select disabled={supplierLookup.loading || !!supplierLookup.error} value={form.supplier_id} onChange={(e) => setForm((f) => ({ ...f, supplier_id: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE}>
                 <option value="">N/A (No Supplier)</option>
                 {suppliers.map((s) => <option key={s.id} value={s.id}>{s.supplier_name}</option>)}
               </select>

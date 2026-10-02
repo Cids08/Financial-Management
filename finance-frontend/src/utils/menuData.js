@@ -70,15 +70,6 @@ export const menuData = [
     // badge to this specific item  -  see the `badge` prop wiring there.
   },
   {
-    id: 'user-management',
-    label: 'User Management',
-    icon: UserCog,
-    children: [
-      { id: 'users', label: 'Users', icon: Users, path: '/user-management/users', permission: 'users.view' },
-      { id: 'roles', label: 'Roles', icon: ShieldCheck, path: '/user-management/roles', permission: 'roles.view' },
-    ],
-  },
-  {
     id: 'master-data',
     label: 'Master Data',
     icon: Database,
@@ -96,8 +87,6 @@ export const menuData = [
       { id: 'fixed-assets', label: 'Fixed Assets', icon: Boxes, path: '/master-data/fixed-assets', permission: 'fixed-assets.view' },
       // expense-categories.view kept on staff for dropdown; .manage gates nav.
       { id: 'expense-categories', label: 'Expense Categories', icon: Tags, path: '/master-data/expense-categories', permission: 'expense-categories.manage' },
-      // chart-of-accounts.view kept on staff (read-only API); .manage gates nav.
-      { id: 'chart-of-accounts', label: 'Chart of Accounts', icon: Network, path: '/master-data/chart-of-accounts', permission: 'chart-of-accounts.manage' },
       { id: 'titles', label: 'Titles', icon: Briefcase, path: '/master-data/titles', permission: 'users.view' },
     ],
   },
@@ -130,6 +119,8 @@ export const menuData = [
     label: 'Accounting',
     icon: BookOpen,
     children: [
+      // chart-of-accounts.view kept on staff (read-only API); .manage gates nav.
+      { id: 'chart-of-accounts', label: 'Chart of Accounts', icon: Network, path: '/master-data/chart-of-accounts', permission: 'chart-of-accounts.manage' },
       { id: 'general-ledger', label: 'General Ledger', icon: BookText, path: '/accounting/general-ledger', permission: 'general-ledger.view' },
     ],
   },
@@ -139,7 +130,7 @@ export const menuData = [
     icon: LineChart,
     children: [
       { id: 'forecasting', label: 'Financial Forecasting', icon: TrendingUp, path: '/analytics/forecasting', permission: 'forecasting.view' },
-      { id: 'ai', label: 'AI Financial Recommendations', icon: Sparkles, path: '/analytics/ai-recommendations', permission: 'ai.view' },
+      { id: 'ai', label: 'AI Advisor', icon: Sparkles, path: '/analytics/ai-recommendations', permission: 'ai.view' },
     ],
   },
   {
@@ -150,17 +141,14 @@ export const menuData = [
     permission: 'reports.view',
   },
   {
-    id: 'audit-logs',
-    label: 'Audit Logs',
-    icon: ClipboardList,
-    path: '/system/audit-logs',
-    // New  -  system-wide trail across every module (Tax Obligations,
-    // Expenses, etc.), so it's a standalone top-level item like Reports
-    // rather than nested under any one module's section. Hyphenated slug
-    // (audit-logs.view) matches the multi-word convention noted above
-    // (cash-accounts, fixed-assets, general-ledger), not the short-form
-    // one used for tax/ai.
-    permission: 'audit-logs.view',
+    id: 'administration',
+    label: 'Administration',
+    icon: UserCog,
+    children: [
+      { id: 'users', label: 'Users', icon: Users, path: '/user-management/users', permission: 'users.view' },
+      { id: 'roles', label: 'Roles', icon: ShieldCheck, path: '/user-management/roles', permission: 'roles.view' },
+      { id: 'audit-logs', label: 'Audit Logs', icon: ClipboardList, path: '/system/audit-logs', permission: 'audit-logs.view' },
+    ],
   },
   {
     id: 'settings',
