@@ -8,6 +8,7 @@ use App\Contracts\RecommendationEngine;
 use App\Observers\DataUpdateObserver;
 use App\Services\Advisor\RemoteAdvisorEngine;
 use App\Services\Forecasting\PythonArimaForecastEngine;
+use App\Services\Forecasting\SimpleForecastEngine;
 use App\Services\Recommendation\RemoteRecommendationEngine;
 use Illuminate\Support\ServiceProvider;
 
@@ -21,8 +22,18 @@ class AppServiceProvider extends ServiceProvider
         // Points at the Python ARIMA/FastAPI service. Endpoint paths/payload
         // shape in PythonArimaForecastEngine are still unverified against
         // the real FastAPI routes — holding off on further changes here
-        // until that's connected and confirmed.
-        $this->app->bind(ForecastEngine::class, PythonArimaForecastEngine::class);
+        // until that's connected and confirmed. When no FORECAST_SERVICE_URL
+        // is configured (production has no Python service deployed), the
+        // binding falls back to SimpleForecastEngine — a deterministic,
+        // PHP-only linear-trend model sharing the same training window —
+        // so Generate keeps working instead of dying with "Failed to fetch".
+        $this->app->bind(ForecastEngine::class, function ($app): ForecastEngine {
+            $url = config('services.forecast_service.base_url');
+
+            return $url
+                ? $app->make(PythonArimaForecastEngine::class)
+                : $app->make(SimpleForecastEngine::class);
+        });
 
         // Points at the AI microservice (ai-advisor-service), not OpenAI
         // directly — that service owns the actual OpenRouter call.

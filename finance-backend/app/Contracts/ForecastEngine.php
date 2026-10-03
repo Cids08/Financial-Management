@@ -6,10 +6,12 @@ namespace App\Contracts;
  * Implementations generate a forecast for one (forecast_type, horizon) pair.
  * Laravel never runs ARIMA itself — per the ai-forecasting skill, the real
  * model lives in the separate Python service (finance-forecasting/) and
- * talks to Laravel over REST. Swap the binding in
- * AppServiceProvider::register() from MockForecastEngine to a
- * PythonArimaForecastEngine (HTTP client) once that service exists —
- * nothing else in the app (controller, service, resource) needs to change.
+ * talks to Laravel over REST. AppServiceProvider::register() binds the
+ * engine conditionally: PythonArimaForecastEngine when FORECAST_SERVICE_URL
+ * is configured, otherwise SimpleForecastEngine (a deterministic PHP
+ * linear-trend model). Both share the same training window via
+ * HistoricalActuals. Nothing else (controller, service, resource) changes
+ * with the engine choice.
  */
 interface ForecastEngine
 {

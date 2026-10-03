@@ -130,7 +130,7 @@ export const menuData = [
     icon: LineChart,
     children: [
       { id: 'forecasting', label: 'Financial Forecasting', icon: TrendingUp, path: '/analytics/forecasting', permission: 'forecasting.view' },
-      { id: 'ai', label: 'AI Advisor', icon: Sparkles, path: '/analytics/ai-recommendations', permission: 'ai.view' },
+      { id: 'ai', label: 'AI Advisor & Recommendations', icon: Sparkles, path: '/analytics/ai-recommendations', permission: 'ai.view' },
     ],
   },
   {

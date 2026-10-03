@@ -67,7 +67,7 @@ export default function SidebarItem({ item, collapsed, onNavigate, onLogoutClick
                   <>
                     <ActiveBar isActive={isActive} />
                     <child.icon size={17} className="shrink-0" strokeWidth={1.8} />
-                    <span className={`truncate ${collapsed ? 'lg:hidden' : ''}`}>{child.label}</span>
+                    <span className={`min-w-0 whitespace-normal break-words leading-5 ${collapsed ? 'lg:hidden' : ''}`}>{child.label}</span>
                   </>
                 )}
               </NavLink>

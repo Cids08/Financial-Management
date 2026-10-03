@@ -5,8 +5,6 @@ namespace App\Services\Forecasting;
 use App\Contracts\ForecastEngine;
 use App\Services\FinancialForecastService;
 use Illuminate\Http\Client\ConnectionException;
-use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -41,29 +39,20 @@ class PythonArimaForecastEngine implements ForecastEngine
     protected ?string $lastForecastType = null;
     protected ?string $lastHorizonKey = null;
 
-    // UNCONFIRMED status strings. These are my best guess from the
-    // permission/action names in the routes (collections.confirm,
-    // expenses.approve, disbursements approved_by/released_by) and from
-    // journal_entries having posted_by/posted_at columns — verify each
-    // against your actual seeded enum/status values before trusting the
-    // aggregated numbers below.
-    protected const COLLECTION_CONFIRMED_STATUS = 'Confirmed';
-    protected const EXPENSE_APPROVED_STATUS = 'Approved';
-    protected const DISBURSEMENT_RELEASED_STATUS = 'Released';
-
-    // Confirmed via Budgets.jsx's own comment on the frontend:
-    // "status is constrained at the DB level (budgets_status_check) to:
-    // Draft, Active, Closed, Cancelled ... Active = approved & spendable."
-    // Only Active budgets should count as real, approved capacity.
-    protected const BUDGET_ACTIVE_STATUS = 'Active';
-
-    public function __construct(?string $baseUrl = null)
-    {
+    public function __construct(
+        // Shared by every engine so the fallback (SimpleForecastEngine)
+        // and this Python engine train on the exact same history.
+        protected HistoricalActuals $actuals,
+        ?string $baseUrl = null
+    ) {
         // No default fallback, matching config/services.php's own comment:
         // fail loudly if unconfigured, rather than silently guessing a URL
         // (a hardcoded guess here is exactly how the earlier port-8000
         // collision between this service and Laravel's own dev server
-        // went unnoticed for as long as it did).
+        // went unnoticed for as long as it did). The AppServiceProvider
+        // binding only selects this engine when the URL IS configured, so
+        // in practice this guard fires only if the config is removed
+        // after the binding was decided.
         $this->baseUrl = $baseUrl ?? config('services.forecast_service.base_url');
 
         if (empty($this->baseUrl)) {
@@ -196,177 +185,11 @@ class PythonArimaForecastEngine implements ForecastEngine
 
     /**
      * Returns `lookbackMonths` monthly totals for $forecastType, oldest
-     * first, as a plain list<float> — exactly `lookbackMonths` entries,
-     * one per calendar month, including zeros for months with no
-     * activity (ARIMA needs a fixed-length, evenly-spaced series; a
-     * GROUP BY query would silently skip empty months and break that).
+     * first, via the shared HistoricalActuals collector — the exact same
+     * training window the SimpleForecastEngine fallback uses.
      */
     protected function historicalActualsFor(string $forecastType, int $lookbackMonths): array
     {
-        $months = $this->monthBoundaries($lookbackMonths);
-
-        return match ($forecastType) {
-            'Collections' => $this->monthlyCollections($months),
-            'Expenses' => $this->monthlyExpenses($months),
-            'Cash Flow' => $this->monthlyCashFlow($months),
-            // Same underlying data as before — outstanding AR balance
-            // point-in-time reconstruction. Category name matches the
-            // required spec exactly; invoices remain a data source here,
-            // not their own forecast category.
-            'Accounts Receivable' => $this->monthlyAccountsReceivableBalance($months),
-            // NEW — see monthlyBudgetUtilization() docblock: a
-            // reconstructed point-in-time snapshot, same technique as
-            // monthlyAccountsReceivableBalance(), because
-            // budgets.used_amount is a current-state column with no
-            // historical monthly record. INFERRED design, not confirmed
-            // against real data — verify before trusting in production.
-            'Budget Utilization' => $this->monthlyBudgetUtilization($months),
-            default => throw new RuntimeException("Unknown forecast_type: {$forecastType}"),
-        };
-    }
-
-    /**
-     * @return list<array{start: Carbon, end: Carbon}> oldest first
-     */
-    protected function monthBoundaries(int $lookbackMonths): array
-    {
-        $months = [];
-        $cursor = Carbon::today()->subMonthsNoOverflow($lookbackMonths - 1)->startOfMonth();
-
-        for ($i = 0; $i < $lookbackMonths; $i++) {
-            $months[] = ['start' => $cursor->copy(), 'end' => $cursor->copy()->endOfMonth()];
-            $cursor->addMonthNoOverflow();
-        }
-
-        return $months;
-    }
-
-    /** SUM(amount_received), confirmed collections only, per month. */
-    protected function monthlyCollections(array $months): array
-    {
-        return array_map(
-            fn (array $m) => (float) DB::table('collections')
-                ->whereBetween('collection_date', [$m['start'], $m['end']])
-                ->where('status', self::COLLECTION_CONFIRMED_STATUS)
-                ->whereNull('deleted_at')
-                ->sum('amount_received'),
-            $months
-        );
-    }
-
-    /** SUM(expense_amount), approved expenses only, per month. */
-    protected function monthlyExpenses(array $months): array
-    {
-        return array_map(
-            fn (array $m) => (float) DB::table('expenses')
-                ->whereBetween('expense_date', [$m['start'], $m['end']])
-                ->where('status', self::EXPENSE_APPROVED_STATUS)
-                ->whereNull('deleted_at')
-                ->sum('expense_amount'),
-            $months
-        );
-    }
-
-    /**
-     * Net operating cash flow per month: confirmed collections in, minus
-     * released disbursements out. Doesn't use cash_accounts.current_balance
-     * since that's a live point-in-time figure with no historical monthly
-     * snapshots — this reconstructs the flow directly from the two
-     * transaction tables instead.
-     */
-    protected function monthlyCashFlow(array $months): array
-    {
-        $collectionsIn = $this->monthlyCollections($months);
-
-        $disbursementsOut = array_map(
-            fn (array $m) => (float) DB::table('disbursements')
-                ->whereBetween('payment_date', [$m['start'], $m['end']])
-                ->where('status', self::DISBURSEMENT_RELEASED_STATUS)
-                ->whereNull('deleted_at')
-                ->sum('amount_paid'),
-            $months
-        );
-
-        return array_map(
-            fn ($in, $out) => $in - $out,
-            $collectionsIn,
-            $disbursementsOut
-        );
-    }
-
-    /**
-     * Outstanding AR balance AS OF each month-end, reconstructed as:
-     *   (invoices raised on/before that month-end)
-     *   - (confirmed collections applied on/before that month-end)
-     *
-     * This is a point-in-time reconstruction, not a simple monthly SUM —
-     * accounts_receivable.remaining_balance only reflects TODAY's state,
-     * not what the balance was historically. Cumulative sums up to each
-     * month-end approximate what the balance would have been then,
-     * assuming no invoice/collection edits after the fact.
-     */
-    protected function monthlyAccountsReceivableBalance(array $months): array
-    {
-        return array_map(function (array $m) {
-            $invoicedToDate = (float) DB::table('accounts_receivable')
-                ->where('invoice_date', '<=', $m['end'])
-                ->where('is_archived', false)
-                ->whereNull('deleted_at')
-                ->sum('original_amount');
-
-            $collectedToDate = (float) DB::table('collections')
-                ->join('accounts_receivable', 'accounts_receivable.id', '=', 'collections.ar_id')
-                ->where('collections.collection_date', '<=', $m['end'])
-                ->where('collections.status', self::COLLECTION_CONFIRMED_STATUS)
-                ->where('accounts_receivable.is_archived', false)
-                ->whereNull('accounts_receivable.deleted_at')
-                ->whereNull('collections.deleted_at')
-                ->sum('collections.amount_received');
-
-            return $invoicedToDate - $collectedToDate;
-        }, $months);
-    }
-
-    /**
-     * Budget IDs "active" as of a given month-end: budgets with status
-     * 'Active' (approved & spendable — see BUDGET_ACTIVE_STATUS) whose
-     * [start_date, end_date] period overlaps that month at all (started
-     * on/before month-end, and either still open or ended on/after month
-     * start). Draft (awaiting approval) and Cancelled budgets are
-     * excluded — they don't represent real, approved spending capacity,
-     * even if their date range happens to overlap.
-     */
-    protected function activeBudgetIdsAsOf(Carbon $monthStart, Carbon $monthEnd): \Illuminate\Support\Collection
-    {
-        return DB::table('budgets')
-            ->where('status', self::BUDGET_ACTIVE_STATUS)
-            ->where('start_date', '<=', $monthEnd)
-            ->where('end_date', '>=', $monthStart)
-            ->whereNull('deleted_at')
-            ->pluck('id');
-    }
-
-    /**
-     * Cumulative approved-expense spend, AS OF each month-end, against
-     * budgets active that month — same point-in-time reconstruction
-     * technique as monthlyAccountsReceivableBalance(), since
-     * budgets.used_amount is a current-state running total with no
-     * historical monthly snapshot. NOT the same as the existing
-     * "Expenses" forecast_type, which reports incremental spend per
-     * month across ALL budgets — this is cumulative and scoped to
-     * budgets active in that specific month.
-     */
-    protected function monthlyBudgetUtilization(array $months): array
-    {
-        return array_map(function (array $m) {
-            $activeBudgetIds = $this->activeBudgetIdsAsOf($m['start'], $m['end']);
-
-            return (float) DB::table('expenses')
-                ->whereIn('budget_id', $activeBudgetIds)
-                ->where('expense_date', '<=', $m['end'])
-                ->where('status', self::EXPENSE_APPROVED_STATUS)
-                ->whereNull('deleted_at')
-                ->sum('expense_amount');
-        }, $months);
+        return $this->actuals->forType($forecastType, $lookbackMonths);
     }
 }
