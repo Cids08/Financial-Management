@@ -46,14 +46,19 @@ const TYPE_STYLES = {
 const HIGH_CONFIDENCE_THRESHOLD = 80
 const LOW_ERROR_THRESHOLD = 8
 
-// Above this, MAPE isn't just "not great"  -  it indicates the model's
-// percentage error is large enough that the forecast shouldn't be
-// treated as reliable at all (see the ai-forecasting skill's "communicate
-// poor accuracy honestly" philosophy). MAPE can legitimately spike into
-// the thousands of percent when historical actuals include near-zero
-// months (division-by-small-number blowup), which is a real, observed
-// case for this dataset, not a hypothetical edge case.
-const MAPE_WARNING_THRESHOLD = 50
+// MAPE severity bands follow the standard Lewis-style accuracy scale
+// (lower is better): ≤10% is an excellent fit, 11–25% is acceptable, and
+// anything above 25% should be treated seriously — the 25% mark is the
+// "trust limit". Whenever the badge is red (Poor) the caution panel is
+// shown too, so there's no silent red zone.
+//
+// MAPE can legitimately spike into the thousands of percent when
+// historical actuals include near-zero months (division-by-small-number
+// blowup), which is a real, observed case for this dataset, not a
+// hypothetical edge case — in that range the forecast is effectively
+// unusable and should never drive decisions.
+const MAPE_EXCELLENT_THRESHOLD = 10
+const MAPE_ACCEPTABLE_THRESHOLD = 25
 
 const PANEL = 'rounded-2xl border border-border bg-surface shadow-card'
 const PANEL_PAD = 'p-4 sm:p-5'
@@ -121,15 +126,45 @@ function confidenceColor(pct) {
 
 // Mirrors confidenceColor()'s tiering, but for MAPE (lower is better, and
 // the top end is unbounded rather than capped at 100 like confidence is).
+function mapeSeverity(mape) {
+  if (mape == null) return { label: '—', text: 'text-muted', badge: '' }
+  if (mape <= MAPE_EXCELLENT_THRESHOLD) {
+    return {
+      label: 'Excellent',
+      text: 'text-emerald-600 dark:text-emerald-400',
+      badge: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400',
+    }
+  }
+  if (mape <= MAPE_ACCEPTABLE_THRESHOLD) {
+    return {
+      label: 'Acceptable',
+      text: 'text-amber-600 dark:text-amber-400',
+      badge: 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400',
+    }
+  }
+  return {
+    label: 'Poor',
+    text: 'text-red-600 dark:text-red-400 font-semibold',
+    badge: 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400',
+  }
+}
+
 function mapeColor(mape) {
-  if (mape == null) return 'text-muted'
-  if (mape > MAPE_WARNING_THRESHOLD) return 'text-red-600 dark:text-red-400 font-semibold'
-  if (mape > LOW_ERROR_THRESHOLD) return 'text-amber-600 dark:text-amber-400'
-  return 'text-emerald-600 dark:text-emerald-400'
+  return mapeSeverity(mape).text
+}
+
+function MapeBadge({ mape }) {
+  if (mape == null) return null
+  const severity = mapeSeverity(mape)
+  return (
+    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${severity.badge}`}>
+      {severity.label}
+    </span>
+  )
 }
 
 function isMapeUnreliable(mape) {
-  return mape != null && mape > MAPE_WARNING_THRESHOLD
+  return mape != null && mape > MAPE_ACCEPTABLE_THRESHOLD
 }
 
 // Months with recorded (non-zero) activity in the training series, plus the
@@ -427,7 +462,10 @@ const GenerateForecastModal = memo(function GenerateForecastModal({ open, onClos
               </div>
               <div className="rounded-lg border border-border px-3 py-2">
                 <p className="text-xs text-muted">MAPE</p>
-                <p className={`text-sm font-semibold mt-0.5 ${mapeColor(result.mape)}`}>{result.mape != null ? `${result.mape}%` : '—'}</p>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <p className={`text-sm font-semibold ${mapeColor(result.mape)}`}>{result.mape != null ? `${result.mape}%` : '—'}</p>
+                  <MapeBadge mape={result.mape} />
+                </div>
               </div>
             </div>
 
@@ -514,7 +552,10 @@ const ForecastDetailModal = memo(function ForecastDetailModal({ forecastId, onCl
             </div>
             <div className="rounded-lg border border-border px-3 py-2">
               <p className="text-xs text-muted">MAPE</p>
-              <p className={`text-sm font-semibold mt-0.5 ${mapeColor(forecast.mape)}`}>{forecast.mape != null ? `${forecast.mape}%` : '—'}</p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <p className={`text-sm font-semibold ${mapeColor(forecast.mape)}`}>{forecast.mape != null ? `${forecast.mape}%` : '—'}</p>
+                <MapeBadge mape={forecast.mape} />
+              </div>
             </div>
           </div>
 
@@ -669,7 +710,7 @@ export default function FinancialForecasting({ title = 'Financial Forecasting', 
           <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-dark">Plan with perspective</p>
           <h1 className="text-2xl font-bold tracking-tight text-ink sm:text-3xl">{title}</h1>
           <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted">
-            ARIMA-based projections trained on posted Collections, Disbursements, and Expenses. Lower MAPE means the model tracked historical actuals more closely.
+            ARIMA-based projections trained on posted Collections, Disbursements, and Expenses. Lower MAPE means the model tracked historical actuals more closely. MAPE bands: ≤10% excellent · 11–25% acceptable · above 25% treat with caution.
           </p>
         </div>
         <Button variant="primary" size="sm" icon={Plus} onClick={openGenerate}>Generate Forecast</Button>
