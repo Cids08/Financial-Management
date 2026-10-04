@@ -269,6 +269,12 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
   const [dSubmitting, setDSubmitting] = useState(false)
   const [dActionError, setDActionError] = useState('')
   const [dActionSuccess, setDActionSuccess] = useState('')
+
+  useEffect(() => {
+    if (!dActionError) return
+    const t = setTimeout(() => setDActionError(''), 8000)
+    return () => clearTimeout(t)
+  }, [dActionError])
   const [releasingId, setReleasingId] = useState(null)
   const [approvingId, setApprovingId] = useState(null)
   const [proofTarget, setProofTarget] = useState(null)
@@ -588,12 +594,12 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
       )}
 
       {(error || dActionError) && (
-        <div className="flex items-center justify-between gap-2 p-3 bg-status-danger-bg border border-status-danger-border rounded-lg text-status-danger text-xs sm:text-sm">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-status-danger shrink-0" />
+        <div className="fixed top-4 right-4 z-[100] max-w-sm flex items-start justify-between gap-2 p-3 bg-status-danger-bg border border-status-danger-border rounded-lg shadow-card text-status-danger text-xs sm:text-sm animate-fadeIn">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-status-danger shrink-0 mt-0.5" />
             <span>{error || dActionError}</span>
           </div>
-          <button type="button" onClick={() => setDActionError('')} className="text-muted hover:text-ink">
+          <button type="button" onClick={() => setDActionError('')} className="text-muted hover:text-ink shrink-0">
             <X className="w-4 h-4" />
           </button>
         </div>
