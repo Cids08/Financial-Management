@@ -294,8 +294,7 @@ export default function PaymentWizardModal({
                   ref={firstInputRef}
                   value={supplierId}
                   onChange={(e) => setSupplierId(e.target.value)}
-                  disabled={Boolean(preselectedBill)}
-                  className={`w-full border border-border bg-surface text-ink rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 ${Boolean(preselectedBill) ? 'opacity-80 cursor-not-allowed bg-slate-100 dark:bg-slate-800' : ''}`}
+                  className="w-full border border-border bg-surface text-ink rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
                 >
                   <option value="">All Suppliers</option>
                   {suppliers.map((s) => (
@@ -304,7 +303,6 @@ export default function PaymentWizardModal({
                     </option>
                   ))}
                 </select>
-                {Boolean(preselectedBill) && <p className="mt-1 text-[11px] text-muted">Locked to the selected bill's supplier.</p>}
               </div>
 
               {/* Cash Account */}

@@ -132,6 +132,24 @@ function isMapeUnreliable(mape) {
   return mape != null && mape > MAPE_WARNING_THRESHOLD
 }
 
+// Months with recorded (non-zero) activity in the training series, plus the
+// number of projected periods. ARIMA needs >=6 active months to fit, and
+// projecting further ahead than the history you have is inherently shaky —
+// both are surfaced as a warning after generation.
+function historyActivityWarnings(series) {
+  const points = series || []
+  const active = points.filter((pt) => pt.historical != null && Number(pt.historical) > 0).length
+  const periods = points.filter((pt) => pt.historical === null && pt.predicted != null).length
+  if (active < 6 || periods > Math.max(active, 2)) {
+    return {
+      active,
+      periods,
+      reason: `The training window contains only ${active} month${active === 1 ? '' : 's'} with recorded activity, but this forecast projects ${periods} month${periods === 1 ? '' : 's'} ahead. ARIMA needs at least 6 active months to fit reliably — treat the projection as directional rather than a hard number.`,
+    }
+  }
+  return null
+}
+
 const StatCard = memo(function StatCard({ loading, label, value, icon: Icon, iconBg, iconColor, isActive, onClick }) {
   return (
     <button
@@ -254,7 +272,7 @@ const GenerateForecastModal = memo(function GenerateForecastModal({ open, onClos
   const horizons = useMemo(() => {
     const months = Number(forecastMonths) || 12
     return [
-      { key: CONFIGURED_HORIZON_KEY, label: `Next ${months} Months` },
+      { key: CONFIGURED_HORIZON_KEY, label: `Company Default (${months} months)` },
       ...FIXED_HORIZONS,
     ]
   }, [forecastMonths])
@@ -376,6 +394,13 @@ const GenerateForecastModal = memo(function GenerateForecastModal({ open, onClos
               </div>
               <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${TYPE_STYLES[result.forecast_type] || 'bg-gray-100 text-muted'}`}>{result.arima_model}</span>
             </div>
+
+            {historyActivityWarnings(result.series) && (
+              <div className="rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2 text-xs text-status-warning flex items-start gap-2">
+                <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                <span>{historyActivityWarnings(result.series).reason}</span>
+              </div>
+            )}
 
             <div className="h-52 w-full rounded-lg border border-border bg-bg p-2">
               <ResponsiveContainer width="100%" height="100%">

@@ -1,3 +1,5 @@
+import RowActions from '../components/RowActions'
+import DocumentAction from '../components/DocumentAction'
 import KpiValue from '../components/KpiValue'
 import { TableSkeleton } from '../components/LoadingSkeleton'
 import ResponsiveTable from '../components/ResponsiveTable'
@@ -779,12 +781,8 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                       </div>
                     </td>
                     <td className="px-3 py-2.5 text-right">
-                      <div className="flex items-center justify-end gap-0.5">
-                        <Tooltip label="View full record" align="start">
-                          <button type="button" onClick={() => openDisbursementDetail(d)} className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                            <Info size={14} />
-                          </button>
-                        </Tooltip>
+                      <RowActions>
+                        <Button variant={d.status === 'Pending' && !d.is_archived ? 'primary' : 'secondary'} size="sm" onClick={() => openDisbursementDetail(d)} aria-label={'Review payment ' + d.voucher_number}>{d.status === 'Pending' && !d.is_archived ? 'Review' : 'Details'}</Button>
                         {!d.is_archived && (
                         <Tooltip label="Print voucher / BIR 2307" align="start">
                           <button type="button" onClick={() => setPrintTarget(d)} className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
@@ -795,20 +793,8 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
 
 
                         {/* Proof attachment button  -  AP-only */}
-                        {canManagePayments && !isPayroll && !d.is_archived && (
-                          <Tooltip label={d.has_attachment ? 'View proof of payment' : 'Attach proof of payment'} align="start">
-                            <button
-                              type="button"
-                              onClick={() => setProofTarget(d)}
-                              className={`flex h-7 w-7 items-center justify-center rounded-lg transition-colors duration-150 ${
-                                d.has_attachment
-                                  ? 'text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-500/10'
-                                  : 'text-muted hover:bg-bg hover:text-ink'
-                              }`}
-                            >
-                              <Paperclip size={14} />
-                            </button>
-                          </Tooltip>
+                        {!isPayroll && (
+                          <DocumentAction attached={d.has_attachment} label={d.voucher_number} onClick={() => setProofTarget(d)} />
                         )}
 
                         {/* Edit / archive are AP-only */}
@@ -818,43 +804,6 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                               <Pencil size={14} />
                             </button>
                           </Tooltip>
-                        )}
-
-                        {canApprovePayments && d.status === 'Pending' && (
-                          <>
-                            {isOwnVoucher(d) ? (
-                              <Tooltip label={SOD_TOOLTIP}>
-                                <button
-                                  type="button"
-                                  disabled
-                                  title=""
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-emerald-600/50 text-white cursor-not-allowed opacity-60 shrink-0"
-                                >
-                                  <Lock size={11} />Approve
-                                </button>
-                              </Tooltip>
-                            ) : (
-                              <button
-                                type="button"
-                                disabled={approvingId === d.disbursement_id}
-                                onClick={() => handleApprove(d.disbursement_id)}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-sm transition-all duration-150 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
-                              >
-                                {approvingId === d.disbursement_id
-                                  ? <><Loader2 size={11} className="animate-spin" />Approving…</>
-                                  : <><CheckCircle2 size={11} />Approve</>
-                                }
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              disabled={!!approvingId}
-                              onClick={() => openReject(d)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20 shadow-sm transition-all duration-150 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-                            >
-                              Reject
-                            </button>
-                          </>
                         )}
 
                         {canReleasePayments && d.status === 'Approved' && (
@@ -881,16 +830,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                               </button>
                             </Tooltip>
                           ) : isMissingProof ? (
-                            <Tooltip label="Attach proof of payment (bank slip, check scan, or OR) before releasing  -  click the paperclip icon to upload">
-                              <button
-                                type="button"
-                                onClick={() => setProofTarget(d)}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-amber-50 border border-amber-300 text-amber-700 hover:bg-amber-100 dark:bg-amber-500/10 dark:border-amber-500/40 dark:text-amber-400 dark:hover:bg-amber-500/20 shadow-sm transition-all duration-150 active:scale-95 shrink-0"
-                              >
-                                <Paperclip size={13} />
-                                Attach Proof
-                              </button>
-                            </Tooltip>
+                            <span className="text-xs text-muted">Proof required before release</span>
                           ) : (
                             <button
                               type="button"
@@ -947,7 +887,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                             </button>
                           </Tooltip>
                         ) : null)}
-                      </div>
+                      </RowActions>
                     </td>
                   </tr>
                 )
@@ -1283,7 +1223,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                     type="button"
                     disabled={approvingId === dDetailRecord.disbursement_id}
                     onClick={() => handleApprove(dDetailRecord.disbursement_id, true)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-sm transition-all duration-150 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-lg bg-primary hover:bg-primary-hover text-black shadow-sm transition-all duration-150 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     {approvingId === dDetailRecord.disbursement_id
                       ? <><Loader2 size={13} className="animate-spin" />Approving…</>
@@ -1499,15 +1439,22 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                   </div>
                 ) : (
                   <div className="px-3 py-2">
+                    <h3 className="mb-2 text-sm font-semibold text-ink">Payment details</h3>
+                    <DetailRow label="Voucher No." value={dDetailRecord.voucher_number} />
+                    <DetailRow label="A/P Invoice" value={dDetailRecord.invoice_number} />
                     <DetailRow label="Department" value={dDetailRecord.department_name || 'General'} />
                     <DetailRow label="Payment Date" value={formatDate(dDetailRecord.payment_date)} />
-                    <DetailRow label="Amount Paid" value={formatCurrency(dDetailRecord.amount_paid)} />
+                    <DetailRow label="Gross Amount" value={formatCurrency(dDetailRecord.amount_paid)} />
+                    <DetailRow label="Withholding Tax" value={formatCurrency(dDetailRecord.ewt_amount || 0)} />
+                    <DetailRow label="Net Payment" value={formatCurrency(dDetailRecord.net_amount ?? (Number(dDetailRecord.amount_paid) - Number(dDetailRecord.ewt_amount || 0)))} />
+                    <h3 className="mb-2 mt-4 text-sm font-semibold text-ink">Payment means</h3>
                     <DetailRow label="Payment Method" value={dDetailRecord.payment_method} />
                     <DetailRow label="Cash Account" value={dDetailRecord.cash_account_name} />
                     <DetailRow label="Reference No." value={dDetailRecord.reference_number} />
                   </div>
                 )}
                 <div className="px-3 py-2">
+                  <h3 className="mb-2 text-sm font-semibold text-ink">Approval and release</h3>
                   <DetailRow label="Approved by" value={dDetailRecord.approved_by_name} />
                   <DetailRow label="Approved at" value={formatDateTime(dDetailRecord.approved_at)} />
                   <DetailRow label="Released by" value={dDetailRecord.released_by_name} />

@@ -70,7 +70,7 @@ class PythonArimaForecastEngine implements ForecastEngine
             throw new RuntimeException("Unknown horizon key: {$horizonKey}");
         }
 
-        $historicalData = $this->historicalActualsFor($forecastType, $horizon['lookback_months']);
+        $historicalData = $this->historicalActualsFor($forecastType);
 
         try {
             $response = Http::baseUrl($this->baseUrl)
@@ -153,7 +153,7 @@ class PythonArimaForecastEngine implements ForecastEngine
 
         $horizon = FinancialForecastService::horizonFor($horizonKey)
             ?? throw new RuntimeException("Unknown horizon key: {$horizonKey}");
-        $historicalData = $this->historicalActualsFor($forecastType, $horizon['lookback_months']);
+        $historicalData = $this->historicalActualsFor($forecastType);
 
         $series = [];
         foreach ($historicalData as $index => $value) {
@@ -184,12 +184,12 @@ class PythonArimaForecastEngine implements ForecastEngine
     }
 
     /**
-     * Returns `lookbackMonths` monthly totals for $forecastType, oldest
-     * first, via the shared HistoricalActuals collector — the exact same
-     * training window the SimpleForecastEngine fallback uses.
+     * Monthly totals for $forecastType, oldest first, via the shared
+     * HistoricalActuals collector — the exact same data-driven training
+     * window the SimpleForecastEngine fallback uses.
      */
-    protected function historicalActualsFor(string $forecastType, int $lookbackMonths): array
+    protected function historicalActualsFor(string $forecastType): array
     {
-        return $this->actuals->forType($forecastType, $lookbackMonths);
+        return $this->actuals->forType($forecastType);
     }
 }

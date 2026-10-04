@@ -1,3 +1,6 @@
+import RowActions from '../components/RowActions'
+import DocumentWorkspaceModal from '../components/DocumentWorkspaceModal'
+import DocumentAction from '../components/DocumentAction'
 import BudgetAccountAllocations from '../components/BudgetAccountAllocations'
 import { apiFetch } from '../utils/api'
 import BudgetComparisonReport from '../components/BudgetComparisonReport'
@@ -17,8 +20,6 @@ import Modal from '../components/Modal'
 import SlideOver from '../components/SlideOver'
 import Pagination from '../components/Pagination'
 import Tooltip from '../components/Tooltip'
-import BudgetPlanUploadModal from '../components/BudgetPlanUploadModal'
-import BudgetPlanHistoryModal from '../components/BudgetPlanHistoryModal'
 import { formatCurrency, currencySymbol, convertAmount, getActiveCurrency, maskedAmount } from '../utils/formatters'
 import { printSlip } from '../utils/printSlip'
 import { money, SIGNATURE_PRESETS } from '../utils/print'
@@ -1079,7 +1080,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                         <td className={`px-3 py-3 text-right font-semibold tabular-nums ${isOverspent ? 'text-status-danger' : 'text-ink'}`}>{formatCurrency(m.remaining)}{isOverspent && <p className="mt-1 text-xs font-normal">Over budget</p>}</td>
                         <td className="px-3 py-3"><ApprovalBadge status={b.status} /></td>
                         <td className="px-4 py-3.5 text-right">
-                          <div className="flex flex-wrap items-center justify-end gap-1.5">
+                          <RowActions>
                             {canManageBudgets && !b.deleted_at && (b.status === 'Draft' || b.status === 'Active' && canApproveBudgets) && <Tooltip label="G/L allocations" align="end"><button type="button" aria-label={`G/L allocations: ${b.budget_code}`} onClick={() => {setAllocationTarget(b);setAllocationRows(b.account_allocations || []);setAllocationError('')}} className="rounded-lg p-2 text-primary-dark hover:bg-primary/10"><Activity size={15} /></button></Tooltip>}
                             {isPending && canApproveBudgets && (
                               <>
@@ -1105,29 +1106,10 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                                     <span>Reject</span>
                                   </button>
                                 </Tooltip>
-                                {!b.has_plan && (
-                                  <Tooltip label="Attach budget plan" align="start">
-                                    <button type="button" onClick={() => setUploadTarget(b)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                                      <Paperclip size={15} />
-                                    </button>
-                                  </Tooltip>
-                                )}
+
                               </>
                             )}
-                            {b.has_plan && (
-                              <>
-                                <Tooltip label="View current plan" align="start">
-                                  <button type="button" onClick={() => handleViewPlan(b)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                                    <FileText size={15} />
-                                  </button>
-                                </Tooltip>
-                                <Tooltip label="View plan history" align="start">
-                                  <button type="button" onClick={() => setHistoryTarget(b)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                                    <History size={15} />
-                                  </button>
-                                </Tooltip>
-                              </>
-                            )}
+                            <DocumentAction attached={b.has_plan} label={b.budget_code} onClick={() => setHistoryTarget(b)} />
                             <Tooltip label="View full record" align="start">
                               <button type="button" aria-label={`View budget ${b.budget_code}`} onClick={() => openDetail(b)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                                 <Info size={15} />
@@ -1167,7 +1149,7 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
                               )}
                               </>
                             )}
-                          </div>
+                          </RowActions>
                         </td>
                       </tr>
                     )
@@ -1669,28 +1651,12 @@ export default function Budgets({ title = 'Budgets', crumbs = ['Financial Transa
       </Modal>
 
       {/* Attach budget plan modal */}
-      <BudgetPlanUploadModal
-        open={!!uploadTarget}
-        onClose={() => setUploadTarget(null)}
-        budget={uploadTarget}
-        onUpload={async (file) => {
-          const result = await uploadPlan(uploadTarget.budget_id, file)
-          if (result.success) {
-            fetchStats()
-            setDetailRecord((prev) => (prev && prev.budget_id === uploadTarget.budget_id ? result.data : prev))
-            load()
-          }
-          return result
-        }}
-      />
-
-      {/* Budget plan version history modal */}
-      <BudgetPlanHistoryModal
-        open={!!historyTarget}
-        onClose={() => setHistoryTarget(null)}
-        budget={historyTarget}
-        fetchHistory={fetchPlanHistory}
-        onView={viewPlanVersion}
+      <DocumentWorkspaceModal open={!!(uploadTarget || historyTarget)} onClose={() => {setUploadTarget(null);setHistoryTarget(null)}}
+        record={{id:(uploadTarget || historyTarget)?.budget_id,label:(uploadTarget || historyTarget)?.budget_code,description:(uploadTarget || historyTarget)?.budget_name}}
+        extensions={['pdf','doc','docx','xls','xlsx']}
+        canUpload={canManageBudgets && (uploadTarget || historyTarget)?.status==='Draft' && !(uploadTarget || historyTarget)?.deleted_at}
+        fetchHistory={fetchPlanHistory} onView={viewPlanVersion}
+        onUpload={async file=>{const target=uploadTarget || historyTarget;const result=await uploadPlan(target.budget_id,file);if(result.success){fetchStats();load();setDetailRecord(prev=>prev?.budget_id===target.budget_id?result.data:prev)}return result}}
       />
 
       {/* Detail modal */}

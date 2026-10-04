@@ -12,6 +12,8 @@ class AccountsPayableResource extends JsonResource
         return [
             'ap_id' => $this->id,
             'supplier_id' => $this->supplier_id,
+            'account_id' => $this->account_id,
+            'budget_id' => $this->budget_id,
             // Only populated when ->with('supplier') was used — saves the
             // frontend a separate lookup against the suppliers list.
             'supplier_name' => $this->whenLoaded('supplier', fn () => $this->supplier?->supplier_name),

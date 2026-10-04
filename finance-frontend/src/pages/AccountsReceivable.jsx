@@ -1,3 +1,5 @@
+import RowActions from '../components/RowActions'
+import DocumentAction from '../components/DocumentAction'
 import KpiValue from '../components/KpiValue'
 import { TableSkeleton, ContentSkeleton } from '../components/LoadingSkeleton'
 import ResponsiveTable from '../components/ResponsiveTable'
@@ -854,7 +856,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                     })()}
                   </td>
                   <td className="px-2 py-3 text-right min-w-0">
-                    <div className="flex items-center justify-end gap-1">
+                    <RowActions>
                       {/* Active rows keep the full working set. Only ARCHIVED
                           rows get trimmed to Info + Restore + countdown + purge,
                           because that's where the wide countdown badge used to
@@ -891,19 +893,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                               <Printer size={15} />
                             </button>
                           </Tooltip>
-                          <Tooltip label={r.has_attachment ? 'View / manage documents' : 'Attach document'} align="end">
-                            <button
-                              type="button"
-                              onClick={() => setDocumentTarget(r)}
-                              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors duration-150 ${
-                                r.has_attachment
-                                  ? 'text-primary-dark hover:bg-primary/10'
-                                  : 'text-muted hover:bg-bg hover:text-ink'
-                              }`}
-                            >
-                              <Paperclip size={15} />
-                            </button>
-                          </Tooltip>
+                          <DocumentAction attached={r.has_attachment} label={r.invoice_number} onClick={() => setDocumentTarget(r)} />
                           {/* Edit hits an ar.manage-gated route  -  hidden for
                               view-only roles (Collector) and once a record is
                               Paid/Cancelled (locked status). */}
@@ -923,7 +913,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                           )}
                         </>
                       )}
-                    </div>
+                    </RowActions>
                   </td>
                 </tr>
                 )
@@ -1202,7 +1192,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
 
           {isEditing && (
             <p className="text-xs text-muted">
-              To attach a supporting document (signed invoice or delivery receipt), use the <Paperclip size={12} className="inline" /> icon on the invoice row.
+              To view or attach a signed invoice or delivery receipt, choose <strong>More actions (?) ? Documents</strong> on the invoice row.
             </p>
           )}
 
@@ -1375,6 +1365,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
         open={Boolean(documentTarget)}
         onClose={() => setDocumentTarget(null)}
         invoice={documentTarget}
+        canUpload={canManage && !documentTarget?.is_archived && !['Paid', 'Cancelled'].includes(documentTarget?.status)}
         fetchHistory={fetchDocumentHistory}
         onUpload={(f) => attachDocument(documentTarget.ar_id, f)}
         onView={viewDocument}

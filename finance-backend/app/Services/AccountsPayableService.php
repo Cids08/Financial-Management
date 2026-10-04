@@ -16,6 +16,7 @@ use App\Support\FileStorage;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use RuntimeException;
 
 class AccountsPayableService
@@ -92,6 +93,8 @@ class AccountsPayableService
     public function create(User $actor, array $data): AccountsPayable
     {
         return DB::transaction(function () use ($actor, $data) {
+            app(SupplierDocumentGuard::class)->check($data['supplier_id'], $data['invoice_number'], 'ap');
+            app(ApPostingGuard::class)->validate($data['account_id'] ?? null, $data['budget_id'] ?? null, $data['invoice_date'] ?? now()->toDateString());
             $originalAmount = $data['amount'];
             $paidAmount = 0;
 
@@ -107,6 +110,7 @@ class AccountsPayableService
             $bill = AccountsPayable::create([
                 'supplier_id' => $data['supplier_id'],
                 'account_id' => $data['account_id'],
+                'budget_id' => $data['budget_id'] ?? null,
                 'invoice_number' => $data['invoice_number'],
                 'invoice_date' => $data['invoice_date'] ?? now()->toDateString(),
                 'due_date' => $data['due_date'],
@@ -118,7 +122,7 @@ class AccountsPayableService
                 'remaining_balance' => $originalAmount - $paidAmount,
                 'payment_method' => $data['payment_method'] ?? null,
                 'reference_number' => !empty($data['reference_number']) ? $data['reference_number'] : self::generateReferenceNumber(),
-                'status' => $data['status'] ?? 'Pending',
+                'status' => 'Pending',
                 'remarks' => $data['description'] ?? null,
                 'penalty_rate' => $penaltyRate,
                 'penalty_amount' => $penaltyAmount,
@@ -150,6 +154,11 @@ class AccountsPayableService
     public function update(User $actor, AccountsPayable $bill, array $data): AccountsPayable
     {
         return DB::transaction(function () use ($actor, $bill, $data) {
+            $bill = AccountsPayable::lockForUpdate()->findOrFail($bill->id);
+            if ($bill->approved_by || in_array($bill->status, ['Paid', 'Cancelled'], true)) throw new RuntimeException('Only unapproved open bills can be edited.');
+            app(SupplierDocumentGuard::class)->check($data['supplier_id'], $data['invoice_number'], 'ap', $bill->id);
+            $data['budget_id'] = array_key_exists('budget_id', $data) ? $data['budget_id'] : $bill->budget_id;
+            app(ApPostingGuard::class)->validate($data['account_id'] ?? null, $data['budget_id'], $data['invoice_date'] ?? $bill->invoice_date?->toDateString() ?? now()->toDateString());
             $original = $bill->only(['supplier_id', 'account_id', 'invoice_number', 'original_amount', 'status']);
             $newOriginalAmount = $data['amount'];
 
@@ -176,6 +185,7 @@ class AccountsPayableService
             $bill->fill([
                 'supplier_id' => $data['supplier_id'],
                 'account_id' => $data['account_id'],
+                'budget_id' => $data['budget_id'] ?? null,
                 'invoice_number' => $data['invoice_number'],
                 'invoice_date' => $data['invoice_date'] ?? $bill->invoice_date,
                 'due_date' => $data['due_date'],
@@ -186,7 +196,7 @@ class AccountsPayableService
                 'remaining_balance' => $newOriginalAmount - $bill->paid_amount,
                 'payment_method' => $data['payment_method'] ?? null,
                 'reference_number' => $data['reference_number'] ?? null,
-                'status' => $data['status'] ?? $bill->status,
+                'status' => $bill->status,
                 'remarks' => $data['description'] ?? null,
                 'penalty_rate' => $penaltyRate,
                 'penalty_amount' => $penaltyAmount,
@@ -230,6 +240,9 @@ class AccountsPayableService
     public function approve(User $actor, AccountsPayable $bill): AccountsPayable
     {
         return DB::transaction(function () use ($actor, $bill) {
+            $bill = AccountsPayable::lockForUpdate()->findOrFail($bill->id);
+            if (in_array($bill->status, ['Paid', 'Cancelled'], true)) throw new RuntimeException('Only open bills can be approved.');
+            app(SupplierDocumentGuard::class)->check($bill->supplier_id, $bill->invoice_number, 'ap', $bill->id);
             if ($bill->approved_by !== null) {
                 throw new RuntimeException("Bill {$bill->invoice_number} is already approved.");
             }
@@ -264,6 +277,7 @@ class AccountsPayableService
     public function reject(User $actor, AccountsPayable $bill, ?string $reason = null): AccountsPayable
     {
         return DB::transaction(function () use ($actor, $bill, $reason) {
+            $bill = AccountsPayable::lockForUpdate()->findOrFail($bill->id);
             if ($bill->approved_by !== null) {
                 throw new RuntimeException("Bill {$bill->invoice_number} is already approved and cannot be rejected.");
             }
@@ -310,17 +324,8 @@ class AccountsPayableService
     private function postApprovalJournalEntry(User $actor, AccountsPayable $bill): void
     {
         $debitAccountId = $bill->account_id;
-        if ($debitAccountId === null) {
-            $defaultExpenseAccount = ChartOfAccount::where('account_type', 'Expense')->first();
-            if ($defaultExpenseAccount) {
-                $debitAccountId = $defaultExpenseAccount->id;
-                $bill->update(['account_id' => $debitAccountId]);
-            } else {
-                throw new RuntimeException(
-                    "Bill {$bill->invoice_number} has no expense account set and no Expense chart of accounts row exists."
-                );
-            }
-        }
+        $postingDate = $bill->invoice_date?->toDateString() ?? now()->toDateString();
+        $budget = app(ApPostingGuard::class)->validate($debitAccountId, $bill->budget_id, $postingDate);
 
         $apLiabilityAccount = $this->resolveAccountsPayableLedgerAccount();
 
@@ -331,7 +336,7 @@ class AccountsPayableService
             // exists. Not having seen that generator, this guarantees
             // uniqueness but may not match your numbering convention.
             'transaction_no' => 'JE-AP-' . $bill->id . '-' . now()->format('YmdHis'),
-            'transaction_date' => now()->toDateString(),
+            'transaction_date' => $postingDate,
             'description' => "Accrual for bill {$bill->invoice_number} ({$bill->supplier?->supplier_name}).",
             'status' => 'Posted',
             'posted_by' => $actor->id,
@@ -344,6 +349,8 @@ class AccountsPayableService
             'account_id' => $debitAccountId,
             'debit' => $bill->original_amount,
             'credit' => 0,
+            'budget_id' => $budget?->id,
+            'department_id' => $budget?->department_id,
             'reference_type' => 'Accounts Payable',
             'reference_id' => $bill->id,
             'remarks' => "Bill {$bill->invoice_number}",
@@ -354,6 +361,8 @@ class AccountsPayableService
             'account_id' => $apLiabilityAccount->id,
             'debit' => 0,
             'credit' => $bill->original_amount,
+            'budget_id' => $budget?->id,
+            'department_id' => $budget?->department_id,
             'reference_type' => 'Accounts Payable',
             'reference_id' => $bill->id,
             'remarks' => "Bill {$bill->invoice_number}",
@@ -573,6 +582,11 @@ class AccountsPayableService
      */
     public function attachDocument(AccountsPayable $bill, \Illuminate\Http\UploadedFile $file, User $actor): \App\Models\SupportingDocument
     {
+        if (in_array($bill->status, ['Paid', 'Cancelled'], true)) {
+            $msg = "Documents cannot be attached to a {$bill->status} bill.";
+            throw ValidationException::create($msg, ['document' => $msg]);
+        }
+
         $path = $file->store("accounts-payable-documents/{$bill->id}", FileStorage::DISK);
 
         $document = \App\Models\SupportingDocument::create([

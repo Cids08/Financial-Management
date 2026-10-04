@@ -15,6 +15,7 @@ class AccountsPayable extends Model
     protected $fillable = [
         'supplier_id',
         'account_id',
+        'budget_id',
         'invoice_number',
         'invoice_date',
         'due_date',

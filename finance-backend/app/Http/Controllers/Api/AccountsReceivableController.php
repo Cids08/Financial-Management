@@ -12,6 +12,7 @@ use App\Models\SupportingDocument;
 use App\Services\AccountsReceivableService;
 use App\Support\FileStorage;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Http\Request;
 
 class AccountsReceivableController extends Controller
@@ -141,11 +142,15 @@ class AccountsReceivableController extends Controller
 
     public function attachDocument(UploadAccountsReceivableDocumentRequest $request, AccountsReceivable $accountsReceivable): JsonResponse
     {
-        $document = $this->service->attachDocument(
-            $accountsReceivable,
-            $request->file('document'),
-            $request->user()
-        );
+        try {
+            $document = $this->service->attachDocument(
+                $accountsReceivable,
+                $request->file('document'),
+                $request->user()
+            );
+        } catch (ValidationException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage(), 'errors' => $e->errors()], 422);
+        }
 
         return response()->json([
             'success' => true,

@@ -171,7 +171,7 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
         <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{error}</div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {statCards.map((card) => {
           const Icon = card.icon
           return (
@@ -188,7 +188,7 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
               </div>
               <div className="min-w-0">
                 <p className="text-xs text-muted">{card.label}</p>
-                <p className="text-lg font-bold text-ink"><KpiValue loading={loading}>{card.value}</KpiValue></p>
+                <p className="text-lg font-bold tabular-nums break-words text-ink"><KpiValue loading={loading}>{card.value}</KpiValue></p>
               </div>
             </button>
           )
@@ -230,14 +230,14 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
 
       <div className={PANEL}>
         <div className="overflow-hidden rounded-t-xl">
-          <ResponsiveTable className="w-full text-sm">
+          <ResponsiveTable minTableWidth={800} className="w-full text-sm" aria-label="Cash accounts">
             <thead className="bg-surface">
               <tr className="border-b border-border">
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Account</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Type</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Balance</th>
-                <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Status</th>
-                <th className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Actions</th>
+                <th style={{ width: '42%' }} className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Account</th>
+                <th style={{ width: '13%' }} className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Type</th>
+                <th style={{ width: '21%' }} className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Balance</th>
+                <th style={{ width: '12%' }} className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Status</th>
+                <th style={{ width: '12%' }} className="text-right font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -254,43 +254,43 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
                       ${highlightedId === a.cash_account_id ? 'bg-primary/10' : 'hover:bg-bg'}`}
                   >
                     <td className="px-4 py-3.5">
-                      <div className="flex items-center gap-2.5">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary-dark">
+                      <div className="grid grid-cols-[2rem_minmax(0,1fr)] items-start gap-3">
+                        <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary/15 text-primary-dark">
                           <TypeIcon size={15} />
                         </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <p className="truncate font-medium text-ink">{a.account_name}</p>
-                            <span className="shrink-0 text-[10px] font-mono text-muted bg-bg border border-border rounded px-1 py-0.5">{a.account_code}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 text-xs text-muted">
-                            <span className="truncate">
-                              {a.bank_name} &middot; <span className="font-mono">{revealedIds.has(a.cash_account_id) ? a.account_number : maskAccountNumber(a.account_number)}</span>
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => toggleReveal(a.cash_account_id)}
-                              aria-label={revealedIds.has(a.cash_account_id) ? 'Hide account number' : 'Show account number'}
-                              className="shrink-0 text-muted hover:text-ink transition-colors duration-150"
-                            >
-                              {revealedIds.has(a.cash_account_id) ? <EyeOff size={13} /> : <Eye size={13} />}
-                            </button>
+                        <div className="min-w-0 space-y-1">
+                          <p className="font-semibold leading-5 text-ink break-words">{a.account_name}</p>
+                          <p className="text-xs leading-4 text-muted break-words">{a.bank_name || 'Cash account'}</p>
+                          <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2 text-xs text-muted">
+                            <span className="rounded border border-border bg-bg px-1.5 py-0.5 font-mono text-[10px]">{a.account_code}</span>
+                            <div className="grid grid-cols-[minmax(0,1fr)_1.75rem] items-center gap-1 max-w-60">
+                              <span className="font-mono break-all">{revealedIds.has(a.cash_account_id) ? a.account_number : maskAccountNumber(a.account_number)}</span>
+                              <button
+                                type="button"
+                                onClick={() => toggleReveal(a.cash_account_id)}
+                                aria-label={(revealedIds.has(a.cash_account_id) ? 'Hide account number for ' : 'Show account number for ') + a.account_name}
+                                aria-pressed={revealedIds.has(a.cash_account_id)}
+                                className="grid h-7 w-7 place-items-center rounded-md text-muted hover:bg-bg hover:text-ink focus-visible:outline-2 focus-visible:outline-primary transition-colors"
+                              >
+                                {revealedIds.has(a.cash_account_id) ? <EyeOff size={14} /> : <Eye size={14} />}
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap text-ink">{a.account_type}</td>
-                    <td className="px-4 py-3.5 whitespace-nowrap font-medium tabular-nums text-ink">
+                    <td className="px-4 py-3.5 text-right font-semibold tabular-nums text-ink">
                       {privacyOn ? maskedAmount() : formatCurrency(a.current_balance)}
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[a.status]}`}>{a.status}</span>
                     </td>
                     <td className="px-4 py-3.5 text-right">
-                      <div className="flex items-center justify-end gap-1">
+                      <div className="flex items-center justify-end gap-1.5">
                         {!showArchived && (
                         <Tooltip label="Edit account" align="start">
-                          <button type="button" onClick={() => openEdit(a)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                          <button type="button" onClick={() => openEdit(a)} aria-label={'Edit ' + a.account_name} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                             <Pencil size={15} />
                           </button>
                         </Tooltip>
@@ -300,6 +300,7 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
                             <button
                               type="button"
                               onClick={() => (showArchived ? restoreAccount(a.cash_account_id) : archiveAccount(a.cash_account_id))}
+                              aria-label={(showArchived ? 'Restore ' : 'Archive ') + a.account_name}
                               className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
                             >
                               {showArchived ? <RotateCcw size={15} /> : <Archive size={15} />}
@@ -368,7 +369,7 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
             <label className={LABEL}>Account Name</label>
             <input type="text" value={form.account_name} onChange={(e) => setForm((f) => ({ ...f, account_name: e.target.value }))} className={INPUT} placeholder="BDO Operating Account" />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className={LABEL}>Bank Name</label>
               <input type="text" value={form.bank_name} onChange={(e) => setForm((f) => ({ ...f, bank_name: e.target.value }))} className={INPUT} placeholder="BDO Unibank" />
@@ -378,7 +379,7 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
               <input type="text" value={form.account_number} onChange={(e) => setForm((f) => ({ ...f, account_number: e.target.value }))} className={INPUT} placeholder="0012 3456 7890" />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className={LABEL}>Account Type</label>
               <select value={form.account_type} onChange={(e) => setForm((f) => ({ ...f, account_type: e.target.value }))} className={INPUT}>

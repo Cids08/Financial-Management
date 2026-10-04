@@ -1,3 +1,6 @@
+import RowActions from '../components/RowActions'
+import DocumentWorkspaceModal from '../components/DocumentWorkspaceModal'
+import DocumentAction from '../components/DocumentAction'
 import ExpenseGlAccountField from '../components/ExpenseGlAccountField'
 import KpiValue from '../components/KpiValue'
 import { TableSkeleton, ContentSkeleton } from '../components/LoadingSkeleton'
@@ -16,8 +19,6 @@ import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Pagination from '../components/Pagination'
 import Tooltip from '../components/Tooltip'
-import ExpenseReceiptUploadModal from '../components/ExpenseReceiptUploadModal'
-import ExpenseReceiptHistoryModal from '../components/ExpenseReceiptHistoryModal'
 import BatchApproveExpensesModal from '../components/BatchApproveExpensesModal'
 import { formatCurrency } from '../utils/formatters'
 import { printSlip } from '../utils/printSlip'
@@ -260,9 +261,9 @@ function formatDateTime(value) {
 
 function DetailRow({ label, value }) {
   return (
-    <div className="flex items-center justify-between gap-3 py-1.5">
+    <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] items-start gap-1 sm:gap-3 py-2">
       <span className="text-xs text-muted">{label}</span>
-      <span className="text-xs font-medium text-ink text-right">{value ?? '—'}</span>
+      <span className="min-w-0 break-words text-xs font-medium text-ink sm:text-right">{value ?? '—'}</span>
     </div>
   )
 }
@@ -462,7 +463,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
     setReceiptFile(null)
     setModalMode(x)
   }
-  const closeModal = () => { setModalMode(null); setFormError(''); setFieldErrors({}); setDateErrors({ expense_date: '' }); setReceiptFile(null) }
+  const closeModal = () => { if (mutating) return; setModalMode(null); setFormError(''); setFieldErrors({}); setDateErrors({ expense_date: '' }); setReceiptFile(null) }
   const isModalOpen = modalMode !== null
   const isEditing = modalMode !== null && modalMode !== 'add'
 
@@ -496,6 +497,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
     e.preventDefault()
     if (lookupPending) { setFormError('Wait for the form choices to load, or retry the failed lookup.'); return }
     const errors = {}
+    if (form.supplier_id && !form.receipt_number.trim()) errors.receipt_number = 'Enter the supplier document number to check for duplicate costs.'
     if (!form.gl_account_id) errors.gl_account_id = 'Please select a posting G/L account.'
     if (!form.budget_id) errors.budget_id = 'Please select a budget.'
     if (!form.expense_category_id) errors.expense_category_id = 'Please select a category.'
@@ -583,9 +585,23 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
     }
   }
 
-  const handleApprove = async (x) => { await approveExpense(x.id) }
+  const [settlementTarget, setSettlementTarget] = useState(null)
+  const [settling, setSettling] = useState(false)
+  const [settlementError, setSettlementError] = useState('')
+  const handleApprove = (x) => { setSettlementTarget(x); setSettlementError('') }
+  const confirmSettlement = async () => {
+    if (settling || !settlementTarget) return
+    setSettling(true)
+    try {
+      const result = await approveExpense(settlementTarget.id)
+      if (result?.success) setSettlementTarget(null)
+      else setSettlementError(result?.message || 'Could not record this expense. Check the budget, receipt, and cash account.')
+    } catch (e) { setSettlementError(e.message) }
+    finally { setSettling(false) }
+  }
   const openReject = (x) => { setRejectTarget(x); setRejectRemarks(''); setRejectError('') }
   const confirmReject = async () => {
+    if (mutating || !rejectTarget) return;
     if (!rejectRemarks.trim()) {
       setRejectError('A reason for rejection is required.')
       return
@@ -716,7 +732,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:grid-cols-4">
         {statCards.map((card) => {
           const Icon = card.icon
           const cardClass = `${PANEL} ${PANEL_PAD} flex items-center gap-2.5 text-left
@@ -887,7 +903,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[x.status] || ''}`}>{x.status}</span>
                   </td>
                   <td className="px-3.5 py-3 text-right">
-                    <div className="flex items-center justify-end gap-0.5">
+                    <RowActions>
                       {canApprove && x.status === 'Pending' && !filters.trashed && x.has_receipt && (() => {
                         const hasBudget = Boolean(x.budget_id && (x.budget_name || budgets.some((b) => Number(b.budget_id) === Number(x.budget_id))))
                         const isCostExceeded = x.budget_remaining_amount !== null && x.budget_remaining_amount !== undefined
@@ -916,23 +932,21 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                                 </button>
                               </Tooltip>
                             ) : (
-                              <button
+                              <Button variant="primary" size="sm" icon={CheckCircle2}
                                 type="button"
                                 onClick={() => handleApprove(x)}
                                 disabled={mutating}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-sm transition-all duration-150 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
                               >
                                 Approve
-                              </button>
+                              </Button>
                             )}
-                            <button
+                            <Button variant="secondary" size="sm" icon={XCircle}
                               type="button"
                               onClick={() => openReject(x)}
-                              disabled={mutating}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20 shadow-sm transition-all duration-150 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                              disabled={mutating} className="text-status-danger hover:bg-status-danger-bg"
                             >
                               Reject
-                            </button>
+                            </Button>
                           </>
                         )
                       })()}
@@ -941,28 +955,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                           <Info size={14} />
                         </button>
                       </Tooltip>
-                      {x.has_receipt ? (
-                        <>
-                          <Tooltip label="View current receipt" align="start">
-                            <button type="button" onClick={() => handleViewReceipt(x)} className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                              <FileText size={14} />
-                            </button>
-                          </Tooltip>
-                          <Tooltip label="View receipt history" align="start">
-                            <button type="button" onClick={() => setReceiptHistoryTarget(x)} className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                              <History size={14} />
-                            </button>
-                          </Tooltip>
-                        </>
-                      ) : (
-                        !filters.trashed && (
-                          <Tooltip label="Attach receipt" align="start">
-                            <button type="button" onClick={() => setReceiptUploadTarget(x)} className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
-                              <Paperclip size={14} />
-                            </button>
-                          </Tooltip>
-                        )
-                      )}
+                      <DocumentAction attached={x.has_receipt} label={x.description} onClick={() => setReceiptHistoryTarget(x)} />
                       {!filters.trashed && (
                       <Tooltip label="Print expense slip" align="start">
                         <button type="button" onClick={() => handlePrint(x)} className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
@@ -997,7 +990,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                         )}
                         </>
                       )}
-                    </div>
+                    </RowActions>
                   </td>
                 </tr>
               ))}
@@ -1022,9 +1015,10 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
         open={isModalOpen}
         onClose={closeModal}
         title={isEditing ? 'Edit Expense' : 'Add Expense'}
+        size="lg"
         footer={
           <>
-            <Button variant="secondary" size="md" onClick={closeModal}>Cancel</Button>
+            <Button variant="secondary" size="md" onClick={closeModal} disabled={mutating}>Cancel</Button>
             <Button variant="primary" size="md" loading={mutating} disabled={lookupPending} onClick={handleSubmit}>{isEditing ? 'Save Changes' : 'Add Expense'}</Button>
           </>
         }
@@ -1037,6 +1031,73 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
             <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{formError}</div>
           )}
 
+          <p className="rounded-xl bg-primary/10 px-3 py-2 text-xs text-ink">Direct company spending. Saving creates a pending record; approval records the cash deduction and G/L posting.</p>
+          <fieldset className="min-w-0 rounded-xl border border-border p-4 space-y-3"><legend className="px-2 text-sm font-semibold text-ink">Expense details</legend>
+          <div>
+            <label htmlFor="expense-description" className={LABEL}>Description <span className="text-status-danger">*</span></label>
+            <input id="expense-description" aria-invalid={!!fieldErrors.description}
+              type="text"
+              value={form.description}
+              onChange={(e) => { setForm((f) => ({ ...f, description: e.target.value })); setFieldErrors((fe) => ({ ...fe, description: '' })) }}
+              className={`${INPUT} ${fieldErrors.description ? 'border-status-danger-border' : ''}`}
+              style={INPUT_TEXT_STYLE}
+              placeholder="What this expense was for"
+            />
+            {fieldErrors.description && <p className="mt-1 text-xs text-status-danger">{fieldErrors.description}</p>}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="expense-expense_date" className={LABEL}>Expense Date <span className="text-status-danger">*</span></label>
+              <input
+                type="date"
+                min={budgets.find(b => Number(b.budget_id) === Number(form.budget_id))?.start_date || '2017-01-01'}
+                max={budgets.find(b => Number(b.budget_id) === Number(form.budget_id))?.end_date || `${new Date().getFullYear() + 1}-12-31`}
+                value={form.expense_date}
+                onChange={(e) => { setForm((f) => ({ ...f, expense_date: e.target.value })); setFieldErrors((fe) => ({ ...fe, expense_date: '' })) }}
+                onBlur={(e) => validateDate('expense_date', e.target.value)}
+                className={`${INPUT} scheme-light dark:scheme-dark ${dateErrors.expense_date || fieldErrors.expense_date ? 'border-status-danger-border' : ''}`}
+                style={INPUT_TEXT_STYLE}
+              />
+              {(dateErrors.expense_date || fieldErrors.expense_date) && <p className="mt-1 text-xs text-status-danger">{dateErrors.expense_date || fieldErrors.expense_date}</p>}
+            </div>
+            <div>
+              <label htmlFor="expense-expense_amount" className={LABEL}>Amount <span className="text-status-danger">*</span></label>
+              <input id="expense-expense_amount" aria-invalid={!!fieldErrors.expense_amount}
+                type="number"
+                min={MIN_COLLECTION_AMOUNT}
+                step="any"
+                value={form.expense_amount}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setForm((f) => ({ ...f, expense_amount: val }))
+                  setFieldErrors((fe) => ({ ...fe, expense_amount: '' }))
+                  if (val === '') {
+                    setFieldErrors((fe) => ({ ...fe, expense_amount: '' }))
+                  } else if (Number(val) < 0) {
+                    setFieldErrors((fe) => ({ ...fe, expense_amount: 'Amount cannot be negative.' }))
+                  } else if (Number(val) < MIN_COLLECTION_AMOUNT) {
+                    setFieldErrors((fe) => ({ ...fe, expense_amount: `Amount must be at least ${formatCurrency(MIN_COLLECTION_AMOUNT)}.` }))
+                  } else if (form.budget_id && (() => {
+                    const b = budgets.find((item) => Number(item.budget_id) === Number(form.budget_id))
+                    return b && Number(val) > Number(b.remaining_amount)
+                  })()) {
+                    setFieldErrors((fe) => ({ ...fe, expense_amount: 'Amount exceeds available balance for the selected budget.' }))
+                  } else if (form.cash_account_id) {
+                    const acc = cashAccounts.find((a) => String(a.id) === String(form.cash_account_id))
+                    if (acc && Number(val) > Number(acc.current_balance)) {
+                      setFieldErrors((fe) => ({ ...fe, expense_amount: 'Amount exceeds available funds in the selected cash account.' }))
+                    }
+                  }
+                }}
+                className={`${INPUT} ${fieldErrors.expense_amount ? 'border-status-danger-border' : ''}`}
+                style={INPUT_TEXT_STYLE}
+                placeholder={minHint(MIN_COLLECTION_AMOUNT)}
+              />
+              {fieldErrors.expense_amount && <p className="mt-1 text-xs text-status-danger">{fieldErrors.expense_amount}</p>}
+            </div>
+          </div>
+          </fieldset>
+          <fieldset className="min-w-0 rounded-xl border border-border p-4 space-y-3"><legend className="px-2 text-sm font-semibold text-ink">Supplier & receipt</legend>
           {!isEditing && (
             <>
               <ExpenseScanUpload
@@ -1057,10 +1118,44 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
             </>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Budget <span className="text-status-danger">*</span></label>
-              <select
+              <label className={LABEL}>Receipt attachment</label>
+              <div className="flex items-center h-9 px-3 rounded-lg border border-border bg-bg/50 text-xs font-medium cursor-not-allowed select-none">
+                {receiptFile || form.receipt_status === 'Uploaded' || (isEditing && modalMode.has_receipt) ? (
+                  <span className="inline-flex items-center gap-1.5 text-status-success font-semibold">
+                    <CheckCircle2 size={14} />
+                    Uploaded (Proof Attached)
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 text-status-warning">
+                    <Paperclip size={14} />
+                    Pending (Attach proof above)
+                  </span>
+                )}
+              </div>
+            </div>
+            <div>
+              <label htmlFor="expense-supplier_id" className={LABEL}>Supplier (optional)</label>
+              <select id="expense-supplier_id" aria-invalid={!!fieldErrors.supplier_id} disabled={supplierLookup.loading || !!supplierLookup.error} value={form.supplier_id} onChange={(e) => setForm((f) => ({ ...f, supplier_id: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE}>
+                <option value="">N/A (No Supplier)</option>
+                {suppliers.map((s) => <option key={s.id} value={s.id}>{s.supplier_name}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="expense-document-number" className={LABEL}>Supplier document number {form.supplier_id ? <span className="text-status-danger">*</span> : <span className="text-muted">(optional)</span>}</label>
+            <input id="expense-document-number" type="text" required={!!form.supplier_id} aria-invalid={!!fieldErrors.receipt_number} aria-describedby="expense-document-help" value={form.receipt_number} onChange={e => {setForm(f => ({...f,receipt_number:e.target.value}));setFieldErrors(fe => ({...fe,receipt_number:''}))}} className={INPUT} placeholder="Original invoice / receipt number" />
+            <p id="expense-document-help" className="mt-1 text-xs text-muted">Use the original supplier reference so duplicate costs can be checked against AP.</p>
+            {fieldErrors.receipt_number && <p role="alert" className="text-xs text-status-danger">{fieldErrors.receipt_number}</p>}
+          </div>
+          </fieldset>
+          <fieldset className="min-w-0 rounded-xl border border-border p-4 space-y-3"><legend className="px-2 text-sm font-semibold text-ink">Budget & G/L</legend>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="expense-budget_id" className={LABEL}>Budget <span className="text-status-danger">*</span></label>
+              <select id="expense-budget_id" aria-invalid={!!fieldErrors.budget_id}
                 aria-label="Expense budget"
                 disabled={budgetLookup.loading || !!budgetLookup.error}
                 value={form.budget_id}
@@ -1100,8 +1195,8 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
               {fieldErrors.budget_id && <p className="mt-1 text-xs text-status-danger">{fieldErrors.budget_id}</p>}
             </div>
             <div>
-              <label className={LABEL}>Category <span className="text-status-danger">*</span></label>
-              <select
+              <label htmlFor="expense-expense_category_id" className={LABEL}>Category <span className="text-status-danger">*</span></label>
+              <select id="expense-expense_category_id" aria-invalid={!!fieldErrors.expense_category_id}
                 disabled={categoryLookup.loading || !!categoryLookup.error}
                 value={form.expense_category_id}
                 onChange={(e) => { setForm((f) => ({ ...f, expense_category_id: e.target.value })); setFieldErrors((fe) => ({ ...fe, expense_category_id: '' })) }}
@@ -1122,129 +1217,25 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
           <ExpenseGlAccountField budgetId={form.budget_id} value={form.gl_account_id} onChange={id => {setForm(f => ({...f,gl_account_id:id}));setFieldErrors(fe => ({...fe,gl_account_id:''}))}} error={fieldErrors.gl_account_id} disabled={mutating} />
 
           {(() => {
-            const b = budgets.find((item) => Number(item.budget_id) === Number(form.budget_id))
+            const b = budgets.find(item => Number(item.budget_id) === Number(form.budget_id))
             if (!b) return null
             const state = getBudgetBalanceState(b)
-            const isExceeded = Number(form.expense_amount) > Number(b.remaining_amount)
-            return (
-              <div className="rounded-lg border border-border bg-bg/50 px-3 py-2 text-xs space-y-1.5">
-                <div className="flex justify-between items-center">
-                  <span className="text-muted">Linked Budget:</span>
-                  <span className="font-semibold text-ink">{b.budget_name} ({b.budget_code})</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted">Budget Status:</span>
-                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${b.status === 'Active' ? 'bg-status-success-bg text-status-success' : 'bg-status-warning-bg text-status-warning'}`}>
-                    {b.status}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted">Budget Balance Status:</span>
-                  {state.isDepleted ? (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-status-danger-bg text-status-danger">
-                      Depleted (No funds available)
-                    </span>
-                  ) : state.isLow ? (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-status-warning-bg text-status-warning">
-                      Low Balance Warning
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-status-success-bg text-status-success">
-                      Sufficient Balance
-                    </span>
-                  )}
-                </div>
-
-                {state.isDepleted && (
-                  <div className="flex items-start gap-1.5 text-[11px] text-status-danger font-medium pt-0.5">
-                    <AlertTriangle size={13} className="shrink-0 mt-0.5" />
-                    <span>Cannot select this budget: Budget funds are exhausted. Please select an active budget with available funds.</span>
-                  </div>
-                )}
-
-                {!state.isDepleted && state.isLow && !isExceeded && (
-                  <div className="flex items-start gap-1.5 text-[11px] text-status-warning font-medium pt-0.5">
-                    <AlertTriangle size={13} className="shrink-0 mt-0.5" />
-                    <span>Warning: This budget has low remaining balance. Please review this expense carefully.</span>
-                  </div>
-                )}
-
-                {isExceeded && Number(form.expense_amount) > 0 && (
-                  <div className="flex items-start gap-1.5 text-[11px] text-status-danger font-medium pt-0.5">
-                    <AlertTriangle size={13} className="shrink-0 mt-0.5" />
-                    <span>Warning: Expense amount exceeds the budget's available balance. Expenses exceeding available funds cannot be approved.</span>
-                  </div>
-                )}
+            const exceeded = Number(form.expense_amount) > Number(b.remaining_amount)
+            return <div className="rounded-xl border border-border bg-bg p-3 space-y-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                <div className="min-w-0"><p className="text-muted">Selected budget</p><p className="font-semibold text-ink break-words">{b.budget_name} ({b.budget_code})</p></div>
+                <div><p className="text-muted">Available before this expense</p><p className="font-semibold tabular-nums text-ink">{formatCurrency(b.remaining_amount)}</p></div>
               </div>
-            )
+              {(state.isDepleted || state.isLow || exceeded) && <p role="status" className={'text-xs ' + (state.isDepleted || exceeded ? 'text-status-danger' : 'text-status-warning')}>
+                {state.isDepleted ? 'This budget is depleted. Select another active budget.' : exceeded ? 'This expense exceeds the available budget and cannot be approved.' : 'This budget is running low. Review the amount before submitting.'}
+              </p>}
+            </div>
           })()}
-          <div>
-            <label className={LABEL}>Description <span className="text-status-danger">*</span></label>
-            <input
-              type="text"
-              value={form.description}
-              onChange={(e) => { setForm((f) => ({ ...f, description: e.target.value })); setFieldErrors((fe) => ({ ...fe, description: '' })) }}
-              className={`${INPUT} ${fieldErrors.description ? 'border-status-danger-border' : ''}`}
-              style={INPUT_TEXT_STYLE}
-              placeholder="What this expense was for"
-            />
-            {fieldErrors.description && <p className="mt-1 text-xs text-status-danger">{fieldErrors.description}</p>}
-          </div>
-          <div className="grid grid-cols-2 gap-3">
+          </fieldset>
+          <fieldset className="min-w-0 rounded-xl border border-border p-4 space-y-3"><legend className="px-2 text-sm font-semibold text-ink">Payment account</legend>
             <div>
-              <label className={LABEL}>Expense Date <span className="text-status-danger">*</span></label>
-              <input
-                type="date"
-                min={budgets.find(b => Number(b.budget_id) === Number(form.budget_id))?.start_date || '2017-01-01'}
-                max={budgets.find(b => Number(b.budget_id) === Number(form.budget_id))?.end_date || `${new Date().getFullYear() + 1}-12-31`}
-                value={form.expense_date}
-                onChange={(e) => { setForm((f) => ({ ...f, expense_date: e.target.value })); setFieldErrors((fe) => ({ ...fe, expense_date: '' })) }}
-                onBlur={(e) => validateDate('expense_date', e.target.value)}
-                className={`${INPUT} scheme-light dark:scheme-dark ${dateErrors.expense_date || fieldErrors.expense_date ? 'border-status-danger-border' : ''}`}
-                style={INPUT_TEXT_STYLE}
-              />
-              {(dateErrors.expense_date || fieldErrors.expense_date) && <p className="mt-1 text-xs text-status-danger">{dateErrors.expense_date || fieldErrors.expense_date}</p>}
-            </div>
-            <div>
-              <label className={LABEL}>Amount <span className="text-status-danger">*</span></label>
-              <input
-                type="number"
-                min={MIN_COLLECTION_AMOUNT}
-                step="any"
-                value={form.expense_amount}
-                onChange={(e) => {
-                  const val = e.target.value
-                  setForm((f) => ({ ...f, expense_amount: val }))
-                  setFieldErrors((fe) => ({ ...fe, expense_amount: '' }))
-                  if (val === '') {
-                    setFieldErrors((fe) => ({ ...fe, expense_amount: '' }))
-                  } else if (Number(val) < 0) {
-                    setFieldErrors((fe) => ({ ...fe, expense_amount: 'Amount cannot be negative.' }))
-                  } else if (Number(val) < MIN_COLLECTION_AMOUNT) {
-                    setFieldErrors((fe) => ({ ...fe, expense_amount: `Amount must be at least ${formatCurrency(MIN_COLLECTION_AMOUNT)}.` }))
-                  } else if (form.budget_id && (() => {
-                    const b = budgets.find((item) => Number(item.budget_id) === Number(form.budget_id))
-                    return b && Number(val) > Number(b.remaining_amount)
-                  })()) {
-                    setFieldErrors((fe) => ({ ...fe, expense_amount: 'Amount exceeds available balance for the selected budget.' }))
-                  } else if (form.cash_account_id) {
-                    const acc = cashAccounts.find((a) => String(a.id) === String(form.cash_account_id))
-                    if (acc && Number(val) > Number(acc.current_balance)) {
-                      setFieldErrors((fe) => ({ ...fe, expense_amount: 'Amount exceeds available funds in the selected cash account.' }))
-                    }
-                  }
-                }}
-                className={`${INPUT} ${fieldErrors.expense_amount ? 'border-status-danger-border' : ''}`}
-                style={INPUT_TEXT_STYLE}
-                placeholder={minHint(MIN_COLLECTION_AMOUNT)}
-              />
-              {fieldErrors.expense_amount && <p className="mt-1 text-xs text-status-danger">{fieldErrors.expense_amount}</p>}
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={LABEL}>Payment Cash Account <span className="text-status-danger">*</span></label>
-              <select
+              <label htmlFor="expense-cash_account_id" className={LABEL}>Payment Cash Account <span className="text-status-danger">*</span></label>
+              <select id="expense-cash_account_id" aria-invalid={!!fieldErrors.cash_account_id}
                 disabled={cashLookup.loading || !!cashLookup.error}
                 value={form.cash_account_id}
                 onChange={(e) => {
@@ -1278,11 +1269,6 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
               </select>
               {fieldErrors.cash_account_id && <p className="mt-1 text-xs text-status-danger">{fieldErrors.cash_account_id}</p>}
             </div>
-            <div>
-              <label className={LABEL}>Receipt Number</label>
-              <input type="text" value={form.receipt_number} onChange={(e) => setForm((f) => ({ ...f, receipt_number: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE} placeholder="RCPT-4401" />
-            </div>
-          </div>
           {(() => {
             const selectedAcc = cashAccounts.find((a) => String(a.id) === String(form.cash_account_id))
             const enteredAmt = Number(form.expense_amount)
@@ -1310,72 +1296,47 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
             }
             return null
           })()}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={LABEL}>Receipt Status (Auto-managed)</label>
-              <div className="flex items-center h-9 px-3 rounded-lg border border-border bg-bg/50 text-xs font-medium cursor-not-allowed select-none">
-                {receiptFile || form.receipt_status === 'Uploaded' || (isEditing && modalMode.has_receipt) ? (
-                  <span className="inline-flex items-center gap-1.5 text-status-success font-semibold">
-                    <CheckCircle2 size={14} />
-                    Uploaded (Proof Attached)
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 text-status-warning">
-                    <Paperclip size={14} />
-                    Pending (Attach proof above)
-                  </span>
-                )}
-              </div>
-            </div>
-            <div>
-              <label className={LABEL}>Supplier (optional)</label>
-              <select disabled={supplierLookup.loading || !!supplierLookup.error} value={form.supplier_id} onChange={(e) => setForm((f) => ({ ...f, supplier_id: e.target.value }))} className={INPUT} style={INPUT_TEXT_STYLE}>
-                <option value="">N/A (No Supplier)</option>
-                {suppliers.map((s) => <option key={s.id} value={s.id}>{s.supplier_name}</option>)}
-              </select>
-            </div>
-          </div>
-
+          </fieldset>
           {isEditing && (
             <p className="text-xs text-muted">
-              To attach or update receipts, use the <Paperclip size={12} className="inline" /> icon on the expense row.
+              To view or attach receipts, choose <strong>More actions (?) ? Documents</strong> on the expense row.
             </p>
           )}
 
           {isEditing && (
-            <div className="rounded-lg border border-border bg-bg px-3 py-2.5">
-              <p className="text-xs font-medium text-muted mb-1">Record Info (read-only)</p>
+            <details className="rounded-lg border border-border bg-bg px-3 py-2.5">
+              <summary className="cursor-pointer text-xs font-medium text-muted">Record history</summary>
               <DetailRow label="Created by" value={modalMode.created_by_name} />
               <DetailRow label="Created at" value={formatDateTime(modalMode.created_at)} />
               <DetailRow label="Last updated" value={formatDateTime(modalMode.updated_at)} />
               <DetailRow label="Status" value={modalMode.status} />
-            </div>
+            </details>
           )}
         </form>
       </Modal>
 
       <Modal
         open={!!detailRecord}
+        size="lg"
         onClose={() => setDetailRecord(null)}
         title={detailRecord ? `Expense Details  -  #${detailRecord.id}` : 'Expense Details'}
         footer={
           <>
             <Button variant="secondary" size="md" onClick={() => setDetailRecord(null)}>Close</Button>
             {detailRecord && <Button variant="primary" size="md" icon={Printer} onClick={() => handlePrint(detailRecord)}>Print Slip</Button>}
-            {detailRecord && detailRecord.status === 'Pending' && detailRecord.has_receipt && (() => {
+            {detailRecord && canApprove && detailRecord.status === 'Pending' && detailRecord.has_receipt && (() => {
               const hasBudget = Boolean(detailRecord.budget_id && (detailRecord.budget_name || budgets.some((b) => Number(b.budget_id) === Number(detailRecord.budget_id))))
               const isCostExceeded = detailRecord.budget_remaining_amount !== null && detailRecord.budget_remaining_amount !== undefined
                 ? Number(detailRecord.expense_amount) > Number(detailRecord.budget_remaining_amount)
                 : Boolean(detailRecord.is_over_budget)
               return (
                 <>
-                  <button
+                  <Button variant="secondary" size="sm" icon={XCircle}
                     type="button"
-                    onClick={() => { const target = detailRecord; setDetailRecord(null); openReject(target) }}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-semibold rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20 shadow-sm transition-all duration-150 active:scale-95"
+                    onClick={() => { const target = detailRecord; setDetailRecord(null); openReject(target) }} className="text-status-danger hover:bg-status-danger-bg"
                   >
                     Reject
-                  </button>
+                  </Button>
                   {!hasBudget ? (
                     <Tooltip label="Cannot approve: Linked budget is missing or does not exist.">
                       <button
@@ -1397,13 +1358,12 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                       </button>
                     </Tooltip>
                   ) : (
-                    <button
+                    <Button variant="primary" size="sm" icon={CheckCircle2}
                       type="button"
                       onClick={async () => { await handleApprove(detailRecord); setDetailRecord(null) }}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-sm transition-all duration-150 active:scale-95"
                     >
                       Approve
-                    </button>
+                    </Button>
                   )}
                 </>
               )
@@ -1413,6 +1373,12 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
       >
         {detailRecord && (
           <div className="space-y-4">
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs font-medium text-muted">Direct expense #{detailRecord.id}</p><span className={'rounded-full px-2.5 py-1 text-xs font-medium ' + (STATUS_STYLES[detailRecord.status] || '')}>{detailRecord.status}</span></div>
+              <p className="text-2xl font-bold tabular-nums break-words text-ink">{formatCurrency(detailRecord.expense_amount)}</p>
+              <p className="text-sm font-semibold break-words text-ink">{detailRecord.description}</p>
+              <p className="text-xs text-muted">{formatDate(detailRecord.expense_date)} &middot; {detailRecord.expense_category_name || categoryName(detailRecord.expense_category_id)}</p>
+            </div>
             {/* Warning banner when budget is missing/nonexistent */}
             {detailRecord.status === 'Pending' && (!detailRecord.budget_id || (!detailRecord.budget_name && !budgets.some((b) => Number(b.budget_id) === Number(detailRecord.budget_id)))) && (
               <div className="flex items-start gap-2.5 rounded-lg border border-status-danger-border bg-status-danger-bg p-3 text-xs text-status-danger">
@@ -1482,31 +1448,25 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
               </div>
             )}
 
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold text-ink">{detailRecord.description}</p>
-                <p className="text-xs text-muted">{detailRecord.budget_name || budgetLabel(detailRecord.budget_id)}</p>
-              </div>
-              <div className="flex flex-col items-end gap-1">
-                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${CATEGORY_STYLES}`}>{detailRecord.expense_category_name || categoryName(detailRecord.expense_category_id)}</span>
-                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[detailRecord.status] || ''}`}>{detailRecord.status}</span>
-              </div>
-            </div>
             <div className="rounded-lg border border-border divide-y divide-border">
               <div className="px-3 py-2">
+                <p className="mb-2 text-xs font-semibold text-muted uppercase tracking-wide">Payment &amp; accounting</p>
+                <DetailRow label="Budget" value={detailRecord.budget_name || budgetLabel(detailRecord.budget_id)} />
                 <DetailRow label="Record ID" value={`#${detailRecord.id}`} />
                 <DetailRow label="Posting G/L account" value={detailRecord.gl_account_code ? `${detailRecord.gl_account_code} - ${detailRecord.gl_account_name}` : 'Legacy posting - see general ledger'} />
                 <DetailRow label="Expense Date" value={formatDate(detailRecord.expense_date)} />
                 <DetailRow label="Amount" value={formatCurrency(detailRecord.expense_amount)} />
                 <DetailRow label="Over Budget" value={detailRecord.is_over_budget ? 'Yes' : 'No'} />
                 <DetailRow label="Cash Account" value={detailRecord.cash_account_name ? `${detailRecord.cash_account_name} (${detailRecord.cash_account_bank || detailRecord.cash_account_code})` : (detailRecord.expense_source || '—')} />
+                </div><div className="px-3 py-2">
+                <p className="mb-2 text-xs font-semibold text-muted uppercase tracking-wide">Supplier &amp; receipt</p>
                 <DetailRow label="Receipt No." value={detailRecord.receipt_number} />
                 <DetailRow label="Receipt Status" value={detailRecord.receipt_status} />
                 <DetailRow
                   label="Receipt File"
                   value={
                     detailRecord.has_receipt ? (
-                      <span className="inline-flex items-center gap-3">
+                      <span className="inline-flex flex-wrap items-center gap-3">
                         <button type="button" onClick={() => handleViewReceipt(detailRecord)} className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
                           <FileText size={12} /> View file
                         </button>
@@ -1524,6 +1484,7 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
                 <DetailRow label="Supplier" value={detailRecord.supplier_name || supplierName(detailRecord.supplier_id)} />
               </div>
               <div className="px-3 py-2">
+                <p className="mb-2 text-xs font-semibold text-muted uppercase tracking-wide">Approval history</p>
                 <DetailRow label="Created by" value={detailRecord.created_by_name} />
                 <DetailRow label="Created at" value={formatDateTime(detailRecord.created_at)} />
                 <DetailRow label="Updated at" value={formatDateTime(detailRecord.updated_at)} />
@@ -1579,17 +1540,18 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
 
       <Modal
         open={!!rejectTarget}
-        onClose={() => { setRejectTarget(null); setRejectError('') }}
+        onClose={() => { if (!mutating) { setRejectTarget(null); setRejectError('') } }}
         title={rejectTarget ? `Reject Expense #${rejectTarget.id}` : 'Reject Expense'}
         maxWidth="max-w-sm"
         footer={
           <>
-            <Button variant="secondary" size="md" onClick={() => { setRejectTarget(null); setRejectError('') }}>Cancel</Button>
+            <Button variant="secondary" size="md" disabled={mutating} onClick={() => { setRejectTarget(null); setRejectError('') }}>Cancel</Button>
             <Button variant="danger" size="md" loading={mutating} disabled={!rejectRemarks.trim()} onClick={confirmReject}>Reject Expense</Button>
           </>
         }
       >
         <div className="space-y-3">
+          <div className="rounded-xl border border-border bg-bg p-3"><p className="font-semibold tabular-nums text-ink">{formatCurrency(rejectTarget?.expense_amount || 0)}</p><p className="mt-1 text-sm break-words text-muted">{rejectTarget?.description}</p></div>
           <p className="text-xs text-muted">
             Rejecting will finalize this expense as <strong>Rejected</strong>. The user who created this expense will be immediately notified along with your reason below.
           </p>
@@ -1601,11 +1563,13 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
           )}
 
           <div>
-            <label className={LABEL}>
+            <label htmlFor="expense-reject-reason" className={LABEL}>
               Reason for Rejection <span className="text-status-danger">*</span>
             </label>
             <textarea
               rows={3}
+              id="expense-reject-reason"
+              disabled={mutating}
               value={rejectRemarks}
               onChange={(e) => { setRejectRemarks(e.target.value); setRejectError('') }}
               className={`w-full px-3 py-2 rounded-lg border bg-bg text-sm text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-status-danger-border ${rejectError ? 'border-status-danger-border' : 'border-border'}`}
@@ -1617,28 +1581,31 @@ export default function Expenses({ title = 'Expenses', crumbs = ['Financial Tran
         </div>
       </Modal>
 
-      <ExpenseReceiptUploadModal
-        open={!!receiptUploadTarget}
-        onClose={() => setReceiptUploadTarget(null)}
-        expense={receiptUploadTarget}
-        onUpload={async (file) => {
-          const result = await uploadReceipt(receiptUploadTarget.id, file)
-          if (result.success) {
-            refetch()
-            setDetailRecord((prev) => (prev && prev.id === receiptUploadTarget.id ? { ...prev, has_receipt: true, receipt_status: 'Uploaded' } : prev))
-          }
-          return result
-        }}
+      <DocumentWorkspaceModal
+        open={!!(receiptUploadTarget || receiptHistoryTarget)}
+        onClose={() => { setReceiptUploadTarget(null); setReceiptHistoryTarget(null) }}
+        record={{id:(receiptUploadTarget || receiptHistoryTarget)?.id,label:'Expense #' + (receiptUploadTarget || receiptHistoryTarget)?.id,description:(receiptUploadTarget || receiptHistoryTarget)?.description}}
+        canUpload={hasPermission(permissions, 'expenses.manage') && !(receiptUploadTarget || receiptHistoryTarget)?.deleted_at && !filters.trashed && !['Rejected'].includes((receiptUploadTarget || receiptHistoryTarget)?.status)}
+        fetchHistory={fetchReceiptHistory} onView={viewReceiptVersion}
+        onUpload={async file => {const target=receiptUploadTarget || receiptHistoryTarget;const result=await uploadReceipt(target.id,file);if(result.success){refetch();setDetailRecord(prev=>prev?.id===target.id?{...prev,has_receipt:true,receipt_status:'Uploaded'}:prev)}return result}}
       />
 
-      <ExpenseReceiptHistoryModal
-        open={!!receiptHistoryTarget}
-        onClose={() => setReceiptHistoryTarget(null)}
-        expense={receiptHistoryTarget}
-        fetchHistory={fetchReceiptHistory}
-        onView={viewReceiptVersion}
-      />
-
+      <Modal open={!!settlementTarget} onClose={() => { if (!settling) setSettlementTarget(null) }} title="Confirm direct expense posting" size="lg" footer={<>
+        <Button variant="secondary" onClick={() => setSettlementTarget(null)} disabled={settling}>Cancel</Button>
+        <Button onClick={confirmSettlement} loading={settling}>Confirm &amp; record payment</Button>
+      </>}>
+        <div className="space-y-3 text-sm">
+          <div className="rounded-xl bg-primary/10 p-4 space-y-1"><p className="text-xs text-muted">Amount to record</p><p className="text-2xl font-bold tabular-nums break-words text-ink">{formatCurrency(settlementTarget?.expense_amount || 0)}</p><p className="font-semibold break-words text-ink">{settlementTarget?.description}</p></div>
+          <div className="rounded-xl border border-border p-3">
+            <DetailRow label="Cash account" value={settlementTarget?.cash_account_name || cashAccounts.find(a => String(a.id) === String(settlementTarget?.cash_account_id))?.account_name || 'See expense payment account'} />
+            <DetailRow label="Budget" value={settlementTarget?.budget_name || budgetLabel(settlementTarget?.budget_id)} />
+            <DetailRow label="Posting G/L account" value={settlementTarget?.gl_account_code ? settlementTarget.gl_account_code + ' - ' + settlementTarget.gl_account_name : 'See expense posting details'} />
+          </div>
+          <p className="text-muted">This records {formatCurrency(settlementTarget?.expense_amount || 0)} against the selected cash account, deducts its balance, uses the budget, and posts to G/L. There is no later release step.</p>
+          <p className="rounded-lg border border-border bg-bg p-3 text-muted">Use this for direct spending paid by the company. For an unpaid bill or reimbursement, cancel and use the payable/payment workflow instead. Do not record the same payment twice.</p>
+          {settlementError && <p role="alert" className="text-status-danger">{settlementError}</p>}
+        </div>
+      </Modal>
       {/* Batch Approve Expenses Wizard */}
       <BatchApproveExpensesModal
         open={showBatchApproveModal}

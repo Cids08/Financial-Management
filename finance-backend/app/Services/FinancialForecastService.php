@@ -8,6 +8,7 @@ use App\Models\AuditLog;
 use App\Models\FinancialForecast;
 use App\Models\Setting;
 use App\Models\User;
+use App\Services\Forecasting\HistoricalActuals;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Carbon;
@@ -51,12 +52,14 @@ class FinancialForecastService
         'Budget Utilization' => 'Budget',
     ];
 
-    // months = forecast_period value stored in the DB (the integer column);
-    // lookback_months = training window length.
+    // months = forecast_period value stored in the DB (the integer column).
+    // The training window is NOT configured here anymore — it's data-driven
+    // (HistoricalActuals: from the first month with activity for the type up
+    // to the last completed month, floored at 6, capped at 60).
     public const HORIZON_LABELS = [
-        'next_month' => ['months' => 1, 'lookback_months' => 6],
-        'next_quarter' => ['months' => 3, 'lookback_months' => 8],
-        'next_fiscal_year' => ['months' => 12, 'lookback_months' => 24],
+        'next_month' => ['months' => 1],
+        'next_quarter' => ['months' => 3],
+        'next_fiscal_year' => ['months' => 12],
     ];
 
     // The extra horizon key the UI offers on top of the fixed ones above.
@@ -66,11 +69,10 @@ class FinancialForecastService
     public const CONFIGURED_HORIZON_KEY = 'configured';
 
     /**
-     * Resolves a horizon key to its ['months', 'lookback_months'] window.
-     * 'configured' reads the company's Forecast Horizon (months) setting;
-     * training window is kept at twice the horizon (bounded 12–60) so
-     * longer horizons still have enough history to fit. Returns null for
-     * an unknown key so callers can fail loudly.
+     * Resolves a horizon key to its ['months'] forecast length.
+     * 'configured' reads the company's Forecast Horizon (months) setting
+     * (bounded 1–60). Returns null for an unknown key so callers can fail
+     * loudly.
      */
     public static function horizonFor(string $horizonKey): ?array
     {
@@ -78,10 +80,7 @@ class FinancialForecastService
             $months = (int) (Setting::current()->forecast_months ?: 12);
             $months = max(1, min(60, $months));
 
-            return [
-                'months' => $months,
-                'lookback_months' => max(12, min(60, $months * 2)),
-            ];
+            return ['months' => $months];
         }
 
         return self::HORIZON_LABELS[$horizonKey] ?? null;
@@ -93,7 +92,7 @@ class FinancialForecastService
         return array_merge(array_keys(self::HORIZON_LABELS), [self::CONFIGURED_HORIZON_KEY]);
     }
 
-    public function __construct(protected ForecastEngine $engine)
+    public function __construct(protected ForecastEngine $engine, protected HistoricalActuals $actuals)
     {
     }
 
@@ -149,8 +148,15 @@ class FinancialForecastService
             $today = Carbon::today();
             $forecastStart = $today->copy()->addMonthNoOverflow()->startOfMonth();
             $forecastEnd = $forecastStart->copy()->addMonths($horizon['months'] - 1)->endOfMonth();
-            $historicalStart = $today->copy()->subMonthsNoOverflow($horizon['lookback_months'] - 1)->startOfMonth();
-            $historicalEnd = $today->copy()->endOfMonth();
+            // The training window is data-driven (first activity month →
+            // last completed month, capped) — HistoricalActuals::monthBoundaries
+            // decides it, so read it back from the same source the engines
+            // train on rather than deriving it from the horizon again. This
+            // keeps historical_start/end identical to the series the model
+            // genuinely saw.
+            $window = $this->actuals->window($forecastType);
+            $historicalStart = $window['start'];
+            $historicalEnd = $window['end'];
 
             $forecast = FinancialForecast::create([
                 'forecast_no' => $this->generateForecastNo(),

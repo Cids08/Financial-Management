@@ -186,6 +186,11 @@ class BudgetService
 
     public function attachPlan(Budget $budget, UploadedFile $file, int $userId): SupportingDocument
     {
+        if ($budget->status !== Budget::STATUS_DRAFT) {
+            $msg = "Budget plan uploads are only allowed while the budget is Draft.";
+            throw ValidationException::create($msg, ['file' => $msg]);
+        }
+
         $path = $file->store("budget-plans/{$budget->id}", FileStorage::DISK);
 
         return SupportingDocument::create([

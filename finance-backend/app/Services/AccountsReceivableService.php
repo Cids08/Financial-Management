@@ -434,6 +434,11 @@ class AccountsReceivableService
 
     public function attachDocument(AccountsReceivable $ar, UploadedFile $file, User $actor): SupportingDocument
     {
+        if (in_array($ar->status, ['Paid', 'Cancelled'], true)) {
+            $msg = "Documents cannot be attached to a {$ar->status} invoice.";
+            throw ValidationException::create($msg, ['document' => $msg]);
+        }
+
         $path = $file->store("accounts-receivable-documents/{$ar->id}", FileStorage::DISK);
 
         $document = SupportingDocument::create([

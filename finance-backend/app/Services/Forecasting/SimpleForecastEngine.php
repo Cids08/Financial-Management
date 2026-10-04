@@ -17,8 +17,8 @@ use RuntimeException;
  * model so the Generate buttons actually produce a forecast:
  *
  *   1. Build the SAME training window as the Python engine via
- *      HistoricalActuals (one value per calendar month for the horizon's
- *      lookback window).
+ *      HistoricalActuals (one value per completed calendar month, from the
+ *      first month with activity for the type, capped at 60).
  *   2. Fit a least-squares linear trend y = a + b*x over the window.
  *   3. Shrink the intercept toward the window mean so short or noisy
  *      histories can't extrapolate into absurd numbers (the trend weight
@@ -52,7 +52,7 @@ class SimpleForecastEngine implements ForecastEngine
         $horizon = FinancialForecastService::horizonFor($horizonKey)
             ?? throw new RuntimeException("Unknown horizon key: {$horizonKey}");
 
-        $history = $this->actuals->forType($forecastType, $horizon['lookback_months']);
+        $history = $this->actuals->forType($forecastType);
 
         [$a, $b] = $this->fitTrend($history);
         $forecasts = $this->project($a, $b, count($history), $horizon['months']);
@@ -98,7 +98,7 @@ class SimpleForecastEngine implements ForecastEngine
 
         $horizon = FinancialForecastService::horizonFor($horizonKey)
             ?? throw new RuntimeException("Unknown horizon key: {$horizonKey}");
-        $history = $this->actuals->forType($forecastType, $horizon['lookback_months']);
+        $history = $this->actuals->forType($forecastType);
 
         $series = [];
         foreach ($history as $index => $value) {

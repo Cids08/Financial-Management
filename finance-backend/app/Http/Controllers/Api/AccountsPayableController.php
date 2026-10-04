@@ -13,6 +13,7 @@ use App\Models\SupportingDocument;
 use App\Services\AccountsPayableService;
 use App\Support\FileStorage;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Http\Request;
 
 
@@ -20,6 +21,11 @@ class AccountsPayableController extends Controller
 {
     public function __construct(protected AccountsPayableService $service)
     {
+    }
+
+    public function budgetOptions(): JsonResponse
+    {
+        return response()->json(['success' => true, 'data' => \App\Models\Budget::where('status', 'Active')->orderByDesc('fiscal_year')->get(['id', 'budget_code', 'budget_name', 'start_date', 'end_date'])]);
     }
 
     public function index(Request $request): JsonResponse
@@ -149,11 +155,15 @@ class AccountsPayableController extends Controller
     {
         $this->authorize('attachDocument', $accountsPayable);
 
-        $document = $this->service->attachDocument(
-            $accountsPayable,
-            $request->file('document'),
-            $request->user()
-        );
+        try {
+            $document = $this->service->attachDocument(
+                $accountsPayable,
+                $request->file('document'),
+                $request->user()
+            );
+        } catch (ValidationException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage(), 'errors' => $e->errors()], 422);
+        }
 
         return response()->json([
             'success' => true,

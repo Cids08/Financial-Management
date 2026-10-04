@@ -1,3 +1,7 @@
+import RowActions from '../components/RowActions'
+import DocumentWorkspaceModal from '../components/DocumentWorkspaceModal'
+import { usePermissions } from '../context/PermissionsContext'
+import DocumentAction from '../components/DocumentAction'
 import KpiValue from '../components/KpiValue'
 import { TableSkeleton } from '../components/LoadingSkeleton'
 import ResponsiveTable from '../components/ResponsiveTable'
@@ -8,8 +12,6 @@ import Pagination from '../components/Pagination'
 import Button from '../components/Button'
 import Modal from '../components/Modal'
 import Tooltip from '../components/Tooltip'
-import TaxObligationDocumentUploadModal from '../components/TaxObligationDocumentUploadModal'
-import TaxObligationDocumentHistoryModal from '../components/TaxObligationDocumentHistoryModal'
 import RecordTaxPaymentModal from '../components/RecordTaxPaymentModal'
 import BatchPayTaxWizardModal from '../components/BatchPayTaxWizardModal'
 import GenerateTaxScheduleModal from '../components/GenerateTaxScheduleModal'
@@ -166,6 +168,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
   useDataUpdates(['tax-obligations', 'disbursements', 'expenses'], () => refetch())
 
   const { profile } = useProfile()
+  const { hasPermission: canAccess } = usePermissions()
   const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin'
 
   // Batch payment wizard (selection happens inside the modal now  -  the
@@ -805,7 +808,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[o.status]}`}>{o.status}</span>
                     </td>
                     <td className="px-3.5 py-2.5 text-right">
-                      <div className="flex items-center justify-end gap-1">
+                      <RowActions>
                         {/* Workflow Action: Pay (Unpaid obligations only, and only
                             when there's actually an amount owed  -  zero-amount
                             "upcoming/uncalculated" obligations have nothing to pay) */}
@@ -832,19 +835,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                         </Tooltip>
 
                         {/* Unified Supporting Document Action */}
-                        <Tooltip label={o.has_document ? 'View supporting documents' : 'Attach supporting document'} align="start">
-                          <button
-                            type="button"
-                            onClick={() => (o.has_document ? setHistoryTarget(o) : setUploadTarget(o))}
-                            className={`flex h-7 w-7 items-center justify-center rounded-lg transition-colors duration-150 ${
-                              o.has_document
-                                ? 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:hover:bg-emerald-500/20'
-                                : 'text-muted hover:bg-bg hover:text-ink'
-                            }`}
-                          >
-                            <Paperclip size={14} fill={o.has_document ? 'currentColor' : 'none'} fillOpacity={o.has_document ? 0.2 : 0} />
-                          </button>
-                        </Tooltip>
+                        <DocumentAction attached={o.has_document} label={o.tax_type} onClick={() => setHistoryTarget(o)} />
 
                         {/* Print tax voucher */}
                         {!showArchived && (
@@ -901,7 +892,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
                             </button>
                           </Tooltip>
                         ) : null)}
-                      </div>
+                      </RowActions>
                     </td>
                   </tr>
                 )
@@ -1386,25 +1377,11 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
 
       {/* Attach supporting document modal  -  triggered from a row action or
           from inside the Detail modal above. */}
-      <TaxObligationDocumentUploadModal
-        open={!!uploadTarget}
-        onClose={() => setUploadTarget(null)}
-        obligation={uploadTarget}
-        onUpload={async (file) => {
-          if (uploadTarget?.status === 'Paid') {
-            return { success: false, message: 'Cannot attach documents to a paid tax obligation.' }
-          }
-          return uploadDocument(uploadTarget.tax_id, file)
-        }}
-      />
-
-      {/* Document version history modal  -  same trigger points as above. */}
-      <TaxObligationDocumentHistoryModal
-        open={!!historyTarget}
-        onClose={() => setHistoryTarget(null)}
-        obligation={historyTarget}
-        fetchHistory={fetchDocumentHistory}
-        onView={viewDocument}
+      <DocumentWorkspaceModal open={!!(uploadTarget || historyTarget)} onClose={() => {setUploadTarget(null);setHistoryTarget(null)}}
+        record={{id:(uploadTarget || historyTarget)?.tax_id,label:'Tax obligation #' + (uploadTarget || historyTarget)?.tax_id,description:(uploadTarget || historyTarget)?.tax_type}}
+        canUpload={canAccess('tax.manage') && (uploadTarget || historyTarget)?.status!=='Paid' && !(uploadTarget || historyTarget)?.deleted_at && !showArchived}
+        extensions={['pdf','jpg','jpeg','png']} fetchHistory={fetchDocumentHistory} onView={viewDocument}
+        onUpload={file=>uploadDocument((uploadTarget || historyTarget).tax_id,file)}
       />
 
       {/* Record BIR tax payment modal */}

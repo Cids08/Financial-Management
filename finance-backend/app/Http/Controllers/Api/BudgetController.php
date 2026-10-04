@@ -12,6 +12,7 @@ use App\Models\SupportingDocument;
 use App\Services\BudgetService;
 use App\Support\FileStorage;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class BudgetController extends Controller
 {
@@ -200,7 +201,11 @@ class BudgetController extends Controller
 
     public function uploadPlan(UploadBudgetPlanRequest $request, Budget $budget)
     {
-        $this->budgets->attachPlan($budget, $request->file('plan'), $request->user()->id);
+        try {
+            $this->budgets->attachPlan($budget, $request->file('plan'), $request->user()->id);
+        } catch (ValidationException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage(), 'errors' => $e->errors()], 422);
+        }
 
         return response()->json([
             'success' => true,

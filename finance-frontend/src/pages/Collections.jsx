@@ -1,3 +1,5 @@
+import RowActions from '../components/RowActions'
+import DocumentAction from '../components/DocumentAction'
 import KpiValue from '../components/KpiValue'
 import { TableSkeleton, ContentSkeleton } from '../components/LoadingSkeleton'
 import ResponsiveTable from '../components/ResponsiveTable'
@@ -1106,14 +1108,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-2">
                         <p className="font-medium text-ink">{c.receipt_number}</p>
-                        <button
-                          type="button"
-                          onClick={() => setProofTarget(c)}
-                          className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-primary bg-primary/10 hover:bg-primary/20 transition-colors"
-                          title="View / Upload Proof of Receipt"
-                        >
-                          <Paperclip size={11} /> Proof
-                        </button>
+
                       </div>
                       <p className="text-xs text-muted">{formatDate(c.collection_date)} · {c.cash_account_name || accountName(c.cash_account_id)}</p>
                     </td>
@@ -1129,7 +1124,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                       </span>
                     </td>
                     <td className="px-4 py-3.5 text-right">
-                      <div className="flex items-center justify-end gap-1">
+                      <RowActions>
                         {c.status === 'Pending' && canConfirm && (
                           <div className="flex items-center gap-1 mr-1 pr-1 border-r border-border shrink-0">
                             {profile?.id && c.created_by && Number(c.created_by) === Number(profile.id) ? (
@@ -1171,9 +1166,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                           <button type="button" onClick={() => handlePrint(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"><Printer size={15} /></button>
                         </Tooltip>
                         )}
-                        <Tooltip label="Proof of receipt" align="start">
-                          <button type="button" onClick={() => setProofTarget(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"><Paperclip size={15} /></button>
-                        </Tooltip>
+                        <DocumentAction label={c.receipt_number} onClick={() => setProofTarget(c)} />
                         {c.status === 'Pending' && !c.deleted_at && (
                           <Tooltip label="Edit collection" align="start">
                             <button type="button" onClick={() => openEdit(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"><Pencil size={15} /></button>
@@ -1199,7 +1192,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                           )}
                           </>
                         )}
-                      </div>
+                      </RowActions>
                     </td>
                   </tr>
                 )
@@ -1815,6 +1808,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
         open={!!proofTarget}
         onClose={() => setProofTarget(null)}
         collection={proofTarget}
+        canManage={hasPermission('collections.manage')}
         onUploaded={refetch}
       />
     </div>

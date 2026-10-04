@@ -20,6 +20,7 @@ class StoreAccountsPayableRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'budget_id' => ['nullable', 'integer', 'exists:budgets,id'],
             'supplier_id' => ['required', 'integer', Rule::exists('suppliers', 'id')],
             // The expense/asset account this bill will debit once
             // approved (see AccountsPayableService::approve()). Required

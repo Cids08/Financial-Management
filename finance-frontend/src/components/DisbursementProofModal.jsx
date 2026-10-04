@@ -1,273 +1,32 @@
-import ModalLoading from './ModalLoading'
-import { useEffect, useRef, useState } from 'react'
-import { UploadCloud, FileText, X, AlertTriangle, Eye, Loader2 } from 'lucide-react'
-import Modal from './Modal'
+import { useCallback, useEffect, useState } from 'react'
+import DocumentWorkspaceModal from './DocumentWorkspaceModal'
+import DocumentHistoryModal from './DocumentHistoryModal'
 import Button from './Button'
-import Tooltip from './Tooltip'
-import { isImageFile, compressImageToUploadable, cannotFitHostLimit } from '../utils/fileUpload'
+import { apiFetch } from '../utils/api'
 
-const ALLOWED_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png', 'webp']
-const ACCEPT = '.pdf,.jpg,.jpeg,.png,.webp'
-const MAX_SIZE_MB = 10
-
-function formatBytes(bytes) {
-  if (!bytes) return ''
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
-
-function formatDateTime(value) {
-  if (!value) return '—'
-  return new Date(value).toLocaleString('en-PH', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-}
-
-/**
- * Proof of payment upload + history modal for a disbursement voucher.
- * Matches AccountsPayableDocumentModal and CollectionProofHistoryModal.
- *
- * Props:
- * - open, onClose: Modal state handlers
- * - disbursement: The disbursement record ({ disbursement_id, voucher_number, payee, is_archived, status })
- * - fetchHistory: async (disbursementId) => { success, data, message }
- * - onUpload: async (disbursementId, file) => { success, message }
- * - onView: async (disbursementId, documentId, targetWindow) => { success, message, viewedInline }
- * - onUploaded: callback after successful upload
- * - canManage: boolean, whether the current user can upload proofs
- */
-export default function DisbursementProofModal({ open, onClose, disbursement, fetchHistory, onUpload, onView, onUploaded, canManage = true }) {
-  const [documents, setDocuments] = useState([])
-  const [historyLoading, setHistoryLoading] = useState(false)
-  const [historyError, setHistoryError] = useState('')
-  const [viewingId, setViewingId] = useState(null)
-
-  const [file, setFile] = useState(null)
-  const [uploadError, setUploadError] = useState('')
-  const [uploading, setUploading] = useState(false)
-  const [dragActive, setDragActive] = useState(false)
-  const inputRef = useRef(null)
-
-  const loadHistory = () => {
-    if (!disbursement) return
-    setHistoryLoading(true)
-    setHistoryError('')
-    fetchHistory(disbursement.disbursement_id).then((result) => {
-      if (result.success) setDocuments(result.data)
-      else setHistoryError(result.message)
-      setHistoryLoading(false)
-    })
-  }
-
-  useEffect(() => {
-    if (open && disbursement) loadHistory()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, disbursement])
-
-  const resetUpload = () => { setFile(null); setUploadError(''); setDragActive(false) }
-  const handleClose = () => { if (!uploading) { resetUpload(); onClose() } }
-
-  const validate = (candidate) => {
-    const ext = candidate.name.split('.').pop()?.toLowerCase()
-    if (!ALLOWED_EXTENSIONS.includes(ext)) {
-      return `"${candidate.name}" isn't a supported file type. Allowed: ${ALLOWED_EXTENSIONS.join(', ').toUpperCase()}.`
-    }
-    if (candidate.size > MAX_SIZE_MB * 1024 * 1024) {
-      return `"${candidate.name}" is ${formatBytes(candidate.size)}, which exceeds the ${MAX_SIZE_MB}MB limit.`
-    }
-    const hostError = cannotFitHostLimit(candidate)
-    if (hostError) return hostError
-    return ''
-  }
-
-  const handleFile = (candidate) => {
-    if (!candidate) return
-    const validationError = validate(candidate)
-    if (validationError) { setUploadError(validationError); setFile(null); return }
-    setUploadError('')
-    setFile(candidate)
-  }
-
-  const handleDrop = (e) => {
-    e.preventDefault()
-    setDragActive(false)
-    handleFile(e.dataTransfer.files?.[0])
-  }
-
-  const handleUpload = async () => {
-    if (!file) { setUploadError('Choose a file to attach first.'); return }
-    setUploading(true)
-    setUploadError('')
-    try {
-      const uploadFile = isImageFile(file) ? await compressImageToUploadable(file) : file
-      await onUpload(disbursement.disbursement_id, uploadFile)
-      resetUpload()
-      loadHistory()
-      onUploaded?.()
-    } catch (err) {
-      setUploadError(err.message || 'Failed to upload proof of payment.')
-    } finally {
-      setUploading(false)
-    }
-  }
-
-  const handleView = async (doc) => {
-    const targetWindow = window.open('', '_blank')
-    setViewingId(doc.id)
-    const result = await onView(disbursement.disbursement_id, doc.id, targetWindow)
-    setViewingId(null)
-    if (!result.success) {
-      setHistoryError(result.message || 'Failed to open document.')
-    }
-  }
-
-  const canUpload = canManage && !disbursement?.is_archived
-
-  return (
-    <Modal
-      open={open}
-      onClose={handleClose}
-      title={`Proof of Payment  -  ${disbursement?.voucher_number || 'Disbursement'}`}
-      maxWidth="max-w-2xl"
-      footer={<Button variant="secondary" size="md" onClick={handleClose} disabled={uploading}>Close</Button>}
-    >
-      <div className="space-y-5 text-ink">
-        {disbursement?.payee && (
-          <div className="flex items-center justify-between text-xs text-muted border-b border-border pb-3">
-            <span>Disbursed To: <strong className="text-ink">{disbursement.payee}</strong></span>
-            <span className="font-mono text-muted">{disbursement.voucher_number}</span>
-          </div>
-        )}
-
-        {/* Upload new proof section */}
-        {canUpload ? (
-          <div className="space-y-2">
-            <label className="block text-xs font-semibold text-ink">
-              Attach New Proof of Payment
-              <span className="ml-1 text-[11px] font-normal text-muted">Upload signed check voucher, transfer slip, or deposit receipt</span>
-            </label>
-            <div
-              onDragOver={(e) => { e.preventDefault(); setDragActive(true) }}
-              onDragLeave={() => setDragActive(false)}
-              onDrop={handleDrop}
-              onClick={() => inputRef.current?.click()}
-              className={`flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed p-4 text-center cursor-pointer transition-colors duration-150 ${
-                dragActive ? 'border-primary bg-primary/10' : 'border-border bg-bg hover:border-primary/60'
-              }`}
-            >
-              <UploadCloud size={22} className="text-muted" />
-              <p className="text-xs font-medium text-ink">
-                Drag &amp; drop file here, or <span className="text-primary-dark underline">browse</span>
-              </p>
-              <p className="text-[11px] text-muted">JPG, PNG, WEBP or PDF up to {MAX_SIZE_MB}MB</p>
-              <input
-                ref={inputRef}
-                type="file"
-                accept={ACCEPT}
-                className="hidden"
-                onChange={(e) => handleFile(e.target.files?.[0])}
-              />
-            </div>
-
-            {file && (
-              <div className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2 text-xs">
-                <div className="flex items-center gap-2 truncate">
-                  <FileText size={16} className="text-primary-dark shrink-0" />
-                  <span className="truncate font-medium text-ink">{file.name}</span>
-                  <span className="text-muted shrink-0">({formatBytes(file.size)})</span>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <Button variant="primary" size="sm" onClick={handleUpload} loading={uploading}>
-                    {uploading ? 'Uploading...' : 'Upload Proof'}
-                  </Button>
-                  <button
-                    type="button"
-                    onClick={resetUpload}
-                    disabled={uploading}
-                    className="p-1 text-muted hover:text-ink transition-colors"
-                    aria-label="Cancel file"
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {uploadError && (
-              <div className="flex items-center gap-1.5 text-xs text-status-danger">
-                <AlertTriangle size={13} className="shrink-0" />
-                <span>{uploadError}</span>
-              </div>
-            )}
-          </div>
-        ) : (
-          disbursement?.is_archived && (
-            <p className="text-xs text-muted italic">This disbursement is archived. Proof uploads are disabled.</p>
-          )
-        )}
-
-        {/* Uploaded History Section */}
-        <div className="space-y-2">
-          <p className="text-xs font-semibold text-ink">
-            Attached Proofs &amp; Documents ({documents.length})
-          </p>
-
-          {historyLoading ? (
-            <ModalLoading />
-          ) : historyError ? (
-            <div className="rounded-lg border border-status-danger-border bg-status-danger-bg p-3 text-xs text-status-danger">
-              {historyError}
-            </div>
-          ) : documents.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border py-8 text-center text-xs text-muted">
-              No proof of payment attached yet.
-            </div>
-          ) : (
-            <div className="rounded-lg border border-border divide-y divide-border overflow-hidden bg-bg">
-              {documents.map((doc, idx) => {
-                const isCurrent = idx === 0
-                const isViewing = viewingId === doc.id
-                return (
-                  <div key={doc.id} className="flex items-center justify-between p-3 gap-3">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-surface border border-border text-primary shrink-0">
-                        <FileText size={18} />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="text-xs font-semibold text-ink truncate">{doc.original_name}</p>
-                          {isCurrent && (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-status-success-bg text-status-success">
-                              Current
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[11px] text-muted">
-                          {formatBytes(doc.file_size)} • Uploaded {formatDateTime(doc.uploaded_at)}
-                          {doc.uploaded_by_name ? ` by ${doc.uploaded_by_name}` : ''}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="shrink-0">
-                      <Tooltip label="View document in new tab">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          icon={Eye}
-                          loading={isViewing}
-                          onClick={() => handleView(doc)}
-                        >
-                          View
-                        </Button>
-                      </Tooltip>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-    </Modal>
-  )
+export default function DisbursementProofModal({ disbursement, onUpload, canManage = true, ...props }) {
+  const [source, setSource] = useState('payment')
+  useEffect(() => { setSource('payment') }, [props.open, disbursement?.disbursement_id])
+  const fetchApDocuments = useCallback(async id => {
+    const response = await apiFetch('/api/accounts-payable/' + id + '/document')
+    const body = await response.json()
+    if (!response.ok || !body.success) throw new Error(response.status === 403 ? 'You need Accounts Payable viewing permission to access the linked invoice documents.' : body.message || 'Could not load linked AP documents.')
+    return body
+  }, [])
+  const viewApDocument = useCallback(async (id, documentId, target) => {
+    const response = await apiFetch('/api/accounts-payable/' + id + '/document/' + documentId + '/view')
+    const body = await response.json()
+    if (!response.ok || !body.success || !body.data?.url) throw new Error(body.message || 'Could not open the linked AP document.')
+    target.location.href = body.data.url
+    return { success: true, viewedInline: true }
+  }, [])
+  const navigation = busy => <div className="space-y-3">
+    <div className="flex flex-wrap gap-2" role="group" aria-label="Document source">
+      <Button size="sm" variant={source === 'payment' ? 'primary' : 'secondary'} aria-pressed={source === 'payment'} disabled={busy} onClick={() => setSource('payment')}>Payment documents</Button>
+      {disbursement?.ap_id && <Button size="sm" variant={source === 'ap' ? 'primary' : 'secondary'} aria-pressed={source === 'ap'} disabled={busy} onClick={() => setSource('ap')}>Linked AP documents</Button>}
+    </div>
+    <p className="text-xs text-muted">{source === 'ap' ? 'Original supplier documents linked from Accounts Payable. No duplicate upload is needed. These documents are not proof of payment.' : 'Attach new payment evidence, such as a bank confirmation or acknowledged receipt. Linked supplier invoices do not satisfy the payment-proof requirement.'}</p>
+  </div>
+  if (source === 'ap' && disbursement?.ap_id) return <DocumentHistoryModal open={props.open} onClose={props.onClose} title="Disbursement documents" record={{id:disbursement.ap_id,label:disbursement.invoice_number || 'Linked AP bill',description:disbursement.payee}} toolbar={navigation} fetchHistory={fetchApDocuments} onView={viewApDocument} emptyMessage="No supporting document is attached to the linked AP bill. Manage supplier documents in Accounts Payable." />
+  return <DocumentWorkspaceModal {...props} title="Disbursement documents" contextToolbar={navigation} record={{id:disbursement?.disbursement_id,label:disbursement?.voucher_number,description:disbursement?.payee}} canUpload={canManage && !disbursement?.is_archived && !['Released', 'Rejected', 'Cancelled'].includes(disbursement?.status)} onUpload={async file => { const result = await onUpload(disbursement.disbursement_id,file); return result?.success === false ? result : {success:true} }} />
 }

@@ -86,6 +86,7 @@ class ExpenseService
     public function create(array $data, User $creator): Expense
     {
         return DB::transaction(function () use ($data, $creator) {
+            app(SupplierDocumentGuard::class)->check($data['supplier_id'] ?? null, $data['receipt_number'] ?? null, 'expense');
             $budget = Budget::query()->lockForUpdate()->findOrFail($data['budget_id']);
             $data['gl_account_id'] = app(ExpenseGlAccountService::class)->selected($budget, isset($data['gl_account_id']) ? (int) $data['gl_account_id'] : null)->id;
             $validSources = [Expense::SOURCE_CASH, Expense::SOURCE_BANK, Expense::SOURCE_PETTY_CASH];
@@ -144,6 +145,7 @@ class ExpenseService
         DB::transaction(function () use ($expense, $data, $actor, $original) {
             $expense = Expense::query()->lockForUpdate()->findOrFail($expense->id);
             if ($expense->status !== Expense::STATUS_PENDING) throw ValidationException::withMessages(['status' => 'Only Pending expenses can be edited.']);
+            app(SupplierDocumentGuard::class)->check(array_key_exists('supplier_id', $data) ? $data['supplier_id'] : $expense->supplier_id, $data['receipt_number'] ?? $expense->receipt_number, 'expense', $expense->id);
             $budget = Budget::query()->lockForUpdate()->findOrFail($data['budget_id'] ?? $expense->budget_id);
             $selectedId = $data['gl_account_id'] ?? $expense->gl_account_id;
             $data['gl_account_id'] = app(ExpenseGlAccountService::class)->selected($budget, $selectedId ? (int) $selectedId : null)->id;
@@ -270,6 +272,7 @@ class ExpenseService
         return DB::transaction(function () use ($expense, $approver, $skipDepartmentCheck) {
             $expense = Expense::query()->lockForUpdate()->findOrFail($expense->id);
             if ($expense->status !== Expense::STATUS_PENDING) throw ValidationException::withMessages(['status' => 'Only Pending expenses can be approved.']);
+            app(SupplierDocumentGuard::class)->check($expense->supplier_id, $expense->receipt_number, 'expense', $expense->id);
             if (! $expense->budget_id) {
                 throw ValidationException::withMessages([
                     'budget' => "Cannot approve expense #{$expense->id}: No budget is assigned to this expense.",
@@ -790,6 +793,13 @@ class ExpenseService
      */
     public function attachReceipt(Expense $expense, UploadedFile $file, User $actor): SupportingDocument
     {
+        if ($expense->status === Expense::STATUS_REJECTED) {
+            throw ValidationException::create(
+                'Receipts cannot be attached to a rejected expense.',
+                ['receipt' => 'Receipts cannot be attached to a rejected expense.']
+            );
+        }
+
         $path = $file->store("expense-receipts/{$expense->id}", FileStorage::DISK);
 
         $document = SupportingDocument::create([

@@ -27,12 +27,21 @@ class HistoricalActuals
     public const DISBURSEMENT_RELEASED_STATUS = 'Released';
     public const BUDGET_ACTIVE_STATUS = 'Active';
 
+    // Ceiling for the training window. Below this, the window is data-driven:
+    // every completed month from the first month with recorded activity for
+    // that forecast type up to the last completed month. Once a company has
+    // more history than this, only the most recent MAX_LOOKBACK_MONTHS are
+    // used (5 years of monthly points is plenty — longer series slow the fit
+    // without adding signal, and very old months often reflect a structurally
+    // different business).
+    public const MAX_LOOKBACK_MONTHS = 60;
+
     /**
-     * @return list<float> oldest first, exactly $lookbackMonths entries
+     * @return list<float> oldest first, one entry per month in the window
      */
-    public function forType(string $forecastType, int $lookbackMonths): array
+    public function forType(string $forecastType, int $maxLookbackMonths = self::MAX_LOOKBACK_MONTHS): array
     {
-        $months = $this->monthBoundaries($lookbackMonths);
+        $months = $this->monthBoundaries($forecastType, $maxLookbackMonths);
 
         return match ($forecastType) {
             'Collections' => $this->monthlyCollections($months),
@@ -47,19 +56,112 @@ class HistoricalActuals
     }
 
     /**
-     * @return list<array{start: Carbon, end: Carbon}> oldest first
+     * The [start, end] date range the training window actually covers —
+     * the same boundaries monthBoundaries() builds, exposed so callers
+     * (e.g. FinancialForecastService) can store historical_start/end to
+     * match the data the model genuinely trained on.
      */
-    protected function monthBoundaries(int $lookbackMonths): array
+    public function window(string $forecastType, int $maxLookbackMonths = self::MAX_LOOKBACK_MONTHS): array
     {
-        $months = [];
-        $cursor = Carbon::today()->subMonthsNoOverflow($lookbackMonths - 1)->startOfMonth();
+        $months = $this->monthBoundaries($forecastType, $maxLookbackMonths);
+        $first = $months[0];
+        $last = $months[count($months) - 1];
 
-        for ($i = 0; $i < $lookbackMonths; $i++) {
+        return ['start' => $first['start'], 'end' => $last['end']];
+    }
+
+    /**
+     * @return list<array{start: Carbon, end: Carbon}> oldest first
+     *
+     * The window covers COMPLETED calendar months only — the current
+     * in-progress month is excluded because its near-zero totals distort
+     * both the holdout step that MAPE/RMSE are scored on (MAPE is undefined
+     * when any actual is 0) and the trend/ARIMA fit itself, which can pull
+     * projections negative. Forecast periods therefore start with the next
+     * (current) month.
+     *
+     * The window length is data-driven: from the first month with recorded
+     * activity for the forecast type through the last completed month,
+     * bounded to at least 6 (ARIMA's minimum) and at most
+     * self::MAX_LOOKBACK_MONTHS. This replaces the old "2x horizon" rule,
+     * which starved long horizons of history on young companies while
+     * trimming useful history for short ones.
+     */
+    protected function monthBoundaries(string $forecastType, int $maxLookbackMonths): array
+    {
+        $end = Carbon::today()->startOfMonth()->subMonthNoOverflow()->startOfMonth();
+        $endBoundary = ['start' => $end->copy(), 'end' => $end->copy()->endOfMonth()];
+
+        $firstActive = $this->firstActiveMonth($forecastType);
+        if ($firstActive === null || $firstActive->startOfMonth()->gt($end)) {
+            $count = 6;
+        } else {
+            $monthsSince = (int) $firstActive->startOfMonth()->diffInMonths($end);
+            $count = min($maxLookbackMonths, max(6, $monthsSince + 1));
+        }
+
+        $months = [];
+        $cursor = $endBoundary['start']->copy()->subMonthsNoOverflow($count - 1)->startOfMonth();
+        foreach (range(1, $count) as $_) {
             $months[] = ['start' => $cursor->copy(), 'end' => $cursor->copy()->endOfMonth()];
             $cursor->addMonthNoOverflow();
         }
 
         return $months;
+    }
+
+    /**
+     * First calendar month with recorded activity for the given forecast
+     * type (or null if the type has no activity yet). Each type answers
+     * from its own source table with the same status/filter semantics as
+     * its monthly aggregate, so the window is what actually influenced the
+     * series being forecast.
+     */
+    protected function firstActiveMonth(string $forecastType): ?Carbon
+    {
+        $date = match ($forecastType) {
+            'Collections' => DB::table('collections')
+                ->where('status', self::COLLECTION_CONFIRMED_STATUS)
+                ->whereNull('deleted_at')
+                ->min('collection_date'),
+            'Expenses' => DB::table('expenses')
+                ->where('status', self::EXPENSE_APPROVED_STATUS)
+                ->whereNull('deleted_at')
+                ->min('expense_date'),
+            'Cash Flow' => [
+                DB::table('collections')
+                    ->where('status', self::COLLECTION_CONFIRMED_STATUS)
+                    ->whereNull('deleted_at')
+                    ->min('collection_date'),
+                DB::table('disbursements')
+                    ->where('status', self::DISBURSEMENT_RELEASED_STATUS)
+                    ->whereNull('deleted_at')
+                    ->min('payment_date'),
+            ],
+            'Accounts Receivable' => DB::table('accounts_receivable')
+                ->where('is_archived', false)
+                ->whereNull('deleted_at')
+                ->min('invoice_date'),
+            'Budget Utilization' => DB::table('expenses')
+                ->where('status', self::EXPENSE_APPROVED_STATUS)
+                ->whereNull('deleted_at')
+                ->min('expense_date'),
+            default => throw new RuntimeException("Unknown forecast_type: {$forecastType}"),
+        };
+
+        if (is_array($date)) {
+            $date = array_filter($date, static fn ($d) => $d !== null);
+            if ($date === []) {
+                return null;
+            }
+            $date = min($date);
+        }
+
+        if (! $date) {
+            return null;
+        }
+
+        return Carbon::parse($date)->startOfMonth();
     }
 
     /** SUM(amount_received), confirmed collections only, per month. */

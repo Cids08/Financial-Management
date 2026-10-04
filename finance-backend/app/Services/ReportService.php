@@ -111,6 +111,7 @@ class ReportService
             ->join('journal_entries', 'journal_entries.id', '=', 'journal_entry_lines.journal_entry_id')
             ->join('chart_of_accounts', 'chart_of_accounts.id', '=', 'journal_entry_lines.account_id')
             ->where('journal_entries.status', 'Posted')
+            ->whereNull('journal_entries.deleted_at')
             ->whereBetween('journal_entries.transaction_date', [$start->toDateString(), $end->toDateString()])
             ->whereIn('chart_of_accounts.account_type', ['Revenue', 'Expense'])
             ->select(
@@ -211,33 +212,26 @@ class ReportService
 
     protected function queryCashFlowData(Carbon $start, Carbon $end): array
     {
-        $inflows = Collection::query()
-            ->join('cash_accounts', 'cash_accounts.id', '=', 'collections.cash_account_id')
-            ->whereBetween('collections.collection_date', [$start->toDateString(), $end->toDateString()])
-            ->whereNull('collections.deleted_at')
-            ->select('cash_accounts.id', 'cash_accounts.account_code', 'cash_accounts.account_name', DB::raw('SUM(collections.amount_received) as total'))
-            ->groupBy('cash_accounts.id', 'cash_accounts.account_code', 'cash_accounts.account_name')
-            ->get()
-            ->keyBy('id');
-
-        $outflows = Disbursement::query()
-            ->join('cash_accounts', 'cash_accounts.id', '=', 'disbursements.cash_account_id')
-            ->whereBetween('disbursements.payment_date', [$start->toDateString(), $end->toDateString()])
-            ->whereNull('disbursements.deleted_at')
-            ->select('cash_accounts.id', 'cash_accounts.account_code', 'cash_accounts.account_name', DB::raw('SUM(disbursements.amount_paid) as total'))
-            ->groupBy('cash_accounts.id', 'cash_accounts.account_code', 'cash_accounts.account_name')
-            ->get()
-            ->keyBy('id');
-
-        $accountIds = $inflows->keys()->merge($outflows->keys())->unique();
-
-        return $accountIds->map(function ($id) use ($inflows, $outflows) {
-            $account = $inflows->get($id) ?? $outflows->get($id);
-
+        // Archived settled records still represent real cash movement.
+        $period = [$start->toDateString(), $end->toDateString()];
+        $inflows = DB::table('collections')->where('status', 'Confirmed')
+            ->whereBetween('collection_date', $period)
+            ->selectRaw('cash_account_id, SUM(amount_received) as total')->groupBy('cash_account_id')->pluck('total', 'cash_account_id');
+        $payments = DB::table('disbursements')->where('status', 'Released')
+            ->whereBetween(DB::raw('COALESCE(released_date, payment_date)'), $period)
+            ->selectRaw('cash_account_id, SUM(COALESCE(net_amount, amount_paid - COALESCE(ewt_amount, 0))) as total')
+            ->groupBy('cash_account_id')->pluck('total', 'cash_account_id');
+        $expenses = DB::table('expenses')->where('status', 'Approved')
+            ->whereBetween('expense_date', $period)
+            ->selectRaw('cash_account_id, SUM(expense_amount) as total')->groupBy('cash_account_id')->pluck('total', 'cash_account_id');
+        $ids = $inflows->keys()->merge($payments->keys())->merge($expenses->keys())->unique();
+        $accounts = DB::table('cash_accounts')->whereIn('id', $ids->filter(fn ($id) => $id !== '' && $id !== null))->get()->keyBy('id');
+        return $ids->map(function ($id) use ($accounts, $inflows, $payments, $expenses) {
+            $account = $accounts->get($id);
             return [
-                'account' => "{$account->account_code} — {$account->account_name}",
-                'inflow'  => (float) ($inflows->get($id)->total ?? 0),
-                'outflow' => (float) ($outflows->get($id)->total ?? 0),
+                'account' => $account ? "{$account->account_code} - {$account->account_name}" : 'Unassigned cash account',
+                'inflow' => (float) $inflows->get($id, 0),
+                'outflow' => (float) \App\Support\Money::add($payments->get($id, 0), $expenses->get($id, 0)),
             ];
         })->values()->all();
     }

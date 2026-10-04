@@ -982,6 +982,11 @@ class DisbursementService
             ]);
         }
 
+        if (in_array($disbursement->status, ['Released', 'Rejected', 'Cancelled'], true)) {
+            $msg = "Proof of payment cannot be attached to a {$disbursement->status} disbursement.";
+            throw ValidationException::create($msg, ['source_type' => $msg]);
+        }
+
         $path = $file->store("disbursement-proofs/{$disbursement->id}", FileStorage::DISK);
 
         $document = SupportingDocument::create([

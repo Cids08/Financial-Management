@@ -1,3 +1,6 @@
+import RowActions from '../components/RowActions'
+import DocumentAction from '../components/DocumentAction'
+import ApBudgetField from '../components/ApBudgetField'
 import KpiValue from '../components/KpiValue'
 import { TableSkeleton, ContentSkeleton } from '../components/LoadingSkeleton'
 import ResponsiveTable from '../components/ResponsiveTable'
@@ -48,7 +51,7 @@ const MIN_BILL_DATE = '2017-01-01'
 const MAX_BILL_DATE = `${new Date().getFullYear() + 5}-12-31`
 
 const EMPTY_FORM = {
-  supplier_id: '', account_id: '', invoice_number: '', invoice_date: '', due_date: '', amount: '',
+  supplier_id: '', account_id: '', budget_id: '', invoice_number: '', invoice_date: '', due_date: '', amount: '',
   payment_method: 'Bank Transfer', billing_address: '', description: '', reference_number: '',
   status: 'Pending Approval', purchase_order_no: '', penalty_rate: '',
 }
@@ -553,7 +556,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
     setForm({
       ...EMPTY_FORM,
       supplier_id: suppliers[0]?.supplier_id ?? '',
-      account_id: accounts[0]?.id ?? '',
+      account_id: '',
       reference_number: getNextReferenceNo(allBills),
       // Pre-fill the company-wide penalty rate from Settings; still editable.
       penalty_rate: Number(defaultPenaltyRate) > 0 ? String(defaultPenaltyRate) : '',
@@ -582,7 +585,6 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
       setForm((f) => ({
         ...f,
         supplier_id: f.supplier_id || (suppliers[0]?.supplier_id ?? ''),
-        account_id: f.account_id || (accounts[0]?.id ?? ''),
       }))
     }
   }, [suppliers, accounts, modalMode])
@@ -591,6 +593,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
     setForm({
       supplier_id: r.supplier_id,
       account_id: r.account_id ?? '',
+      budget_id: r.budget_id ?? '',
       invoice_number: r.invoice_number,
       invoice_date: r.invoice_date || '',
       due_date: r.due_date || '',
@@ -762,6 +765,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
     const payload = {
       supplier_id: Number(form.supplier_id),
       account_id: Number(form.account_id),
+      budget_id: form.budget_id ? Number(form.budget_id) : null,
       invoice_number: form.invoice_number.trim(),
       invoice_date: form.invoice_date || null,
       due_date: form.due_date,
@@ -955,13 +959,13 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
           <ResponsiveTable minTableWidth={1050} className="w-full text-sm table-fixed">
             <thead className="bg-surface">
               <tr className="border-b border-border">
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2.5 py-3 w-[15%] whitespace-nowrap">Bill</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[13%] whitespace-nowrap">Supplier</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2.5 py-3 w-[18%] whitespace-nowrap">Bill</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[17%] whitespace-nowrap">Supplier</th>
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[10%] whitespace-nowrap">Due Date</th>
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[14%] whitespace-nowrap">Amount Due</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[10%] whitespace-nowrap">Penalty</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[8%] whitespace-nowrap">Penalty</th>
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[13%] whitespace-nowrap">Status</th>
-                <th className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wider px-2.5 py-3 w-[25%] whitespace-nowrap">Actions</th>
+                <th className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wider px-2.5 py-3 w-[20%] whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -1027,61 +1031,33 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                     })()}
                   </td>
                   <td className="px-2.5 py-2 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      {/* Workflow decision buttons  -  Approve / Reject (Pending only) */}
-                      {canApprove && !r.is_archived && !r.approved_by && r.status !== 'Cancelled' && (
-                        <div className="flex items-center gap-1 mr-1 pr-1 border-r border-border shrink-0">
-                          <Tooltip label="Approve bill & post to General Ledger" align="start">
-                            <button
-                              type="button"
-                              onClick={() => handleApprove(r)}
-                              disabled={actionBusyId === r.ap_id}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-md bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-xs transition-all duration-150 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-                            >
-                              <CheckCircle2 size={12} className={actionBusyId === r.ap_id ? 'animate-spin' : ''} />
-                              <span>{actionBusyId === r.ap_id ? 'Approving…' : 'Approve'}</span>
-                            </button>
-                          </Tooltip>
-                          <Tooltip label="Reject bill" align="start">
-                            <button
-                              type="button"
-                              onClick={() => openReject(r)}
-                              disabled={actionBusyId === r.ap_id}
-                              className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs font-semibold rounded-md border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20 shadow-xs transition-all duration-150 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-                            >
-                              <XCircle size={12} />
-                              <span>Reject</span>
-                            </button>
-                          </Tooltip>
-                        </div>
-                      )}
-
+                    <RowActions>
+                      {canApprove && !r.is_archived && !r.approved_by && r.status !== 'Cancelled' && <Button variant="primary" size="sm" onClick={() => openDetail(r)} aria-label={'Review bill ' + r.invoice_number}>Review</Button>}
                       {/* Pay Button for any Approved / Partially Paid / Overdue bill with remaining balance */}
                       {!r.is_archived && r.status !== 'Cancelled' && (r.approved_by || r.status === 'Partially Paid') && Number(r.remaining_balance) > 0 && (
-                        <div className="flex items-center mr-1 pr-1 border-r border-border shrink-0">
+                        <div className="flex items-center justify-end gap-2">
                           <Tooltip label={`Pay remaining balance (${formatCurrency(r.remaining_balance)})`} align="start">
-                            <button
-                              type="button"
+                            <Button variant="primary" size="sm" icon={Wallet}
                               onClick={() => openPayBill(r)}
                               disabled={actionBusyId === r.ap_id}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-md bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-xs transition-all duration-150 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-                            >
-                              <Wallet size={12} />
-                              <span>Pay</span>
-                            </button>
+                              aria-label={'Pay bill ' + r.invoice_number}
+                            >Pay</Button>
                           </Tooltip>
                         </div>
                       )}
 
+                      <div className="flex items-center justify-end gap-1">
                       {/* Active rows keep the full working set. Only ARCHIVED
                           rows get trimmed to Info + Restore + countdown + purge,
                           because that's where the wide countdown badge used to
                           collide with the Status column. */}
+                      {!(canApprove && !r.is_archived && !r.approved_by && r.status !== 'Cancelled') && (
                       <Tooltip label="View details" align="end">
-                        <button type="button" onClick={() => openDetail(r)} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                        <button type="button" onClick={() => openDetail(r)} aria-label={'View bill ' + r.invoice_number} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                           <Info size={14} />
                         </button>
                       </Tooltip>
+                      )}
 
                       {r.is_archived ? (
                         isAdmin && (
@@ -1091,7 +1067,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                                 type="button"
                                 onClick={() => restoreBill(r.ap_id)}
                                 disabled={actionBusyId === r.ap_id}
-                                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
                               >
                                 <RotateCcw size={14} />
                               </button>
@@ -1108,29 +1084,17 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                       ) : (
                         <>
                           <Tooltip label="Print bill voucher" align="end">
-                            <button type="button" onClick={() => handlePrint(r)} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                            <button type="button" onClick={() => handlePrint(r)} aria-label={'Print bill ' + r.invoice_number} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                               <Printer size={14} />
                             </button>
                           </Tooltip>
 
-                          <Tooltip label={r.has_attachment ? 'Supporting document attached (click to view/manage)' : 'Attach supporting document'} align="end">
-                            <button
-                              type="button"
-                              onClick={() => setDocumentTarget(r)}
-                              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors duration-150 ${
-                                r.has_attachment
-                                  ? 'text-primary-dark bg-primary/10 hover:bg-primary/20'
-                                  : 'text-muted hover:bg-bg hover:text-ink'
-                              }`}
-                            >
-                              <Paperclip size={14} fill={r.has_attachment ? 'currentColor' : 'none'} fillOpacity={r.has_attachment ? 0.2 : 0} />
-                            </button>
-                          </Tooltip>
+                          <DocumentAction attached={r.has_attachment} label={r.invoice_number} onClick={() => setDocumentTarget(r)} />
 
                           {/* Edit bill  -  only rendered when bill is editable */}
                           {canEditBill(r) && (
                             <Tooltip label="Edit bill" align="end">
-                              <button type="button" onClick={() => openEdit(r)} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
+                              <button type="button" onClick={() => openEdit(r)} aria-label={'Edit bill ' + r.invoice_number} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                                 <Pencil size={14} />
                               </button>
                             </Tooltip>
@@ -1142,7 +1106,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                                 type="button"
                                 onClick={() => archiveBill(r.ap_id)}
                                 disabled={actionBusyId === r.ap_id}
-                                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
                               >
                                 <Archive size={14} />
                               </button>
@@ -1151,6 +1115,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                         </>
                       )}
                     </div>
+                    </RowActions>
                   </td>
                 </tr>
               ))}
@@ -1239,6 +1204,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
               {fieldErrors.invoice_number && <p className="mt-1 text-xs text-status-danger">{fieldErrors.invoice_number}</p>}
             </div>
           </div>
+          <ApBudgetField value={form.budget_id} onChange={value => setForm(f => ({ ...f, budget_id: value }))} />
           <div>
             <label className={LABEL}>Account (what this bill debits) <span className="text-status-danger">*</span></label>
             <select
@@ -1420,7 +1386,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
           </div>
           {isEditing && (
             <p className="text-xs text-muted">
-              To attach a supporting document (invoice scan/photo), use the <Paperclip size={12} className="inline" /> icon on the bill's row after saving.
+              After saving, open the bill's <strong>More actions (?) ? Documents</strong> to view or attach supporting documents.
             </p>
           )}
 
@@ -1442,7 +1408,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
       <Modal
         open={!!detailRecord}
         onClose={closeDetail}
-        title="Bill Details"
+        title="Review Bill"
         footer={
           <>
             <Button variant="secondary" size="md" onClick={closeDetail}>Close</Button>
@@ -1452,7 +1418,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                   type="button"
                   disabled={actionBusyId === detailRecord.ap_id}
                   onClick={() => handleApprove(detailRecord)}
-                  className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all duration-150 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg bg-primary hover:bg-primary-hover text-black shadow-sm transition-all duration-150 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <CheckCircle2 size={16} className={actionBusyId === detailRecord.ap_id ? 'animate-spin' : ''} />
                   {actionBusyId === detailRecord.ap_id ? 'Approving…' : 'Approve Bill'}
@@ -1472,7 +1438,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
               <button
                 type="button"
                 onClick={() => { const target = detailRecord; closeDetail(); openPayBill(target) }}
-                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-sm transition-all duration-150 active:scale-95"
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg bg-primary hover:bg-primary-hover text-black shadow-sm transition-all duration-150 active:scale-95"
               >
                 <Wallet size={16} />
                 Pay Bill ({formatCurrency(detailRecord.remaining_balance)})
@@ -1506,28 +1472,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                     <p className="text-[11px] text-status-warning">This bill requires approval before disbursements or payments can proceed.</p>
                   </div>
                 </div>
-                {canApprove && (
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      type="button"
-                      disabled={actionBusyId === detailRecord.ap_id}
-                      onClick={() => handleApprove(detailRecord)}
-                      className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow transition-all duration-150 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <CheckCircle2 size={13} className={actionBusyId === detailRecord.ap_id ? 'animate-spin' : ''} />
-                      {actionBusyId === detailRecord.ap_id ? 'Approving…' : 'Approve Bill'}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={actionBusyId === detailRecord.ap_id}
-                      onClick={() => openReject(detailRecord)}
-                      className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-lg border border-red-200 bg-white hover:bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-surface dark:text-red-400 dark:hover:bg-red-500/10 shadow-sm transition-all duration-150 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <XCircle size={13} />
-                      Reject
-                    </button>
-                  </div>
-                )}
+
               </div>
             )}
             <div className="flex items-center justify-between">
@@ -1650,6 +1595,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
         open={!!documentTarget}
         onClose={() => setDocumentTarget(null)}
         bill={documentTarget}
+        canUpload={canManage && !documentTarget?.is_archived && !['Paid', 'Cancelled'].includes(documentTarget?.status)}
         fetchHistory={fetchDocumentHistory}
         onUpload={(file) => attachDocument(documentTarget.ap_id, file)}
         onView={viewDocument}

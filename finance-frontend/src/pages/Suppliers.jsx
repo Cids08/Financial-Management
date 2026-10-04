@@ -540,6 +540,11 @@ export default function Suppliers({ title = 'Suppliers', crumbs = ['Master Data'
               </datalist>
             </div>
           </div>
+          <div>
+            <label className={LABEL}>Contact Person <span className="text-red-500">*</span></label>
+            <input type="text" value={form.contact_person} onChange={(e) => { setForm((f) => ({ ...f, contact_person: e.target.value })); setFieldErrors((fe) => ({ ...fe, contact_person: '' })) }} className={`${INPUT} ${fieldErrors.contact_person ? 'border-status-danger-border' : ''}`} placeholder="e.g. Marie Santos" />
+            {fieldErrors.contact_person && <p className="mt-1 text-xs text-status-danger">{fieldErrors.contact_person}</p>}
+          </div>
           <div className="rounded-lg border border-border/80 bg-bg/50 p-3 space-y-3">
             <p className="text-xs font-semibold text-ink uppercase tracking-wider flex items-center gap-1.5">
               <FileText size={13} className="text-primary" />

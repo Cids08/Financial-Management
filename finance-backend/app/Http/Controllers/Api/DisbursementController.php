@@ -14,6 +14,7 @@ use App\Services\DisbursementService;
 use App\Support\FileStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class DisbursementController extends Controller
 {
@@ -164,7 +165,11 @@ class DisbursementController extends Controller
 
     public function uploadProof(UploadDisbursementProofRequest $request, Disbursement $disbursement)
     {
-        $this->disbursements->attachDocument($disbursement, $request->file('proof'), $request->user()->id);
+        try {
+            $this->disbursements->attachDocument($disbursement, $request->file('proof'), $request->user()->id);
+        } catch (ValidationException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage(), 'errors' => $e->errors()], 422);
+        }
 
         return response()->json([
             'success' => true,

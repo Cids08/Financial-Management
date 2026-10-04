@@ -39,6 +39,7 @@ class UpdateAccountsPayableRequest extends FormRequest
         $apId = $this->route('accountsPayable')?->id ?? $this->route('accounts_payable')?->id;
 
         return [
+            'budget_id' => ['nullable', 'integer', 'exists:budgets,id'],
             'supplier_id' => ['required', 'integer', Rule::exists('suppliers', 'id')],
             'account_id' => ['required', 'integer', Rule::exists('chart_of_accounts', 'id')],
             'invoice_number' => [
