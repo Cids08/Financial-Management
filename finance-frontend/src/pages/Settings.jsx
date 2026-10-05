@@ -1,3 +1,4 @@
+import CollectionPostingSettings from '../components/CollectionPostingSettings'
 import { useEffect, useRef, useState } from 'react'
 import { Building2, CheckCircle2, Coins, Hash, Mail, MapPin, Phone, Trash2, Upload } from 'lucide-react'
 import Breadcrumb from '../components/Breadcrumb'
@@ -332,6 +333,8 @@ export default function Settings({ title = 'Settings', crumbs = ['Settings'] }) 
           </form>
         </div>
       )}
+
+      {canManageBranding && <CollectionPostingSettings />}
 
       {/* Regional & Financial Defaults  -  same gate as Company Branding. */}
       {!permissionsLoading && canManageBranding && (

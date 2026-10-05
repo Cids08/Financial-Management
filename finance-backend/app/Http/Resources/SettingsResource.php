@@ -21,6 +21,8 @@ class SettingsResource extends JsonResource
             'currency' => $this->currency,
             'baseCurrency' => $this->base_currency,
             'exchangeRates' => $this->exchange_rates ?? (object) [],
+            'undepositedFundsAccountId' => $this->undeposited_funds_account_id,
+            'collectionClosedThrough' => $this->collection_closed_through,
             'fiscalYear' => $this->fiscal_year,
             'defaultTaxRate' => $this->default_tax_rate,
             'defaultPenaltyRate' => $this->default_penalty_rate,

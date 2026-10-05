@@ -23,6 +23,9 @@ import { useProfile } from '../hooks/useProfile'
 import { useCompany } from '../context/CompanyContext'
 import DeletePermanentButton from '../components/DeletePermanentButton'
 import RetentionCountdown from '../components/RetentionCountdown'
+// NOTE: the shared formatters.formatDateTime renders en-US, while this page's
+// local formatDateTime below renders en-PH. Keep the local one so existing
+// timestamps on this page keep their current format.
 import { formatCurrency } from '../utils/formatters'
 import { printSlip } from '../utils/printSlip'
 import { printDuplicateReceipt } from '../utils/printReceipt'
@@ -359,6 +362,8 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
   const [batchOpen, setBatchOpen] = useState(false)
   const [depositTarget, setDepositTarget] = useState(null)
   const [checkCleared, setCheckCleared] = useState(false)
+  const [verifyTarget, setVerifyTarget] = useState(null)
+  const [receiptVerified, setReceiptVerified] = useState(false)
   const [confirmTarget,setConfirmTarget]= useState(null)
   const [cancelTarget, setCancelTarget] = useState(null)
   const [cancelRemarks,setCancelRemarks]= useState('')
@@ -799,6 +804,20 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
   // -------------------------------------------------------------------------
   // Confirm / cancel
   // -------------------------------------------------------------------------
+  const handleVerifyReceipt = async () => {
+    if (!verifyTarget || actioning || !receiptVerified) return
+    setActioning(true); setActionError('')
+    try {
+      const res = await apiFetch('/api/collections/' + verifyTarget.id + '/verify-receipt', {
+        method: 'PATCH', body: JSON.stringify({ receipt_verified: receiptVerified, check_cleared: checkCleared }),
+      })
+      const json = await res.json()
+      if (!res.ok || !json.success) throw new Error(Object.values(json.errors ?? {})[0]?.[0] || json.message || 'Unable to verify receipt.')
+      setVerifyTarget(null); refetch()
+    } catch (error) { setActionError(error.message) }
+    finally { setActioning(false) }
+  }
+
   const handleConfirm = async () => {
     if (!confirmTarget || actioning || !confirmTarget.deposit_date || !confirmTarget.has_proof || (confirmTarget.payment_method === 'Check' && !checkCleared)) return
     setActioning(true)
@@ -1139,9 +1158,14 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[collectionStage(c)] ?? 'bg-slate-100 text-slate-600'}`}>
                         {c.deposit_batch_id && c.status === 'Pending' ? 'In deposit batch' : STATUS_LABELS[collectionStage(c)] || collectionStage(c)}
                       </span>
+                      {c.receipt_journal_entry_id && c.status === 'Pending' && <p className="mt-1 text-xs text-status-success">Receipt verified - Undeposited Funds</p>}
                     </td>
                     <td className="px-4 py-3.5 text-right">
                       <RowActions>
+                        {c.status === 'Pending' && !c.receipt_journal_entry_id && !c.deposit_batch_id && !c.deleted_at && isAdmin && canConfirm && (
+                          <Button size="sm" variant="secondary" disabled={Number(c.created_by) === Number(profile?.id)} onClick={() => { setVerifyTarget(c); setReceiptVerified(false); setCheckCleared(false); setActionError('') }}>Verify receipt</Button>
+                        )}
+                        {c.status === 'Pending' && !c.deposit_batch_id && !c.deposit_date && isAdmin && canConfirm && !c.deleted_at && <Button size="sm" variant="secondary" onClick={() => openCancel(c)}>Cancel receipt</Button>}
                         {c.status === 'Pending' && !c.deposit_batch_id && !c.deposit_date && hasPermission('collections.manage') && !c.deleted_at && <Button size="sm" onClick={() => setDepositTarget(c)}>Record Deposit</Button>}
                         {c.status === 'Pending' && !c.deposit_batch_id && !!c.deposit_date && canConfirm && (
                           <div className="flex items-center gap-1 mr-1 pr-1 border-r border-border shrink-0">
@@ -1185,7 +1209,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                         </Tooltip>
                         )}
                         <DocumentAction label={c.receipt_number} onClick={() => setProofTarget(c)} />
-                        {c.status === 'Pending' && !c.deleted_at && (
+                        {c.status === 'Pending' && !c.receipt_journal_entry_id && !c.deleted_at && (
                           <Tooltip label="Edit collection" align="start">
                             <button type="button" onClick={() => openEdit(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"><Pencil size={15} /></button>
                           </Tooltip>
@@ -1642,6 +1666,10 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                 <DetailRow label="Invoice"         value={detailRecord.invoice_number || arInfo(detailRecord.ar_id)?.invoice_number} />
                 <DetailRow label="Collector"       value={detailRecord.collector_name || collectorName(detailRecord.collector_id)} />
                 <DetailRow label="Collection Date" value={formatDate(detailRecord.collection_date)} />
+                <DetailRow label="Receipt Verified" value={detailRecord.receipt_verified_at ? formatDateTime(detailRecord.receipt_verified_at) : 'Not separately verified'} />
+                <DetailRow label="Deposit Confirmed" value={detailRecord.confirmed_at ? formatDateTime(detailRecord.confirmed_at) : 'Not recorded'} />
+                <DetailRow label="Receipt Journal" value={detailRecord.receipt_journal_entry_id || 'None'} />
+                <DetailRow label="Deposit Journal" value={detailRecord.deposit_journal_entry_id || 'None'} />
                 <DetailRow label="Deposit Date" value={detailRecord.deposit_date ? formatDate(detailRecord.deposit_date) : 'Not deposited'} />
               </div>
               <div className="px-3 py-2">
@@ -1709,6 +1737,19 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
 
       <DepositBatchesModal open={batchOpen} onClose={() => setBatchOpen(false)} onChanged={() => { refetch(); setBatchRevision(n => n + 1) }} cashAccounts={cashAccounts} canManage={hasPermission('collections.manage')} canConfirm={canConfirm} userId={profile?.id} />
       <RecordDepositModal record={depositTarget} onClose={() => setDepositTarget(null)} onSaved={refetch} onDocuments={record => {setDepositTarget(null);setProofTarget(record)}} />
+      <Modal open={!!verifyTarget} onClose={() => !actioning && setVerifyTarget(null)} title="Verify collection receipt" size="lg"
+        footer={<><Button variant="secondary" onClick={() => setVerifyTarget(null)} disabled={actioning}>Back</Button><Button onClick={handleVerifyReceipt} disabled={actioning || !receiptVerified || !verifyTarget?.has_proof || (verifyTarget?.payment_method === 'Check' && !checkCleared)}>{actioning ? 'Posting...' : 'Verify receipt'}</Button></>}>
+        {verifyTarget && <div className="space-y-4">
+          <p className="text-sm text-muted">Records this payment in Undeposited Funds and reduces the invoice balance. The bank balance changes only after deposit confirmation.</p>
+          <DetailRow label="Receipt" value={verifyTarget.receipt_number} />
+          <DetailRow label="Amount" value={formatCurrency(verifyTarget.amount_received)} />
+          <DetailRow label="Receipt posting date" value={formatDate(verifyTarget.collection_date)} />
+          <Button variant="secondary" onClick={() => setProofTarget(verifyTarget)}>{verifyTarget.has_proof ? 'Review receipt evidence' : 'Attach receipt evidence'}</Button>
+          <label className="flex items-start gap-2 text-sm text-ink"><input type="checkbox" className="mt-1" checked={receiptVerified} onChange={e => setReceiptVerified(e.target.checked)} />I verified the issued receipt, payer, invoice, and amount received.</label>
+          {verifyTarget.payment_method === 'Check' && <label className="flex items-start gap-2 text-sm text-ink"><input type="checkbox" className="mt-1" checked={checkCleared} onChange={e => setCheckCleared(e.target.checked)} />I verified bank clearance. Uncleared checks remain pending; cancel bounced checks with a reason.</label>}
+          {actionError && <p className="text-sm text-status-danger" role="alert">{actionError}</p>}
+        </div>}
+      </Modal>
       {/* Confirm modal */}
       <Modal open={!!confirmTarget} onClose={closeConfirm} title="Confirm Collection"
         footer={
@@ -1741,7 +1782,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
       >
         {confirmTarget && (
           <div className="space-y-4">
-            <p className="text-sm text-muted">Confirming this collection will update the invoice balance and credit the cash account. This cannot be undone.</p>
+            <p className="text-sm text-muted">Confirmation posts the bank deposit on the deposit date. If the receipt is not yet verified, it also posts the collection to Undeposited Funds on the collection date. The invoice is settled only once.</p>
             {confirmTarget && !confirmTarget.has_proof && (
               <div className="rounded-lg border border-status-warning-border bg-status-warning-bg p-3 text-xs text-status-warning flex items-start gap-2.5">
                 <AlertCircle size={18} className="shrink-0 text-status-warning mt-0.5" />
@@ -1807,7 +1848,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
       >
         {cancelTarget && (
           <div className="space-y-4">
-            <p className="text-sm text-muted">This will mark the collection as cancelled. The invoice balance will not be affected.</p>
+            <p className="text-sm text-muted">{cancelTarget.receipt_journal_entry_id ? 'This reverses the verified receipt using the current date, restores the invoice balance, and removes the amount from Undeposited Funds. A reason is required.' : 'This cancels the unposted receipt without changing the invoice balance. For a bounced check, record the reason below.'}</p>
             <div className="rounded-lg border border-border divide-y divide-border">
               <div className="px-3 py-2">
                 <DetailRow label="Receipt"         value={cancelTarget.receipt_number} />
@@ -1836,6 +1877,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
         canManage={hasPermission('collections.manage')}
         onUploaded={() => {
           refetch()
+          setVerifyTarget(current => current?.id === proofTarget?.id ? {...current, has_proof: true} : current)
           setConfirmTarget(current => current?.id === proofTarget?.id ? {...current, has_proof: true} : current)
           setDetailRecord(current => current?.id === proofTarget?.id ? {...current, has_proof: true} : current)
         }}

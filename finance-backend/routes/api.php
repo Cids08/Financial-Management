@@ -371,6 +371,7 @@ Route::middleware(['auth:sanctum', 'require.password.change'])->group(function (
 
         // Parameterised routes — model-bound, must come after static routes above
         Route::put('/{collection}', [CollectionController::class, 'update'])->middleware('permission:collections.manage');
+        Route::patch('/{collection}/verify-receipt', [CollectionController::class, 'verifyReceipt'])->middleware('permission:collections.confirm');
         Route::patch('/{collection}/confirm', [CollectionController::class, 'confirm'])->middleware('permission:collections.confirm');
         Route::patch('/{collection}/cancel', [CollectionController::class, 'cancel'])->middleware('permission:collections.confirm');
         Route::patch('/{collection}/archive', [CollectionController::class, 'archive'])->middleware('permission:collections.manage');

@@ -39,6 +39,8 @@ class UpdateSettingsRequest extends FormRequest
             'baseCurrency' => ['sometimes', 'nullable', 'string', 'in:' . implode(',', self::CURRENCIES)],
             'exchangeRates' => ['sometimes', 'nullable', 'array'],
             'exchangeRates.*' => ['nullable', 'numeric', 'min:0'],
+            'undepositedFundsAccountId' => ['sometimes', 'nullable', 'integer', 'exists:chart_of_accounts,id'],
+            'collectionClosedThrough' => ['sometimes', 'nullable', 'date_format:Y-m-d', 'before_or_equal:today'],
             'fiscalYear' => ['sometimes', 'required', 'integer', 'min:2000', 'max:2100'],
             'defaultTaxRate' => ['sometimes', 'required', 'numeric', 'min:0', 'max:100'],
             'defaultPenaltyRate' => ['sometimes', 'required', 'numeric', 'min:0', 'max:100'],

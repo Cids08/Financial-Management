@@ -41,6 +41,8 @@ class SettingsController extends Controller
             'currency' => 'currency',
             'baseCurrency' => 'base_currency',
             'exchangeRates' => 'exchange_rates',
+            'undepositedFundsAccountId' => 'undeposited_funds_account_id',
+            'collectionClosedThrough' => 'collection_closed_through',
             'fiscalYear' => 'fiscal_year',
             'defaultTaxRate' => 'default_tax_rate',
             'defaultPenaltyRate' => 'default_penalty_rate',

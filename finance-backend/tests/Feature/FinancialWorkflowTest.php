@@ -68,7 +68,7 @@ class FinancialWorkflowTest extends TestCase
         DB::table('suppliers')->insert([['id'=>1],['id'=>2]]);
         Schema::create('cash_accounts', function(Blueprint $t) { $t->id(); $t->string('account_code'); $t->string('account_name'); });
         DB::table('cash_accounts')->insert(['id'=>1,'account_code'=>'CA1','account_name'=>'Bank']);
-        Schema::create('collections', function(Blueprint $t) { $t->id(); $t->integer('cash_account_id'); $t->string('status'); $t->date('collection_date'); $t->decimal('amount_received',15,2); $t->softDeletes(); });
+        Schema::create('collections', function(Blueprint $t) { $t->id(); $t->integer('cash_account_id'); $t->string('status'); $t->date('collection_date'); $t->date('deposit_date')->nullable(); $t->integer('deposit_journal_entry_id')->nullable(); $t->decimal('amount_received',15,2); $t->softDeletes(); });
         Schema::table('disbursements', function(Blueprint $t) { $t->integer('cash_account_id'); $t->string('status'); $t->date('payment_date'); $t->date('released_date')->nullable(); $t->decimal('amount_paid',15,2); $t->decimal('net_amount',15,2)->nullable(); $t->decimal('ewt_amount',15,2)->default(0); $t->softDeletes(); });
         Schema::table('expenses', function(Blueprint $t) { $t->integer('supplier_id')->nullable(); $t->string('receipt_number')->nullable(); $t->integer('cash_account_id')->nullable(); $t->string('status')->default('Pending'); $t->date('expense_date')->nullable(); $t->decimal('expense_amount',15,2)->default(0); $t->softDeletes(); });
         Schema::create('accounts_payable', function(Blueprint $t) { $t->id(); $t->integer('supplier_id'); $t->integer('account_id')->nullable(); $t->string('invoice_number'); $t->date('invoice_date'); $t->decimal('original_amount',15,2); $t->string('status'); $t->softDeletes(); $t->timestamps(); });
@@ -90,6 +90,14 @@ class FinancialWorkflowTest extends TestCase
         $this->expense(['deleted_at'=>now()]); $this->expense(['status'=>'Pending']); $this->expense(['status'=>'Rejected']); $this->expense(['expense_date'=>'2026-09-01']);
         $rows=app(\App\Services\ReportService::class)->cashFlow(\Carbon\Carbon::parse('2026-10-01'),\Carbon\Carbon::parse('2026-10-31'));
         $this->assertCount(1,$rows); $this->assertEquals(100,$rows[0]['inflow']); $this->assertEquals(167,$rows[0]['outflow']);
+        DB::table('collections')->insert(['cash_account_id'=>1,'status'=>'Confirmed','collection_date'=>'2026-09-30','deposit_date'=>'2026-10-02','deposit_journal_entry_id'=>99,'amount_received'=>75]);
+        DB::table('collections')->insert(['cash_account_id'=>1,'status'=>'Confirmed','collection_date'=>'2026-09-30','deposit_date'=>'2026-10-02','amount_received'=>25]);
+        $report=app(\App\Services\ReportService::class);
+        $october=$report->cashFlow(\Carbon\Carbon::parse('2026-10-01'),\Carbon\Carbon::parse('2026-10-31'));
+        $september=$report->cashFlow(\Carbon\Carbon::parse('2026-09-01'),\Carbon\Carbon::parse('2026-09-30'));
+        $this->assertEquals(175,$october[0]['inflow']);
+        $this->assertEquals(25,$september[0]['inflow']);
+
     }
     public function test_ap_blocks_duplicate_expense_even_when_archived(): void
     {
@@ -210,7 +218,7 @@ class FinancialWorkflowTest extends TestCase
 
     public function test_deposit_tracking_does_not_post_and_confirmation_requires_evidence_and_check_clearance(): void
     {
-        Schema::table('collections', function (Blueprint $t) { $t->string('receipt_number'); $t->string('payment_method'); $t->date('deposit_date')->nullable(); $t->integer('created_by'); $t->timestamps(); });
+        Schema::table('collections', function (Blueprint $t) { $t->string('receipt_number'); $t->string('payment_method'); $t->integer('created_by'); $t->timestamps(); });
         Schema::create('supporting_documents', function (Blueprint $t) { $t->id(); $t->string('reference_type'); $t->integer('reference_id'); $t->string('storage_path')->nullable(); });
         Schema::table('audit_logs', function (Blueprint $t) { $t->string('ip_address')->nullable(); $t->text('user_agent')->nullable(); });
         DB::table('collections')->insert(['id'=>1,'cash_account_id'=>1,'amount_received'=>100,'receipt_number'=>'BOOK-0001','status'=>'Pending','payment_method'=>'Check','collection_date'=>'2026-10-01','created_by'=>2]);

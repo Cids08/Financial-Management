@@ -41,6 +41,7 @@ class Setting extends Model
         'fiscal_year',
         'default_tax_rate',
         'default_penalty_rate',
+        'undeposited_funds_account_id', 'collection_closed_through',
         'ar_control_account_id',
         'forecast_months',
         'data_retention_days',

@@ -32,6 +32,15 @@ class SettingsService
     {
         return DB::transaction(function () use ($actor, $data) {
             $setting = Setting::current();
+            $setting = Setting::query()->lockForUpdate()->findOrFail($setting->id);
+            if (!empty($data['undeposited_funds_account_id'])) {
+                $account = \App\Models\ChartOfAccount::find($data['undeposited_funds_account_id']);
+                if (!$account || !$account->is_active || $account->account_type !== 'Asset' || $account->id === $setting->ar_control_account_id) {
+                    throw \Illuminate\Validation\ValidationException::withMessages(['undepositedFundsAccountId'=>'Choose an active asset account separate from Accounts Receivable.']);
+                }
+                $bankCodes = \App\Models\CashAccount::pluck('account_code')->map(fn($code)=>preg_replace('/^CA-/', '', $code));
+                if ($bankCodes->contains($account->account_code)) throw \Illuminate\Validation\ValidationException::withMessages(['undepositedFundsAccountId'=>'Use a separate holding account, not a cash/bank account.']);
+            }
             $original = $setting->only(array_keys($data));
 
             // Only re-apply when the default actually changes, so saving

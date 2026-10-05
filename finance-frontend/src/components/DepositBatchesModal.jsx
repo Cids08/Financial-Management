@@ -54,7 +54,7 @@ export default function DepositBatchesModal({ open, onClose, onChanged, cashAcco
       {mode==='review' && canConfirm && batch?.status==='Pending' && <Button loading={busy} disabled={ownBatch || difference!==0 || !batch.has_proof || !bankVerified || (hasChecks&&!checksCleared)} onClick={confirm}>Confirm entire batch</Button>}
     </>}>
       <div className="space-y-5 min-w-0">
-        <p className="text-xs text-muted">Prepare one batch for one bank deposit. Admin verifies the bank evidence once; the system posts each receipt together. OCR is not bank verification.</p>
+        <p className="text-xs text-muted">Prepare one batch for one bank deposit. Admin verifies the bank evidence once. Unverified receipts post to Undeposited Funds on their collection dates; all deposits post to the bank on the deposit date. OCR is not bank verification.</p>
         {error && <div role="alert" className="rounded-lg bg-status-danger-bg p-3 text-sm text-status-danger break-words">{error}{mode!=='review' && <Button size="sm" variant="secondary" onClick={()=>setRefresh(n=>n+1)}>Retry</Button>}</div>}
         {mode==='list' && <label className="batch-field flex min-w-0 flex-col gap-2 text-xs font-medium text-muted w-full sm:max-w-sm"><span>Batch status</span><select className={field} value={status} onChange={e=>{setStatus(e.target.value);setPage(1)}}><option>Pending</option><option>Confirmed</option><option>Cancelled</option><option value="all">All batches</option></select></label>}
         {mode==='create' && <>

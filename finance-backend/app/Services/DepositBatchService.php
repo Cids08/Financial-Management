@@ -54,9 +54,9 @@ class DepositBatchService {
                 if (strcasecmp($row->payment_method,'Check')===0 && !$checksCleared) $this->fail('Verify bank clearance for every check in this batch.');
             }
             // Lock invoice totals in a stable order before posting any member.
-            $invoices=AccountsReceivable::whereIn('id',$rows->pluck('ar_id')->unique())->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+            $invoices=AccountsReceivable::withTrashed()->whereIn('id',$rows->pluck('ar_id')->unique())->orderBy('id')->lockForUpdate()->get()->keyBy('id');
             foreach ($rows->groupBy('ar_id') as $id=>$group) {
-                $sum=$group->reduce(fn($sum,$r)=>Money::add($sum,$r->amount_received),'0.00');
+                $sum=$group->filter(fn($r)=>!$r->receipt_journal_entry_id)->reduce(fn($sum,$r)=>Money::add($sum,$r->amount_received),'0.00');
                 if (!isset($invoices[$id]) || $invoices[$id]->status === 'Cancelled' || Money::comp($sum,$invoices[$id]->remaining_balance)>0) $this->fail('Batch receipts exceed an invoice balance or reference an unavailable invoice.');
             }
             foreach ($rows as $row) {

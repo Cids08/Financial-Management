@@ -21,6 +21,7 @@ use Illuminate\Validation\ValidationException;
 
 class CollectionService
 {
+    use \App\Concerns\LocksReferencePrefix;
     /**
      * @param array{search?:string,collector_id?:int,status?:string,trashed?:bool,per_page?:int} $filters
      */
@@ -205,6 +206,13 @@ class CollectionService
             if (isset($data['receipt_number']) && $data['receipt_number'] !== $collection->receipt_number) {
                 throw ValidationException::withMessages(['receipt_number' => 'Keep the original issued receipt number. Cancel an incorrect record instead of replacing its receipt number.']);
             }
+            if ($collection->receipt_journal_entry_id) {
+                foreach ($data as $key => $value) {
+                    if (in_array($key, ['deposit_date', 'reference_number', 'remarks'], true)) continue;
+                    $current = $collection->getRawOriginal($key);
+                    if ((string)$current !== (string)$value) throw ValidationException::withMessages(['receipt'=>'Verified receipt details are locked. Cancel with a reversal before replacing an incorrect receipt.']);
+                }
+            }
             $collection->update($data);
 
             AuditLog::create([
@@ -223,12 +231,23 @@ class CollectionService
         return $collection->refresh();
     }
 
-    /**
-     * Applies the collection: reduces the invoice's remaining balance,
-     * credits the cash account, marks the AR Paid/Partial, and posts
-     * the double-entry journal entry. Mirrors ExpenseService::approve()'s
-     * locking pattern.
-     */
+    /** Verify a receipt into Undeposited Funds; the bank remains unchanged. */
+    public function verifyReceipt(Collection $collection, User $actor, bool $checkCleared = false): Collection
+    {
+        return DB::transaction(function () use ($collection, $actor, $checkCleared) {
+            $collection = Collection::query()->lockForUpdate()->findOrFail($collection->id);
+            if (DB::table('deposit_batch_items')->where('collection_id',$collection->id)->exists()) {
+                throw ValidationException::withMessages(['batch'=>'Verify this receipt with its deposit batch, or cancel the batch first.']);
+            }
+            if (!$collection->supportingDocuments()->whereNotNull('storage_path')->exists()) {
+                throw ValidationException::withMessages(['proof'=>'Attach receipt evidence before verification.']);
+            }
+            app(CollectionPostingService::class)->receipt($collection,$actor,$checkCleared);
+            DB::afterCommit(fn () => CollectionStatusChanged::dispatch($collection->refresh()));
+            return $collection->refresh();
+        });
+    }
+
     public function confirm(Collection $collection, User $confirmedBy, bool $checkCleared = false, ?int $depositBatchId = null): Collection
     {
         if ($collection->status !== Collection::STATUS_PENDING) {
@@ -266,22 +285,15 @@ class CollectionService
             }
 
             /** @var AccountsReceivable $ar */
-            $ar = AccountsReceivable::query()->lockForUpdate()->findOrFail($collection->ar_id);
+            $ar = AccountsReceivable::withTrashed()->lockForUpdate()->findOrFail($collection->ar_id);
             /** @var CashAccount $cashAccount */
             $cashAccount = CashAccount::query()->lockForUpdate()->findOrFail($collection->cash_account_id);
 
-            if (Money::comp((string) $collection->amount_received, (string) $ar->remaining_balance, 2) > 0) {
-                throw ValidationException::withMessages(['amount_received' => 'The receipt exceeds the current invoice balance. Review other confirmed receipts.']);
-            }
-            $newPaid           = Money::add((string) $ar->paid_amount, (string) $collection->amount_received, 2);
-            $newRemaining      = Money::sub((string) $ar->original_amount, $newPaid, 2);
+            $posting = app(CollectionPostingService::class);
             $cashBalanceBefore = $cashAccount->current_balance;
-
-            $ar->update([
-                'paid_amount'       => $newPaid,
-                'remaining_balance' => max('0.00', $newRemaining),
-                'status'            => Money::comp($newRemaining, '0', 2) <= 0 ? 'Paid' : 'Partially Paid',
-            ]);
+            if (!$collection->receipt_journal_entry_id) $posting->receipt($collection, $confirmedBy, $checkCleared);
+            $ar->refresh();
+            $newRemaining = $ar->remaining_balance;
 
             $cashAccount->update([
                 'current_balance' => Money::add((string) $cashAccount->current_balance, (string) $collection->amount_received, 2),
@@ -292,11 +304,10 @@ class CollectionService
                 'received_by' => $confirmedBy->id,
             ]);
 
-            // Load cashAccount onto the collection so postJournalEntry()
-            // can read account_code without an extra query.
+            // Resolve the destination bank for the deposit transfer.
             $collection->load('cashAccount');
 
-            $journalEntry = $this->postJournalEntry($collection, $ar, $confirmedBy);
+            $journalEntry = $posting->deposit($collection, $confirmedBy);
 
             // Broadcast to all users on the private-collections channel so
             // the Collections page auto-refreshes without a manual reload.
@@ -386,6 +397,7 @@ class CollectionService
                 throw ValidationException::withMessages(['batch'=>'Cancel the deposit batch before changing this receipt.']);
             }
 
+            app(CollectionPostingService::class)->reverseReceipt($collection, $actor, $remarks);
             $collection->update([
                 'status'  => Collection::STATUS_CANCELLED,
                 'remarks' => $remarks
@@ -444,6 +456,10 @@ class CollectionService
             // Collection::booted() skips the saveQuietly() — one write,
             // correct actor, even during queued jobs where Auth::id()
             // might differ from $actor->id.
+            $collection = Collection::query()->lockForUpdate()->findOrFail($collection->id);
+            if ($collection->status === Collection::STATUS_PENDING && $collection->receipt_journal_entry_id) {
+                throw ValidationException::withMessages(['receipt'=>'Deposit or reverse this verified receipt before archiving it.']);
+            }
             $collection->deleted_by = $actor->id;
             $collection->save();
             $collection->delete();
@@ -620,94 +636,6 @@ class CollectionService
             });
     }
     /**
-     *   Dr  Cash / Bank  — the chart_of_accounts row whose account_code
-     *                      matches cash_accounts.account_code with the
-     *                      "CA-" prefix stripped (e.g. CA-1010 → 1010).
-     *   Cr  Accounts Receivable control — the chart_of_accounts row pinned
-     *                      by settings.ar_control_account_id (falls back to
-     *                      account_name = 'Accounts Receivable', code 1100).
-     *
-     * No config map, no hardcoded IDs. Both sides are resolved from the
-     * DB at confirm-time so adding a new cash account never requires a
-     * code change — just seed a matching chart_of_accounts row.
-     */
-    private function postJournalEntry(
-        Collection $collection,
-        AccountsReceivable $ar,
-        User $confirmedBy
-    ): JournalEntry {
-        // cash_accounts.account_code is "CA-XXXX"; the matching
-        // chart_of_accounts row uses just "XXXX" as its account_code.
-        // str_replace used intentionally — ltrim would strip individual
-        // characters ('C','A','-') not the prefix as a whole, which would
-        // corrupt codes like CA-0010 (leading zero stripped).
-        $chartCode = str_replace('CA-', '', $collection->cashAccount->account_code);
-
-        $cashChartAccount = ChartOfAccount::where('account_code', $chartCode)
-            ->where('is_active', true)
-            ->first();
-
-        if (! $cashChartAccount) {
-            throw ValidationException::withMessages([
-                'finance' => "No active chart-of-accounts entry found for cash account "
-                    . "\"{$collection->cashAccount->account_name}\" "
-                    . "(looked up code: {$chartCode}). "
-                    . "Add a chart_of_accounts row with account_code = {$chartCode} to fix this.",
-            ]);
-        }
-
-        // AR control account is pinned by account_id in settings (falls back
-        // to the legacy "Accounts Receivable" name lookup), so it stays the
-        // same row even if the account is renamed.
-        $arChartAccount = ChartOfAccount::arControlAccount();
-
-        if (! $arChartAccount) {
-            throw ValidationException::withMessages([
-                'finance' => 'No active chart-of-accounts entry found with account_name '
-                    . '"Accounts Receivable". Check your chart_of_accounts table.',
-            ]);
-        }
-
-        $entry = JournalEntry::create([
-            'transaction_no'   => 'JE-COL-' . $collection->id . '-' . now()->format('YmdHis'),
-            'transaction_date' => $collection->collection_date,
-            'description'      => sprintf(
-                'Collection #%d confirmed — %.2f received against invoice %s',
-                $collection->id,
-                (float) $collection->amount_received,
-                $ar->invoice_number
-            ),
-            'status'     => 'Posted',
-            'posted_by'  => $confirmedBy->id,
-            'posted_at'  => now(),
-            'created_by' => $confirmedBy->id,
-        ]);
-
-        $entry->lines()->createMany([
-            [
-                // Cash/Bank increases — asset debit
-                'account_id'     => $cashChartAccount->id,
-                'debit'          => $collection->amount_received,
-                'credit'         => '0.00',
-                'reference_type' => 'Collections',
-                'reference_id'   => $collection->id,
-                'remarks'        => "Cash received — invoice {$ar->invoice_number}",
-            ],
-            [
-                // AR control decreases — asset credit (reducing what's owed)
-                'account_id'     => $arChartAccount->id,
-                'debit'          => '0.00',
-                'credit'         => $collection->amount_received,
-                'reference_type' => 'Collections',
-                'reference_id'   => $collection->id,
-                'remarks'        => "AR settled — invoice {$ar->invoice_number}",
-            ],
-        ]);
-
-        return $entry;
-    }
-
-    /**
      * Notifies whoever recorded the collection (created_by) that it was
      * confirmed or cancelled.
      *
@@ -782,6 +710,10 @@ class CollectionService
 
     public static function generateReferenceNumber(): string
     {
+        // Serialise concurrent generators — see the note on
+        // AccountsReceivableService::generateReferenceNo().
+        self::lockReferencePrefix('fms.reference.collections');
+
         $last = Collection::withTrashed()
             ->where('reference_number', 'like', 'REF-COL-%')
             ->orderByDesc('id')

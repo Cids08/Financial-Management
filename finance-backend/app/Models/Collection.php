@@ -24,6 +24,8 @@ class Collection extends Model
     public const STATUS_CANCELLED = 'Cancelled';
 
     protected $fillable = [
+        'receipt_journal_entry_id', 'deposit_journal_entry_id', 'reversal_journal_entry_id',
+        'receipt_verified_by', 'receipt_verified_at', 'confirmed_at',
         'ar_id',
         'collector_id',
         'cash_account_id',
@@ -41,6 +43,7 @@ class Collection extends Model
     ];
 
     protected $casts = [
+        'receipt_verified_at' => 'datetime', 'confirmed_at' => 'datetime',
         'collection_date' => 'date',
         'deposit_date'    => 'date',
         'amount_received' => 'decimal:2',

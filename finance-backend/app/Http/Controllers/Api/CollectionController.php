@@ -141,6 +141,14 @@ class CollectionController extends Controller
         ]);
     }
 
+    public function verifyReceipt(Request $request, Collection $collection): JsonResponse
+    {
+        $this->authorize('confirm', $collection);
+        $request->validate(['receipt_verified'=>['required','accepted'],'check_cleared'=>['sometimes','boolean']]);
+        $row = $this->collections->verifyReceipt($collection, $request->user(), $request->boolean('check_cleared'));
+        return response()->json(['success'=>true,'message'=>'Receipt verified in Undeposited Funds. Bank balance is unchanged.','data'=>new CollectionResource($row)]);
+    }
+
     public function confirm(Request $request, Collection $collection): JsonResponse
     {
         // Policy checks both permission AND that the collection is still

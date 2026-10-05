@@ -215,7 +215,7 @@ class ReportService
         // Archived settled records still represent real cash movement.
         $period = [$start->toDateString(), $end->toDateString()];
         $inflows = DB::table('collections')->where('status', 'Confirmed')
-            ->whereBetween('collection_date', $period)
+            ->whereBetween(DB::raw('CASE WHEN deposit_journal_entry_id IS NOT NULL THEN deposit_date ELSE collection_date END'), $period)
             ->selectRaw('cash_account_id, SUM(amount_received) as total')->groupBy('cash_account_id')->pluck('total', 'cash_account_id');
         $payments = DB::table('disbursements')->where('status', 'Released')
             ->whereBetween(DB::raw('COALESCE(released_date, payment_date)'), $period)

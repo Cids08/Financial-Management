@@ -129,7 +129,7 @@ class CollectionPolicy
      */
     public function confirm(User $user, Collection $collection): bool
     {
-        if (! $user->hasPermission('collections.confirm')) {
+        if (!$user->hasAnyRole(['admin','super-admin','Admin','Super Admin']) || ! $user->hasPermission('collections.confirm')) {
             return false;
         }
 
@@ -146,7 +146,7 @@ class CollectionPolicy
      */
     public function cancel(User $user, Collection $collection): bool
     {
-        if (! $user->hasPermission('collections.confirm')) {
+        if (!$user->hasAnyRole(['admin','super-admin','Admin','Super Admin']) || ! $user->hasPermission('collections.confirm')) {
             return false;
         }
 
