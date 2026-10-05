@@ -1,7 +1,16 @@
 fastapi>=0.110.0,<1.0.0
 uvicorn[standard]>=0.28.0,<1.0.0
 pydantic>=2.6.0,<3.0.0
-numpy>=1.26.0,<2.0.0
-pandas>=2.2.0,<3.0.0
-scipy>=1.12.0,<2.0.0
-statsmodels>=0.14.0,<1.0.0
+# Numerical stack is pinned exactly rather than range-pinned. As ranges these
+# four resolved independently on every build, and the combination that landed
+# in production (statsmodels 0.15.0 with scipy 1.17.1) ran ARIMA fits roughly
+# 100x slower than the tested environment -- past any client timeout, which
+# surfaced as a 500 in Laravel and "Failed to fetch" in the browser.
+#
+# This combination is verified on python:3.11: a 60-point series over a
+# 12-period horizon converges on the first order in 0.19s. Keep these pinned;
+# loosening them reintroduces the drift.
+numpy==1.26.4
+pandas==2.3.3
+scipy==1.15.3
+statsmodels==0.14.6
