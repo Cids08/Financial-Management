@@ -17,7 +17,9 @@ export default function ResponsiveTable({ children, className = '', minTableWidt
       const headers = Array.from(table.tHead?.rows ?? []).flatMap(row => Array.from(row.cells))
       const labels = headers.flatMap(cell => Array(cell.colSpan).fill(cell.textContent.trim() || cell.getAttribute('aria-label') || 'Select'))
       columnCount = labels.length
+      const numericLabel = label => /^(amount(?: due| paid| received)?|balance|outstanding(?: balance)?|original amount|net payment|penalty|debit|credit|allocated(?: amount)?|actual(?: amount)?|variance|predicted amount|current balance|opening balance|total(?: amount)?)$/i.test(label.trim())
       headers.forEach(cell => {
+        cell.dataset.numeric = String(numericLabel(cell.textContent))
         cell.setAttribute('role', 'columnheader')
         if (!cell.hasAttribute('scope')) cell.setAttribute('scope', 'col')
       })
@@ -30,6 +32,7 @@ export default function ResponsiveTable({ children, className = '', minTableWidt
             if (section !== table.tHead) {
               const label = labels[index] || ''
               cell.setAttribute('role', cell.tagName === 'TH' ? 'rowheader' : 'cell')
+              cell.dataset.numeric = String(cell.colSpan === 1 && numericLabel(label))
               cell.dataset.label = cell.colSpan > 1 ? '' : label
               cell.dataset.fullWidth = String(cell.colSpan > 1 || index === 0 || /actions/i.test(label))
               cell.dataset.actions = String(/actions/i.test(label))

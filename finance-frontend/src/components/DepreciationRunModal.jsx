@@ -282,9 +282,9 @@ export default function DepreciationRunModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-surface rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden">
+      <div role="dialog" aria-modal="true" className="app-modal min-w-0 bg-surface rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-gradient-to-r from-primary/10 via-primary/5 to-transparent">
+        <div className="modal-header min-w-0 flex-wrap gap-3 shrink-0 flex items-center justify-between px-6 py-4 border-b border-border bg-gradient-to-r from-primary/10 via-primary/5 to-transparent">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-primary/20 text-primary-dark dark:text-primary rounded-xl">
               <TrendingDown className="w-5 h-5" />
@@ -325,7 +325,7 @@ export default function DepreciationRunModal({
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="modal-body min-h-0 min-w-0 flex-1 overflow-y-auto p-6">
           {/* STEP 0: Configure Run */}
           {step === 0 && (
             <div className="space-y-6 max-w-xl mx-auto">
@@ -635,7 +635,7 @@ export default function DepreciationRunModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-border bg-bg">
+        <div className="modal-footer shrink-0 flex-wrap gap-2 flex items-center justify-between px-6 py-4 border-t border-border bg-bg">
           <button
             type="button"
             onClick={() => {

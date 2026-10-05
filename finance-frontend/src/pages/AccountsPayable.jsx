@@ -1,3 +1,4 @@
+import DetailRow from '../components/DetailRow'
 import RowActions from '../components/RowActions'
 import DocumentAction from '../components/DocumentAction'
 import ApBudgetField from '../components/ApBudgetField'
@@ -136,14 +137,7 @@ function addDaysISO(days) {
 // interpolated value (billing_address, description, remarks) has to go
 // through it.
 
-function DetailRow({ label, value }) {
-  return (
-    <div className="flex items-center justify-between gap-3 py-1.5">
-      <span className="text-xs text-muted">{label}</span>
-      <span className="text-xs font-medium text-ink text-right">{value ?? '—'}</span>
-    </div>
-  )
-}
+
 
 // Upload + scan panel shown at the top of the Add Bill form  -  same behavior
 // as AccountsReceivable's InvoiceScanUpload, adapted for bills. Owns its own
@@ -956,14 +950,14 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
 
       <div className={PANEL}>
         <div className="overflow-hidden rounded-t-xl">
-          <ResponsiveTable minTableWidth={1050} className="w-full text-sm table-fixed">
+          <ResponsiveTable minTableWidth={1050} className="w-full text-sm table-fixed payment-register">
             <thead className="bg-surface">
               <tr className="border-b border-border">
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2.5 py-3 w-[18%] whitespace-nowrap">Bill</th>
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[17%] whitespace-nowrap">Supplier</th>
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[10%] whitespace-nowrap">Due Date</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[14%] whitespace-nowrap">Amount Due</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[8%] whitespace-nowrap">Penalty</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[14%] whitespace-nowrap register-amount">Amount Due</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[8%] whitespace-nowrap register-amount">Penalty</th>
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[13%] whitespace-nowrap">Status</th>
                 <th className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wider px-2.5 py-3 w-[20%] whitespace-nowrap">Actions</th>
               </tr>
@@ -1001,13 +995,13 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                     </p>
                   </td>
                   <td className="px-2 py-2 whitespace-nowrap text-ink text-xs">{formatDate(r.due_date)}</td>
-                  <td className="px-2 py-2 whitespace-nowrap text-left tabular-nums">
+                  <td className="px-2 py-2 tabular-nums register-amount">
                     <span className="text-ink font-semibold text-xs sm:text-sm">{formatCurrency(r.remaining_balance)}</span>
                     {r.paid_amount > 0 && (
                       <span className="block text-[10px] text-muted line-through">{formatCurrency(r.amount)}</span>
                     )}
                   </td>
-                  <td className="px-2 py-2 whitespace-nowrap text-left">
+                  <td className="px-2 py-2 tabular-nums register-amount">
                     {r.penalty_rate > 0 ? (
                       isOverdueBill(r) ? (
                         <>

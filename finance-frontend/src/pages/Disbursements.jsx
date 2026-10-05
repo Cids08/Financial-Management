@@ -1,3 +1,4 @@
+import DetailRow from '../components/DetailRow'
 import RowActions from '../components/RowActions'
 import DocumentAction from '../components/DocumentAction'
 import KpiValue from '../components/KpiValue'
@@ -159,14 +160,7 @@ function cashAccountLabel(account) {
   return account.bank_name ? `${name}  -  ${account.bank_name}` : name
 }
 
-function DetailRow({ label, value }) {
-  return (
-    <div className="flex items-center justify-between gap-3 py-1.5">
-      <span className="text-xs text-muted">{label}</span>
-      <span className="text-xs font-medium text-ink text-right">{value ?? '—'}</span>
-    </div>
-  )
-}
+
 
 function NoAccessState({ label }) {
   return (
@@ -212,7 +206,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
 
   const {
     disbursements, stats, meta, loading, error,
-    dSearch, setDSearch, dStatusFilter, setDStatusFilter,
+    dSourceFilter, setDSourceFilter, dSearch, setDSearch, dStatusFilter, setDStatusFilter,
     dShowArchived, setDShowArchived, dDateFrom, setDDateFrom,
     dDateTo, setDDateTo, dHasDateFilter, clearDDateFilter,
     dPage, setDPage,
@@ -300,10 +294,6 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
     }
   }
 
-  // Source filter is applied client-side over the page the hook already
-  // fetched. If/when useDisbursements grows a server-side `source_type`
-  // param, swap this for a hook-driven filter like the status filter above.
-  const [dSourceFilter, setDSourceFilter] = useState('all') // 'all' | 'ap' | 'payroll'
 
   const STATUS_SORT_PRIORITY = {
     Pending: 1,
@@ -314,9 +304,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
   }
 
   const visibleDisbursements = useMemo(() => {
-    const list = dSourceFilter === 'all'
-      ? disbursements
-      : disbursements.filter((d) => getSourceType(d) === dSourceFilter)
+    const list = disbursements
 
     return [...list].sort((a, b) => {
       const priorityA = STATUS_SORT_PRIORITY[a.status] || 99
@@ -326,7 +314,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
       }
       return (b.disbursement_id || 0) - (a.disbursement_id || 0)
     })
-  }, [disbursements, dSourceFilter])
+  }, [disbursements])
 
   const payrollPendingCount = useMemo(
     () => (stats?.payroll_pending ?? disbursements.filter((d) => getSourceType(d) === 'payroll' && d.status === 'Pending').length),
@@ -654,15 +642,6 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
               )}
             </div>
           </div>
-          {/* Source */}
-          <div className="w-full sm:w-44 shrink-0">
-            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Source</label>
-            <select value={dSourceFilter} onChange={(e) => setDSourceFilter(e.target.value)} className={INPUT} style={INPUT_TEXT_STYLE}>
-              <option value="all">All Sources</option>
-              <option value="ap">Accounts Payable</option>
-              <option value="payroll">Payroll</option>
-            </select>
-          </div>
           {/* Status */}
           <div className="w-full sm:w-44 shrink-0">
             <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Status</label>
@@ -707,17 +686,20 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
       </div>
 
       <div className={PANEL}>
+        <div className="flex flex-wrap gap-2 border-b border-border p-3" role="group" aria-label="Payment source">
+          {[['all', 'All payments'], ['ap', 'Accounts Payable'], ['payroll', 'Payroll']].map(([value, label]) => <Button key={value} size="sm" variant={dSourceFilter === value ? 'primary' : 'secondary'} aria-pressed={dSourceFilter === value} onClick={() => setDSourceFilter(value)}>{label}</Button>)}
+        </div>
         <div className="overflow-hidden rounded-t-xl">
-          <ResponsiveTable className="w-full text-sm">
+          <ResponsiveTable minTableWidth={1100} className="w-full text-sm payment-register">
             <thead className="bg-surface">
               <tr className="border-b border-border">
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-3 py-3">Disbursed To</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3">Source</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3">Reference / Dept</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 whitespace-nowrap">Payment Date</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 whitespace-nowrap">Amount</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3">Status</th>
-                <th className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wider px-3 py-3">Actions</th>
+                <th style={{ width: '20%' }} className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-3 py-3">Disbursed To</th>
+                <th style={{ width: '8%' }} className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3">Source</th>
+                <th style={{ width: '14%' }} className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3">Reference / Dept</th>
+                <th style={{ width: '11%' }} className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 whitespace-nowrap">Payment Date</th>
+                <th style={{ width: '14%' }} className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 whitespace-nowrap register-amount">Amount</th>
+                <th style={{ width: '17%' }} className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3">Status</th>
+                <th style={{ width: '16%' }} className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wider px-3 py-3">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -742,8 +724,8 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                 return (
                   <tr key={d.disbursement_id} data-row-id={d.disbursement_id} className={`border-b border-border last:border-0 transition-colors duration-150 ${highlightedId === d.disbursement_id ? 'bg-primary/10' : 'hover:bg-bg'}`}>
                     <td className="px-3 py-2.5 min-w-0">
-                      <p className="font-medium text-ink truncate max-w-35 sm:masm:max-w-45ax-w-[220px]">{d.payee}</p>
-                      <p className="text-xs text-muted wrap-break-word max-w-42.5 xl:max-w-50">{d.voucher_number} &middot; {d.cash_account_name}</p>
+                      <p className="font-medium text-ink truncate">{d.payee}</p>
+                      <p className="text-xs text-muted break-words">{d.voucher_number} &middot; {d.cash_account_name}</p>
                     </td>
                     <td className="px-2 py-2.5 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${SOURCE_BADGE_STYLES[sourceType]}`}>
@@ -753,18 +735,18 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                     <td className="px-2 py-2.5 min-w-0">
                       {isPayroll ? (
                         <>
-                          <p className="text-ink text-xs truncate max-w-27.5 xl:max-w-32.5">{d.payroll_batch_number || '—'}</p>
-                          <p className="text-xs text-muted truncate max-w-27.5 xl:max-w-32.5">{d.department_name || '—'}</p>
+                          <p className="text-ink text-xs truncate">{d.payroll_batch_number || '—'}</p>
+                          <p className="text-xs text-muted truncate">{d.department_name || '—'}</p>
                         </>
                       ) : (
                         <>
-                          <p className="text-ink text-xs truncate max-w-27.5 xl:max-w-32.5">{d.invoice_number || '—'}</p>
-                          <p className="text-xs text-muted truncate max-w-27.5 xl:max-w-32.5">{d.department_name || 'General'}</p>
+                          <p className="text-ink text-xs truncate">{d.invoice_number || '—'}</p>
+                          <p className="text-xs text-muted truncate">{d.department_name || 'General'}</p>
                         </>
                       )}
                     </td>
                     <td className="px-2 py-2.5 whitespace-nowrap text-ink text-xs">{formatDate(d.payment_date)}</td>
-                    <td className="px-2 py-2.5 whitespace-nowrap font-medium tabular-nums text-ink text-xs sm:text-sm">{formatCurrency(d.amount_paid)}</td>
+                    <td className="px-2 py-2.5 font-medium tabular-nums text-ink text-sm register-amount">{formatCurrency(d.amount_paid)}</td>
                     <td className="px-2 py-2.5 whitespace-nowrap">
                       <div className="flex flex-col items-start gap-1">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${DISBURSEMENT_STATUS_STYLES[d.status]}`}>{DISBURSEMENT_STATUS_LABELS[d.status] || d.status}</span>
@@ -788,7 +770,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                     </td>
                     <td className="px-3 py-2.5 text-right">
                       <RowActions>
-                        <Button variant={d.status === 'Pending' && !d.is_archived ? 'primary' : 'secondary'} size="sm" onClick={() => openDisbursementDetail(d)} aria-label={'Review payment ' + d.voucher_number}>{d.status === 'Pending' && !d.is_archived ? 'Review' : 'Details'}</Button>
+                        {d.status === 'Pending' && !d.is_archived ? <Button size="sm" onClick={() => openDisbursementDetail(d)} aria-label={'Review payment ' + d.voucher_number}>Review</Button> : <Tooltip label="View details" align="end"><Button variant="ghost" size="sm" icon={Info} iconOnly onClick={() => openDisbursementDetail(d)} aria-label={'View payment ' + d.voucher_number} /></Tooltip>}
                         {!d.is_archived && (
                         <Tooltip label="Print voucher / BIR 2307" align="start">
                           <button type="button" onClick={() => setPrintTarget(d)} className="flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
@@ -818,7 +800,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                               <button
                                 type="button"
                                 disabled
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed opacity-75 shrink-0"
+                                className="inline-flex items-center gap-1.5 h-8 px-3 py-1.5 text-xs font-semibold rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed opacity-75 shrink-0"
                               >
                                 <Wallet size={13} />
                                 Release
@@ -829,7 +811,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                               <button
                                 type="button"
                                 disabled
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed opacity-75 shrink-0"
+                                className="inline-flex items-center gap-1.5 h-8 px-3 py-1.5 text-xs font-semibold rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed opacity-75 shrink-0"
                               >
                                 <Wallet size={13} />
                                 Release
@@ -842,7 +824,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                               type="button"
                               disabled={releasingId !== null}
                               onClick={() => handleRelease(d.disbursement_id, false)}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-primary hover:bg-primary-hover active:bg-primary-hover text-black shadow-sm transition-all duration-150 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                              className="inline-flex items-center gap-1.5 h-8 px-3 py-1.5 text-xs font-semibold rounded-xl bg-primary hover:bg-primary-hover active:bg-primary-hover text-black shadow-sm transition-all duration-150 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
                             >
                               {releasingId === d.disbursement_id ? (
                                 <>
@@ -1186,12 +1168,13 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
         open={!!dDetailRecord}
         onClose={closeDisbursementDetail}
         title="Disbursement Details"
+        size="lg"
         footer={
           <>
             <Button variant="secondary" size="md" onClick={closeDisbursementDetail}>Close</Button>
             {dDetailRecord && (
               <Button
-                variant="primary"
+                variant="secondary"
                 size="md"
                 icon={Printer}
                 onClick={() => {
@@ -1200,7 +1183,7 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
                   setPrintTarget(target)
                 }}
               >
-                Print Voucher / BIR 2307
+                Print documents
               </Button>
             )}
 

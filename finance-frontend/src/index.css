@@ -461,3 +461,105 @@
 @media (prefers-reduced-motion: reduce) {
   .animate-spin { animation-duration: 1.8s !important; animation-iteration-count: infinite !important; }
 }
+
+/* Payment registers: stable desktop baselines, with card reflow on smaller workspaces. */
+.payment-register :is(th, td) { vertical-align: middle; }
+.responsive-table[data-layout="table"] .payment-register .register-amount { text-align: right; white-space: nowrap; }
+.payment-register .row-actions { align-items: center; gap: 0.375rem; }
+.payment-register .row-actions button { min-height: 2rem; }
+.payment-register .row-actions > :empty { display: none; }
+.responsive-table[data-layout="table"] .payment-register td[data-actions="true"] { padding-left: 0.75rem; }
+.responsive-table[data-layout="table"] .payment-register .row-actions button { white-space: nowrap; }
+.payment-register td[data-label="Status"] > span,
+.payment-register td[data-label="Status"] > div > span { line-height: 1.35; text-align: left; }
+
+/* Shared workspace alignment: tables and dialogs follow their available width. */
+.responsive-table :is(th, td) { vertical-align: middle; }
+.responsive-table[data-layout="table"] [data-numeric="true"] { text-align: right; font-variant-numeric: tabular-nums; }
+.row-actions { align-items: center; }
+.row-actions button { min-height: 2rem; }
+.row-actions > :empty { display: none; }
+.responsive-table[data-layout="table"] .row-actions button { white-space: nowrap; }
+.app-modal { container: modal / inline-size; }
+.modal-body { overflow-wrap: anywhere; }
+.modal-body :is(input, select, textarea) { min-width: 0; max-width: 100%; }
+.modal-footer { align-items: stretch; max-height: 40dvh; overflow-y: auto; }
+.modal-footer > * { min-width: 0; max-width: 100%; }
+.modal-footer button { min-height: 2.5rem; height: auto; justify-content: center; white-space: normal; overflow-wrap: anywhere; }
+.modal-footer button svg { flex-shrink: 0; }
+.detail-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); align-items: start; gap: 0.375rem 1rem; }
+.detail-row > * { min-width: 0; overflow-wrap: anywhere; }
+.detail-value { text-align: right; }
+@container modal (max-width: 600px) {
+  .modal-footer { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .modal-footer > :only-child, .modal-footer > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .modal-footer > *, .modal-footer button { width: 100%; }
+}
+@container modal (max-width: 380px) {
+  .detail-row { grid-template-columns: minmax(0, 1fr); }
+  .detail-value { text-align: left; }
+  .modal-footer { padding: 0.75rem; gap: 0.5rem; }
+}
+
+.modal-header > * { min-width: 0; max-width: 100%; }
+.modal-header h2, .modal-header p { overflow-wrap: anywhere; }
+.modal-header button { flex-shrink: 0; }
+.modal-footer > div { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: stretch; }
+
+/* Enhance native selects without replacing keyboard, form, or validation behavior. */
+select:not([multiple]) { min-width: 0; max-width: 100%; cursor: pointer; }
+select:disabled { cursor: not-allowed; opacity: 0.6; }
+@supports (appearance: base-select) {
+  select:not([multiple]):not([size]), select:not([multiple]):not([size])::picker(select) { appearance: base-select; }
+  select:not([multiple]):not([size]) { align-items: center; gap: 0.625rem; }
+  select::picker-icon { color: var(--color-muted); margin-inline-start: auto; flex-shrink: 0; transition: rotate 150ms ease; }
+  select:open::picker-icon { rotate: 180deg; color: var(--color-primary-dark); }
+  select::picker(select) {
+    margin-block: 0.375rem; padding: 0.375rem;
+    border: 1px solid var(--color-border); border-radius: 0.75rem;
+    background: var(--color-surface); color: var(--color-ink);
+    box-shadow: 0 12px 32px rgb(0 0 0 / 0.18);
+    min-width: anchor-size(width); max-width: calc(100vw - 1.5rem);
+    max-height: min(22rem, 60dvh); overflow-y: auto; overflow-x: hidden;
+    overscroll-behavior: contain; scrollbar-width: thin;
+    font-size: 0.875rem; line-height: 1.5;
+  }
+  select option {
+    display: flex; align-items: center; gap: 0.75rem;
+    min-height: 2.5rem; padding: 0.5rem 0.75rem; border-radius: 0.5rem;
+    white-space: normal; overflow-wrap: anywhere; cursor: pointer;
+  }
+  select option:hover, select option:focus-visible { background: var(--color-bg); outline: 2px solid var(--color-primary); outline-offset: -2px; }
+  select option:checked { background: var(--color-primary); color: #111; font-weight: 600; }
+  select option::checkmark { order: 1; margin-inline-start: auto; flex-shrink: 0; color: currentColor; }
+  select option:disabled { opacity: 0.5; cursor: not-allowed; }
+  select optgroup { padding-block: 0.25rem; }
+}
+@media (prefers-reduced-motion: reduce) { select::picker-icon { transition: none; } }
+
+/* Keep the selected value inside the field; only the open options may wrap. */
+@supports (appearance: base-select) {
+  select:not([multiple]):not([size]) {
+    display: block; position: relative; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; padding-inline-end: 2.5rem;
+    overflow-wrap: normal; line-height: 1.5;
+  }
+  select::picker-icon { position: absolute; right: 0.75rem; top: 50%; translate: 0 -50%; margin: 0; }
+  select optgroup {
+    color: var(--color-muted); font-size: 0.6875rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.08em; cursor: default;
+    padding-block: 0.5rem 0.25rem;
+  }
+  select optgroup + optgroup { border-top: 1px solid var(--color-border); margin-top: 0.5rem; }
+  select optgroup option {
+    font-size: 0.875rem; font-weight: 400; text-transform: none;
+    letter-spacing: normal; color: var(--color-ink); line-height: 1.5;
+  }
+  select optgroup option:checked { color: #111; font-weight: 600; }
+  select option:disabled { color: var(--color-muted); background: var(--color-bg); opacity: 0.6; }
+}
+
+/* Center the closed select value within fixed-height form controls. */
+@supports (appearance: base-select) {
+  select:not([multiple]):not([size]) { align-content: center; }
+}

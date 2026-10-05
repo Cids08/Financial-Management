@@ -21,6 +21,7 @@ export function useDisbursements() {
 
   // Filters  -  mirrors the old local state names so the component barely
   // has to change.
+  const [dSourceFilter, setDSourceFilter] = useState('all')
   const [dSearch, setDSearch] = useState('')
   const [dStatusFilter, setDStatusFilter] = useState('all')
   const [dShowArchived, setDShowArchived] = useState(false)
@@ -43,7 +44,7 @@ export function useDisbursements() {
   // Reset to page 1 whenever a filter changes.
   useEffect(() => {
     setDPage(1)
-  }, [debouncedSearch, dStatusFilter, dShowArchived, dDateFrom, dDateTo])
+  }, [debouncedSearch, dSourceFilter, dStatusFilter, dShowArchived, dDateFrom, dDateTo])
 
   // Latest filter+page snapshot, so an in-flight response for an older
   // combination (e.g. the request fired for page 2 just before a filter
@@ -51,17 +52,18 @@ export function useDisbursements() {
   // overwriting the newer, correct payload.
   const latestFiltersRef = useRef({})
   useEffect(() => {
-    latestFiltersRef.current = { debouncedSearch, dStatusFilter, dShowArchived, dDateFrom, dDateTo, dPage }
+    latestFiltersRef.current = { debouncedSearch, dSourceFilter, dStatusFilter, dShowArchived, dDateFrom, dDateTo, dPage }
   })
 
   const fetchList = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      const started = { debouncedSearch, dStatusFilter, dShowArchived, dDateFrom, dDateTo, dPage }
+      const started = { debouncedSearch, dSourceFilter, dStatusFilter, dShowArchived, dDateFrom, dDateTo, dPage }
       const params = new URLSearchParams()
       params.set('page', dPage)
       params.set('per_page', 10)
+      if (dSourceFilter !== 'all') params.set('source_type', dSourceFilter)
       if (debouncedSearch) params.set('search', debouncedSearch)
       if (dStatusFilter !== 'all') params.set('status', dStatusFilter)
       if (dShowArchived) params.set('archived', 1)
@@ -73,7 +75,7 @@ export function useDisbursements() {
       if (!res.ok || !json.success) throw new Error(json.message || 'Failed to load disbursements.')
 
       const current = latestFiltersRef.current
-      if (current.debouncedSearch !== started.debouncedSearch ||
+      if (current.dSourceFilter !== started.dSourceFilter || current.debouncedSearch !== started.debouncedSearch ||
           current.dStatusFilter !== started.dStatusFilter ||
           current.dShowArchived !== started.dShowArchived ||
           current.dDateFrom !== started.dDateFrom ||
@@ -89,7 +91,7 @@ export function useDisbursements() {
     } finally {
       setLoading(false)
     }
-  }, [dPage, debouncedSearch, dStatusFilter, dShowArchived, dDateFrom, dDateTo])
+  }, [dPage, debouncedSearch, dSourceFilter, dStatusFilter, dShowArchived, dDateFrom, dDateTo])
 
   const fetchStats = useCallback(async () => {
     try {
@@ -297,7 +299,7 @@ export function useDisbursements() {
     // data
     disbursements, stats, meta, loading, error,
     // filters
-    dSearch, setDSearch, dStatusFilter, setDStatusFilter,
+    dSourceFilter, setDSourceFilter, dSearch, setDSearch, dStatusFilter, setDStatusFilter,
     dShowArchived, setDShowArchived, dDateFrom, setDDateFrom,
     dDateTo, setDDateTo, dHasDateFilter, clearDDateFilter,
     dPage, setDPage,

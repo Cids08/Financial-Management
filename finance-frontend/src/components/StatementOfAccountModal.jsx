@@ -532,10 +532,10 @@ export default function StatementOfAccountModal({ open, onClose, fetchAgingSumma
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
 
       {/* Panel */}
-      <div className="relative z-10 flex flex-col w-full max-w-6xl max-h-[90vh] rounded-2xl bg-surface shadow-2xl">
+      <div role="dialog" aria-modal="true" className="app-modal min-w-0 relative z-10 flex flex-col w-full max-w-6xl max-h-[90vh] rounded-2xl bg-surface shadow-2xl">
 
         {/* Modal Header */}
-        <div className="flex items-center justify-between border-b border-border px-6 py-4 shrink-0">
+        <div className="modal-header min-w-0 flex-wrap gap-3 shrink-0 flex items-center justify-between border-b border-border px-6 py-4 shrink-0">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15">
               <Users size={18} className="text-primary-dark dark:text-primary" />
@@ -587,7 +587,7 @@ export default function StatementOfAccountModal({ open, onClose, fetchAgingSumma
         </div>
 
         {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="modal-body min-h-0 min-w-0 flex-1 overflow-y-auto p-6">
           {/* Error banners */}
           {agingError && (
             <div className="mb-4 flex items-start gap-2 rounded-lg border border-status-danger-border bg-status-danger-bg p-3 text-xs text-status-danger">

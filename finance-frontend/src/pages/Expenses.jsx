@@ -1,3 +1,4 @@
+import DetailRow from '../components/DetailRow'
 import RowActions from '../components/RowActions'
 import DocumentWorkspaceModal from '../components/DocumentWorkspaceModal'
 import DocumentAction from '../components/DocumentAction'
@@ -259,14 +260,7 @@ function formatDateTime(value) {
   return new Date(value).toLocaleString('en-PH', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-function DetailRow({ label, value }) {
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] items-start gap-1 sm:gap-3 py-2">
-      <span className="text-xs text-muted">{label}</span>
-      <span className="min-w-0 break-words text-xs font-medium text-ink sm:text-right">{value ?? '—'}</span>
-    </div>
-  )
-}
+
 
 // Load every page before publishing choices, including after live changes.
 function useLookup(path, modules) {

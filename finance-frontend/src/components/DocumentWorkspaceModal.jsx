@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Button from './Button'
 import DocumentUploadModal from './DocumentUploadModal'
 import DocumentHistoryModal from './DocumentHistoryModal'

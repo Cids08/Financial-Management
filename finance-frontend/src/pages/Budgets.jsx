@@ -1,3 +1,4 @@
+import DetailRow from '../components/DetailRow'
 import RowActions from '../components/RowActions'
 import DocumentWorkspaceModal from '../components/DocumentWorkspaceModal'
 import DocumentAction from '../components/DocumentAction'
@@ -145,14 +146,7 @@ function yearBounds(fiscalYear) {
   return { min: `${fiscalYear}-01-01`, max: `${fiscalYear}-12-31` }
 }
 
-function DetailRow({ label, value }) {
-  return (
-    <div className="flex items-center justify-between gap-3 py-1.5">
-      <span className="text-xs text-muted">{label}</span>
-      <span className="text-xs font-medium text-ink text-right">{value ?? '—'}</span>
-    </div>
-  )
-}
+
 
 function ApprovalBadge({ status }) {
   const Icon = APPROVAL_ICONS[status] ?? Clock

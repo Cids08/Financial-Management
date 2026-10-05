@@ -535,9 +535,9 @@ export default function DisbursementPrintModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="bg-surface rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden border border-border">
+      <div role="dialog" aria-modal="true" className="app-modal min-w-0 bg-surface rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden border border-border">
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-bg/60">
+        <div className="modal-header min-w-0 flex-wrap gap-3 shrink-0 flex items-center justify-between px-6 py-4 border-b border-border bg-bg/60">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-primary/10 rounded-xl">
               <Printer className="w-5 h-5 text-primary-dark dark:text-primary" />
@@ -588,7 +588,7 @@ export default function DisbursementPrintModal({
         </div>
 
         {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-6 bg-bg/20">
+        <div className="modal-body min-h-0 min-w-0 flex-1 overflow-y-auto p-6 bg-bg/20">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-20 text-muted">
               <Loader2 className="w-8 h-8 animate-spin text-primary mb-2" />
@@ -925,7 +925,7 @@ export default function DisbursementPrintModal({
         </div>
 
         {/* Modal Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-border bg-bg/60">
+        <div className="modal-footer shrink-0 flex-wrap gap-2 flex items-center justify-between px-6 py-4 border-t border-border bg-bg/60">
           <button
             type="button"
             onClick={onClose}

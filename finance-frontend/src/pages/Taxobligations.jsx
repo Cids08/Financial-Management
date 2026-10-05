@@ -1,3 +1,4 @@
+import DetailRow from '../components/DetailRow'
 import RowActions from '../components/RowActions'
 import DocumentWorkspaceModal from '../components/DocumentWorkspaceModal'
 import { usePermissions } from '../context/PermissionsContext'
@@ -137,14 +138,7 @@ function daysUntil(dueDate) {
   return Math.round((due - today) / 86400000)
 }
 
-function DetailRow({ label, value }) {
-  return (
-    <div className="flex items-center justify-between gap-3 py-1.5">
-      <span className="text-xs text-muted">{label}</span>
-      <span className="text-xs font-medium text-ink text-right">{value ?? '—'}</span>
-    </div>
-  )
-}
+
 
 export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['Compliance', 'Tax Obligations'] }) {
   const {

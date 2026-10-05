@@ -75,8 +75,19 @@ export default function Tooltip({ label, children, position = 'top', align = 'ce
     setCoords({ top, left })
   }
 
-  const show = () => { updatePosition(); setVisible(true) }
+  const show = () => {
+    if (document.querySelector('[role=dialog][aria-modal=true]') && !triggerRef.current?.closest('[role=dialog]')) return
+    updatePosition(); setVisible(true)
+  }
   const hide = () => setVisible(false)
+
+  useEffect(() => {
+    if (!visible) return
+    const dismiss = () => setVisible(false)
+    document.addEventListener('pointerdown', dismiss, true)
+    document.addEventListener('fms:modal-open', dismiss)
+    return () => { document.removeEventListener('pointerdown', dismiss, true); document.removeEventListener('fms:modal-open', dismiss) }
+  }, [visible])
 
   // Reposition on scroll / resize while open  -  fixed-positioned portal
   // won't move with its trigger automatically.
@@ -120,6 +131,7 @@ export default function Tooltip({ label, children, position = 'top', align = 'ce
       onMouseLeave={hide}
       onFocus={show}
       onBlur={hide}
+      onClickCapture={hide}
     >
       {children}
       {visible &&

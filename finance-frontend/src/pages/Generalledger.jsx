@@ -1,3 +1,4 @@
+import DetailRow from '../components/DetailRow'
 import { Skeleton, TableSkeleton } from '../components/LoadingSkeleton'
 import KpiValue from '../components/KpiValue'
 import ResponsiveTable from '../components/ResponsiveTable'
@@ -94,14 +95,7 @@ function formatDateTime(value) {
   return new Date(value).toLocaleString('en-PH', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-function DetailRow({ label, value }) {
-  return (
-    <div className="flex items-center justify-between gap-3 py-1.5">
-      <span className="text-xs text-muted">{label}</span>
-      <span className="text-xs font-medium text-ink text-right">{value ?? '—'}</span>
-    </div>
-  )
-}
+
 
 const EMPTY_FILTERS = { search: '', referenceFilter: 'all', accountFilter: 'all', dateFrom: '', dateTo: '', lineFilter: 'all' }
 

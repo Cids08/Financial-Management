@@ -15,13 +15,20 @@ export default function Modal({ open, onClose, title, children, footer, maxWidth
 
   useEffect(() => {
     if (!open) return
+    document.dispatchEvent(new Event('fms:modal-open'))
     const handleKey = (e) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key !== 'Escape') return
+      // Let the browser dismiss an open select before dismissing its dialog.
+      if (document.querySelector('select:open')) {
+        e.stopPropagation()
+        return
+      }
+      if (!e.defaultPrevented) onClose()
     }
-    document.addEventListener('keydown', handleKey)
+    document.addEventListener('keydown', handleKey, true)
     document.body.style.overflow = 'hidden'
     return () => {
-      document.removeEventListener('keydown', handleKey)
+      document.removeEventListener('keydown', handleKey, true)
       document.body.style.overflow = ''
     }
   }, [open, onClose])
@@ -43,26 +50,26 @@ export default function Modal({ open, onClose, title, children, footer, maxWidth
         role="dialog"
         aria-modal="true"
         aria-label={typeof title === 'string' ? title : undefined}
-        className={`relative flex w-full ${resolvedMaxWidth} max-h-[92vh] sm:max-h-[85vh] flex-col
+        className={`app-modal relative flex min-w-0 w-full ${resolvedMaxWidth} max-h-[92vh] sm:max-h-[85vh] flex-col
           rounded-t-2xl border border-b-0 border-border bg-surface shadow-dropdown animate-fadeIn
           sm:rounded-2xl sm:border-b sm:border-border`}
       >
-        <div className="flex shrink-0 items-center justify-between border-b border-border px-5 py-4">
-          <h2 className="text-base font-semibold tracking-tight text-ink">{title}</h2>
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-5 py-4">
+          <h2 className="min-w-0 break-words text-base font-semibold tracking-tight text-ink">{title}</h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150"
           >
             <X size={16} />
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
+        <div className="modal-body min-h-0 min-w-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
 
         {footer && (
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border bg-bg/60 px-5 py-4 rounded-b-none sm:rounded-b-2xl">
+          <div className="modal-footer flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border bg-bg/60 px-5 py-4 rounded-b-none sm:rounded-b-2xl">
             {footer}
           </div>
         )}
