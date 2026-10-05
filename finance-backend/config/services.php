@@ -64,6 +64,13 @@ return [
     // silently hitting an empty URL if this is missing.
     'forecast_service' => [
         'base_url' => env('FORECAST_SERVICE_URL'),
+        // Shared secret the Python service requires in X-Internal-Token. Must
+        // match INTERNAL_SERVICE_TOKEN in finance-forecasting's own env, or
+        // every forecast call gets rejected with a 401. Unauthenticated
+        // ARIMA fits are expensive and the port is published, so the token is
+        // the only thing stopping an outside caller from driving the model at
+        // will.
+        'token' => env('FORECAST_SERVICE_TOKEN'),
     ],
 
     // Base URL of the AI advisor/recommendation microservice

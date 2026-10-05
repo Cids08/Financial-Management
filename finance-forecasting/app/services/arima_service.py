@@ -163,6 +163,27 @@ class ARIMAService:
 
         confidence_intervals = forecast_result.conf_int(alpha=alpha)
 
+        # A diverged/overflowed state-space fit returns NaN or +/-Inf here
+        # rather than raising. Only the INPUT series was checked for
+        # finiteness in validate_data(), so without this guard a non-finite
+        # value flows into predicted_amount, the bounds and the decimal(15,4)
+        # rmse column — Laravel then stores NULL and throws a QueryException,
+        # turning a model failure into a 500 that looks like a database bug.
+        # A forecast built from NaN is meaningless, so fail as a 422-style
+        # ValueError the endpoint already maps to "insufficient/unusable data".
+        if not np.all(np.isfinite(np.asarray(forecast_values, dtype=float))):
+            raise ValueError(
+                "ARIMA produced non-finite forecast values (NaN/Inf). The model "
+                "did not produce a usable projection for this series; it cannot "
+                "be forecast as configured."
+            )
+
+        if not np.all(np.isfinite(np.asarray(confidence_intervals, dtype=float))):
+            raise ValueError(
+                "ARIMA produced non-finite confidence bounds (NaN/Inf). The "
+                "model did not produce a usable projection for this series."
+            )
+
         forecast = []
         for index, value in enumerate(forecast_values):
             lower, upper = confidence_intervals[index]
@@ -183,6 +204,14 @@ class ARIMAService:
             # the FastAPI endpoint can pass this dict straight into that
             # model without a manual field-remapping step.
             "forecasts": forecast,
+            # CONTRACT: predicted_amount is the TOTAL predicted across the whole
+            # horizon, not the final period's value. SimpleForecastEngine on the
+            # Laravel side sums its projected periods the same way, so the two
+            # engines write the same meaning into the same database column. Do
+            # not "fix" this to the last period without changing that engine too
+            # — the UI's "Total Predicted Value" card sums this column across
+            # rows, so the two meanings cannot be mixed. Per-period values are
+            # in the `forecasts` array above.
             "predicted_amount": round(float(np.sum(forecast_values)), 2),
             "confidence_level": round((1 - alpha) * 100, 2),
             "mape": mape,

@@ -1,6 +1,9 @@
 fastapi>=0.110.0,<1.0.0
 uvicorn[standard]>=0.28.0,<1.0.0
 pydantic>=2.6.0,<3.0.0
+# Pinned exactly (same version the AI service uses) so main.py can read
+# INTERNAL_SERVICE_TOKEN / CORS_ALLOWED_ORIGINS from the platform env file.
+python-dotenv==1.2.3
 # Numerical stack is pinned exactly rather than range-pinned. As ranges these
 # four resolved independently on every build, and the combination that landed
 # in production (statsmodels 0.15.0 with scipy 1.17.1) ran ARIMA fits roughly

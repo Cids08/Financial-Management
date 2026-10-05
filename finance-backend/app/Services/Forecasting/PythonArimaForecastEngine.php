@@ -33,6 +33,8 @@ class PythonArimaForecastEngine implements ForecastEngine
 {
     protected string $baseUrl;
 
+    protected string $serviceToken;
+
     /** Cache of the most recent generate() call, keyed so buildSeries()
      *  can confirm it's reusing the right response. Cleared after use. */
     protected ?array $lastResponse = null;
@@ -54,6 +56,22 @@ class PythonArimaForecastEngine implements ForecastEngine
         // in practice this guard fires only if the config is removed
         // after the binding was decided.
         $this->baseUrl = $baseUrl ?? config('services.forecast_service.base_url');
+
+        $this->serviceToken = (string) (config('services.forecast_service.token') ?? '');
+
+        if ($this->serviceToken === '') {
+            // The Python service fails CLOSED — with no token configured there it
+            // 401s every caller, including us, and ResilientForecastEngine would
+            // quietly degrade to the linear-trend fallback while the UI still
+            // implies ARIMA. Log it at construction so the cause is on the first
+            // line of the log rather than buried in a 401 body.
+            Log::warning(
+                'FORECAST_SERVICE_TOKEN is not set — the ARIMA service requires it in '
+                .'X-Internal-Token and will reject every request with 401, degrading '
+                .'forecasts to the linear-trend fallback. See config/services.php.',
+                ['base_url' => $this->baseUrl]
+            );
+        }
 
         if (empty($this->baseUrl)) {
             throw new RuntimeException(
@@ -83,10 +101,20 @@ class PythonArimaForecastEngine implements ForecastEngine
         $startedAt = microtime(true);
 
         try {
-            $response = Http::baseUrl($this->baseUrl)
+            $request = Http::baseUrl($this->baseUrl)
                 ->connectTimeout(3)
-                ->timeout(15)
-                ->post('/forecast/arima', [
+                ->timeout(15);
+
+            // The forecasting service authenticates callers with a shared
+            // secret. Omitting the header is what makes the endpoint look
+            // "open" from the outside — an ARIMA fit is seconds of CPU and the
+            // container's port is published, so anyone who can reach it can
+            // queue work until it falls over.
+            if ($this->serviceToken !== '') {
+                $request = $request->withHeaders(['X-Internal-Token' => $this->serviceToken]);
+            }
+
+            $response = $request->post('/forecast/arima', [
                     'forecast_target' => $forecastType,
                     'forecast_period' => $horizon['months'],
                     'historical_data' => $historicalData,
