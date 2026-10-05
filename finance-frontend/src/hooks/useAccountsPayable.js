@@ -25,6 +25,7 @@ export function useAccountsPayable() {
 
   const [stats, setStats] = useState({ total: 0, payable: 0, overdue: 0, archived: 0 })
   const [statsLoading, setStatsLoading] = useState(true)
+  const [statsError, setStatsError] = useState(null)
 
   const [suppliers, setSuppliers] = useState([])
   const [suppliersLoading, setSuppliersLoading] = useState(true)
@@ -68,10 +69,26 @@ export function useAccountsPayable() {
 
   const fetchStats = useCallback(async () => {
     setStatsLoading(true)
+    setStatsError(null)
     try {
       const res = await apiFetch('/api/accounts-payable/stats')
       const json = await res.json()
-      if (res.ok && json.success) setStats(json.data)
+      if (!res.ok || !json.success) throw new Error(json.message || 'Failed to load payable stats.')
+      setStats(json.data)
+    } catch (err) {
+      // Deliberately does NOT rethrow.
+      //
+      // refetchAll() is `Promise.all([fetchBills(), fetchStats()])`, and every
+      // mutation below awaits that refetch from INSIDE its own try block. Since
+      // fetchBills() already swallows its own errors into billsError, this
+      // unguarded fetchStats() was the only thing in that Promise.all able to
+      // reject — so any stats-endpoint blip (401, 500, dropped connection)
+      // turned a bill create/update/archive that had ALREADY SUCCEEDED on the
+      // server into `{ success: false }`. The UI then showed an error for a
+      // saved record and invited the user to retry, which submitted the same
+      // bill a second time. Refreshing a stats tile is a read; never fail a
+      // write because a read failed. Surface it as its own error state instead.
+      setStatsError(err.message)
     } finally {
       setStatsLoading(false)
     }
@@ -125,6 +142,10 @@ export function useAccountsPayable() {
     return json.data ?? []
   }, [])
 
+  // Refreshes the list and the stats tiles. Both fetchers record their own
+  // errors (billsError / statsError) and never reject, so this resolves
+  // unconditionally — callers can await it after a successful write without
+  // that refresh being able to change the write's reported outcome.
   const refetchAll = useCallback(async () => {
     await Promise.all([fetchBills(), fetchStats()])
   }, [fetchBills, fetchStats])
@@ -364,6 +385,7 @@ export function useAccountsPayable() {
     billsError,
     stats,
     statsLoading,
+    statsError,
     suppliers,
     suppliersLoading,
     suppliersError,

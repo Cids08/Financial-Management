@@ -22,6 +22,7 @@ import { printSlip } from '../utils/printSlip'
 import { money, SIGNATURE_PRESETS } from '../utils/print'
 import { MIN_INVOICE_AMOUNT, minHint } from '../utils/business'
 import { useTaxObligations } from '../hooks/useTaxObligations'
+import { apiFetch } from '../utils/api'
 import { useDataUpdates } from '../hooks/useDataUpdates'
 import { useHighlightRow } from '../hooks/useHighlightRow'
 import DeletePermanentButton from '../components/DeletePermanentButton'
@@ -103,7 +104,7 @@ function buildEmptyForm(defaultRate) {
     tax_period, due_date,
     tax_rate: Number(defaultRate) > 0 ? defaultRate : TAX_TYPE_CONFIG[taxType].defaultRate,
     taxable_amount: '',
-    is_paid: false, payment_date: '', reference_number: '', remarks: '',
+    is_paid: false, payment_date: '', reference_number: '', cash_account_id: '', remarks: '',
   }
 }
 
@@ -222,6 +223,46 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
   const [detailRecord, setDetailRecord] = useState(null)
   const [refTouched, setRefTouched] = useState(false)
 
+  // Cash accounts for the "already paid" form. Marking an obligation paid
+  // posts a journal entry, and that entry has to debit a real cash account  -
+  //  so the account the BIR payment left is a required field, not a nicety.
+  const [cashAccounts, setCashAccounts] = useState([])
+  const [accountsLoading, setAccountsLoading] = useState(false)
+  const [accountsError, setAccountsError] = useState('')
+
+  useEffect(() => {
+    if (!modalMode) return undefined
+
+    let active = true
+    setAccountsLoading(true)
+    setAccountsError('')
+
+    apiFetch('/api/cash-accounts?per_page=100')
+      .then((res) => res.json())
+      .then((json) => {
+        if (!active) return
+        if (!json || json.data === undefined || json.data === null) {
+          setCashAccounts([])
+          setAccountsError(json?.message || 'Could not load cash accounts.')
+          return
+        }
+        const list = Array.isArray(json.data) ? json.data : (json.data?.data || [])
+        setCashAccounts(Array.isArray(list) ? list : [])
+      })
+      .catch((err) => {
+        if (!active) return
+        setCashAccounts([])
+        setAccountsError(err?.message || 'Could not load cash accounts.')
+      })
+      .finally(() => {
+        if (active) setAccountsLoading(false)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [modalMode])
+
   // Auto-calculation from transactions (enterprise tax engine automation)
   const [calcLoading, setCalcLoading] = useState(false)
   const [calcResult, setCalcResult] = useState(null)
@@ -326,7 +367,8 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
       tax_type: o.tax_type, period_year, period_month, period_quarter,
       tax_period: o.tax_period, due_date: o.due_date,
       tax_rate: o.tax_rate, taxable_amount: o.taxable_amount,
-      is_paid: o.status === 'Paid', payment_date: o.payment_date || '', reference_number: o.reference_number || '', remarks: o.remarks || '',
+      is_paid: o.status === 'Paid', payment_date: o.payment_date || '', reference_number: o.reference_number || '',
+      cash_account_id: o.cash_account_id ? String(o.cash_account_id) : '', remarks: o.remarks || '',
     })
     setFormError('')
     setFieldErrors({})
@@ -419,6 +461,10 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
       errors.payment_date = 'Payment date is required when marking as paid.'
     }
 
+    if (form.is_paid && !form.cash_account_id) {
+      errors.cash_account_id = 'Select the cash or bank account this payment was made from.'
+    }
+
     if (form.is_paid && form.reference_number && form.reference_number.trim()) {
       const trimmedRef = form.reference_number.trim().toLowerCase()
       const dup = obligations.find((o) => {
@@ -445,6 +491,7 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
       is_paid: form.is_paid,
       payment_date: form.is_paid ? form.payment_date : null,
       reference_number: form.is_paid ? form.reference_number : null,
+      cash_account_id: form.is_paid && form.cash_account_id ? Number(form.cash_account_id) : null,
       remarks: form.remarks,
     }
 
@@ -1157,6 +1204,40 @@ export default function TaxObligations({ title = 'Tax Obligations', crumbs = ['C
 
           {form.is_paid && (
             <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <label className={LABEL}>Paid From (Cash / Bank Account) <span className="text-status-danger">*</span></label>
+                <select
+                  value={form.cash_account_id}
+                  onChange={(e) => {
+                    setFieldErrors((fe) => ({ ...fe, cash_account_id: '' }))
+                    setForm((f) => ({ ...f, cash_account_id: e.target.value }))
+                  }}
+                  disabled={isLockedObligation || accountsLoading}
+                  className={`${INPUT} scheme-light dark:scheme-dark ${fieldErrors.cash_account_id ? 'border-status-danger-border' : ''}`}
+                  style={INPUT_TEXT_STYLE}
+                >
+                  <option value="">
+                    {accountsLoading ? 'Loading cash accounts…' : '— Select the account used for this payment —'}
+                  </option>
+                  {cashAccounts.map((a) => (
+                    <option key={a.id} value={String(a.id)}>
+                      {a.account_name}{a.account_code ? ` (${a.account_code})` : ''}
+                    </option>
+                  ))}
+                </select>
+                {fieldErrors.cash_account_id && (
+                  <p className="mt-1 text-xs text-status-danger">{fieldErrors.cash_account_id}</p>
+                )}
+                {!fieldErrors.cash_account_id && accountsError && (
+                  <p className="mt-1 text-xs text-status-danger">{accountsError}</p>
+                )}
+                {!fieldErrors.cash_account_id && !accountsError && !accountsLoading && cashAccounts.length === 0 && (
+                  <p className="mt-1 text-xs text-status-danger">No cash accounts are available. Set one up under Cash Management first.</p>
+                )}
+                <p className="mt-1 text-xs text-muted">
+                  Marking an obligation as paid posts a journal entry, so the account the money left must be recorded.
+                </p>
+              </div>
               <div>
                 <label className={LABEL}>Payment Date <span className="text-status-danger">*</span></label>
                 <input

@@ -56,7 +56,22 @@ class SimpleForecastEngine implements ForecastEngine
 
         [$a, $b] = $this->fitTrend($history);
         $forecasts = $this->project($a, $b, count($history), $horizon['months']);
-        $predicted = (float) end($forecasts)['predicted_amount'];
+
+        // CONTRACT: predicted_amount is the TOTAL predicted across the whole
+        // horizon (the sum of every projected period), matching
+        // arima_service.py's "predicted_amount":
+        //     round(float(np.sum(forecast_values)), 2)
+        //
+        // This used to return the LAST period only, which meant the same
+        // database column held two different meanings depending on which engine
+        // produced the row: ARIMA stored a 12-period total, this fallback stored
+        // a single period. Same forecast_type/horizon could therefore read ~12x
+        // apart depending on whether the Python service happened to be
+        // reachable, and the UI's "Total Predicted Value" card (which sums this
+        // column across rows) silently under-counted every fallback row.
+        // Per-period values remain available in the `forecasts` array that
+        // buildSeries() replays into the chart.
+        $predicted = (float) array_sum(array_column($forecasts, 'predicted_amount'));
 
         [$mape, $rmse] = $this->fitQuality($history, $a, $b);
         $meanY = count($history) > 0 ? abs(array_sum($history)) / max(count($history), 1) : 0.0;

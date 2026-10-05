@@ -21,6 +21,7 @@ use RuntimeException;
 
 class AccountsPayableService
 {
+    use \App\Concerns\LocksReferencePrefix;
     public function __construct(protected DisbursementService $disbursementService)
     {
     }
@@ -643,6 +644,12 @@ class AccountsPayableService
 
     public static function generateReferenceNumber(): string
     {
+        // Serialise concurrent generators — see the note on
+        // AccountsReceivableService::generateReferenceNo(). Holds until the
+        // enclosing transaction commits so the next concurrent create re-reads
+        // the committed value instead of duplicating it.
+        self::lockReferencePrefix('fms.reference.accounts_payable');
+
         $last = AccountsPayable::withTrashed()
             ->where('reference_number', 'like', 'REF-AP-%')
             ->orderByDesc('id')

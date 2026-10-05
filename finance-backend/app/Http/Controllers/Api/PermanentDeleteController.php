@@ -18,6 +18,7 @@ use App\Models\Expense;
 use App\Models\ExpenseCategory;
 use App\Models\FinancialForecast;
 use App\Models\FixedAsset;
+use App\Models\JournalEntryLine;
 use App\Models\Supplier;
 use App\Models\TaxObligation;
 use App\Models\Title;
@@ -63,6 +64,69 @@ class PermanentDeleteController extends Controller
         'disbursements' => ['model' => Disbursement::class, 'permission' => 'disbursements.manage|disbursements.approve|disbursements.release', 'label' => 'disbursement'],
     ];
 
+    /**
+     * slug => normalised journal reference_type keys.
+     *
+     * journal_entry_lines stores its source as an unconstrained polymorphic
+     * pair (reference_type / reference_id) with NO foreign key, so the database
+     * happily lets a permanent delete orphan a posted journal entry: the
+     * General Ledger keeps debits and credits whose source document no longer
+     * exists, and the audit trail silently loses its counterparty.
+     *
+     * Over time the writers have used snake_case ('accounts_receivable'),
+     * Title Case ('Disbursement') and plural ('Expenses', 'Collections') forms
+     * for the same source, so every spelling that can legitimately exist in the
+     * column is listed here. Keys are normalised with the same rule
+     * JournalSourceResolver::groupKey() uses: strip every non-letter, lowercase.
+     *
+     * Entities absent from this map carry no journal lines of their own, so
+     * there is nothing to block.
+     */
+    private const JOURNAL_REFERENCE_KEYS = [
+        'accounts-receivable' => ['accountsreceivable', 'accountsreceivables', 'receivable', 'receivables', 'ar'],
+        'accounts-payable'    => ['accountspayable', 'accountspayables', 'payable', 'payables', 'ap'],
+        'collections'         => ['collection', 'collections'],
+        'disbursements'       => ['disbursement', 'disbursements', 'dv'],
+        'expenses'            => ['expense', 'expenses', 'appmodelsexpense'],
+        'budgets'             => ['budget', 'budgets'],
+        'tax-obligations'     => ['taxobligation', 'taxobligations', 'tax'],
+        'fixed-assets'        => ['fixedasset', 'fixedassetdepreciation', 'depreciation'],
+    ];
+
+    /**
+     * Counts posted journal lines that point at this record.
+     *
+     * Shared with RetentionPurgeService so the scheduled/lazy retention purge
+     * applies exactly the same rule as the manual admin purge — otherwise the
+     * automated job keeps manufacturing the orphans this check exists to stop.
+     *
+     * Filtering happens in PHP because the same reference_id is reused across
+     * unrelated entities (expense #15 and collection #15 are different rows),
+     * and the column's spelling is inconsistent, so a plain SQL equality on
+     * reference_type would either miss real references or match a stranger's.
+     * reference_id is always the id of an archived record, so the row count here
+     * stays small.
+     */
+    public static function postedJournalLineCount(string $slug, int $id): int
+    {
+        $accepted = self::JOURNAL_REFERENCE_KEYS[$slug] ?? null;
+
+        if ($accepted === null) {
+            return 0;
+        }
+
+        return JournalEntryLine::query()
+            ->where('reference_id', $id)
+            ->whereNotNull('reference_type')
+            ->pluck('reference_type')
+            ->filter(fn ($type) => in_array(
+                strtolower((string) preg_replace('/[^a-zA-Z]/', '', (string) $type)),
+                $accepted,
+                true
+            ))
+            ->count();
+    }
+
     public function destroy(Request $request, string $slug, string $id): JsonResponse
     {
         // Route params come in as raw strings (the {id} segment); cast here
@@ -89,6 +153,24 @@ class PermanentDeleteController extends Controller
 
         if (! $record) {
             return response()->json(['success' => false, 'message' => "Archived {$label} not found."], 404);
+        }
+
+        // Block the purge while any posted journal line still points at this
+        // record. journal_entry_lines has no FK on (reference_type,
+        // reference_id), so without this check forceDelete() silently orphans
+        // the ledger lines: debits and credits survive with no source document,
+        // no counterparty and no way to trace the amount. The correct route out
+        // is to post a reversing journal entry first, then purge.
+        $journalLineCount = self::postedJournalLineCount($slug, $id);
+
+        if ($journalLineCount > 0) {
+            return response()->json([
+                'success' => false,
+                'message' => "This archived {$label} still has {$journalLineCount} posted journal "
+                    .'line'.($journalLineCount === 1 ? '' : 's').' referencing it and cannot be permanently '
+                    .'deleted. Post a reversing journal entry first, then permanently delete it — deleting it '
+                    .'now would leave those amounts in the General Ledger with no source document.',
+            ], 409);
         }
 
         try {

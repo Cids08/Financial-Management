@@ -21,6 +21,7 @@ use Illuminate\Validation\ValidationException;
 
 class AccountsReceivableService
 {
+    use \App\Concerns\LocksReferencePrefix;
     /**
      * $filters: ['status' => ?string, 'archived' => bool, 'search' => ?string, 'collector_id' => ?int]
      * Matches the filter behavior already implemented client-side in
@@ -413,6 +414,16 @@ class AccountsReceivableService
 
     public static function generateReferenceNo(): string
     {
+        // Serialise concurrent generators. Without a lock two requests both read
+        // "the last one is REF-AR-008", both compute 009, and both insert the
+        // same business reference onto two different invoices. The lock is held
+        // until the enclosing transaction commits (every create() path already
+        // wraps itself in one), so the second request re-reads the freshly
+        // committed 009 and picks 010. The partial unique index added in
+        // 2026_10_05_120000 is the hard backstop for any path not in a
+        // transaction.
+        self::lockReferencePrefix('fms.reference.accounts_receivable');
+
         $last = AccountsReceivable::withTrashed()
             ->where('reference_no', 'like', 'REF-AR-%')
             ->orderByDesc('id')

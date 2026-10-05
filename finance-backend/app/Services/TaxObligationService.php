@@ -181,6 +181,7 @@ class TaxObligationService
                 'status'           => $isPaid ? 'Paid' : 'Pending',
                 'payment_date'     => $isPaid ? ($data['payment_date'] ?? now()->toDateString()) : null,
                 'reference_number' => $isPaid ? ($data['reference_number'] ?? null) : null,
+                'cash_account_id'  => $isPaid ? ($data['cash_account_id'] ?? null) : null,
                 'created_by'       => $user->id,
             ]);
 
@@ -247,6 +248,7 @@ class TaxObligationService
                 'status'           => $isPaid ? 'Paid' : 'Pending',
                 'payment_date'     => $isPaid ? ($data['payment_date'] ?? now()->toDateString()) : null,
                 'reference_number' => $isPaid ? ($data['reference_number'] ?? null) : null,
+                'cash_account_id'  => $isPaid ? ($data['cash_account_id'] ?? null) : null,
             ]);
 
             if (! $wasPaid && $isPaid) {
@@ -530,6 +532,23 @@ class TaxObligationService
     {
         if ($obligation->expense_id) {
             return $obligation;
+        }
+
+        // Hard integrity guard: approving this Expense posts a journal entry
+        // that MUST have a cash side. recordAsExpense() feeds
+        // $obligation->cash_account_id into ExpenseService::create(), and
+        // ExpenseService::postJournalEntry() silently skips the cash debit
+        // when that is null — then credits a fallback asset account. The
+        // resulting entry debits tax expense and credits an asset while no
+        // cash account is ever debited, i.e. a BIR payment that never left the
+        // bank. Fail loudly instead. StoreTaxObligationRequest also requires
+        // cash_account_id when is_paid is true, so this is the backstop for any
+        // other caller (seeder, console command, future endpoint).
+        if (! $obligation->cash_account_id) {
+            throw ValidationException::withMessages([
+                'cash_account_id' => 'Select the cash or bank account this tax payment was made from. '
+                    .'A paid tax obligation posts a journal entry, and that entry must debit a real cash account.',
+            ]);
         }
 
         $budget = Budget::where('budget_code', self::TAX_BUDGET_CODE)->first();

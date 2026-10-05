@@ -19,6 +19,7 @@ use Illuminate\Validation\ValidationException;
 
 class DisbursementService
 {
+    use \App\Concerns\LocksReferencePrefix;
     /**
      * Auto-reconciles any disbursement records that had journal entries posted
      * but whose status was not persisted due to prior model fillable protection,
@@ -39,6 +40,8 @@ class DisbursementService
             if ($releasedDisbursementIds->isEmpty()) {
                 return;
             }
+
+            $reconciledApIds = [];
 
             foreach ($releasedDisbursementIds as $disbursementId) {
                 $disbursement = Disbursement::find($disbursementId);
@@ -106,19 +109,60 @@ class DisbursementService
                     ]);
                 }
 
-                // If it is AP-sourced, ensure linked bill is updated
-                if ($disbursement->ap_id && $disbursement->accountsPayable) {
-                    $ap = $disbursement->accountsPayable;
-                    if ($ap->status !== 'Paid' && $ap->status !== 'Partially Paid') {
-                        $newPaid = $ap->paid_amount + $disbursement->amount_paid;
-                        $newRemaining = max(0, $ap->original_amount - $newPaid);
-                        $ap->update([
-                            'paid_amount' => $newPaid,
-                            'remaining_balance' => $newRemaining,
-                            'status' => $newRemaining <= 0 ? 'Paid' : 'Partially Paid',
-                        ]);
-                    }
+                if ($disbursement->ap_id) {
+                    $reconciledApIds[$disbursement->ap_id] = true;
                 }
+            }
+
+            // Repair each linked AP bill from the journal-derived truth instead
+            // of incrementing paid_amount.
+            //
+            // The old code only acted when the bill's status was not
+            // Paid/Partially Paid, and releaseAp() left a partially-paid bill
+            // on 'Pending'. Every subsequent GET /disbursements (or
+            // /disbursements/stats) therefore added the same disbursement's
+            // amount_paid a second time, and the AccountsPayable::saved hook
+            // rewrote suppliers.current_balance from the result — so simply
+            // listing disbursements corrupted AR/AP aging, supplier balances
+            // and the dashboards. Recomputing the total from the set of
+            // disbursements that actually carry a posted journal entry makes
+            // this idempotent and self-healing for rows already corrupted.
+            foreach (array_keys($reconciledApIds) as $apId) {
+                $ap = AccountsPayable::find($apId);
+
+                if (! $ap) {
+                    continue;
+                }
+
+                $releasedTotal = (float) Disbursement::withTrashed()
+                    ->where('ap_id', $apId)
+                    ->where('status', 'Released')
+                    ->sum('amount_paid');
+
+                $originalAmount = (float) $ap->original_amount;
+                $newPaid = min($releasedTotal, $originalAmount);
+                $newRemaining = max(0, $originalAmount - $newPaid);
+
+                $desiredStatus = match (true) {
+                    $newRemaining <= 0 => 'Paid',
+                    $newPaid > 0 => 'Partially Paid',
+                    default => $ap->status,
+                };
+
+                // Nothing to repair — skip the write (and its saved-hook
+                // supplier balance recalculation).
+                if (round((float) $ap->paid_amount, 2) === round($newPaid, 2)
+                    && round((float) $ap->remaining_balance, 2) === round($newRemaining, 2)
+                    && $ap->status === $desiredStatus
+                ) {
+                    continue;
+                }
+
+                $ap->update([
+                    'paid_amount' => $newPaid,
+                    'remaining_balance' => $newRemaining,
+                    'status' => $desiredStatus,
+                ]);
             }
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::warning('Disbursement reconciliation: ' . $e->getMessage());
@@ -527,47 +571,63 @@ class DisbursementService
      */
     public function release(Disbursement $disbursement, int $releasedById): Disbursement
     {
-        if ($disbursement->status !== 'Approved') {
-            throw ValidationException::withMessages([
-                'status' => 'Only an approved disbursement can be released.',
-            ]);
-        }
+        // Everything below runs inside one transaction that starts by locking
+        // the disbursement row itself. The status guard used to read the
+        // caller-supplied (unlocked) model *before* DB::transaction() opened,
+        // while releaseAp() locked only the AP bill and the cash account —
+        // never the disbursement. Two concurrent PATCH /disbursements/{id}/release
+        // calls therefore both passed the guard and each posted a payment, a
+        // cash debit and a journal entry for the same voucher. releaseAp() /
+        // releasePayroll() still open their own DB::transaction(); Laravel nests
+        // those as savepoints, so this outer lock is held until the outermost
+        // commit.
+        return DB::transaction(function () use ($disbursement, $releasedById) {
+            $locked = Disbursement::lockForUpdate()->findOrFail($disbursement->getKey());
 
-        if ($disbursement->created_by === $releasedById) {
-            throw ValidationException::withMessages([
-                'status' => 'The creator of a disbursement cannot release their own voucher (separation of duties).',
-            ]);
-        }
+            if ($locked->status !== 'Approved') {
+                throw ValidationException::withMessages([
+                    'status' => 'Only an approved disbursement can be released.',
+                ]);
+            }
 
-        // AP supplier payments require an uploaded proof-of-payment document OR
-        // the linked AP bill's attached invoice document before funds are released.
-        // Payroll disbursements are exempt.
-        $hasProof = (bool) (
-            $disbursement->has_attachment
-            || $disbursement->supportingDocuments()->exists()
-            || ($disbursement->accountsPayable && ($disbursement->accountsPayable->has_attachment || $disbursement->accountsPayable->supportingDocuments()->exists()))
-        );
+            if ($locked->created_by === $releasedById) {
+                throw ValidationException::withMessages([
+                    'status' => 'The creator of a disbursement cannot release their own voucher (separation of duties).',
+                ]);
+            }
 
-        if (! $disbursement->isPayroll() && ! $hasProof) {
-            throw ValidationException::withMessages([
-                'proof' => 'A proof of payment (e.g. bank transfer slip, check voucher scan, or official receipt) '
-                    . 'must be attached to this disbursement before it can be released. '
-                    . 'Upload the payment document using the Paperclip button, then release.',
-            ]);
-        }
+            // AP supplier payments require an uploaded proof-of-payment document OR
+            // the linked AP bill's attached invoice document before funds are released.
+            // Payroll disbursements are exempt. Re-read from the locked row rather
+            // than the stale caller-supplied model so a document removed between
+            // the request and this lock cannot slip through.
+            $hasProof = (bool) (
+                $locked->has_attachment
+                || $locked->supportingDocuments()->exists()
+                || ($locked->accountsPayable && ($locked->accountsPayable->has_attachment || $locked->accountsPayable->supportingDocuments()->exists()))
+            );
 
-        $released = $disbursement->isPayroll()
-            ? $this->releasePayroll($disbursement, $releasedById)
-            : $this->releaseAp($disbursement, $releasedById);
+            if (! $locked->isPayroll() && ! $hasProof) {
+                throw ValidationException::withMessages([
+                    'proof' => 'A proof of payment (e.g. bank transfer slip, check voucher scan, or official receipt) '
+                        . 'must be attached to this disbursement before it can be released. '
+                        . 'Upload the payment document using the Paperclip button, then release.',
+                ]);
+            }
 
-        $this->notifyCreator($released, 'Disbursement released', sprintf(
-            '%.2f was released to %s (%s).',
-            (float) $released->amount_paid,
-            $released->payee,
-            $released->voucher_number
-        ), 'Success');
+            $released = $locked->isPayroll()
+                ? $this->releasePayroll($locked, $releasedById)
+                : $this->releaseAp($locked, $releasedById);
 
-        return $released;
+            $this->notifyCreator($released, 'Disbursement released', sprintf(
+                '%.2f was released to %s (%s).',
+                (float) $released->amount_paid,
+                $released->payee,
+                $released->voucher_number
+            ), 'Success');
+
+            return $released;
+        });
     }
 
     /**
@@ -652,7 +712,12 @@ class DisbursementService
             $ap->update([
                 'paid_amount' => $newPaid,
                 'remaining_balance' => $newRemaining,
-                'status' => $newRemaining <= 0 ? 'Paid' : $ap->status,
+                // A partial release must land on 'Partially Paid', not stay on
+                // whatever it was ('Pending' after approve()). Leaving it there
+                // made reconcileReleasedDisbursements() treat the bill as
+                // unsettled and add this same disbursement's amount_paid a
+                // second time on the next GET /disbursements.
+                'status' => $newRemaining <= 0 ? 'Paid' : 'Partially Paid',
             ]);
 
             $cashBalanceBefore = $cashAccount->current_balance;
@@ -1144,6 +1209,10 @@ class DisbursementService
 
     public static function generateReferenceNumber(): string
     {
+        // Serialise concurrent generators — see the note on
+        // AccountsReceivableService::generateReferenceNo().
+        self::lockReferencePrefix('fms.reference.disbursements');
+
         $last = Disbursement::withTrashed()
             ->where('reference_number', 'like', 'REF-DIS-%')
             ->orderByDesc('id')

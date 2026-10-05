@@ -34,6 +34,16 @@ class StoreTaxObligationRequest extends FormRequest
             'tax_rate'          => ['required', 'numeric', 'min:0', 'max:100'],
             'taxable_amount'    => ['required', 'numeric', 'min:' . config('business.min_invoice_amount')],
             'is_paid'           => ['sometimes', 'boolean'],
+            // Marking an obligation paid creates + approves an Expense
+            // (TaxObligationService::recordAsExpense), which posts a journal
+            // entry. That entry needs a real cash account to credit, and the
+            // matching cash_account_id is read straight off the obligation.
+            // Without this rule the request left cash_account_id null,
+            // ExpenseService::postJournalEntry found no cash account, skipped
+            // the debit entirely and credited a fallback asset account — so a
+            // BIR remittance was recorded as paid without any money leaving the
+            // bank. Require the account whenever is_paid is set.
+            'cash_account_id'   => ['required_if:is_paid,true', 'nullable', 'integer', Rule::exists('cash_accounts', 'id')],
             'payment_date'      => ['required_if:is_paid,true', 'nullable', 'date'],
             'reference_number'  => [
                 'nullable',

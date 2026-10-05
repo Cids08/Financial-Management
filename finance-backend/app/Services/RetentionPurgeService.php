@@ -61,6 +61,20 @@ class RetentionPurgeService
                 }
 
                 try {
+                    // journal_entry_lines has no FK on (reference_type,
+                    // reference_id), so a purge here would orphan the posted
+                    // ledger lines and leave those amounts in the General
+                    // Ledger with no source document. Skip and report instead —
+                    // the same rule PermanentDeleteController::destroy()
+                    // applies to a manual admin purge.
+                    $journalLines = PermanentDeleteController::postedJournalLineCount($entity, (int) $id);
+
+                    if ($journalLines > 0) {
+                        $skipped++;
+                        Log::warning("[retention] Skipped {$entity} #{$id}: {$journalLines} posted journal line(s) still reference it. Purging would orphan them - post a reversing journal entry first.");
+                        continue;
+                    }
+
                     $record->forceDelete();
                     $purged++;
                 } catch (QueryException $e) {
