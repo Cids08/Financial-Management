@@ -43,35 +43,119 @@ class DashboardController extends Controller
         $user = $request->user();
         $isStaff = strtolower($user?->role?->name ?? '') === 'staff';
 
-        $staffData = $this->dashboardService->getStaffDashboardData();
-
         if ($isStaff) {
             return response()->json([
                 'success' => true,
                 'message' => 'Staff dashboard data retrieved successfully.',
-                'data' => $staffData,
+                'data' => $this->dashboardService->getStaffDashboardData((bool) $user?->hasPermission('ap.view')),
             ]);
         }
 
+        // Every block below aggregates a *different* module, so each one is
+        // gated on that module's own view permission. Previously this
+        // endpoint handed the whole admin aggregate to anyone who was merely
+        // authenticated: a `collector` has dashboard.view but no
+        // expenses.view / cash-accounts.view / ap.view, yet was served
+        // company-wide expense totals, total bank balances, supplier
+        // disbursements and the pending-approval queue anyway.
+        //
+        // Nothing here changes for a full-access user: admin and super-admin
+        // hold every permission, so their payload is identical. Collectors
+        // keep the figures their permissions actually cover - CollectorDashboard
+        // doesn't consume this endpoint, so nothing on screen depends on the
+        // blocks they no longer receive.
+        $can = static fn (string $permission): bool => (bool) $user?->hasPermission($permission);
+        $canAll = static function (array $permissions) use ($can): bool {
+            foreach ($permissions as $permission) {
+                if (! $can($permission)) {
+                    return false;
+                }
+            }
+
+            return true;
+        };
+
         $year = $this->resolveYear($request);
+
+        $overviewBlocks = [];
+        if ($can('collections.view')) {
+            $overviewBlocks[] = 'total_revenue';
+        }
+        if ($can('expenses.view')) {
+            $overviewBlocks[] = 'total_expenses';
+        }
+        if ($can('cash-accounts.view')) {
+            $overviewBlocks[] = 'available_cash';
+        }
+        if ($can('collections.view') && $can('expenses.view')) {
+            $overviewBlocks[] = 'net_cash_flow';
+        }
+
+        $cardBlocks = [];
+        foreach ([
+            'total_customers' => 'customers.view',
+            'total_suppliers' => 'suppliers.view',
+            'receivable' => 'ar.view',
+            'cash_balance' => 'cash-accounts.view',
+            'payable' => 'ap.view',
+            'active_collectors' => 'collectors.view',
+            'collections_today' => 'collections.view',
+            'disbursements_today' => 'disbursements.view',
+            'tax_obligations' => 'tax.view',
+            'active_budgets' => 'budgets.view',
+        ] as $block => $permission) {
+            if ($can($permission)) {
+                $cardBlocks[] = $block;
+            }
+        }
 
         $data = [
             'selected_year' => $year,
             'available_years' => $this->dashboardService->getAvailableYears(),
-            'overview' => $this->dashboardService->getOverview($year),
-            'module_cards' => $this->dashboardService->getModuleCards(),
-            'recent_transactions' => $this->dashboardService->getRecentTransactions(),
-            'pending_approvals' => $this->dashboardService->getPendingApprovals(),
-            'upcoming_deadlines' => $this->dashboardService->getUpcomingDeadlines(),
-            'notifications' => $this->dashboardService->getNotifications(),
-            'ai_insights' => $this->dashboardService->getAiInsights(),
-            'forecast_summary' => $this->dashboardService->getForecastSummary(),
-
-            // Also provide staff keys so testing or previewing StaffDashboard never fails
-            'summary' => $staffData['summary'],
-            'attention' => $staffData['attention'],
-            'recent_activity' => $staffData['recent_activity'],
         ];
+
+        if ($overviewBlocks !== []) {
+            $data['overview'] = $this->dashboardService->getOverview($year, $overviewBlocks);
+        }
+
+        if ($cardBlocks !== []) {
+            $data['module_cards'] = $this->dashboardService->getModuleCards($cardBlocks);
+        }
+
+        // These merge several modules into one feed/queue, so they need
+        // viewing rights to every module that feeds them.
+        if ($canAll(['ar.view', 'ap.view', 'expenses.view', 'collections.view', 'disbursements.view'])) {
+            $data['recent_transactions'] = $this->dashboardService->getRecentTransactions();
+        }
+
+        if ($canAll(['expenses.view', 'budgets.view', 'disbursements.view'])) {
+            $data['pending_approvals'] = $this->dashboardService->getPendingApprovals();
+        }
+
+        if ($canAll(['ar.view', 'ap.view'])) {
+            $data['upcoming_deadlines'] = $this->dashboardService->getUpcomingDeadlines();
+        }
+
+        // Already scoped to the requesting user by Notification::scopeForUser().
+        $data['notifications'] = $this->dashboardService->getNotifications();
+
+        if ($can('ai.view')) {
+            $data['ai_insights'] = $this->dashboardService->getAiInsights();
+        }
+
+        if ($can('forecasting.view')) {
+            $data['forecast_summary'] = $this->dashboardService->getForecastSummary();
+        }
+
+        // Also provide staff keys so testing or previewing StaffDashboard never fails.
+        // getStaffDashboardData() spans expenses, disbursements, budgets, tax and
+        // the ledger, so it only rides along for a user who may view all of those.
+        if ($canAll(['expenses.view', 'disbursements.view', 'budgets.view', 'tax.view', 'general-ledger.view'])) {
+            $staffData = $this->dashboardService->getStaffDashboardData((bool) $user?->hasPermission('ap.view'));
+            $data['summary'] = $staffData['summary'];
+            $data['attention'] = $staffData['attention'];
+            $data['recent_activity'] = $staffData['recent_activity'];
+        }
 
         return response()->json([
             'success' => true,
@@ -90,10 +174,22 @@ class DashboardController extends Controller
      */
     public function charts(Request $request): JsonResponse
     {
+        $user = $request->user();
+
+        // Same rule as index(): a dataset is served only to someone who may
+        // view the module behind it. Without this, any authenticated user
+        // with dashboard.view could pull expense trends, budget utilization,
+        // payable aging and the cash split across accounts - all of which
+        // sit behind their own permissions on every other route.
+        $datasets = array_keys(array_filter(
+            DashboardChartService::DATASET_PERMISSIONS,
+            static fn (string $permission): bool => (bool) $user?->hasPermission($permission)
+        ));
+
         return response()->json([
             'success' => true,
             'message' => '',
-            'data' => $this->chartService->getAll($this->resolveYear($request)),
+            'data' => $this->chartService->getAll($this->resolveYear($request), $datasets),
         ]);
     }
 
@@ -296,7 +392,7 @@ class DashboardController extends Controller
      */
     private function exportStaffPdf(Request $request, $user, int $year, ?Setting $settings, string $currency): Response
     {
-        $staffData = $this->dashboardService->getStaffDashboardData();
+        $staffData = $this->dashboardService->getStaffDashboardData((bool) $user?->hasPermission('ap.view'));
 
         $data = [
             'generated_at' => now(),

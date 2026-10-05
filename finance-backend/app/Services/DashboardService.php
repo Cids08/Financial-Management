@@ -45,9 +45,26 @@ use Illuminate\Support\Facades\DB;
  */
 class DashboardService
 {
-    public function getOverview(?int $year = null): array
+    /**
+     * Keys the overview cards are built from, each tied to the permission
+     * that authorises reading its underlying module.
+     *
+     * The caller passes the subset it is allowed to see so a user without
+     * `expenses.view` is never served company-wide expense totals (and we
+     * don't even run those queries). Defaults to all four, which is the
+     * full-access case.
+     */
+    public const OVERVIEW_BLOCKS = ['total_revenue', 'total_expenses', 'available_cash', 'net_cash_flow'];
+
+    public const MODULE_CARD_BLOCKS = [
+        'total_customers', 'total_suppliers', 'receivable', 'cash_balance', 'payable',
+        'active_collectors', 'collections_today', 'disbursements_today', 'tax_obligations', 'active_budgets',
+    ];
+
+    public function getOverview(?int $year = null, array $blocks = self::OVERVIEW_BLOCKS): array
     {
         $year ??= (int) Carbon::today()->year;
+        $blocks = array_intersect(self::OVERVIEW_BLOCKS, $blocks);
 
         $yearStart = Carbon::create($year, 1, 1);
         $lastYearStart = $yearStart->copy()->subYear();
@@ -57,48 +74,61 @@ class DashboardService
         // year has nothing in it yet, hence the empty window.
         $end = $this->yearEnd($year);
 
+        $out = [];
+
         // Actual cash collected, not invoiced AR  -  Collection now exists.
         // Scoped to the selected year instead of a rolling windowed month,
         // so the overview cards match the "this year" framing by default.
-        $revenueThisYear = CollectionModel::whereBetween('collection_date', [$yearStart, $end])
-            ->sum('amount_received');
+        $revenueThisYear = $revenueLastYear = null;
+        if (in_array('total_revenue', $blocks, true)) {
+            $revenueThisYear = CollectionModel::whereBetween('collection_date', [$yearStart, $end])
+                ->sum('amount_received');
 
-        $revenueLastYear = CollectionModel::whereBetween('collection_date', [$lastYearStart, $this->yearEnd($year - 1)])
-            ->sum('amount_received');
+            $revenueLastYear = CollectionModel::whereBetween('collection_date', [$lastYearStart, $this->yearEnd($year - 1)])
+                ->sum('amount_received');
 
-        $expensesThisYear = Expense::whereBetween('expense_date', [$yearStart, $end])
-            ->where('status', '!=', Expense::STATUS_REJECTED)
-            ->sum('expense_amount');
-
-        $expensesLastYear = Expense::whereBetween('expense_date', [$lastYearStart, $this->yearEnd($year - 1)])
-            ->where('status', '!=', Expense::STATUS_REJECTED)
-            ->sum('expense_amount');
-
-        $availableCash = CashAccount::where('status', 'Active')->sum('current_balance');
-
-        $netCashFlow = $revenueThisYear - $expensesThisYear;
-        $netCashFlowLastYear = $revenueLastYear - $expensesLastYear;
-
-        return [
-            'total_revenue' => [
+            $out['total_revenue'] = [
                 'value' => (float) $revenueThisYear,
                 'trend' => $this->percentChange($revenueLastYear, $revenueThisYear),
                 'note' => 'Actual cash collected in ' . $year . ' (Collections), not invoiced AR.',
-            ],
-            'total_expenses' => [
-                'value' => (float) $expensesThisYear,
-                'trend' => $this->percentChange($expensesLastYear, $expensesThisYear),
-            ],
-            'available_cash' => [
-                'value' => (float) $availableCash,
+            ];
+        }
+
+        $expensesThisYear = $expensesLastYear = null;
+        if (in_array('total_expenses', $blocks, true) || in_array('net_cash_flow', $blocks, true)) {
+            $expensesThisYear = Expense::whereBetween('expense_date', [$yearStart, $end])
+                ->where('status', '!=', Expense::STATUS_REJECTED)
+                ->sum('expense_amount');
+
+            $expensesLastYear = Expense::whereBetween('expense_date', [$lastYearStart, $this->yearEnd($year - 1)])
+                ->where('status', '!=', Expense::STATUS_REJECTED)
+                ->sum('expense_amount');
+
+            if (in_array('total_expenses', $blocks, true)) {
+                $out['total_expenses'] = [
+                    'value' => (float) $expensesThisYear,
+                    'trend' => $this->percentChange($expensesLastYear, $expensesThisYear),
+                ];
+            }
+        }
+
+        if (in_array('available_cash', $blocks, true)) {
+            $out['available_cash'] = [
+                'value' => (float) CashAccount::where('status', 'Active')->sum('current_balance'),
                 'trend' => null, // point-in-time balance, no meaningful period trend
                 'note' => 'Current balance across active cash accounts.',
-            ],
-            'net_cash_flow' => [
+            ];
+        }
+
+        if (in_array('net_cash_flow', $blocks, true)) {
+            $netCashFlow = $revenueThisYear - $expensesThisYear;
+            $out['net_cash_flow'] = [
                 'value' => (float) $netCashFlow,
-                'trend' => $this->percentChange($netCashFlowLastYear, $netCashFlow),
-            ],
-        ];
+                'trend' => $this->percentChange($revenueLastYear - $expensesLastYear, $netCashFlow),
+            ];
+        }
+
+        return $out;
     }
 
     /**
@@ -149,59 +179,78 @@ class DashboardService
         return Carbon::create($year, 12, 31)->endOfDay();
     }
 
-    public function getModuleCards(): array
+    public function getModuleCards(array $blocks = self::MODULE_CARD_BLOCKS): array
     {
         $today = Carbon::today();
+        $blocks = array_intersect(self::MODULE_CARD_BLOCKS, $blocks);
+        $out = [];
 
-        return [
-            'total_customers' => Customer::where('status', 'Active')->count(),
-            'total_suppliers' => Supplier::where('status', 'Active')->count(),
-            'receivable' => (float) AccountsReceivable::whereNotIn('status', ['Paid', 'Cancelled'])->sum('remaining_balance'),
-            'cash_balance' => (float) CashAccount::where('status', 'Active')->sum('current_balance'),
-            'payable' => (float) AccountsPayable::whereNotIn('status', ['Paid', 'Cancelled'])->sum('remaining_balance'),
-
-            'active_collectors' => Collector::where('status', 'Active')->count(),
-
-            'collections_today' => (float) CollectionModel::whereDate('collection_date', $today)->sum('amount_received'),
-
-            'disbursements_today' => (float) Disbursement::whereDate('payment_date', $today)->sum('amount_paid'),
-
+        // Each card reads a different module, so each is gated on that
+        // module's own view permission rather than the dashboard as a whole.
+        if (in_array('total_customers', $blocks, true)) {
+            $out['total_customers'] = Customer::where('status', 'Active')->count();
+        }
+        if (in_array('total_suppliers', $blocks, true)) {
+            $out['total_suppliers'] = Supplier::where('status', 'Active')->count();
+        }
+        if (in_array('receivable', $blocks, true)) {
+            $out['receivable'] = (float) AccountsReceivable::whereNotIn('status', ['Paid', 'Cancelled'])->sum('remaining_balance');
+        }
+        if (in_array('cash_balance', $blocks, true)) {
+            $out['cash_balance'] = (float) CashAccount::where('status', 'Active')->sum('current_balance');
+        }
+        if (in_array('payable', $blocks, true)) {
+            $out['payable'] = (float) AccountsPayable::whereNotIn('status', ['Paid', 'Cancelled'])->sum('remaining_balance');
+        }
+        if (in_array('active_collectors', $blocks, true)) {
+            $out['active_collectors'] = Collector::where('status', 'Active')->count();
+        }
+        if (in_array('collections_today', $blocks, true)) {
+            $out['collections_today'] = (float) CollectionModel::whereDate('collection_date', $today)->sum('amount_received');
+        }
+        if (in_array('disbursements_today', $blocks, true)) {
+            $out['disbursements_today'] = (float) Disbursement::whereDate('payment_date', $today)->sum('amount_paid');
+        }
+        if (in_array('tax_obligations', $blocks, true)) {
             // "Unpaid" via payment_date IS NULL rather than a guessed status string.
-            'tax_obligations' => (float) TaxObligation::whereNull('payment_date')->sum('tax_amount'),
-
+            $out['tax_obligations'] = (float) TaxObligation::whereNull('payment_date')->sum('tax_amount');
+        }
+        if (in_array('active_budgets', $blocks, true)) {
             // "Currently active" via date range, restricted to approved budgets —
             // a budget still awaiting approval (approved_by IS NULL) shouldn't
             // count as active just because its dates overlap today.
-            'active_budgets' => Budget::whereDate('start_date', '<=', $today)
+            $out['active_budgets'] = Budget::whereDate('start_date', '<=', $today)
                 ->whereDate('end_date', '>=', $today)
                 ->whereNotNull('approved_by')
-                ->count(),
-        ];
+                ->count();
+        }
+
+        return $out;
     }
 
     public function getRecentTransactions(int $limit = 8): array
     {
         $receivables = AccountsReceivable::query()
-            ->select(['invoice_date as date', 'invoice_number as reference', DB::raw("'Invoice Issued' as transaction"), 'customer_id', 'original_amount as amount', 'status', 'created_at'])
+            ->select(['invoice_date as date', 'invoice_number as reference', DB::raw("'Invoice Issued' as \"transaction\""), 'customer_id', 'original_amount as amount', 'status', 'created_at'])
             ->with('customer:id,customer_name')
             ->latest('created_at')->limit($limit)->get();
 
         $payables = AccountsPayable::query()
-            ->select(['invoice_date as date', 'invoice_number as reference', DB::raw("'Supplier Invoice' as transaction"), 'supplier_id', 'original_amount as amount', 'status', 'created_at'])
+            ->select(['invoice_date as date', 'invoice_number as reference', DB::raw("'Supplier Invoice' as \"transaction\""), 'supplier_id', 'original_amount as amount', 'status', 'created_at'])
             ->with('supplier:id,supplier_name')
             ->latest('created_at')->limit($limit)->get();
 
         $expenses = Expense::query()
-            ->select(['expense_date as date', 'receipt_number as reference', DB::raw("'Expense Voucher' as transaction"), 'description as party', 'expense_amount as amount', 'status', 'created_at'])
+            ->select(['expense_date as date', 'receipt_number as reference', DB::raw("'Expense Voucher' as \"transaction\""), 'description as party', 'expense_amount as amount', 'status', 'created_at'])
             ->latest('created_at')->limit($limit)->get();
 
         $collections = CollectionModel::query()
-            ->select(['collection_date as date', 'receipt_number as reference', DB::raw("'Customer Collection' as transaction"), 'collector_id', 'amount_received as amount', 'status', 'created_at'])
+            ->select(['collection_date as date', 'receipt_number as reference', DB::raw("'Customer Collection' as \"transaction\""), 'collector_id', 'amount_received as amount', 'status', 'created_at'])
             ->with('collector:id,first_name,last_name')
             ->latest('created_at')->limit($limit)->get();
 
         $disbursements = Disbursement::query()
-            ->select(['payment_date as date', 'voucher_number as reference', DB::raw("'Supplier Disbursement' as transaction"), 'payee as party', 'amount_paid as amount', 'status', 'created_at'])
+            ->select(['payment_date as date', 'voucher_number as reference', DB::raw("'Supplier Disbursement' as \"transaction\""), 'payee as party', 'amount_paid as amount', 'status', 'created_at'])
             ->latest('created_at')->limit($limit)->get();
 
         $merged = collect()
@@ -432,7 +481,20 @@ class DashboardService
             ->toArray();
     }
 
-    public function getStaffDashboardData(): array
+    /**
+     * Staff dashboard payload.
+     *
+     * @param  bool  $canViewPayables  The `staff` role holds ar/collections/
+     *                                expenses/disbursements/budgets view rights
+     *                                but *not* `ap.view`, so the payables total
+     *                                and the AP attention queue are withheld
+     *                                unless the caller confirms the permission.
+     *
+     * Shapes are preserved (null / empty array) rather than dropped, so
+     * StaffDashboard and the PDF blade keep rendering: the card falls back to
+     * an em dash and the section to "nothing waiting on approval".
+     */
+    public function getStaffDashboardData(bool $canViewPayables = false): array
     {
         $today = Carbon::today();
         $startOfMonth = Carbon::now()->startOfMonth();
@@ -443,7 +505,9 @@ class DashboardService
             'customers' => Customer::where('status', 'Active')->count(),
             'suppliers' => Supplier::where('status', 'Active')->count(),
             'ar_outstanding' => (float) AccountsReceivable::whereNotIn('status', ['Paid', 'Cancelled'])->sum('remaining_balance'),
-            'ap_outstanding' => (float) AccountsPayable::whereNotIn('status', ['Paid', 'Cancelled'])->sum('remaining_balance'),
+            'ap_outstanding' => $canViewPayables
+                ? (float) AccountsPayable::whereNotIn('status', ['Paid', 'Cancelled'])->sum('remaining_balance')
+                : null,
             'expenses_this_month' => (float) Expense::whereBetween('expense_date', [$startOfMonth, $endOfMonth])
                 ->where('status', '!=', Expense::STATUS_REJECTED)
                 ->sum('expense_amount'),
@@ -473,33 +537,37 @@ class DashboardService
             ->toArray();
 
         // AP Pending Approval (Bills awaiting approval or pending review)
-        $apQuery = AccountsPayable::query()
-            ->with('supplier:id,supplier_name')
-            ->whereNotIn('status', ['Paid', 'Cancelled'])
-            ->where(function ($q) {
-                $q->whereNull('approved_by')
-                  ->orWhere('status', 'Pending');
-            })
-            ->orderBy('due_date', 'asc')
-            ->limit(10)
-            ->get();
+        $apAttention = [];
 
-        if ($apQuery->isEmpty()) {
-            // If none awaiting approval, surface unpaid bills approaching due date
+        if ($canViewPayables) {
             $apQuery = AccountsPayable::query()
                 ->with('supplier:id,supplier_name')
                 ->whereNotIn('status', ['Paid', 'Cancelled'])
+                ->where(function ($q) {
+                    $q->whereNull('approved_by')
+                      ->orWhere('status', 'Pending');
+                })
                 ->orderBy('due_date', 'asc')
                 ->limit(10)
                 ->get();
-        }
 
-        $apAttention = $apQuery->map(fn ($bill) => [
-            'id' => $bill->id,
-            'supplier_name' => $bill->supplier?->supplier_name ?? $bill->invoice_number,
-            'amount' => (float) $bill->remaining_balance,
-            'due_date' => optional($bill->due_date)->format('Y-m-d') ?? (string) $bill->due_date,
-        ])->values()->toArray();
+            if ($apQuery->isEmpty()) {
+                // If none awaiting approval, surface unpaid bills approaching due date
+                $apQuery = AccountsPayable::query()
+                    ->with('supplier:id,supplier_name')
+                    ->whereNotIn('status', ['Paid', 'Cancelled'])
+                    ->orderBy('due_date', 'asc')
+                    ->limit(10)
+                    ->get();
+            }
+
+            $apAttention = $apQuery->map(fn ($bill) => [
+                'id' => $bill->id,
+                'supplier_name' => $bill->supplier?->supplier_name ?? $bill->invoice_number,
+                'amount' => (float) $bill->remaining_balance,
+                'due_date' => optional($bill->due_date)->format('Y-m-d') ?? (string) $bill->due_date,
+            ])->values()->toArray();
+        }
 
         // Expenses Pending Approval
         $expenseQuery = Expense::query()

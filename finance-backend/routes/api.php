@@ -285,9 +285,9 @@ Route::middleware(['auth:sanctum', 'require.password.change'])->group(function (
     });
 
     // Dashboard
-    Route::get('/dashboard', [DashboardController::class, 'index']);
-    Route::get('/dashboard/charts', [DashboardController::class, 'charts']);
-    Route::post('/dashboard/export', [DashboardController::class, 'exportPdf'])->middleware('throttle:10,1');
+    Route::get('/dashboard', [DashboardController::class, 'index'])->middleware('permission:dashboard.view');
+    Route::get('/dashboard/charts', [DashboardController::class, 'charts'])->middleware('permission:dashboard.view');
+    Route::post('/dashboard/export', [DashboardController::class, 'exportPdf'])->middleware(['permission:dashboard.view', 'throttle:10,1']);
     Route::post('/exports/csv', [\App\Http\Controllers\Api\ProtectedExportController::class, 'csv'])->middleware('throttle:10,1');
     Route::post('/exports/pdf', [\App\Http\Controllers\Api\ProtectedExportController::class, 'pdf'])->middleware('throttle:10,1');
 

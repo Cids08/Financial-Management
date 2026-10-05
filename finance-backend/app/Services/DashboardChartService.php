@@ -187,19 +187,52 @@ class DashboardChartService
      * utilization, AR/AP aging  —  and the rolling 30-day collections trend
      * have no meaningful "selected year" version, so they stay as-is.
      */
-    public function getAll(?int $year = null): array
+    /**
+ * Every chart dataset and the permission that authorises reading the module
+ * it is built from. Kept next to the dataset list so adding a chart can't
+ * silently ship without a permission.
+ *
+ * cash_flow_trend needs both inputs, so it is listed under the stricter of
+ * the two rather than being duplicated.
+ */
+public const DATASET_PERMISSIONS = [
+    'revenue_trend' => 'collections.view',
+    'expense_trend' => 'expenses.view',
+    'cash_flow_trend' => 'expenses.view',
+    'collections_trend' => 'collections.view',
+    'budget_utilization' => 'budgets.view',
+    'receivable_aging' => 'ar.view',
+    'payable_aging' => 'ap.view',
+    'expense_breakdown' => 'expenses.view',
+    'cash_distribution' => 'cash-accounts.view',
+];
+
+/**
+ * @param  array<int, string>|null  $datasets  subset of self::DATASET_PERMISSIONS to
+ *                                              compute; defaults to all of them
+ */
+public function getAll(?int $year = null, ?array $datasets = null): array
     {
-        return [
-            'revenue_trend' => $this->getRevenueTrend($year),
-            'expense_trend' => $this->getExpenseTrend($year),
-            'cash_flow_trend' => $this->getCashFlowTrend($year),
-            'collections_trend' => $this->getCollectionsTrend(),
-            'budget_utilization' => $this->getBudgetUtilization(),
-            'receivable_aging' => $this->getReceivableAging(),
-            'payable_aging' => $this->getPayableAging(),
-            'expense_breakdown' => $this->getExpenseBreakdown($year),
-            'cash_distribution' => $this->getCashDistribution(),
+        $all = [
+            'revenue_trend' => fn () => $this->getRevenueTrend($year),
+            'expense_trend' => fn () => $this->getExpenseTrend($year),
+            'cash_flow_trend' => fn () => $this->getCashFlowTrend($year),
+            'collections_trend' => fn () => $this->getCollectionsTrend(),
+            'budget_utilization' => fn () => $this->getBudgetUtilization(),
+            'receivable_aging' => fn () => $this->getReceivableAging(),
+            'payable_aging' => fn () => $this->getPayableAging(),
+            'expense_breakdown' => fn () => $this->getExpenseBreakdown($year),
+            'cash_distribution' => fn () => $this->getCashDistribution(),
         ];
+
+        $wanted = $datasets === null ? array_keys($all) : array_intersect(array_keys($all), $datasets);
+
+        $out = [];
+        foreach ($wanted as $dataset) {
+            $out[$dataset] = $all[$dataset]();
+        }
+
+        return $out;
     }
 
     /**
