@@ -18,7 +18,6 @@ import {
   Banknote,
   Wallet,
   Percent,
-  Sparkles,
   FileText,
   ClipboardList,
   Target,
@@ -168,11 +167,14 @@ const NOTIFICATION_STYLE = {
   payable: { icon: CalendarClock, color: 'text-amber-600 bg-amber-50 dark:text-amber-400 dark:bg-amber-500/10' },
   budget: { icon: Wallet, color: 'text-amber-600 bg-amber-50 dark:text-amber-400 dark:bg-amber-500/10' },
   forecast: { icon: CheckCircle2, color: 'text-emerald-600 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-500/10' },
-  ai_recommendation: { icon: Sparkles, color: 'text-violet-600 bg-violet-50 dark:text-violet-400 dark:bg-violet-500/10' },
+  ai_recommendation: { icon: AiLogo, color: 'text-violet-600 bg-violet-50 dark:text-violet-400 dark:bg-violet-500/10' },
 }
 const DEFAULT_NOTIFICATION_STYLE = { icon: BellRing, color: 'text-slate-600 bg-slate-100 dark:text-slate-300 dark:bg-slate-800' }
 
-const PRIORITY_ICON = { High: AlertTriangle, Medium: TrendingUp, Low: Activity }
+// Insight cards lead with the AI logo, so priority is carried by a corner dot
+// instead. The icons these replace encoded urgency (a red triangle for High),
+// so the dot keeps that signal rather than letting branding erase it.
+const PRIORITY_DOT = { High: 'bg-red-500', Medium: 'bg-amber-500', Low: 'bg-sky-400' }
 
 const FORECAST_ICON = { revenue: TrendingUp, expense: TrendingDown, expenses: TrendingDown, cash: PiggyBank }
 
@@ -912,19 +914,23 @@ export default function Dashboard() {
         ) : (
           <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
             {aiInsights.map((insight, idx) => {
-              const Icon = PRIORITY_ICON[insight.priority] || Sparkles
+              const priority = insight.priority || 'Low'
               return (
                 <button
                   key={idx}
                   type="button"
                   onClick={() => navigate(insight.route || '/analytics/ai-recommendations')}
-                  className="group flex items-start gap-2.5 rounded-lg border border-border bg-surface p-3 text-left
+                  className="group relative flex items-start gap-2.5 rounded-lg border border-border bg-surface p-3 text-left
                     transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
                 >
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/15 text-primary-dark">
-                    <Icon size={15} />
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/15">
+                    <AiLogo size={17} />
                   </div>
                   <p className="text-xs leading-snug text-ink">{normalizeAiCurrencyText(insight.text)}</p>
+                  <span
+                    className={`absolute right-2.5 top-2.5 h-2 w-2 rounded-full ${PRIORITY_DOT[priority] || PRIORITY_DOT.Low}`}
+                  />
+                  <span className="sr-only">{priority} priority</span>
                 </button>
               )
             })}
