@@ -420,7 +420,7 @@ class AccountsReceivableService
         // until the enclosing transaction commits (every create() path already
         // wraps itself in one), so the second request re-reads the freshly
         // committed 009 and picks 010. The partial unique index added in
-        // 2026_10_05_120000 is the hard backstop for any path not in a
+        // 2026_10_06_000000 is the hard backstop for any path not in a
         // transaction.
         self::lockReferencePrefix('fms.reference.accounts_receivable');
 

@@ -20,7 +20,7 @@ use Illuminate\Support\Facades\DB;
  * transaction ends, and every create() path already wraps itself in one, a
  * second request blocks here, then re-reads the freshly committed number and
  * picks the following one. The partial unique indexes added in
- * 2026_10_05_120000 remain the hard guarantee for anything not in a
+ * 2026_10_06_000000 remain the hard guarantee for anything not in a
  * transaction.
  */
 trait LocksReferencePrefix

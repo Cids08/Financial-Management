@@ -37,6 +37,15 @@ use Illuminate\Support\Facades\DB;
  *   accounts_payable.reference_number
  *   collections.reference_number
  *   disbursements.reference_number
+ *
+ * ORDERING: this file is deliberately timestamped AFTER
+ * 2026_10_05_230000_add_collection_posting_stages.php. Laravel runs pending
+ * migrations in filename order and aborts the whole batch on the first
+ * failure, so a pre-existing duplicate reference would otherwise stop the
+ * collection-posting migration from running too - leaving the Collections
+ * code querying receipt_journal_entry_id against a column that does not yet
+ * exist. The two features are unrelated, so neither should be able to block
+ * the other. Keep this file last unless both are already applied.
  */
 return new class extends Migration
 {
