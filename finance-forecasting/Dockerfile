@@ -1,4 +1,6 @@
-FROM ghcr.io/cids08/python311-ml:latest
+# Pinned by digest, not the :latest tag. A mutable tag let the base image
+# change underneath the pinned requirements above without any visible diff.
+FROM ghcr.io/cids08/python311-ml@sha256:4ae686a187b8b3f8d8a2cb8f6022fd3f1e940c23ff06d8873dbed5fe755e445b
 
 LABEL maintainer="Financial Management System — Forecasting Service"
 
