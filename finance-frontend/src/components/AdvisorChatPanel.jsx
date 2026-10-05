@@ -1,10 +1,11 @@
 import { ContentSkeleton } from './LoadingSkeleton'
 import { useEffect, useRef, useState } from 'react'
-import { Sparkles, Send, X, History, SquarePen, Archive, Trash2, RotateCcw } from 'lucide-react'
+import { Send, X, History, SquarePen, Archive, Trash2, RotateCcw } from 'lucide-react'
 import Button from './Button'
 import ChatMessageBubble from './ChatMessageBubble'
 import Modal from './Modal'
 import Tooltip from './Tooltip'
+import AiLogo from './AiLogo'
 import { useAiAdvisor } from '../hooks/useAiAdvisor'
 import { useProfile } from '../hooks/useProfile'
 
@@ -493,7 +494,7 @@ export default function AdvisorChatPanel() {
             {/* ── Modern High-Contrast Header ── */}
             <div className="flex items-center gap-3 px-4 py-3 bg-surface shrink-0 border-b border-border shadow-xs">
               <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-black shrink-0 shadow-xs">
-                <Sparkles size={18} className="text-black" />
+                <AiLogo size={20} />
                 <span className="absolute -top-1 -right-1 flex h-3 w-3">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                   <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500 border-2 border-surface" />
@@ -575,7 +576,7 @@ export default function AdvisorChatPanel() {
               {isThinking && (
                 <div className="flex items-end gap-2.5" aria-label="AI advisor is typing">
                   <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-amber-700 dark:text-primary border border-primary/30">
-                    <Sparkles size={13} />
+                    <AiLogo size={15} />
                   </div>
                   <div className="rounded-2xl rounded-bl-sm border border-border bg-surface px-4 py-3 shadow-sm">
                     <span className="inline-flex gap-1.5 items-center">
@@ -669,7 +670,7 @@ export default function AdvisorChatPanel() {
             aria-expanded={open}
             className="relative flex h-14 w-14 items-center justify-center rounded-full bg-primary text-black shadow-xl shadow-primary/35 hover:scale-105 active:scale-95 transition-all duration-200 border-2 border-surface"
           >
-            <Sparkles size={24} className="text-black" />
+            <AiLogo size={26} />
             <span className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
               <span className="relative inline-flex h-3.5 w-3.5 rounded-full bg-emerald-500 border-2 border-surface" />

@@ -1,5 +1,6 @@
 import { memo } from 'react'
-import { Sparkles, User } from 'lucide-react'
+import { User } from 'lucide-react'
+import AiLogo from './AiLogo'
 
 // The advisor's system prompt is allowed exactly one lightweight
 // markdown-like pattern, **text**, reserved for a single genuinely critical
@@ -32,7 +33,7 @@ function ChatMessageBubble({ role, text }) {
             : 'bg-primary/15 text-primary-dark dark:text-primary border border-primary/30'
         }`}
       >
-        {isUser ? <User size={13} /> : <Sparkles size={13} />}
+        {isUser ? <User size={13} /> : <AiLogo size={15} />}
       </div>
 
       {/* Bubble */}

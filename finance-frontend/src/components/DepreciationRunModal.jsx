@@ -12,10 +12,10 @@ import {
   Loader2,
   Printer,
   ShieldAlert,
-  Sparkles,
   TrendingDown,
   X,
 } from 'lucide-react'
+import AiLogo from './AiLogo'
 import { formatCurrency } from '../utils/formatters'
 import {
   buildHeader, buildFooter, buildSignatureBlock, SIGNATURE_PRESETS,
@@ -679,7 +679,7 @@ export default function DepreciationRunModal({
               onClick={handleExecuteRun}
               className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-primary hover:bg-primary-hover disabled:opacity-50 text-black rounded-lg transition-colors shadow-sm"
             >
-              {executing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+              {executing ? <Loader2 className="w-4 h-4 animate-spin" /> : <AiLogo size={16} />}
               {executing ? 'Posting to GL…' : `Post Depreciation · ${fmt(selectedDepreciationTotal)}`}
             </button>
           )}
