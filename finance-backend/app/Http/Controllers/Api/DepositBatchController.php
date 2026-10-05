@@ -18,6 +18,7 @@ class DepositBatchController extends Controller {
         $this->access($request);
         $query=DepositBatch::with(['preparer','cashAccount'])->orderByDesc('id');
         if(in_array($request->query('status'),['Pending','Confirmed','Cancelled'],true)) $query->where('status',$request->query('status'));
+        if ($request->boolean('summary')) return response()->json(['success'=>true,'data'=>['total'=>$query->count()]]);
         $page=$query->paginate(10);
         return response()->json(['success'=>true,'data'=>$page->getCollection()->map(fn($b)=>$this->present($b)),'meta'=>['current_page'=>$page->currentPage(),'last_page'=>$page->lastPage(),'total'=>$page->total()]]);
     }

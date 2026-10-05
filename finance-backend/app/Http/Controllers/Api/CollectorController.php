@@ -25,7 +25,8 @@ class CollectorController extends Controller
         $paginated = $this->collectorService->list([
             'search'   => $request->string('search')->toString(),
             'status'   => $request->string('status')->toString(),
-            'archived' => $request->boolean('archived'),
+            'archived' => $request->user()->hasAnyRole(['collector','Collector']) ? false : $request->boolean('archived'),
+            'user_id' => $request->user()->hasAnyRole(['collector','Collector']) ? $request->user()->id : null,
         ]);
 
         return response()->json([
@@ -54,6 +55,7 @@ class CollectorController extends Controller
      */
     public function availableUsers(Request $request): JsonResponse
     {
+        abort_unless(!$request->user()->hasAnyRole(['collector','Collector']) && $request->user()->hasPermission('collectors.manage'), 403);
         $collectorId = $request->integer('collector_id') ?: null;
 
         $users = $this->collectorService->availableUsers($collectorId);
@@ -138,7 +140,7 @@ class CollectorController extends Controller
         // default) — but that's an admin-editable permission, not a
         // code-level guarantee, so this check stays regardless of what's
         // currently seeded.
-        if ($user->hasRole('collector') && $user->collector?->id !== $collector->id) {
+        if ($user->hasAnyRole(['collector','Collector']) && (int)$collector->user_id !== (int)$user->id) {
             abort(403, 'You may only view your own efficiency stats.');
         }
 

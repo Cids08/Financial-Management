@@ -236,4 +236,30 @@ class FinancialWorkflowTest extends TestCase
         catch (ValidationException $e) { $this->assertArrayHasKey('status',$e->errors()); }
         $this->assertEquals($before,DB::table('journal_entries')->get()->toArray());
     }
+
+    public function test_collector_directory_is_scoped_and_management_is_denied(): void
+    {
+        Schema::table('users', fn (Blueprint $t) => $t->softDeletes());
+        Schema::create('collectors', function (Blueprint $t) { $t->id(); $t->integer('user_id')->nullable(); $t->integer('service_area_id')->nullable(); $t->string('status'); $t->timestamps(); $t->softDeletes(); });
+        DB::table('users')->insert(['id'=>2]);
+        DB::table('collectors')->insert([['id'=>1,'user_id'=>1,'status'=>'Active'],['id'=>2,'user_id'=>2,'status'=>'Active']]);
+        $service=app(\App\Services\CollectorService::class);
+        $this->assertSame([1], $service->list(['user_id'=>1])->getCollection()->pluck('id')->all());
+        $this->assertSame(0, $service->list(['user_id'=>999])->total());
+        $this->assertSame(2, $service->list([])->total());
+        $actor=new \App\Models\User; $actor->id=1; $actor->setRelation('role',new \App\Models\Role(['name'=>'collector']));
+        $this->assertFalse($actor->hasPermission('collectors.manage'));
+        $record=\App\Models\Collector::find(2);
+        foreach ([fn()=>$service->create($actor,[]),fn()=>$service->update($actor,$record,[]),fn()=>$service->archive($actor,$record),fn()=>$service->restore($actor,$record)] as $operation) {
+            try {$operation();$this->fail('Collector management must be denied');} catch (HttpException $e) {$this->assertSame(403,$e->getStatusCode());}
+        }
+        $request=\Illuminate\Http\Request::create('/api/collectors?user_id=2&collector_id=2&archived=1'); $request->setUserResolver(fn()=>$actor);
+        $mock=\Mockery::mock(\App\Services\CollectorService::class);
+        $mock->shouldReceive('list')->once()->with(\Mockery::on(fn($f)=>$f['user_id']===1 && $f['archived']===false))->andReturn(new \Illuminate\Pagination\LengthAwarePaginator([],0,15));
+        $controller=new \App\Http\Controllers\Api\CollectorController($mock);
+        $this->assertSame(200,$controller->index($request)->getStatusCode());
+        foreach ([fn()=>$controller->availableUsers($request),fn()=>$controller->efficiency($request,$record)] as $operation) {
+            try {$operation();$this->fail('Cross-collector access must be denied');} catch (HttpException $e) {$this->assertSame(403,$e->getStatusCode());}
+        }
+    }
 }

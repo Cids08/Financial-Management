@@ -73,6 +73,8 @@ class PermissionController extends Controller
             ? $user->role->permissions()->where('permissions.is_active', true)->whereNotIn('permission_name', \App\Models\User::ADMIN_APPROVAL_PERMISSIONS)->pluck('permission_name')
             : collect();
 
+        if ($user->hasAnyRole(['collector','Collector'])) $permissionNames = $permissionNames->reject(fn ($name) => $name === 'collectors.manage');
+
         return response()->json([
             'success' => true,
             'message' => '',

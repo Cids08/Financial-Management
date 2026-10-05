@@ -30,6 +30,7 @@ class CollectorService
         // account (if any) is linked to each collector row without an
         // N+1 query per row.
         $query = Collector::query()->with(['serviceArea', 'user']);
+        if (isset($filters['user_id'])) $query->where('user_id', $filters['user_id']);
 
         // Mirrors the frontend's "Show archived" checkbox: archived and
         // active collectors are two disjoint views, never mixed.
@@ -48,6 +49,7 @@ class CollectorService
 
     public function create(User $user, array $data): Collector
     {
+        abort_if($user->hasAnyRole(['collector','Collector']), 403, 'Collectors cannot manage collector profiles.');
         return DB::transaction(function () use ($user, $data) {
             $temporaryPassword = null;
 
@@ -116,6 +118,7 @@ class CollectorService
 
     public function update(User $user, Collector $collector, array $data): Collector
     {
+        abort_if($user->hasAnyRole(['collector','Collector']), 403, 'Collectors cannot manage collector profiles.');
         return DB::transaction(function () use ($user, $collector, $data) {
             $collector->update([
                 ...$data,
@@ -135,6 +138,7 @@ class CollectorService
      */
     public function archive(User $user, Collector $collector): Collector
     {
+        abort_if($user->hasAnyRole(['collector','Collector']), 403, 'Collectors cannot manage collector profiles.');
         return DB::transaction(function () use ($user, $collector) {
             $collector->update(['status' => 'Inactive', 'deleted_by' => $user->id]);
             $collector->delete();
@@ -150,6 +154,7 @@ class CollectorService
      */
     public function restore(User $user, Collector $collector): Collector
     {
+        abort_if($user->hasAnyRole(['collector','Collector']), 403, 'Collectors cannot manage collector profiles.');
         return DB::transaction(function () use ($user, $collector) {
             $collector->restore();
             $collector->update(['updated_by' => $user->id]);

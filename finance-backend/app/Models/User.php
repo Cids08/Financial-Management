@@ -128,6 +128,8 @@ class User extends Authenticatable
             return true;
         }
 
+        if ($permissionName === 'collectors.manage' && $this->hasAnyRole(['collector', 'Collector'])) return false;
+
         // Financial authorization stays with Admin/Super Admin even if
         // another role accidentally receives an approval permission.
         if (in_array($permissionName, self::ADMIN_APPROVAL_PERMISSIONS, true)) {

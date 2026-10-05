@@ -1,3 +1,5 @@
+import DetailRow from '../components/DetailRow'
+import AssignCollectorModal from '../components/AssignCollectorModal'
 import RowActions from '../components/RowActions'
 import DocumentAction from '../components/DocumentAction'
 import KpiValue from '../components/KpiValue'
@@ -134,29 +136,24 @@ const MAX_DUE_DATE = addDaysISO(365 * 10)
  */
 function useLookup(path) {
   const [options, setOptions] = useState([])
-
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [retry, setRetry] = useState(0)
   useEffect(() => {
     let cancelled = false
-    apiFetch(path)
-      .then((res) => res.json())
-      .then((json) => { if (!cancelled && json.success) setOptions(json.data) })
-      .catch(() => {})
+    setLoading(true); setError('')
+    apiFetch(path).then(async res => { const json = await res.json(); if (!res.ok || !json.success) throw Error(json.message || 'Could not load options.'); return json.data })
+      .then(data => { if (!cancelled) setOptions(data || []) })
+      .catch(e => { if (!cancelled) setError(e.message) })
+      .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [path])
-
-  return options
+  }, [path, retry])
+  return Object.assign([...options], { loading, error, reload: () => setRetry(n => n + 1) })
 }
 
 // Read-only "detail row" used inside the record info panel  -  keeps every DB
 // column visible somewhere in the UI even when it isn't part of the editable form.
-function DetailRow({ label, value }) {
-  return (
-    <div className="flex items-center justify-between gap-3 py-1.5">
-      <span className="text-xs text-muted">{label}</span>
-      <span className="text-xs font-medium text-ink text-right">{value ?? '—'}</span>
-    </div>
-  )
-}
+
 
 // Upload + scan panel shown at the top of the Add/Edit form. Owns its own
 // image/drag-state; calls onScanned(fields) once the "scan" resolves so the
@@ -342,6 +339,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
   // strictly to Admin and Super Admin roles. Non-admin users (Staff, Collectors) cannot archive.
   const isAdmin = profile?.role === 'Admin' || profile?.role === 'Super Admin' || profile?.role_slug === 'admin' || profile?.role_slug === 'super-admin'
   const canManage = hasPermission('ar.manage')
+  const [assignmentTarget, setAssignmentTarget] = useState(null)
   const customers = useLookup('/api/customers')
   const users = useLookup('/api/users')
   const collectors = useLookup('/api/collectors?archived=0&per_page=200')
@@ -857,6 +855,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
                   </td>
                   <td className="px-2 py-3 text-right min-w-0">
                     <RowActions>
+                      {canManage && !r.is_archived && !['Paid', 'Cancelled'].includes(r.status) && Number(r.balance) > 0 && <Button size="sm" variant={r.collector_id ? 'secondary' : 'primary'} onClick={() => setAssignmentTarget(r)}>{r.collector_id ? 'Reassign Collector' : 'Assign Collector'}</Button>}
                       {/* Active rows keep the full working set. Only ARCHIVED
                           rows get trimmed to Info + Restore + countdown + purge,
                           because that's where the wide countdown badge used to
@@ -1361,6 +1360,7 @@ export default function AccountsReceivable({ title = 'Accounts Receivable', crum
         )}
       </Modal>
 
+      <AssignCollectorModal record={assignmentTarget} collectors={collectors} onClose={() => setAssignmentTarget(null)} onSaved={fetchRecords} />
       <AccountsReceivableDocumentModal
         open={Boolean(documentTarget)}
         onClose={() => setDocumentTarget(null)}

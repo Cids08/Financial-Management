@@ -1,3 +1,5 @@
+import CollectorInvoicesModal from '../components/CollectorInvoicesModal'
+import { usePermissions } from '../context/PermissionsContext'
 import KpiValue from '../components/KpiValue'
 import ModalLoading from '../components/ModalLoading'
 import { TableSkeleton } from '../components/LoadingSkeleton'
@@ -317,6 +319,10 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
   const [form, setForm] = useState(EMPTY_FORM)
   const [formError, setFormError] = useState('')
   const [targetErrors, setTargetErrors] = useState({ monthly_target: '', commission_rate: '' })
+  const { hasPermission } = usePermissions()
+  const isCollector = profile?.role_slug === 'collector' || profile?.role?.toLowerCase() === 'collector'
+  const canManage = !isCollector && hasPermission('collectors.manage')
+  const [invoiceTarget, setInvoiceTarget] = useState(null)
   const [efficiencyTarget, setEfficiencyTarget] = useState(null)
   const [newCredentials, setNewCredentials] = useState(null)
   const [copied, setCopied] = useState(false)
@@ -434,17 +440,17 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-ink">{title}</h1>
-          <p className="mt-1 text-xs text-muted">Manage field collectors, assigned areas, and monthly targets.</p>
+          <h1 className="text-xl font-bold tracking-tight text-ink">{isCollector ? 'My Collector Profile' : title}</h1>
+          <p className="mt-1 text-xs text-muted">{isCollector ? 'View your assigned invoices, area, target, and collection performance.' : 'Manage field collectors, assigned areas, and monthly targets.'}</p>
         </div>
-        <Button variant="primary" size="sm" icon={Plus} onClick={openAdd}>Add Collector</Button>
+        {canManage && <Button variant="primary" size="sm" icon={Plus} onClick={openAdd}>Add Collector</Button>}
       </div>
 
       {error && (
         <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{error}</div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {!isCollector && <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {statCards.map((card) => {
           const Icon = card.icon
           return (
@@ -466,9 +472,9 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
             </button>
           )
         })}
-      </div>
+      </div>}
 
-      <div className={`${PANEL} ${PANEL_PAD}`}>
+      {!isCollector && <div className={`${PANEL} ${PANEL_PAD}`}>
         <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end flex-wrap">
           <div className="relative flex-1 min-w-0">
             <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Search</label>
@@ -490,7 +496,7 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
             </div>
           </div>
         </div>
-      </div>
+      </div>}
 
       <div className={PANEL}>
         <div className="overflow-hidden rounded-t-xl">
@@ -565,7 +571,8 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
                       </span>
                     </td>
                     <td className="px-4 py-3.5 text-right">
-                      <div className="flex items-center justify-end gap-1">
+                      <div className="flex flex-wrap items-center justify-end gap-1">
+                        {hasPermission('ar.view') && !showArchived && <Button size="sm" variant="secondary" onClick={() => setInvoiceTarget(c)}>Assigned Invoices</Button>}
                         {!showArchived && (
                         <Tooltip2 label="View efficiency" align="start">
                           <button type="button" onClick={() => setEfficiencyTarget(c)} aria-label="View efficiency" className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
@@ -573,8 +580,8 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
                           </button>
                         </Tooltip2>
                         )}
-                        {!showArchived && (
-                        <Tooltip2 label="Edit collector" align="start">
+                        {canManage && !showArchived && (
+                          <Tooltip2 label="Edit collector" align="start">
                           <button type="button" onClick={() => openEdit(c)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-bg hover:text-ink transition-colors duration-150">
                             <Pencil size={15} />
                           </button>
@@ -610,13 +617,13 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
                 )
               })}
               {!loading && collectors.length === 0 && (
-                <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">No collectors match your filters.</td></tr>
+                <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">{isCollector ? 'No collector profile is linked to your account. Contact your administrator.' : 'No collectors match your filters.'}</td></tr>
               )}
             </tbody>
           </ResponsiveTable>
         </div>
 
-        <Pagination page={page} totalPages={meta.last_page} onPageChange={setPage} total={meta.total} label="collectors" bordered />
+        {!isCollector && <Pagination page={page} totalPages={meta.last_page} onPageChange={setPage} total={meta.total} label="collectors" bordered />}
       </div>
 
       <Modal
@@ -813,6 +820,7 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
         </div>
       </Modal>
 
+      <CollectorInvoicesModal collector={invoiceTarget} onClose={() => setInvoiceTarget(null)} />
       <EfficiencyModal collector={efficiencyTarget} onClose={() => setEfficiencyTarget(null)} getEfficiency={getEfficiency} />
     </div>
   )

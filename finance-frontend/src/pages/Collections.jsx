@@ -1,3 +1,7 @@
+import PendingDepositNotice from '../components/PendingDepositNotice'
+import DetailRow from '../components/DetailRow'
+import DepositBatchesModal from '../components/DepositBatchesModal'
+import RecordDepositModal from '../components/RecordDepositModal'
 import RowActions from '../components/RowActions'
 import DocumentAction from '../components/DocumentAction'
 import KpiValue from '../components/KpiValue'
@@ -30,17 +34,22 @@ import { usePrivacy } from '../context/PrivacyContext'
 import { usePermissions } from '../context/PermissionsContext'
 import { compressImageToUploadable, cannotFitHostLimit } from '../utils/fileUpload'
 
-const STATUS_OPTIONS = ['Awaiting Collection', 'Pending', 'Confirmed', 'Cancelled']
+const collectionStage = c => c.collection_stage || (c.status === 'Pending' ? (c.deposit_date ? 'Deposited' : 'Collected') : c.status)
+const STATUS_OPTIONS = ['Awaiting Collection', 'Collected', 'Deposited', 'Confirmed', 'Cancelled']
 const PAGE_SIZE = 10
 
 const STATUS_LABELS = {
+  Collected: 'Collected - not deposited',
+  Deposited: 'Deposited - awaiting confirmation',
   'Awaiting Collection': 'Awaiting Collection',
-  Pending:               'Awaiting Confirmation',
+  Pending:               'Unconfirmed receipts',
   Confirmed:             'Confirmed',
   Cancelled:             'Cancelled',
 }
 
 const STATUS_STYLES = {
+  Collected: 'bg-status-warning-bg text-status-warning',
+  Deposited: 'bg-primary/10 text-primary-dark',
   Pending:                 'bg-status-warning-bg text-status-warning',
   'Awaiting Confirmation': 'bg-status-warning-bg text-status-warning',
   Confirmed:               'bg-status-success-bg text-status-success',
@@ -97,14 +106,7 @@ function formatDateTime(value) {
   return new Date(value).toLocaleString('en-PH', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-function DetailRow({ label, value }) {
-  return (
-    <div className="flex items-center justify-between gap-3 py-1.5">
-      <span className="text-xs text-muted">{label}</span>
-      <span className="text-xs font-medium text-ink text-right">{value ?? '—'}</span>
-    </div>
-  )
-}
+
 
 // ---------------------------------------------------------------------------
 // Lookup hook
@@ -353,6 +355,10 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
     }
   }
   const [detailRecord, setDetailRecord] = useState(null)
+  const [batchRevision, setBatchRevision] = useState(0)
+  const [batchOpen, setBatchOpen] = useState(false)
+  const [depositTarget, setDepositTarget] = useState(null)
+  const [checkCleared, setCheckCleared] = useState(false)
   const [confirmTarget,setConfirmTarget]= useState(null)
   const [cancelTarget, setCancelTarget] = useState(null)
   const [cancelRemarks,setCancelRemarks]= useState('')
@@ -365,7 +371,9 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
   const [auditLogsError,   setAuditLogsError]   = useState(null)
 
   const filtered = useMemo(() => collections.filter((c) => {
-    if (statusFilter !== 'all' && c.status !== statusFilter) return false
+    if (statusFilter === 'In deposit batch') {
+      if (c.status !== 'Pending' || !c.deposit_batch_id) return false
+    } else if (statusFilter !== 'all' && (['Collected','Deposited'].includes(statusFilter) ? collectionStage(c) !== statusFilter : c.status !== statusFilter)) return false
     if (collectorFilter !== 'all' && String(c.collector_id) !== String(collectorFilter)) return false
     const info = arInfo(c.ar_id)
     const q    = search.toLowerCase()
@@ -612,7 +620,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
       .finally(() => setAuditLogsLoading(false))
   }
   const closeDetail = () => { setDetailRecord(null); setAuditLogs([]); setAuditLogsError(null) }
-  const openConfirm = (c) => { setConfirmTarget(c); setActionError('') }
+  const openConfirm = (c) => { setCheckCleared(false); setConfirmTarget(c); setActionError('') }
   const closeConfirm = () => { setConfirmTarget(null); setActionError('') }
   const openCancel  = (c) => { setCancelTarget(c); setCancelRemarks(''); setActionError('') }
   const closeCancel = () => { setCancelTarget(null); setCancelRemarks(''); setActionError('') }
@@ -792,11 +800,11 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
   // Confirm / cancel
   // -------------------------------------------------------------------------
   const handleConfirm = async () => {
-    if (!confirmTarget) return
+    if (!confirmTarget || actioning || !confirmTarget.deposit_date || !confirmTarget.has_proof || (confirmTarget.payment_method === 'Check' && !checkCleared)) return
     setActioning(true)
     setActionError('')
     try {
-      const res  = await apiFetch(`/api/collections/${confirmTarget.id}/confirm`, { method: 'PATCH' })
+      const res  = await apiFetch(`/api/collections/${confirmTarget.id}/confirm`, { method: 'PATCH', body: JSON.stringify({check_cleared:checkCleared}) })
       const json = await res.json()
       if (!json.success) throw new Error(Object.values(json.errors ?? {})[0]?.[0] || json.message || 'Failed to confirm.')
       closeConfirm()
@@ -853,7 +861,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
     { key: 'total',     label: 'All Records',          value: stats.total + stats.awaiting,                  icon: HandCoins, iconBg: 'bg-primary/15',                        iconColor: 'text-primary-dark',                          isActive: statusFilter === 'all'                 && !trashed, onClick: () => { setStatusFilter('all');                 setTrashed(false); setOverdueOnly(false) } },
     { key: 'awaiting',  label: 'Awaiting Collection',  value: stats.awaiting,                             icon: Users,     iconBg: 'bg-violet-50 dark:bg-violet-500/10',     iconColor: 'text-violet-600 dark:text-violet-400',     isActive: statusFilter === 'Awaiting Collection' && !trashed, onClick: () => { setStatusFilter('Awaiting Collection'); setTrashed(false); setOverdueOnly(false) } },
     { key: 'collected', label: 'Confirmed Amount',     value: formatCurrency(stats.collected),              icon: Wallet,    iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: statusFilter === 'Confirmed'            && !trashed, onClick: () => { setStatusFilter('Confirmed');           setTrashed(false); setOverdueOnly(false) } },
-    { key: 'pending',   label: 'Awaiting Confirmation', value: stats.pending,                             icon: Clock3,    iconBg: 'bg-amber-50 dark:bg-amber-500/10',     iconColor: 'text-amber-600 dark:text-amber-400',     isActive: statusFilter === 'Pending'             && !trashed, onClick: () => { setStatusFilter('Pending');             setTrashed(false); setOverdueOnly(false) } },
+    { key: 'pending',   label: 'Unconfirmed Receipts', value: stats.pending,                             icon: Clock3,    iconBg: 'bg-amber-50 dark:bg-amber-500/10',     iconColor: 'text-amber-600 dark:text-amber-400',     isActive: statusFilter === 'Pending'             && !trashed, onClick: () => { setStatusFilter('Pending');             setTrashed(false); setOverdueOnly(false) } },
     { key: 'archived',  label: 'Archived',             value: '—',                                        icon: Archive,   iconBg: 'bg-slate-100 dark:bg-slate-800',       iconColor: 'text-slate-500 dark:text-slate-400',     isActive: trashed,                                            onClick: () => { setTrashed(true);                   setStatusFilter('all'); setOverdueOnly(false) } },
   ]
 
@@ -869,13 +877,16 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
           <h1 className="text-xl font-bold tracking-tight text-ink">{title}</h1>
           <p className="mt-1 text-xs text-muted">Customer collections automatically synced from assigned accounts receivable invoices.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {!isCollectorUser && (hasPermission('collections.manage') || canConfirm) && <Button onClick={() => setBatchOpen(true)}>Deposit Batches</Button>}
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border border-border bg-surface text-muted shadow-sm">
             <span className="h-2 w-2 rounded-full bg-status-success animate-pulse" />
             Live Synced
           </span>
         </div>
       </div>
+
+      {isAdmin && canConfirm && <PendingDepositNotice revision={batchRevision} onReview={() => setBatchOpen(true)} />}
 
       {lookupErrors.length > 0 && (
         <div className="rounded-lg border border-status-warning-border bg-status-warning-bg px-3 py-2 text-xs text-status-warning">
@@ -937,15 +948,21 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
               )}
             </div>
           </div>
-          <div className="w-full sm:w-48 shrink-0">
-            <label className="mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Status</label>
-            <select
+          <div className="w-full sm:w-64 shrink-0">
+            <label htmlFor="collection-status-filter" className="mb-2 block text-[10.5px] font-semibold uppercase tracking-wide text-muted">Status</label>
+            <select id="collection-status-filter"
               value={statusFilter}
               onChange={(e) => { setOverdueOnly(false); setStatusFilter(e.target.value) }}
               className={INPUT}
             >
               <option value="all">All Statuses</option>
-              {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{STATUS_LABELS[s] || s}</option>)}
+              <optgroup label="Collection stages">
+                {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{STATUS_LABELS[s] || s}</option>)}
+              </optgroup>
+              <optgroup label="Quick filters">
+                <option value="Pending">All unconfirmed receipts</option>
+                <option value="In deposit batch">In deposit batch</option>
+              </optgroup>
             </select>
           </div>
           {!isCollectorUser && (
@@ -1119,13 +1136,14 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                     <td className="px-4 py-3.5 whitespace-nowrap text-ink">{c.collector_name || collectorName(c.collector_id)}</td>
                     <td className="px-4 py-3.5 whitespace-nowrap font-medium tabular-nums text-ink">{formatCurrency(c.amount_received)}</td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[c.status] ?? 'bg-slate-100 text-slate-600'}`}>
-                        {STATUS_LABELS[c.status] || c.status}
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[collectionStage(c)] ?? 'bg-slate-100 text-slate-600'}`}>
+                        {c.deposit_batch_id && c.status === 'Pending' ? 'In deposit batch' : STATUS_LABELS[collectionStage(c)] || collectionStage(c)}
                       </span>
                     </td>
                     <td className="px-4 py-3.5 text-right">
                       <RowActions>
-                        {c.status === 'Pending' && canConfirm && (
+                        {c.status === 'Pending' && !c.deposit_batch_id && !c.deposit_date && hasPermission('collections.manage') && !c.deleted_at && <Button size="sm" onClick={() => setDepositTarget(c)}>Record Deposit</Button>}
+                        {c.status === 'Pending' && !c.deposit_batch_id && !!c.deposit_date && canConfirm && (
                           <div className="flex items-center gap-1 mr-1 pr-1 border-r border-border shrink-0">
                             {profile?.id && c.created_by && Number(c.created_by) === Number(profile.id) ? (
                               <Tooltip label="Separation of duties: You cannot confirm a collection you recorded yourself.">
@@ -1217,7 +1235,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
       </div>
 
       {/* Add / Edit modal */}
-      <Modal open={isModalOpen} onClose={closeModal} title={isEditing ? 'Edit Collection' : 'Add Collection'}
+      <Modal open={isModalOpen} onClose={closeModal} title={isEditing ? 'Edit Collection' : 'Add Collection'} size="lg"
         footer={
           <>
             <Button variant="secondary" size="md" onClick={closeModal} disabled={submitting}>Cancel</Button>
@@ -1232,7 +1250,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
             <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{formError}</div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Invoice  -  uses _key (= ar_id) as option value */}
             <div>
               <label className={LABEL}>Invoice <span className="text-status-danger">*</span></label>
@@ -1294,16 +1312,18 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className={LABEL}>Receipt Number <span className="text-status-danger">*</span></label>
+              <label className={LABEL}>Booklet / Issued Receipt Number <span className="text-status-danger">*</span></label>
               <input
                 type="text"
                 value={form.receipt_number}
+                readOnly={modalMode !== 'add'}
                 onChange={(e) => { setForm((f) => ({ ...f, receipt_number: e.target.value })); setFieldErrors((fe) => ({ ...fe, receipt_number: '' })) }}
                 className={`${INPUT} ${fieldErrors.receipt_number ? 'border-status-danger-border' : ''}`}
                 placeholder="OR-10021"
               />
+              <p className="mt-1 text-xs text-muted">Use the exact pre-numbered receipt given to the customer. Do not generate a second number. Saved receipt numbers cannot be replaced.</p>
               {fieldErrors.receipt_number && <p className="mt-1 text-xs text-status-danger">{fieldErrors.receipt_number}</p>}
             </div>
             <div>
@@ -1321,7 +1341,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               {(() => {
                 const currentAr = arInfo(form.ar_id)
@@ -1388,7 +1408,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Cash account  -  uses _key (= id) as option value */}
             <div>
               <label className={LABEL}>Deposit To (Cash Account) <span className="text-status-danger">*</span></label>
@@ -1589,7 +1609,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                 <p className="text-sm font-semibold text-ink">{detailRecord.receipt_number}</p>
                 <p className="text-xs text-muted">{arInfo(detailRecord.ar_id)?.customer_name}</p>
               </div>
-              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[detailRecord.status] ?? 'bg-slate-100 text-slate-600'}`}>{STATUS_LABELS[detailRecord.status] || detailRecord.status}</span>
+              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[collectionStage(detailRecord)] ?? 'bg-slate-100 text-slate-600'}`}>{STATUS_LABELS[collectionStage(detailRecord)] || collectionStage(detailRecord)}</span>
             </div>
 
             {/* Proof of Receipt preview banner in details */}
@@ -1622,6 +1642,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                 <DetailRow label="Invoice"         value={detailRecord.invoice_number || arInfo(detailRecord.ar_id)?.invoice_number} />
                 <DetailRow label="Collector"       value={detailRecord.collector_name || collectorName(detailRecord.collector_id)} />
                 <DetailRow label="Collection Date" value={formatDate(detailRecord.collection_date)} />
+                <DetailRow label="Deposit Date" value={detailRecord.deposit_date ? formatDate(detailRecord.deposit_date) : 'Not deposited'} />
               </div>
               <div className="px-3 py-2">
                 <DetailRow label="Amount Received" value={formatCurrency(detailRecord.amount_received)} />
@@ -1686,6 +1707,8 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
         )}
       </Modal>
 
+      <DepositBatchesModal open={batchOpen} onClose={() => setBatchOpen(false)} onChanged={() => { refetch(); setBatchRevision(n => n + 1) }} cashAccounts={cashAccounts} canManage={hasPermission('collections.manage')} canConfirm={canConfirm} userId={profile?.id} />
+      <RecordDepositModal record={depositTarget} onClose={() => setDepositTarget(null)} onSaved={refetch} onDocuments={record => {setDepositTarget(null);setProofTarget(record)}} />
       {/* Confirm modal */}
       <Modal open={!!confirmTarget} onClose={closeConfirm} title="Confirm Collection"
         footer={
@@ -1707,7 +1730,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
               size="md"
               icon={CheckCircle2}
               onClick={handleConfirm}
-              disabled={actioning || (confirmTarget && !confirmTarget.has_proof)}
+              disabled={actioning || !confirmTarget?.has_proof || !confirmTarget?.deposit_date || (confirmTarget?.payment_method === 'Check' && !checkCleared)}
               loading={actioning}
               title={confirmTarget && !confirmTarget.has_proof ? 'Upload proof before confirming' : ''}
             >
@@ -1748,6 +1771,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                 <DetailRow label="Invoice"         value={confirmTarget.invoice_number || arInfo(confirmTarget.ar_id)?.invoice_number} />
                 <DetailRow label="Collector"       value={confirmTarget.collector_name || collectorName(confirmTarget.collector_id)} />
                 <DetailRow label="Collection Date" value={formatDate(confirmTarget.collection_date)} />
+                <DetailRow label="Deposit Date" value={confirmTarget.deposit_date ? formatDate(confirmTarget.deposit_date) : 'Not recorded'} />
               </div>
               <div className="px-3 py-2">
                 <DetailRow label="Amount Received" value={formatCurrency(confirmTarget.amount_received)} />
@@ -1755,6 +1779,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                 <DetailRow label="Deposit To"      value={confirmTarget.cash_account_name || accountName(confirmTarget.cash_account_id)} />
               </div>
             </div>
+            {confirmTarget?.payment_method === 'Check' && <label className="flex gap-2 text-sm text-ink"><input type="checkbox" checked={checkCleared} disabled={actioning} onChange={e=>setCheckCleared(e.target.checked)} />I verified with the bank that this check has cleared.</label>}
             {actionError && (
               <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{actionError}</div>
             )}
@@ -1809,7 +1834,11 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
         onClose={() => setProofTarget(null)}
         collection={proofTarget}
         canManage={hasPermission('collections.manage')}
-        onUploaded={refetch}
+        onUploaded={() => {
+          refetch()
+          setConfirmTarget(current => current?.id === proofTarget?.id ? {...current, has_proof: true} : current)
+          setDetailRecord(current => current?.id === proofTarget?.id ? {...current, has_proof: true} : current)
+        }}
       />
     </div>
   )
