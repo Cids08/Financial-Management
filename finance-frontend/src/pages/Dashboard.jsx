@@ -1,4 +1,5 @@
 import { PageSkeleton, ContentSkeleton } from '../components/LoadingSkeleton'
+import AiLogo from '../components/AiLogo'
 import { protectedDashboardPdf } from '../utils/secureExport'
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -895,7 +896,7 @@ export default function Dashboard() {
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/20 text-primary-dark">
-              <Sparkles size={18} />
+              <AiLogo size={20} />
             </div>
             <div>
               <h2 className="text-base font-bold text-ink">AI Insights</h2>

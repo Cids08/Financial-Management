@@ -11,11 +11,11 @@ import {
   Loader2,
   Paperclip,
   Receipt,
+  Sparkles,
   X,
 } from 'lucide-react'
 import { formatCurrency } from '../utils/formatters'
 import { usePrivacy } from '../context/PrivacyContext'
-import AiLogo from './AiLogo'
 import Button from './Button'
 
 // ---------------------------------------------------------------------------
@@ -309,7 +309,7 @@ export default function BatchApproveExpensesModal({
         <div className="modal-header min-w-0 flex-wrap gap-3 shrink-0 flex items-center justify-between px-6 py-4 border-b border-border bg-gradient-to-r from-primary/10 via-primary/5 to-transparent">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-primary/20 text-primary-dark dark:text-primary rounded-xl">
-              <AiLogo size={22} />
+              <Sparkles className="w-5 h-5" />
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-bold text-ink">Expense Batch Approval Wizard</h2>
@@ -789,7 +789,7 @@ export default function BatchApproveExpensesModal({
               disabled={executing || hasOverdraft || hasOverBudget}
               onClick={handleExecute}
             >
-              {executing ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin inline" /> : <AiLogo size={16} className="mr-1.5" />}
+              {executing ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin inline" /> : <Sparkles className="w-4 h-4 mr-1.5 inline" />}
               {executing ? 'Processing…' : `Approve ${selectedCount} Expense${selectedCount !== 1 ? 's' : ''} · ${formatCurrency(selectedTotal)}`}
             </Button>
           )}

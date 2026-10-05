@@ -17,10 +17,10 @@ import {
   Layers,
   Receipt,
   Search,
+  Sparkles,
   UploadCloud,
   X,
 } from 'lucide-react'
-import AiLogo from './AiLogo'
 import Modal from './Modal'
 import Button from './Button'
 import { apiFetch } from '../utils/api'
@@ -628,7 +628,7 @@ export default function BatchPayTaxWizardModal({
                     onClick={handleGenerateRef}
                     className="inline-flex items-center gap-1 text-[11px] text-primary-dark dark:text-primary hover:underline"
                   >
-                    <AiLogo size={13} /> Auto-generate
+                    <Sparkles size={11} /> Auto-generate
                   </button>
                 </div>
                 <input
