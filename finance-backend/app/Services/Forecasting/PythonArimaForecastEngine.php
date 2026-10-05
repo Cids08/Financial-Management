@@ -72,17 +72,20 @@ class PythonArimaForecastEngine implements ForecastEngine
 
         $historicalData = $this->historicalActualsFor($forecastType);
 
+        // Measured service latency after the threading and statsmodels pin
+        // fixes is 5.8-7.7s for a 60-point series over a 12-period horizon,
+        // which sits far too close to the old 8s budget: requests that
+        // crossed it silently degraded to the linear-trend fallback while the
+        // UI still implied ARIMA. The budget now clears the observed worst
+        // case with headroom, while ResilientForecastEngine still bounds a
+        // genuinely hung service. connectTimeout stays short so a blackholed
+        // host fails on the TCP handshake instead of consuming this budget.
+        $startedAt = microtime(true);
+
         try {
             $response = Http::baseUrl($this->baseUrl)
-                // Kept deliberately short: ResilientForecastEngine falls back
-                // to SimpleForecastEngine when this expires, so a hung Python
-                // service costs a few seconds of latency instead of the old
-                // 30s stall (which held the Generate button spinning long
-                // enough to look like a frozen page). connectTimeout is even
-                // shorter so a blackholed host fails fast on the TCP handshake
-                // rather than consuming the whole budget.
                 ->connectTimeout(3)
-                ->timeout(8)
+                ->timeout(15)
                 ->post('/forecast/arima', [
                     'forecast_target' => $forecastType,
                     'forecast_period' => $horizon['months'],
@@ -101,6 +104,7 @@ class PythonArimaForecastEngine implements ForecastEngine
                 'forecast_type' => $forecastType,
                 'horizon_key' => $horizonKey,
                 'base_url' => $this->baseUrl,
+                'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
                 'error' => $e->getMessage(),
             ]);
             throw new RuntimeException(
@@ -113,6 +117,7 @@ class PythonArimaForecastEngine implements ForecastEngine
                 'forecast_type' => $forecastType,
                 'horizon_key' => $horizonKey,
                 'status' => $response->status(),
+                'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
                 'body' => $response->body(),
             ]);
             throw new RuntimeException(
@@ -121,6 +126,13 @@ class PythonArimaForecastEngine implements ForecastEngine
         }
 
         $body = $response->json();
+
+        Log::info('ARIMA service responded', [
+            'forecast_type' => $forecastType,
+            'horizon_key' => $horizonKey,
+            'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+            'observations' => count($historicalData),
+        ]);
 
         $this->lastResponse = $body;
         $this->lastForecastType = $forecastType;
