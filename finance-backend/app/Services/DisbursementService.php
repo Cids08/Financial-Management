@@ -195,7 +195,7 @@ class DisbursementService
             });
         }
 
-        return $query
+        $records = $query
             ->orderByRaw("
                 CASE 
                     WHEN status = 'Pending' THEN 1
@@ -207,6 +207,33 @@ class DisbursementService
             ->orderByDesc('created_at')
             ->orderByDesc('id')
             ->paginate($perPage);
+
+        // Page-wide eager load of the Active budget(s) for every payroll
+        // department on this page, instead of DisbursementResource firing
+        // one budget query per payroll row (has_active_budget + active_budget
+        // used to be 2-3 N+1 queries per row). Payroll rows all land the
+        // same department_id, so this is ~1 query per page, not per row.
+        $payrollDeptIds = collect($records->items())
+            ->filter(fn ($d) => $d->source_type === 'payroll' && $d->department_id)
+            ->pluck('department_id')
+            ->unique()
+            ->values();
+
+        if ($payrollDeptIds->isNotEmpty()) {
+            $activeBudgets = Budget::whereIn('department_id', $payrollDeptIds)
+                ->where('status', 'Active')
+                ->orderBy('start_date')
+                ->get()
+                ->groupBy('department_id');
+
+            foreach ($records as $d) {
+                if ($d->source_type === 'payroll' && $d->department_id) {
+                    $d->setRelation('activeBudgets', $activeBudgets->get($d->department_id, collect()));
+                }
+            }
+        }
+
+        return $records;
     }
 
     /**

@@ -49,7 +49,8 @@ class AccountsReceivableService
             ->where('status', '!=', 'Overdue')
             ->update(['status' => 'Overdue']);
 
-        $query = AccountsReceivable::query()->with(['customer', 'collector']);
+        $query = AccountsReceivable::query()->with(['customer', 'collector'])
+            ->withCount(['supportingDocuments as supporting_documents_count']);
 
         // Soft-deleted rows are excluded by default via SoftDeletes' global
         // scope. is_archived is a separate flag — only filter on it when the

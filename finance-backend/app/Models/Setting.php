@@ -16,6 +16,17 @@ class Setting extends Model
 {
     protected $table = 'settings';
 
+    /**
+     * Request-scoped cache of the single settings row. Settings are read on
+     * nearly every request (retention middleware, currency/formats, AR
+     * control account) and sometimes per-row inside resources
+     * (ChartOfAccount::arControlId), so an uncached current() was costing a
+     * `SELECT * FROM settings` per call — N+1 on list endpoints. The saved/
+     * deleted model hooks below invalidate it, so a long-lived process
+     * (octane/queue/scheduler) still reflects updates.
+     */
+    protected static ?self $cachedCurrent = null;
+
     protected $fillable = [
         'company_name',
         'tagline',
@@ -59,9 +70,13 @@ class Setting extends Model
      */
     public static function current(): self
     {
+        if (static::$cachedCurrent !== null) {
+            return static::$cachedCurrent;
+        }
+
         $existing = static::query()->orderBy('id')->first();
         if ($existing) {
-            return $existing;
+            return static::$cachedCurrent = $existing;
         }
 
         $payload = [
@@ -89,8 +104,22 @@ class Setting extends Model
         // not yet applied) still succeeds instead of throwing SQLSTATE[42703].
         $columns = Schema::getColumnListing('settings');
 
-        return static::query()->create(
+        return static::$cachedCurrent = static::query()->create(
             array_intersect_key($payload, array_flip($columns))
         );
+    }
+
+    protected static function booted(): void
+    {
+        // Keep the per-process cache honest: any write to the settings row
+        // (including the first-ever create above) clears it so a long-lived
+        // process still sees the latest values on the next current().
+        static::saved(function (): void {
+            static::$cachedCurrent = null;
+        });
+
+        static::deleted(function (): void {
+            static::$cachedCurrent = null;
+        });
     }
 }

@@ -32,7 +32,7 @@ class BudgetResource extends JsonResource
             'remarks' => $this->remarks,
             'has_plan' => $this->has_plan,
             'plan_file_name' => $this->has_plan
-                ? $this->supportingDocuments()->latest('uploaded_at')->value('original_name')
+                ? ($this->supportingDocuments->first()?->original_name ?? null)
                 : null,
             'created_by' => $this->created_by,
             'created_by_name' => $this->whenLoaded('creator', fn () => $this->creator ? ($this->creator->fullName() ?: $this->creator->email) : null),

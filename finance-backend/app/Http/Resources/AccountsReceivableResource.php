@@ -38,7 +38,12 @@ class AccountsReceivableResource extends JsonResource
             'remarks' => $this->remarks,
             'status' => $this->status,
             'created_by' => $this->created_by,
-            'has_attachment' => (bool) $this->supportingDocuments()->exists(),
+            // Prefer the eager-loaded withCount() value (list/aging/SOA paths)
+            // so the index doesn't run one supporting-documents query per row;
+            // fall back to a live exists() for single-record loads.
+            'has_attachment' => $this->supporting_documents_count !== null
+                ? $this->supporting_documents_count > 0
+                : (bool) $this->supportingDocuments()->exists(),
             'is_archived' => (bool) $this->is_archived,
             'archived_at' => $this->archived_at?->toIso8601String(),
             'deleted_at' => $this->archived_at?->toIso8601String(),

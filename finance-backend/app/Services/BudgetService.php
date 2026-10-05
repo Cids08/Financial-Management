@@ -38,7 +38,10 @@ class BudgetService
     {
         $query = Budget::query()
             ->with(['department', 'creator', 'approver', 'accountAllocations.account'])
-            ->withCount(['supportingDocuments as supporting_documents_count']);
+            ->withCount(['supportingDocuments as supporting_documents_count'])
+            // Eager-load the latest plan document per budget so
+            // BudgetResource::plan_file_name doesn't query per row.
+            ->with(['supportingDocuments' => fn ($q) => $q->latest('uploaded_at')]);
 
         if (! empty($filters['status'])) {
             $query->where('status', $filters['status']);

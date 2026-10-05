@@ -21,18 +21,14 @@ class DisbursementResource extends JsonResource
             'cash_account_balance' => $this->whenLoaded('cashAccount', fn () => $this->cashAccount ? (float) $this->cashAccount->current_balance : null),
             'is_insufficient_funds' => $this->whenLoaded('cashAccount', fn () => $this->status !== 'Released' && $this->cashAccount ? ((float) $this->amount_paid > (float) $this->cashAccount->current_balance) : false),
             'has_active_budget' => $this->source_type === 'payroll'
-                ? ($this->department_id ? \App\Models\Budget::where('department_id', $this->department_id)->where('status', 'Active')->exists() : false)
+                ? ($this->department_id ? $this->activeBudgetCandidates()->isNotEmpty() : false)
                 : true,
             'active_budget' => $this->when($this->source_type === 'payroll' && $this->department_id, function () {
                 $paymentDateStr = $this->payment_date?->toDateString() ?? now()->toDateString();
-                $budget = \App\Models\Budget::where('department_id', $this->department_id)
-                    ->where('status', 'Active')
-                    ->where('start_date', '<=', $paymentDateStr)
-                    ->where('end_date', '>=', $paymentDateStr)
-                    ->first()
-                    ?? \App\Models\Budget::where('department_id', $this->department_id)
-                        ->where('status', 'Active')
-                        ->first();
+                $budgets = $this->activeBudgetCandidates();
+                $budget = $budgets
+                    ->first(fn ($b) => $b->start_date?->toDateString() <= $paymentDateStr && $b->end_date?->toDateString() >= $paymentDateStr)
+                    ?? $budgets->first();
 
                 if (! $budget) {
                     return [
@@ -109,5 +105,25 @@ class DisbursementResource extends JsonResource
             'pay_period_end' => $this->pay_period_end?->toDateString(),
             'employee_count' => $this->employee_count,
         ];
+    }
+
+    /**
+     * The department's Active budgets, resolved WITHOUT a query whenever
+     * DisbursementService::paginate() has eager-loaded them (setRelation
+     * 'activeBudgets', one page-wide query). Falls back to a live query for
+     * single-record loads (detail/show endpoints), so behavior is identical
+     * either way — just no more N+1 on list pages.
+     */
+    protected function activeBudgetCandidates(): \Illuminate\Support\Collection
+    {
+        if ($this->relationLoaded('activeBudgets')) {
+            return $this->activeBudgets;
+        }
+
+        return \App\Models\Budget::query()
+            ->where('department_id', $this->department_id)
+            ->where('status', 'Active')
+            ->orderBy('start_date')
+            ->get();
     }
 }
