@@ -6,7 +6,10 @@ use App\Contracts\ForecastEngine;
 use App\Services\Forecasting\PythonArimaForecastEngine;
 use App\Services\Forecasting\ResilientForecastEngine;
 use App\Services\Forecasting\SimpleForecastEngine;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\TestCase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use RuntimeException;
 
 /**
@@ -32,6 +35,51 @@ class ForecastEngineFallbackTest extends TestCase
         $app = require __DIR__.'/../../bootstrap/app.php';
         $app->make(\Illuminate\Contracts\Console\Kernel::class)->bootstrap();
         return $app;
+    }
+
+    /**
+     * The fallback path reads real training history through HistoricalActuals,
+     * so this test needs its own schema.
+     *
+     * It used to pass only because another test in the same process happened
+     * to create these tables first and the shared in-memory SQLite connection
+     * carried them over. That is order-dependent: running this file on its
+     * own failed with "no such table: expenses". The tables are created here
+     * so the test stands alone regardless of what runs before it.
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        config(['database.default' => 'sqlite', 'database.connections.sqlite.database' => ':memory:']);
+        DB::purge('sqlite');
+
+        // Column shapes mirror what HistoricalActuals actually queries. The
+        // tables stay empty: min()/sum() returning null is the "no history yet"
+        // case, and SimpleForecastEngine still produces a usable linear trend
+        // from it, which is exactly the degradation this test pins down.
+        $shape = [
+            'expenses' => [['expense_date', 'date'], ['amount', 'decimal']],
+            'collections' => [['collection_date', 'date'], ['amount_received', 'decimal']],
+            'disbursements' => [['payment_date', 'date'], ['amount_paid', 'decimal']],
+            'accounts_receivable' => [['invoice_date', 'date'], ['original_amount', 'decimal'], ['paid_amount', 'decimal']],
+        ];
+
+        foreach ($shape as $table => $columns) {
+            if (Schema::hasTable($table)) {
+                continue;
+            }
+
+            Schema::create($table, function (Blueprint $t) use ($columns) {
+                $t->id();
+                $t->string('status')->nullable();
+                $t->boolean('is_archived')->default(false);
+                foreach ($columns as [$name, $type]) {
+                    $type === 'date' ? $t->date($name)->nullable() : $t->decimal($name, 15, 2)->default(0);
+                }
+                $t->softDeletes();
+            });
+        }
     }
 
     public function test_python_engine_when_service_url_is_configured(): void
