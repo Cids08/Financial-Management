@@ -24,10 +24,11 @@ class UpdateCollectionRequest extends FormRequest
             'receipt_number'   => [
                 'sometimes', 'required', 'string', 'max:255',
                 Rule::unique('collections', 'receipt_number')->ignore($collection?->id),
+                Rule::in([$collection?->receipt_number]),
             ],
             'or_number'        => ['nullable', 'string', 'max:255'],
             'collection_date'  => ['sometimes', 'required', 'date', 'before_or_equal:today'],
-            'deposit_date'     => ['nullable', 'date', 'after_or_equal:collection_date'],
+            'deposit_date'     => ['nullable', 'date', 'after_or_equal:' . $this->input('collection_date', $collection?->collection_date?->toDateString()), 'before_or_equal:today'],
             'amount_received'  => ['sometimes', 'required', 'numeric', 'min:' . config('business.min_collection_amount')],
             'payment_method'   => ['sometimes', 'required', 'string', 'max:255'],
             'reference_number' => [

@@ -234,6 +234,7 @@ Route::middleware(['auth:sanctum', 'require.password.change'])->group(function (
     Route::middleware('permission:ar.view')->get('accounts-receivable/aging-summary', [AccountsReceivableController::class, 'agingSummary']);
     Route::middleware('permission:ar.view')->get('accounts-receivable/customer-soa/{customerId}', [AccountsReceivableController::class, 'customerSoa']);
     Route::middleware('permission:ar.view')->get('accounts-receivable/soa-batch', [AccountsReceivableController::class, 'soaBatch']);
+    Route::middleware('permission:ar.manage')->patch('accounts-receivable/{accountsReceivable}/collector', [AccountsReceivableController::class, 'assignCollector']);
     // Wildcard routes follow
     Route::middleware('permission:ar.manage')->put('accounts-receivable/{accountsReceivable}', [AccountsReceivableController::class, 'update']);
     Route::middleware('permission:ar.manage')->post('accounts-receivable/{accountsReceivable}/toggle-archive', [AccountsReceivableController::class, 'toggleArchive']);
@@ -379,6 +380,18 @@ Route::middleware(['auth:sanctum', 'require.password.change'])->group(function (
         Route::get('/{collection}/proof', [CollectionController::class, 'proofHistory'])->middleware('permission:collections.view');
         Route::post('/{collection}/proof', [CollectionController::class, 'attachProof'])->middleware('permission:collections.manage');
         Route::get('/{collection}/proof/{document}/view', [CollectionController::class, 'viewProof'])->middleware('permission:collections.view');
+    });
+
+    Route::prefix('deposit-batches')->group(function () {
+        $controller = \App\Http\Controllers\Api\DepositBatchController::class;
+        Route::get('/', [$controller,'index'])->middleware('permission:collections.view');
+        Route::get('/candidates', [$controller,'candidates'])->middleware('permission:collections.manage');
+        Route::post('/', [$controller,'store'])->middleware('permission:collections.manage');
+        Route::patch('/{depositBatch}/confirm', [$controller,'confirm'])->middleware('permission:collections.confirm');
+        Route::patch('/{depositBatch}/cancel', [$controller,'cancel'])->middleware('permission:collections.manage');
+        Route::get('/{depositBatch}/documents', [$controller,'documents'])->middleware('permission:collections.view');
+        Route::post('/{depositBatch}/documents', [$controller,'upload'])->middleware('permission:collections.manage');
+        Route::get('/{depositBatch}/documents/{document}/view', [$controller,'view'])->middleware('permission:collections.view');
     });
 
     // Reports

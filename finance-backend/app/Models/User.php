@@ -117,10 +117,21 @@ class User extends Authenticatable
      * other role. This makes "Super Admin" actually mean "always allowed"
      * instead of "allowed only if someone remembered to grant it."
      */
+    public const ADMIN_APPROVAL_PERMISSIONS = [
+        'ap.approve', 'expenses.approve', 'budgets.approve',
+        'disbursements.approve', 'collections.confirm',
+    ];
+
     public function hasPermission(string $permissionName): bool
     {
         if ($this->hasAnyRole([self::SUPER_ADMIN_ROLE, 'Super Admin', 'admin', 'Admin'])) {
             return true;
+        }
+
+        // Financial authorization stays with Admin/Super Admin even if
+        // another role accidentally receives an approval permission.
+        if (in_array($permissionName, self::ADMIN_APPROVAL_PERMISSIONS, true)) {
+            return false;
         }
 
         /** @var Role|null $role */

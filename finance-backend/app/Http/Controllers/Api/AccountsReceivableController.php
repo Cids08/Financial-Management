@@ -23,9 +23,11 @@ class AccountsReceivableController extends Controller
 
     public function index(Request $request): JsonResponse
     {
+        $request->validate(['collector_id' => ['nullable', 'integer', 'min:1']]);
         $filters = [
             'status' => $request->query('status'),
             'search' => $request->query('search'),
+            'collector_id' => $request->integer('collector_id') ?: null,
         ];
 
         if ($request->has('archived')) {
@@ -48,6 +50,10 @@ class AccountsReceivableController extends Controller
                 'message' => '',
                 'data' => [],
             ]);
+        }
+
+        if ($ownCollectorId !== null && $request->filled('collector_id') && $request->integer('collector_id') !== $ownCollectorId) {
+            abort(403, 'You can only view your own assigned invoices.');
         }
 
         if ($ownCollectorId !== null) {
@@ -77,6 +83,31 @@ class AccountsReceivableController extends Controller
             'message' => 'Invoice created successfully.',
             'data' => new AccountsReceivableResource($ar->fresh(['customer', 'collector'])),
         ], 201);
+    }
+
+    public function assignCollector(Request $request, AccountsReceivable $accountsReceivable): JsonResponse
+    {
+        $data = $request->validate(['collector_id' => ['required', 'integer', 'exists:collectors,id']]);
+        $ar = \Illuminate\Support\Facades\DB::transaction(function () use ($request, $accountsReceivable, $data) {
+            $ar = AccountsReceivable::query()->lockForUpdate()->findOrFail($accountsReceivable->id);
+            if ($ar->is_archived || in_array($ar->status, ['Paid', 'Cancelled'], true) || (float) $ar->remaining_balance <= 0) {
+                throw ValidationException::withMessages(['collector_id' => 'Only open, active invoices can be assigned.']);
+            }
+            $collector = \App\Models\Collector::query()->whereKey($data['collector_id'])->where('status', 'Active')->lockForUpdate()->first();
+            if (! $collector) {
+                throw ValidationException::withMessages(['collector_id' => 'Choose an active collector.']);
+            }
+            $original = $ar->only('collector_id');
+            $ar->update(['collector_id' => $collector->id]);
+            \App\Models\AuditLog::create([
+                'user_id' => $request->user()->id, 'module' => 'AccountsReceivable', 'action' => 'update',
+                'record_id' => $ar->id, 'activity_description' => "Assigned collector for invoice {$ar->invoice_number}.",
+                'old_values' => $original, 'new_values' => $ar->only('collector_id'),
+                'ip_address' => $request->ip(), 'user_agent' => $request->userAgent(),
+            ]);
+            return $ar->load(['customer', 'collector']);
+        });
+        return response()->json(['success' => true, 'message' => 'Collector assigned.', 'data' => new AccountsReceivableResource($ar)]);
     }
 
     public function update(UpdateAccountsReceivableRequest $request, AccountsReceivable $accountsReceivable): JsonResponse

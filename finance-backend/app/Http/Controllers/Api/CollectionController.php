@@ -148,7 +148,7 @@ class CollectionController extends Controller
         $this->authorize('confirm', $collection);
 
         try {
-            $collection = $this->collections->confirm($collection, $request->user());
+            $collection = $this->collections->confirm($collection, $request->user(), $request->boolean('check_cleared'));
         } catch (ValidationException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage(), 'errors' => $e->errors()], 422);
         }

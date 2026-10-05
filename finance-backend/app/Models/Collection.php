@@ -151,4 +151,13 @@ class Collection extends Model
     {
         return $status ? $query->where('status', $status) : $query;
     }
+    public function depositBatches(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(DepositBatch::class, 'deposit_batch_items', 'collection_id', 'deposit_batch_id');
+    }
+
+    public function supportingDocuments(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(SupportingDocument::class, 'reference_id')->where('reference_type', 'collection');
+    }
 }

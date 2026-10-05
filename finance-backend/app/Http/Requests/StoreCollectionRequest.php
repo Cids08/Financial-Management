@@ -22,7 +22,7 @@ class StoreCollectionRequest extends FormRequest
             'receipt_number'   => ['required', 'string', 'max:255', 'unique:collections,receipt_number'],
             'or_number'        => ['nullable', 'string', 'max:255'],
             'collection_date'  => ['required', 'date', 'before_or_equal:today'],
-            'deposit_date'     => ['nullable', 'date', 'after_or_equal:collection_date'],
+            'deposit_date'     => ['nullable', 'date', 'after_or_equal:collection_date', 'before_or_equal:today'],
             'amount_received'  => ['required', 'numeric', 'min:' . config('business.min_collection_amount')],
             'payment_method'   => ['required', 'string', 'max:255'],
             'reference_number' => [

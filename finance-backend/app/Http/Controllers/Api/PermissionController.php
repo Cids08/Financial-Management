@@ -70,7 +70,7 @@ class PermissionController extends Controller
         }
 
         $permissionNames = $user->role
-            ? $user->role->permissions()->where('permissions.is_active', true)->pluck('permission_name')
+            ? $user->role->permissions()->where('permissions.is_active', true)->whereNotIn('permission_name', \App\Models\User::ADMIN_APPROVAL_PERMISSIONS)->pluck('permission_name')
             : collect();
 
         return response()->json([

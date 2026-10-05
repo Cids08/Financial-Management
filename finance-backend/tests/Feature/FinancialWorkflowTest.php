@@ -129,4 +129,111 @@ class FinancialWorkflowTest extends TestCase
         $this->assertEquals(100,collect($report['expenses'])->sum('amount'));
         $this->assertEquals(200,app(BudgetGlService::class)->summary(Budget::find(1))['actual']);
     }
+
+    public function test_collector_assignment_preserves_financial_values_and_rejects_closed_invoices(): void
+    {
+        Schema::create('collectors', function (Blueprint $t) { $t->id(); $t->string('status'); $t->softDeletes(); });
+        Schema::create('customers', function (Blueprint $t) { $t->id(); $t->decimal('current_balance',15,2); $t->timestamps(); $t->softDeletes(); });
+        Schema::create('supporting_documents', function (Blueprint $t) { $t->id(); $t->string('reference_type'); $t->integer('reference_id'); });
+        Schema::create('accounts_receivable', function (Blueprint $t) {
+            $t->id(); $t->integer('customer_id'); $t->integer('collector_id')->nullable(); $t->string('invoice_number');
+            $t->decimal('original_amount',15,2); $t->decimal('remaining_balance',15,2); $t->string('status'); $t->boolean('is_archived')->default(false); $t->timestamps(); $t->softDeletes();
+        });
+        Schema::table('audit_logs', function (Blueprint $t) { $t->string('ip_address')->nullable(); $t->text('user_agent')->nullable(); });
+        DB::table('customers')->insert(['id'=>1,'current_balance'=>600]);
+        DB::table('collectors')->insert(['id'=>1,'status'=>'Active']);
+        DB::table('accounts_receivable')->insert(['id'=>1,'customer_id'=>1,'invoice_number'=>'AR-1','original_amount'=>1000,'remaining_balance'=>600,'status'=>'Partially Paid']);
+        $journalsBefore = DB::table('journal_entries')->get()->toArray();
+        $request = \Illuminate\Http\Request::create('/api/accounts-receivable/1/collector','PATCH',['collector_id'=>1]);
+        $request->setUserResolver(fn () => \App\Models\User::withoutGlobalScopes()->find(1));
+        $controller = app(\App\Http\Controllers\Api\AccountsReceivableController::class);
+        $controller->assignCollector($request, \App\Models\AccountsReceivable::find(1));
+        $invoice = DB::table('accounts_receivable')->first();
+        $this->assertEquals(1, $invoice->collector_id);
+        $this->assertEquals(1000, $invoice->original_amount);
+        $this->assertEquals(600, $invoice->remaining_balance);
+        $this->assertEquals('Partially Paid', $invoice->status);
+        $this->assertEquals($journalsBefore, DB::table('journal_entries')->get()->toArray());
+        $this->assertEquals(1, DB::table('audit_logs')->count());
+        DB::table('accounts_receivable')->where('id',1)->update(['status'=>'Paid']);
+        $this->expectException(ValidationException::class);
+        $controller->assignCollector($request, \App\Models\AccountsReceivable::find(1));
+    }
+
+    public function test_staff_can_assign_collectors_but_only_administrators_can_approve(): void
+    {
+        Schema::create('roles', function (Blueprint $t) { $t->id(); $t->string('name'); $t->softDeletes(); });
+        Schema::create('permissions', function (Blueprint $t) { $t->id(); $t->string('permission_name'); $t->boolean('is_active')->default(true); $t->softDeletes(); });
+        Schema::create('role_permissions', function (Blueprint $t) { $t->integer('role_id'); $t->integer('permission_id'); $t->timestamps(); });
+        DB::table('roles')->insert(['id'=>1,'name'=>'staff']);
+        foreach (array_merge(['ar.manage'], \App\Models\User::ADMIN_APPROVAL_PERMISSIONS) as $index => $name) {
+            DB::table('permissions')->insert(['id'=>$index+1,'permission_name'=>$name]);
+            DB::table('role_permissions')->insert(['role_id'=>1,'permission_id'=>$index+1]);
+        }
+        $staff = new \App\Models\User;
+        $staff->forceFill(['id'=>1,'role_id'=>1]);
+        $this->assertTrue($staff->hasPermission('ar.manage'));
+        $request = \Illuminate\Http\Request::create('/');
+        $request->setUserResolver(fn () => $staff);
+        $middleware = new \App\Http\Middleware\CheckPermission;
+        foreach (\App\Models\User::ADMIN_APPROVAL_PERMISSIONS as $permission) {
+            $this->assertFalse($staff->hasPermission($permission));
+            $this->assertEquals(403, $middleware->handle($request, fn () => response()->json(['success'=>true]), $permission)->getStatusCode());
+        }
+        $exposed = app(\App\Http\Controllers\Api\PermissionController::class)->mine($request)->getData(true)['data'];
+        $this->assertSame(['ar.manage'], $exposed);
+        foreach (['admin','super-admin'] as $name) {
+            $user = new \App\Models\User;
+            $user->setRelation('role', new \App\Models\Role(['name'=>$name]));
+            foreach (\App\Models\User::ADMIN_APPROVAL_PERMISSIONS as $permission) $this->assertTrue($user->hasPermission($permission));
+        }
+    }
+
+    public function test_collector_worklist_honors_staff_filter_and_rejects_other_collectors(): void
+    {
+        $service = \Mockery::mock(\App\Services\AccountsReceivableService::class);
+        $service->shouldReceive('list')->once()->with(\Mockery::on(fn ($filters) => $filters['collector_id'] === 7 && $filters['archived'] === false))->andReturn(new \Illuminate\Database\Eloquent\Collection);
+        $controller = new \App\Http\Controllers\Api\AccountsReceivableController($service);
+        $staff = new \App\Models\User;
+        $staff->setRelation('role', new \App\Models\Role(['name'=>'staff']));
+        $request = \Illuminate\Http\Request::create('/api/accounts-receivable?collector_id=7&archived=0');
+        $request->setUserResolver(fn () => $staff);
+        $this->assertEquals(200, $controller->index($request)->getStatusCode());
+        $collector = new \App\Models\User;
+        $collector->setRelation('role', new \App\Models\Role(['name'=>'collector']));
+        $identity = new \App\Models\Collector; $identity->id = 8;
+        $collector->setRelation('collector', $identity);
+        $request->setUserResolver(fn () => $collector);
+        try { $controller->index($request); $this->fail('Cross-collector access must be denied.'); }
+        catch (HttpException $e) { $this->assertEquals(403, $e->getStatusCode()); }
+    }
+
+    public function test_deposit_tracking_does_not_post_and_confirmation_requires_evidence_and_check_clearance(): void
+    {
+        Schema::table('collections', function (Blueprint $t) { $t->string('receipt_number'); $t->string('payment_method'); $t->date('deposit_date')->nullable(); $t->integer('created_by'); $t->timestamps(); });
+        Schema::create('supporting_documents', function (Blueprint $t) { $t->id(); $t->string('reference_type'); $t->integer('reference_id'); $t->string('storage_path')->nullable(); });
+        Schema::table('audit_logs', function (Blueprint $t) { $t->string('ip_address')->nullable(); $t->text('user_agent')->nullable(); });
+        DB::table('collections')->insert(['id'=>1,'cash_account_id'=>1,'amount_received'=>100,'receipt_number'=>'BOOK-0001','status'=>'Pending','payment_method'=>'Check','collection_date'=>'2026-10-01','created_by'=>2]);
+        $actor = new \App\Models\User; $actor->id = 1;
+        $service = app(\App\Services\CollectionService::class);
+        $collection = \App\Models\Collection::find(1);
+        $before = DB::table('journal_entries')->get()->toArray();
+        try { $service->confirm($collection,$actor); $this->fail('Deposit required.'); }
+        catch (ValidationException $e) { $this->assertArrayHasKey('deposit_date',$e->errors()); }
+        $service->update($collection,['deposit_date'=>'2026-10-02'],$actor);
+        $this->assertSame('Pending',$collection->fresh()->status);
+        $this->assertSame('BOOK-0001',$collection->fresh()->receipt_number);
+        $this->assertEquals($before,DB::table('journal_entries')->get()->toArray());
+        try { $service->confirm($collection,$actor); $this->fail('Proof required.'); }
+        catch (ValidationException $e) { $this->assertArrayHasKey('proof',$e->errors()); }
+        DB::table('supporting_documents')->insert(['reference_type'=>'collection','reference_id'=>1,'storage_path'=>'test-proof.pdf']);
+        try { $service->confirm($collection,$actor); $this->fail('Check clearance required.'); }
+        catch (ValidationException $e) { $this->assertArrayHasKey('check_cleared',$e->errors()); }
+        try { $service->update($collection,['receipt_number'=>'REPLACEMENT'],$actor); $this->fail('Receipt must remain unchanged.'); }
+        catch (ValidationException $e) { $this->assertArrayHasKey('receipt_number',$e->errors()); }
+        DB::table('collections')->where('id',1)->update(['status'=>'Confirmed']);
+        try { $service->confirm($collection,$actor,true); $this->fail('Stale confirmation must fail.'); }
+        catch (ValidationException $e) { $this->assertArrayHasKey('status',$e->errors()); }
+        $this->assertEquals($before,DB::table('journal_entries')->get()->toArray());
+    }
 }

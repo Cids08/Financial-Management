@@ -36,6 +36,9 @@ class CollectionService
                 'deleter:id,first_name,last_name',
             ]);
 
+        $query->withExists(['supportingDocuments as has_supporting_proof' => fn ($q) => $q->whereNotNull('storage_path')]);
+        if (\Illuminate\Support\Facades\Schema::hasTable('deposit_batch_items')) $query->with('depositBatches:id');
+
         if (! empty($filters['trashed'])) {
             $query->onlyTrashed();
         }
@@ -188,9 +191,20 @@ class CollectionService
             }
         }
 
-        $original = $collection->only(['amount_received', 'collection_date', 'cash_account_id']);
+        $original = $collection->only(['receipt_number', 'amount_received', 'collection_date', 'deposit_date', 'cash_account_id']);
 
         DB::transaction(function () use ($collection, $data, $actor, $original) {
+            $collection = Collection::query()->lockForUpdate()->findOrFail($collection->id);
+            if ($collection->status !== Collection::STATUS_PENDING) {
+                throw ValidationException::withMessages(['status' => 'Only unconfirmed collections can be edited.']);
+            }
+
+            if (\Illuminate\Support\Facades\Schema::hasTable('deposit_batch_items') && DB::table('deposit_batch_items')->where('collection_id',$collection->id)->exists()) {
+                throw ValidationException::withMessages(['batch'=>'Cancel the deposit batch before changing this receipt.']);
+            }
+            if (isset($data['receipt_number']) && $data['receipt_number'] !== $collection->receipt_number) {
+                throw ValidationException::withMessages(['receipt_number' => 'Keep the original issued receipt number. Cancel an incorrect record instead of replacing its receipt number.']);
+            }
             $collection->update($data);
 
             AuditLog::create([
@@ -200,7 +214,7 @@ class CollectionService
                 'record_id'            => $collection->id,
                 'activity_description' => "Updated collection #{$collection->id}.",
                 'old_values'           => $original,
-                'new_values'           => $collection->only(['amount_received', 'collection_date', 'cash_account_id']),
+                'new_values'           => $collection->only(['receipt_number', 'amount_received', 'collection_date', 'deposit_date', 'cash_account_id']),
                 'ip_address'           => request()->ip(),
                 'user_agent'           => request()->userAgent(),
             ]);
@@ -215,7 +229,7 @@ class CollectionService
      * the double-entry journal entry. Mirrors ExpenseService::approve()'s
      * locking pattern.
      */
-    public function confirm(Collection $collection, User $confirmedBy): Collection
+    public function confirm(Collection $collection, User $confirmedBy, bool $checkCleared = false, ?int $depositBatchId = null): Collection
     {
         if ($collection->status !== Collection::STATUS_PENDING) {
             throw ValidationException::withMessages([
@@ -223,7 +237,25 @@ class CollectionService
             ]);
         }
 
-        return DB::transaction(function () use ($collection, $confirmedBy) {
+        return DB::transaction(function () use ($collection, $confirmedBy, $checkCleared, $depositBatchId) {
+            $collection = Collection::query()->lockForUpdate()->findOrFail($collection->id);
+            if ($collection->status !== Collection::STATUS_PENDING) {
+                throw ValidationException::withMessages(['status' => 'This collection has already been processed.']);
+            }
+            $membership = \Illuminate\Support\Facades\Schema::hasTable('deposit_batch_items') ? DB::table('deposit_batch_items')->where('collection_id',$collection->id)->value('deposit_batch_id') : null;
+            if ($membership && (int)$membership !== $depositBatchId) {
+                throw ValidationException::withMessages(['status'=>'Confirm this receipt through its deposit batch.']);
+            }
+            $batchProof = $membership && (int)$membership === $depositBatchId && \App\Models\DepositBatch::whereKey($depositBatchId)->where('status','Pending')->whereHas('documents',fn($q)=>$q->whereNotNull('storage_path'))->exists();
+            if (! $collection->deposit_date) {
+                throw ValidationException::withMessages(['deposit_date' => 'Record the deposit date before confirming this collection.']);
+            }
+            if (! $batchProof && ! $collection->supportingDocuments()->whereNotNull('storage_path')->exists()) {
+                throw ValidationException::withMessages(['proof' => 'Attach supporting proof before confirming this collection.']);
+            }
+            if (strcasecmp($collection->payment_method, 'Check') === 0 && ! $checkCleared) {
+                throw ValidationException::withMessages(['check_cleared' => 'Confirm that the bank has cleared this check.']);
+            }
             // Separation of duties: whoever RECORDED the collection cannot also
             // CONFIRM it. This prevents a single admin from creating and
             // approving their own collection in one step.
@@ -238,6 +270,9 @@ class CollectionService
             /** @var CashAccount $cashAccount */
             $cashAccount = CashAccount::query()->lockForUpdate()->findOrFail($collection->cash_account_id);
 
+            if (Money::comp((string) $collection->amount_received, (string) $ar->remaining_balance, 2) > 0) {
+                throw ValidationException::withMessages(['amount_received' => 'The receipt exceeds the current invoice balance. Review other confirmed receipts.']);
+            }
             $newPaid           = Money::add((string) $ar->paid_amount, (string) $collection->amount_received, 2);
             $newRemaining      = Money::sub((string) $ar->original_amount, $newPaid, 2);
             $cashBalanceBefore = $cashAccount->current_balance;
@@ -265,7 +300,7 @@ class CollectionService
 
             // Broadcast to all users on the private-collections channel so
             // the Collections page auto-refreshes without a manual reload.
-            CollectionStatusChanged::dispatch($collection->refresh());
+            DB::afterCommit(fn () => CollectionStatusChanged::dispatch($collection->refresh()));
 
             $collection->loadMissing(['collector', 'creator', 'accountsReceivable']);
             $collectorName = $collection->collector
@@ -317,6 +352,8 @@ class CollectionService
                     $journalEntry->transaction_no
                 ),
                 'new_values' => [
+                    'check_cleared'        => strcasecmp($collection->payment_method, 'Check') === 0 ? $checkCleared : null,
+                    'deposit_date'         => $collection->deposit_date?->toDateString(),
                     'amount_received'      => (float) $collection->amount_received,
                     'ar_id'                => $ar->id,
                     'ar_remaining_balance' => max(0, (float) $newRemaining),
@@ -343,6 +380,12 @@ class CollectionService
         }
 
         DB::transaction(function () use ($collection, $actor, $remarks) {
+            $collection = Collection::query()->lockForUpdate()->findOrFail($collection->id);
+            if ($collection->status !== Collection::STATUS_PENDING) throw ValidationException::withMessages(['status'=>'Only pending collections can be cancelled.']);
+            if (\Illuminate\Support\Facades\Schema::hasTable('deposit_batch_items') && DB::table('deposit_batch_items')->where('collection_id',$collection->id)->exists()) {
+                throw ValidationException::withMessages(['batch'=>'Cancel the deposit batch before changing this receipt.']);
+            }
+
             $collection->update([
                 'status'  => Collection::STATUS_CANCELLED,
                 'remarks' => $remarks
