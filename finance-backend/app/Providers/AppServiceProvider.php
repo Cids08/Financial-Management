@@ -8,6 +8,7 @@ use App\Contracts\RecommendationEngine;
 use App\Observers\DataUpdateObserver;
 use App\Services\Advisor\RemoteAdvisorEngine;
 use App\Services\Forecasting\PythonArimaForecastEngine;
+use App\Services\Forecasting\ResilientForecastEngine;
 use App\Services\Forecasting\SimpleForecastEngine;
 use App\Services\Recommendation\RemoteRecommendationEngine;
 use Illuminate\Support\ServiceProvider;
@@ -23,16 +24,27 @@ class AppServiceProvider extends ServiceProvider
         // shape in PythonArimaForecastEngine are still unverified against
         // the real FastAPI routes — holding off on further changes here
         // until that's connected and confirmed. When no FORECAST_SERVICE_URL
-        // is configured (production has no Python service deployed), the
-        // binding falls back to SimpleForecastEngine — a deterministic,
-        // PHP-only linear-trend model sharing the same training window —
-        // so Generate keeps working instead of dying with "Failed to fetch".
+        // is configured, the binding falls back to SimpleForecastEngine — a
+        // deterministic, PHP-only linear-trend model sharing the same
+        // training window — so Generate keeps working.
+        //
+        // When the URL IS configured but the service is unreachable or slow,
+        // the choice is wrapped in ResilientForecastEngine: it tries ARIMA
+        // and degrades to SimpleForecastEngine for that request instead of
+        // throwing. Without this, production (which sets the variable) lost
+        // the fallback entirely the moment the Python service hung, turning
+        // a transport timeout into a 500 the browser misreports as CORS.
         $this->app->bind(ForecastEngine::class, function ($app): ForecastEngine {
             $url = config('services.forecast_service.base_url');
 
-            return $url
-                ? $app->make(PythonArimaForecastEngine::class)
-                : $app->make(SimpleForecastEngine::class);
+            if (! $url) {
+                return $app->make(SimpleForecastEngine::class);
+            }
+
+            return new ResilientForecastEngine(
+                $app->make(PythonArimaForecastEngine::class),
+                $app->make(SimpleForecastEngine::class),
+            );
         });
 
         // Points at the AI microservice (ai-advisor-service), not OpenAI

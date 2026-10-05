@@ -74,7 +74,15 @@ class PythonArimaForecastEngine implements ForecastEngine
 
         try {
             $response = Http::baseUrl($this->baseUrl)
-                ->timeout(30)
+                // Kept deliberately short: ResilientForecastEngine falls back
+                // to SimpleForecastEngine when this expires, so a hung Python
+                // service costs a few seconds of latency instead of the old
+                // 30s stall (which held the Generate button spinning long
+                // enough to look like a frozen page). connectTimeout is even
+                // shorter so a blackholed host fails fast on the TCP handshake
+                // rather than consuming the whole budget.
+                ->connectTimeout(3)
+                ->timeout(8)
                 ->post('/forecast/arima', [
                     'forecast_target' => $forecastType,
                     'forecast_period' => $horizon['months'],
