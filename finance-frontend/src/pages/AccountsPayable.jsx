@@ -953,13 +953,13 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
           <ResponsiveTable minTableWidth={1050} className="w-full text-sm table-fixed payment-register">
             <thead className="bg-surface">
               <tr className="border-b border-border">
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2.5 py-3 w-[18%] whitespace-nowrap">Bill</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[17%] whitespace-nowrap">Supplier</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2.5 py-3 w-[17%] whitespace-nowrap">Bill</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[15%] whitespace-nowrap">Supplier</th>
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[10%] whitespace-nowrap">Due Date</th>
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[14%] whitespace-nowrap register-amount">Amount Due</th>
-                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[8%] whitespace-nowrap register-amount">Penalty</th>
+                <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[13%] whitespace-nowrap register-amount">Penalty</th>
                 <th className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 w-[13%] whitespace-nowrap">Status</th>
-                <th className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wider px-2.5 py-3 w-[20%] whitespace-nowrap">Actions</th>
+                <th className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wider px-2.5 py-3 w-[18%] whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -1016,7 +1016,7 @@ export default function AccountsPayable({ title = 'Accounts Payable', crumbs = [
                       )
                     ) : <span className="text-muted">—</span>}
                   </td>
-                  <td className="px-2 py-2 whitespace-nowrap text-left">
+                  <td className="pl-4 pr-2 py-2 whitespace-nowrap text-left">
                     {(() => {
                       const apStatus = getApDisplayStatus(r)
                       return (

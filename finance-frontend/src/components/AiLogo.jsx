@@ -1,21 +1,9 @@
-/**
- * AI brand mark, served from public/images so it ships with the frontend
- * bundle rather than as a cross-origin request to the API.
- *
- * Single component so every AI touchpoint stays visually consistent and
- * there is one place to change the asset or sizing later. alt is empty
- * because the mark is decorative and always sits beside a text label, so
- * announcing it would just be noise for screen reader users.
- */
-export default function AiLogo({ size = 16, className = '' }) {
+/** Shared circular AI badge using the original brand image. */
+export default function AiLogo({ size = 20, className = '' }) {
   return (
-    <img
-      src="/images/ai-logo.png"
-      alt=""
-      width={size}
-      height={size}
-      style={{ width: size, height: size }}
-      className={`inline-block shrink-0 align-middle ${className}`.trim()}
-    />
+    <span aria-hidden="true" style={{ width: size, height: size }}
+      className={`ai-logo-badge inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full align-middle ${className}`.trim()}>
+      <img src="/images/ai-logo.png" alt="" className="h-[82%] w-[82%] object-contain" />
+    </span>
   )
 }

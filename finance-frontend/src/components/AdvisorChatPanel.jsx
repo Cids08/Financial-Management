@@ -493,15 +493,9 @@ export default function AdvisorChatPanel() {
           <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
             {/* ── Modern High-Contrast Header ── */}
             <div className="flex items-center gap-3 px-4 py-3 bg-surface shrink-0 border-b border-border shadow-xs">
-              <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-black shrink-0 shadow-xs">
-                <AiLogo size={20} />
-                <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500 border-2 border-surface" />
-                </span>
-              </div>
+              <AiLogo size={40} />
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-bold text-ink flex items-center gap-2">
+                <p className="text-sm font-bold text-ink flex flex-wrap items-center gap-x-2 gap-y-1">
                   Financial Advisor
                   <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                     LIVE
@@ -646,20 +640,21 @@ export default function AdvisorChatPanel() {
       )}
 
       {!open && (
-        <div className="flex items-end gap-3">
+        <div className="flex max-w-[calc(100vw-1.5rem)] items-end gap-2.5">
           {teaserText && (
-            <div className="relative max-w-60 rounded-2xl px-4 py-3 text-sm font-semibold shadow-xl animate-fadeIn bg-primary text-black shadow-primary/25 border border-primary-dark/20">
-              <button
-                type="button"
-                onClick={() => setTeaserText(null)}
-                aria-label="Dismiss"
-                className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black text-white hover:bg-black transition-colors duration-150 shadow-xs"
-              >
-                <X size={11} />
+            <div className="relative min-w-0 max-w-52 rounded-xl border border-[#e5b530] border-l-4 bg-[#fff7db] px-3 py-2 shadow-lg animate-fadeIn">
+              <span aria-hidden="true" className="pointer-events-none absolute -right-[6px] bottom-[25px] h-2.5 w-2.5 rotate-45 border-r border-t border-[#e5b530] bg-[#fff7db]" />
+              <div className="mb-0.5 flex items-center justify-between gap-3">
+                <span className="text-[11px] font-bold text-[#805900]">AI Advisor</span>
+                <button type="button" onClick={() => setTeaserText(null)} aria-label="Dismiss suggestion"
+                  className="-mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[#705720] hover:bg-[#f5e8ba] hover:text-black focus-visible:outline-2 focus-visible:outline-[#805900]">
+                  <X size={13} />
+                </button>
+              </div>
+              <button type="button" onClick={openChat}
+                className="block w-full rounded text-left text-[13px] font-medium leading-relaxed text-[#241c0b] hover:text-[#805900] focus-visible:outline-2 focus-visible:outline-[#805900]">
+                {teaserText}
               </button>
-              {teaserText}
-              {/* speech-bubble tail pointing right toward the FAB */}
-              <span className="absolute top-1/2 -right-1.5 -translate-y-1/2 h-3 w-3 bg-primary rotate-45 rounded-xs" />
             </div>
           )}
 
@@ -668,13 +663,9 @@ export default function AdvisorChatPanel() {
             onClick={openChat}
             aria-label="Open AI advisor chat"
             aria-expanded={open}
-            className="relative flex h-14 w-14 items-center justify-center rounded-full bg-primary text-black shadow-xl shadow-primary/35 hover:scale-105 active:scale-95 transition-all duration-200 border-2 border-surface"
+            className="ai-advisor-launcher relative flex h-16 w-16 shrink-0 items-center justify-center bg-transparent p-0 hover:scale-105 active:scale-95 transition-transform duration-200 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary rounded-full"
           >
-            <AiLogo size={26} />
-            <span className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex h-3.5 w-3.5 rounded-full bg-emerald-500 border-2 border-surface" />
-            </span>
+            <AiLogo size={64} />
           </button>
         </div>
       )}

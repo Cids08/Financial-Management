@@ -131,21 +131,21 @@ function mapeSeverity(mape) {
   if (mape <= MAPE_EXCELLENT_THRESHOLD) {
     return {
       label: 'Excellent',
-      text: 'text-emerald-600 dark:text-emerald-400',
-      badge: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400',
+      text: 'text-status-success font-semibold',
+      badge: 'bg-status-success-bg text-status-success border border-status-success-border',
     }
   }
   if (mape <= MAPE_ACCEPTABLE_THRESHOLD) {
     return {
       label: 'Acceptable',
-      text: 'text-amber-600 dark:text-amber-400',
-      badge: 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400',
+      text: 'text-status-warning font-semibold',
+      badge: 'bg-status-warning-bg text-status-warning border border-status-warning-border',
     }
   }
   return {
     label: 'Poor',
-    text: 'text-red-600 dark:text-red-400 font-semibold',
-    badge: 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400',
+    text: 'text-status-danger font-semibold',
+    badge: 'bg-status-danger-bg text-status-danger border border-status-danger-border',
   }
 }
 
@@ -157,7 +157,7 @@ function MapeBadge({ mape }) {
   if (mape == null) return null
   const severity = mapeSeverity(mape)
   return (
-    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${severity.badge}`}>
+    <span className={`inline-flex shrink-0 whitespace-nowrap items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${severity.badge}`}>
       {severity.label}
     </span>
   )
@@ -462,7 +462,7 @@ const GenerateForecastModal = memo(function GenerateForecastModal({ open, onClos
               </div>
               <div className="rounded-lg border border-border px-3 py-2">
                 <p className="text-xs text-muted">MAPE</p>
-                <div className="flex items-center gap-1.5 mt-0.5">
+                <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
                   <p className={`text-sm font-semibold ${mapeColor(result.mape)}`}>{result.mape != null ? `${result.mape}%` : '—'}</p>
                   <MapeBadge mape={result.mape} />
                 </div>
@@ -512,14 +512,14 @@ const ForecastDetailModal = memo(function ForecastDetailModal({ forecastId, onCl
   }, [forecastId, fetchForecastDetail])
 
   return (
-    <Modal open={!!forecastId} onClose={onClose} title="Forecast Trend" footer={<Button variant="secondary" size="md" onClick={onClose}>Close</Button>}>
+    <Modal open={!!forecastId} onClose={onClose} title="Forecast Trend" size="xl" footer={<Button variant="secondary" size="md" onClick={onClose}>Close</Button>}>
       {loading && <ContentSkeleton />}
       {error && (
         <div className="rounded-lg border border-status-danger-border bg-status-danger-bg px-3 py-2 text-xs text-status-danger">{error}</div>
       )}
       {!loading && forecast && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-ink">{forecast.forecast_type}  -  {forecast.forecast_period}</p>
               <p className="text-xs text-muted flex items-center gap-1 mt-0.5"><CalendarRange size={12} /> Trained on {forecast.historical_period}</p>
@@ -541,7 +541,7 @@ const ForecastDetailModal = memo(function ForecastDetailModal({ forecastId, onCl
             </ResponsiveContainer>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="rounded-lg border border-border px-3 py-2">
               <p className="text-xs text-muted">Predicted Amount</p>
               <p className="text-sm font-semibold text-ink mt-0.5">{formatCurrency(forecast.predicted_amount)}</p>
@@ -552,8 +552,8 @@ const ForecastDetailModal = memo(function ForecastDetailModal({ forecastId, onCl
             </div>
             <div className="rounded-lg border border-border px-3 py-2">
               <p className="text-xs text-muted">MAPE</p>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <p className={`text-sm font-semibold ${mapeColor(forecast.mape)}`}>{forecast.mape != null ? `${forecast.mape}%` : '—'}</p>
+              <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                <p className={`text-sm font-semibold whitespace-nowrap ${mapeColor(forecast.mape)}`}>{forecast.mape != null ? `${forecast.mape}%` : '—'}</p>
                 <MapeBadge mape={forecast.mape} />
               </div>
             </div>

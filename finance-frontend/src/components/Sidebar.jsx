@@ -1,7 +1,8 @@
+import { useProfile } from '../hooks/useProfile'
 import { useLocation } from 'react-router-dom'
 import { useEffect, useRef, useState } from 'react'
 import { Landmark, ChevronsLeft, ChevronsRight, ChevronUp, ChevronDown, Search, X } from 'lucide-react'
-import { menuData } from '../utils/menuData'
+import { menuData, collectorMenuData } from '../utils/menuData'
 import { filterMenuByPermissions } from '../utils/permissions'
 import { useCompany } from '../context/CompanyContext'
 import { usePermissions } from '../context/PermissionsContext'
@@ -28,7 +29,10 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
   // failed and only ungated items (Dashboard, Settings, Logout) survived.
   const { permissions, loading: permissionsLoading, error: permissionsError, refetch: reloadPermissions } = usePermissions()
 
-  const visibleMenuData = filterMenuByPermissions(menuData, permissions).filter(item => item.id !== 'settings')
+  const { profile } = useProfile()
+  const isCollector = profile?.role_slug === 'collector' || profile?.role?.toLowerCase() === 'collector'
+  const navigationData = isCollector ? collectorMenuData : menuData
+  const visibleMenuData = filterMenuByPermissions(navigationData, permissions).filter(item => item.id !== 'settings')
   const mainItems = visibleMenuData.filter((item) => !FOOTER_IDS.includes(item.id))
   const footerItems = visibleMenuData.filter((item) => FOOTER_IDS.includes(item.id))
   const term = menuSearch.trim().toLowerCase()
@@ -39,10 +43,10 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
     return children.length ? [{ ...item, children }] : []
   })
   useEffect(() => {
-    const active = menuData.find(item => item.children?.some(child => child.path === location.pathname))
+    const active = navigationData.find(item => item.children?.some(child => child.path === location.pathname))
     setOpenGroup(active?.id || null)
     setMenuSearch('')
-  }, [location.pathname])
+  }, [location.pathname, navigationData])
 
   // Unread badge for the Notifications sidebar item. Reads the shared
   // NotificationsContext (mounted once in DashboardLayout) instead of its
@@ -104,7 +108,7 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
         `}
       >
         {/* Brand / logo row  -  reads from CompanyContext, editable in Settings */}
-        <div className="h-20 flex items-center gap-3 px-5 border-b border-sidebar-border shrink-0">
+        <div className="workspace-brand h-20 flex items-center gap-3 px-5 border-b border-sidebar-border shrink-0">
           <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shrink-0 overflow-hidden shadow-sm">
             {logoUrl ? (
               <img src={logoUrl} alt={name} className="w-full h-full object-cover" />

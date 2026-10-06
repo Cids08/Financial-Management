@@ -174,7 +174,7 @@ const DEFAULT_NOTIFICATION_STYLE = { icon: BellRing, color: 'text-slate-600 bg-s
 // Insight cards lead with the AI logo, so priority is carried by a corner dot
 // instead. The icons these replace encoded urgency (a red triangle for High),
 // so the dot keeps that signal rather than letting branding erase it.
-const PRIORITY_DOT = { High: 'bg-red-500', Medium: 'bg-amber-500', Low: 'bg-sky-400' }
+const INSIGHT_PRIORITY = { High: 'bg-status-danger-bg text-status-danger border-status-danger-border', Medium: 'bg-status-warning-bg text-status-warning border-status-warning-border', Low: 'bg-bg text-muted border-border' }
 
 const FORECAST_ICON = { revenue: TrendingUp, expense: TrendingDown, expenses: TrendingDown, cash: PiggyBank }
 
@@ -896,13 +896,11 @@ export default function Dashboard() {
       {/* AI Insights */}
       <div className={`${HIGHLIGHT_PANEL} p-5`}>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/20 text-primary-dark">
-              <AiLogo size={20} />
-            </div>
+          <div className="flex min-w-0 items-center gap-3">
+            <AiLogo size={48} className="ai-insights-mark" />
             <div>
               <h2 className="text-base font-bold text-ink">AI Insights</h2>
-              <p className="text-xs text-muted">Powered by predictive analytics</p>
+              <p className="text-xs text-muted">Forecast-based guidance for your next financial decisions</p>
             </div>
           </div>
           <Button variant="primary" size="sm" onClick={() => navigate('/analytics/ai-recommendations')}>
@@ -912,7 +910,7 @@ export default function Dashboard() {
         {aiInsights.length === 0 ? (
           <p className="py-6 text-center text-xs text-muted">No AI insights generated yet.</p>
         ) : (
-          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
             {aiInsights.map((insight, idx) => {
               const priority = insight.priority || 'Low'
               return (
@@ -920,17 +918,19 @@ export default function Dashboard() {
                   key={idx}
                   type="button"
                   onClick={() => navigate(insight.route || '/analytics/ai-recommendations')}
-                  className="group relative flex items-start gap-2.5 rounded-lg border border-border bg-surface p-3 text-left
-                    transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+                  className="group flex min-w-0 flex-col gap-3 rounded-xl border border-border bg-surface p-4 text-left
+                    transition-colors hover:border-primary/60 hover:bg-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                 >
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/15">
-                    <AiLogo size={17} />
+                  <div className="flex w-full flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-muted">Insight {idx + 1}</span>
+                    <span className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${INSIGHT_PRIORITY[priority] || INSIGHT_PRIORITY.Low}`}>
+                      {priority} priority
+                    </span>
                   </div>
-                  <p className="text-xs leading-snug text-ink">{normalizeAiCurrencyText(insight.text)}</p>
-                  <span
-                    className={`absolute right-2.5 top-2.5 h-2 w-2 rounded-full ${PRIORITY_DOT[priority] || PRIORITY_DOT.Low}`}
-                  />
-                  <span className="sr-only">{priority} priority</span>
+                  <p className="text-sm leading-relaxed text-ink">{normalizeAiCurrencyText(insight.text)}</p>
+                  <span className="mt-auto inline-flex items-center gap-1.5 pt-1 text-xs font-semibold text-primary-dark">
+                    View recommendation <ArrowUpRight size={14} aria-hidden="true" />
+                  </span>
                 </button>
               )
             })}

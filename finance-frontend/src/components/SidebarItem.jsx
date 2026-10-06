@@ -11,7 +11,7 @@ export default function SidebarItem({ item, collapsed, onNavigate, onLogoutClick
   const Icon = item.icon
 
   const baseLinkClasses = ({ isActive }) =>
-    `group relative flex items-center gap-3 rounded-xl py-2.5 text-[13px] font-medium
+    `group relative flex items-center gap-3 min-h-11 rounded-xl py-3 text-sm font-medium
      transition-all duration-150 ease-in-out-smooth
      ${collapsed ? 'px-3 lg:justify-center lg:px-0' : 'px-3'}
      ${
@@ -46,11 +46,11 @@ export default function SidebarItem({ item, collapsed, onNavigate, onLogoutClick
   // Grouped modules keep the navigation compact; the current route opens its group.
   if (hasChildren) {
     return (
-      <li className="pt-2 mt-2 border-t border-sidebar-border">
+      <li className="mt-1">
         <button type="button" onClick={onToggleGroup} aria-expanded={groupOpen} aria-controls={'nav-group-' + item.id} aria-label={item.label} title={collapsed ? item.label : undefined}
-          className={'flex w-full min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[12px] font-semibold transition-colors hover:bg-sidebar-hover ' + (isChildActive ? 'text-primary ' : 'text-sidebar-ink ') + (collapsed ? 'lg:justify-center lg:px-0' : '')}>
-          <Icon size={17} strokeWidth={1.8} className="shrink-0" />
-          <span className={'min-w-0 flex-1 truncate ' + (collapsed ? 'lg:hidden' : '')}>{item.label}</span>
+          className={'flex w-full min-w-0 items-center gap-3 min-h-11 rounded-xl px-3 py-3 text-left text-sm font-semibold transition-colors hover:bg-sidebar-hover ' + (isChildActive ? 'text-primary ' : 'text-sidebar-ink ') + (collapsed ? 'lg:justify-center lg:px-0' : '')}>
+          <Icon size={20} strokeWidth={1.8} className="shrink-0" />
+          <span className={'min-w-0 flex-1 whitespace-normal leading-5 ' + (collapsed ? 'lg:hidden' : '')}>{item.label}</span>
           <ChevronDown size={14} className={'shrink-0 text-sidebar-muted transition-transform ' + (groupOpen ? 'rotate-180 ' : '') + (collapsed ? 'lg:hidden' : '')} />
         </button>
         <ul id={'nav-group-' + item.id} hidden={!groupOpen} className={'space-y-0.5 pt-1 ' + (collapsed ? 'lg:hidden' : '')}>
@@ -66,7 +66,7 @@ export default function SidebarItem({ item, collapsed, onNavigate, onLogoutClick
                 {({ isActive }) => (
                   <>
                     <ActiveBar isActive={isActive} />
-                    <child.icon size={17} className="shrink-0" strokeWidth={1.8} />
+                    <child.icon size={20} className="shrink-0" strokeWidth={1.8} />
                     <span className={`min-w-0 whitespace-normal break-words leading-5 ${collapsed ? 'lg:hidden' : ''}`}>{child.label}</span>
                   </>
                 )}
@@ -87,12 +87,12 @@ export default function SidebarItem({ item, collapsed, onNavigate, onLogoutClick
           onClick={onLogoutClick}
           aria-label={item.label}
           title={collapsed ? item.label : undefined}
-          className={`group relative flex w-full items-center gap-3 rounded-xl py-2.5 text-[13px] font-medium text-left
+          className={`group relative flex w-full items-center gap-3 min-h-11 rounded-xl py-3 text-sm font-medium text-left
             transition-all duration-150 ease-in-out-smooth
             ${collapsed ? 'px-3 lg:justify-center lg:px-0' : 'px-3'}
             text-sidebar-muted hover:bg-sidebar-hover hover:text-primary`}
         >
-          <Icon size={19} className="shrink-0" strokeWidth={1.8} />
+          <Icon size={20} className="shrink-0" strokeWidth={1.8} />
           <span className={`truncate ${collapsed ? 'lg:hidden' : ''}`}>{item.label}</span>
         </button>
       </li>
@@ -113,7 +113,7 @@ export default function SidebarItem({ item, collapsed, onNavigate, onLogoutClick
           <>
             <ActiveBar isActive={isActive} />
             <span className="relative shrink-0">
-              <Icon size={19} strokeWidth={1.8} />
+              <Icon size={20} strokeWidth={1.8} />
               {collapsed && <BadgeDot />}
             </span>
             <span className={`truncate ${collapsed ? 'lg:hidden' : ''}`}>{item.label}</span>

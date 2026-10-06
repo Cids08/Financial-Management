@@ -127,7 +127,7 @@ export default memo(function Header({ onToggleSidebar, collapsed, onLogoutClick 
 
   return (
     <header
-      className={`fixed top-0 left-0 right-0 h-20 bg-surface/95 backdrop-blur-md border-b border-border z-40
+      className={`workspace-header fixed top-0 left-0 right-0 h-20 bg-surface/95 backdrop-blur-md border-b border-border z-40
         flex items-center justify-between gap-3 px-4 lg:px-7
         transition-all duration-300 ease-in-out-smooth
         ${collapsed ? 'lg:left-20' : 'lg:left-70'}`}

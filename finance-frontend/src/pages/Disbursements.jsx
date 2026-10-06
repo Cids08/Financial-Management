@@ -690,16 +690,16 @@ export default function Disbursements({ title = 'Disbursements', crumbs = ['Fina
           {[['all', 'All payments'], ['ap', 'Accounts Payable'], ['payroll', 'Payroll']].map(([value, label]) => <Button key={value} size="sm" variant={dSourceFilter === value ? 'primary' : 'secondary'} aria-pressed={dSourceFilter === value} onClick={() => setDSourceFilter(value)}>{label}</Button>)}
         </div>
         <div className="overflow-hidden rounded-t-xl">
-          <ResponsiveTable minTableWidth={1100} className="w-full text-sm payment-register">
+          <ResponsiveTable minTableWidth={1050} className="w-full text-sm payment-register">
             <thead className="bg-surface">
               <tr className="border-b border-border">
-                <th style={{ width: '20%' }} className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-3 py-3">Disbursed To</th>
-                <th style={{ width: '8%' }} className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3">Source</th>
+                <th style={{ width: '19%' }} className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-3 py-3">Disbursed To</th>
+                <th style={{ width: '7%' }} className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3">Source</th>
                 <th style={{ width: '14%' }} className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3">Reference / Dept</th>
                 <th style={{ width: '11%' }} className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 whitespace-nowrap">Payment Date</th>
                 <th style={{ width: '14%' }} className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3 whitespace-nowrap register-amount">Amount</th>
                 <th style={{ width: '17%' }} className="bg-surface text-left font-semibold text-muted text-xs uppercase tracking-wider px-2 py-3">Status</th>
-                <th style={{ width: '16%' }} className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wider px-3 py-3">Actions</th>
+                <th style={{ width: '18%' }} className="bg-surface text-right font-semibold text-muted text-xs uppercase tracking-wider px-3 py-3">Actions</th>
               </tr>
             </thead>
             <tbody>

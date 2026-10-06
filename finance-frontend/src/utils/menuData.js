@@ -32,143 +32,54 @@ import {
   LogOut,
 } from 'lucide-react'
 
-// Each item: id, label, icon, path, and optional children for nested menus.
-// `permission` is checked against a flat permission_name array (see
-// src/utils/permissions.js + src/context/PermissionsContext.jsx, sourced
-// from GET /api/me/permissions) before this data ever reaches the
-// sidebar  -  items with no `permission` field are always visible to any
-// authenticated user.
-//
-// Permission slugs below match routes/api.php exactly as of the current
-// RolesAndPermissionsSeeder.php ("v3" naming): hyphenated for
-// cash-accounts/fixed-assets/expense-categories/service-areas/
-// general-ledger, and SHORT forms for tax (not tax_obligations) and ai
-// (not ai_decision_support). If routes/api.php changes again, re-derive
-// this list from it directly  -  that's the only naming drift that's
-// actually reliable in this project's history.
+// Workflow order. Permissions and route paths stay attached to each leaf.
 export const menuData = [
-  {
-    id: 'dashboard',
-    label: 'Dashboard',
-    icon: LayoutDashboard,
-    path: '/dashboard',
-    // No `permission` field  -  every role has its own dashboard, rendered
-    // per-role by DashboardController. Not module-gated, same reasoning
-    // as the Settings entry below.
-  },
-  {
-    id: 'notifications',
-    label: 'Notifications',
-    icon: Bell,
-    path: '/notifications',
-    // No `permission` field, same reasoning as Settings/Profile below  - 
-    // this is "my own notifications", not a module. Its routes/api.php
-    // group (GET /notifications, .../unread-count, PATCH .../read-all,
-    // PATCH .../{id}/read, DELETE .../{id}) has no `permission:`
-    // middleware, only auth:sanctum, so every authenticated user sees
-    // this link regardless of role. Sidebar.jsx passes an unread-count
-    // badge to this specific item  -  see the `badge` prop wiring there.
-  },
-  {
-    id: 'master-data',
-    label: 'Master Data',
-    icon: Database,
-    children: [
-      { id: 'customers', label: 'Customers', icon: Users, path: '/master-data/customers', permission: 'customers.view' },
-      { id: 'suppliers', label: 'Suppliers', icon: Truck, path: '/master-data/suppliers', permission: 'suppliers.view' },
-      { id: 'collectors', label: 'Collectors', icon: UserCheck, path: '/master-data/collectors', permission: 'collectors.view' },
-      // departments.manage required for nav — staff keeps departments.view
-      // only as a silent API permission so the department dropdown on
-      // Expense/Budget forms is populated. They don't need the page itself.
-      { id: 'departments', label: 'Departments', icon: Building2, path: '/master-data/departments', permission: 'departments.manage' },
-      // Same reasoning as departments above — cash-accounts.view stays on
-      // staff for the dropdown source; .manage gates the sidebar link.
-      { id: 'cash-accounts', label: 'Cash Accounts', icon: Wallet, path: '/master-data/cash-accounts', permission: 'cash-accounts.manage' },
-      { id: 'fixed-assets', label: 'Fixed Assets', icon: Boxes, path: '/master-data/fixed-assets', permission: 'fixed-assets.view' },
-      // expense-categories.view kept on staff for dropdown; .manage gates nav.
-      { id: 'expense-categories', label: 'Expense Categories', icon: Tags, path: '/master-data/expense-categories', permission: 'expense-categories.manage' },
-      { id: 'titles', label: 'Titles', icon: Briefcase, path: '/master-data/titles', permission: 'users.view' },
-    ],
-  },
-  {
-    id: 'financial-transactions',
-    label: 'Financial Transactions',
-    icon: ArrowLeftRight,
-    children: [
-      // ar.view is intentionally kept on the Collector role for the API
-      // (/api/accounts-receivable scopes to their assigned invoices).
-      // The sidebar link uses ar.manage so collectors don't see this page —
-      // they work with AR exclusively through the Collections queue.
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
+  { id: 'notifications', label: 'Notifications', icon: Bell, path: '/notifications' },
+  { id: 'receivables', label: 'Receivables & Collections', icon: HandCoins, children: [
       { id: 'ar', label: 'Accounts Receivable', icon: FileText, path: '/transactions/receivable', permission: 'ar.manage' },
       { id: 'collections', label: 'Collections', icon: HandCoins, path: '/transactions/collections', permission: 'collections.view' },
+      { id: 'collectors', label: 'Collectors', icon: UserCheck, path: '/master-data/collectors', permission: 'collectors.view' },
+  ] },
+  { id: 'payables', label: 'Payables & Payments', icon: Wallet, children: [
       { id: 'ap', label: 'Accounts Payable', icon: FileMinus, path: '/transactions/payable', permission: 'ap.view' },
-      // Split back out from Disbursements  -  Disbursements is payments
-      // against AP only now; Budgets is its own module with its own
-      // permission group (budgets.view/manage/approve  -  see
-      // database/seeders/budgets-permission-addition.php), not
-      // disbursements.*, so Staff/Admin access to one is independent of
-      // the other.
       { id: 'disbursements', label: 'Disbursements', icon: Send, path: '/transactions/disbursements', permission: 'disbursements.view' },
-      { id: 'budgets', label: 'Budgets', icon: PiggyBank, path: '/transactions/budgets', permission: 'budgets.view' },
       { id: 'expenses', label: 'Expenses', icon: Receipt, path: '/transactions/expenses', permission: 'expenses.view' },
-      { id: 'tax', label: 'Tax Obligations', icon: Landmark, path: '/transactions/tax-obligations', permission: 'tax.view' },
-    ],
-  },
-  {
-    id: 'accounting',
-    label: 'Accounting',
-    icon: BookOpen,
-    children: [
-      // chart-of-accounts.view kept on staff (read-only API); .manage gates nav.
-      { id: 'chart-of-accounts', label: 'Chart of Accounts', icon: Network, path: '/master-data/chart-of-accounts', permission: 'chart-of-accounts.manage' },
+  ] },
+  { id: 'accounting', label: 'Accounting & Planning', icon: BookOpen, children: [
       { id: 'general-ledger', label: 'General Ledger', icon: BookText, path: '/accounting/general-ledger', permission: 'general-ledger.view' },
-    ],
-  },
-  {
-    id: 'analytics',
-    label: 'Analytics',
-    icon: LineChart,
-    children: [
+      { id: 'chart-of-accounts', label: 'Chart of Accounts', icon: Network, path: '/master-data/chart-of-accounts', permission: 'chart-of-accounts.manage' },
+      { id: 'budgets', label: 'Budgets', icon: PiggyBank, path: '/transactions/budgets', permission: 'budgets.view' },
+      { id: 'tax', label: 'Tax Obligations', icon: Landmark, path: '/transactions/tax-obligations', permission: 'tax.view' },
+  ] },
+  { id: 'insights', label: 'Reports & Insights', icon: FileBarChart, children: [
+      { id: 'reports', label: 'Reports', icon: FileBarChart, path: '/reports', permission: 'reports.view' },
       { id: 'forecasting', label: 'Financial Forecasting', icon: TrendingUp, path: '/analytics/forecasting', permission: 'forecasting.view' },
       { id: 'ai', label: 'AI Advisor & Recommendations', icon: Sparkles, path: '/analytics/ai-recommendations', permission: 'ai.view' },
-    ],
-  },
-  {
-    id: 'reports',
-    label: 'Reports',
-    icon: FileBarChart,
-    path: '/reports',
-    permission: 'reports.view',
-  },
-  {
-    id: 'administration',
-    label: 'Administration',
-    icon: UserCog,
-    children: [
+  ] },
+  { id: 'master-data', label: 'Master Data', icon: Database, children: [
+      { id: 'customers', label: 'Customers', icon: Users, path: '/master-data/customers', permission: 'customers.view' },
+      { id: 'suppliers', label: 'Suppliers', icon: Truck, path: '/master-data/suppliers', permission: 'suppliers.view' },
+      { id: 'cash-accounts', label: 'Cash Accounts', icon: Wallet, path: '/master-data/cash-accounts', permission: 'cash-accounts.manage' },
+      { id: 'fixed-assets', label: 'Fixed Assets', icon: Boxes, path: '/master-data/fixed-assets', permission: 'fixed-assets.view' },
+      { id: 'departments', label: 'Departments', icon: Building2, path: '/master-data/departments', permission: 'departments.manage' },
+      { id: 'expense-categories', label: 'Expense Categories', icon: Tags, path: '/master-data/expense-categories', permission: 'expense-categories.manage' },
+      { id: 'titles', label: 'Titles', icon: Briefcase, path: '/master-data/titles', permission: 'users.view' },
+  ] },
+  { id: 'administration', label: 'Administration', icon: UserCog, children: [
       { id: 'users', label: 'Users', icon: Users, path: '/user-management/users', permission: 'users.view' },
       { id: 'roles', label: 'Roles', icon: ShieldCheck, path: '/user-management/roles', permission: 'roles.view' },
       { id: 'audit-logs', label: 'Audit Logs', icon: ClipboardList, path: '/system/audit-logs', permission: 'audit-logs.view' },
-    ],
-  },
-  {
-    id: 'settings',
-    label: 'Settings',
-    icon: Settings,
-    path: '/settings',
-    // Organization config page (Company Branding + Regional & Financial
-    // Defaults)  -  every form on it is gated by settings.manage on the
-    // backend, so for staff/collector (who only hold settings.view for the
-    // sidebar logo) the page is an empty shell. Gate the nav entry here too:
-    // Sidebar/Header swap it for a "My Profile" item, and App.jsx redirects
-    // a direct /settings URL to /profile. settings.view still works for
-    // everyone via CompanyContext, which reads GET /api/settings on its own.
-    permission: 'settings.manage',
-  },
-  {
-    id: 'logout',
-    label: 'Logout',
-    icon: LogOut,
-    path: '/logout',
-    isLogout: true,
-  },
+  ] },
+  { id: 'settings', label: 'Settings', icon: Settings, path: '/settings', permission: 'settings.manage' },
+  { id: 'logout', label: 'Logout', icon: LogOut, path: '/logout', isLogout: true },
+]
+
+// Collectors work from their assigned-invoice queue and personal collector profile.
+// Filtering below still requires the same module permissions as the full menu.
+export const collectorMenuData = [
+  menuData[0], menuData[1],
+  { ...menuData[2].children.find(item => item.id === 'collections'), label: 'My Collections' },
+  { ...menuData[2].children.find(item => item.id === 'collectors'), label: 'My Collector Profile' },
+  menuData.find(item => item.id === 'logout'),
 ]

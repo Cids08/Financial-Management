@@ -56,7 +56,7 @@ export default function DashboardLayout() {
             sync: mark something read on the page and the sidebar/header
             badge update immediately, not on the next 30s poll. */}
         <NotificationsProvider>
-          <div className="min-h-dvh bg-bg">
+          <div className="workspace-shell min-h-dvh bg-bg" data-nav-collapsed={collapsed}>
             <Header
               onToggleSidebar={handleHeaderToggle}
               collapsed={collapsed}
@@ -72,7 +72,7 @@ export default function DashboardLayout() {
             />
 
             <div
-              className={`pt-20 flex flex-col min-h-dvh min-w-0 transition-all duration-300 ease-in-out-smooth
+              className={`workspace-frame pt-20 flex flex-col min-h-dvh min-w-0 transition-all duration-300 ease-in-out-smooth
                 ${collapsed ? 'lg:pl-20' : 'lg:pl-70'}
               `}
             >
