@@ -19,7 +19,11 @@ class StoreCollectorRequest extends FormRequest
                 'required',
                 'string',
                 'max:255',
-                'unique:collectors,employee_no',
+                // Collectors are soft-deleted. Without the whereNull(deleted_at),
+                // deleting a collector kept its employee number "taken" forever —
+                // the create form in user management kept rejecting the same
+                // number even though the collector list no longer showed anyone.
+                Rule::unique('collectors', 'employee_no')->whereNull('deleted_at'),
                 Rule::unique('users', 'employee_no')->whereNull('deleted_at')->ignore($this->user_id, 'id'),
             ],
             'first_name'       => ['required', 'string', 'max:255'],
@@ -39,7 +43,7 @@ class StoreCollectorRequest extends FormRequest
             'monthly_target'   => ['nullable', 'numeric', 'min:0'],
             'is_active'        => ['sometimes', 'boolean'],
             // Links this collector record to an existing login account.
-            'user_id'          => ['nullable', 'integer', 'exists:users,id', 'unique:collectors,user_id'],
+            'user_id'          => ['nullable', 'integer', 'exists:users,id', Rule::unique('collectors', 'user_id')->whereNull('deleted_at')],
         ];
     }
 

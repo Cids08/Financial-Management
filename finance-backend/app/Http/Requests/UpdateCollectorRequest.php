@@ -17,7 +17,7 @@ class UpdateCollectorRequest extends FormRequest
         $collectorId = $this->route('collector')?->id;
 
         return [
-            'employee_no'      => ['required', 'string', 'max:255', Rule::unique('collectors', 'employee_no')->ignore($collectorId)],
+            'employee_no'      => ['required', 'string', 'max:255', Rule::unique('collectors', 'employee_no')->ignore($collectorId)->whereNull('deleted_at')],
             'first_name'       => ['required', 'string', 'max:255'],
             'middle_name'      => ['nullable', 'string', 'max:255'],
             'last_name'        => ['required', 'string', 'max:255'],
@@ -32,7 +32,7 @@ class UpdateCollectorRequest extends FormRequest
             // ->ignore($collectorId) matters here specifically: without
             // it, re-saving a collector that's already linked to user_id
             // X would fail uniqueness against its own existing row.
-            'user_id'          => ['nullable', 'integer', 'exists:users,id', Rule::unique('collectors', 'user_id')->ignore($collectorId)],
+            'user_id'          => ['nullable', 'integer', 'exists:users,id', Rule::unique('collectors', 'user_id')->ignore($collectorId)->whereNull('deleted_at')],
         ];
     }
 }

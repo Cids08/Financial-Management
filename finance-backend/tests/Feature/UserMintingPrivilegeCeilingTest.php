@@ -2,16 +2,20 @@
 
 namespace Tests\Feature;
 
+use App\Http\Requests\StoreCollectorRequest;
+use App\Http\Requests\UpdateCollectorRequest;
 use App\Models\Collector;
 use App\Models\User;
 use App\Services\CollectorService;
 use App\Services\UserService;
 use Illuminate\Contracts\Console\Kernel;
+use Illuminate\Database\QueryException;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\TestCase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -351,5 +355,170 @@ class UserMintingPrivilegeCeilingTest extends TestCase
             'first_name' => 'Nope',
             'last_name' => 'Collector',
         ]);
+    }
+
+    /** Employee-number slots must be re-usable once the previous collector was deleted. */
+    public function test_a_soft_deleted_collector_does_not_keep_its_employee_number_taken(): void
+    {
+        $actor = $this->actor(self::STAFF, 'staff9@example.test');
+
+        // A collector holding this number was deleted - the number must be free.
+        DB::table('collectors')->insert([
+            'employee_no' => 'EMP-90004',
+            'first_name' => 'Gone',
+            'last_name' => 'Collector',
+            'status' => 'Active',
+            'deleted_at' => now(),
+        ]);
+
+        $payload = [
+            'employee_no' => 'EMP-90004',
+            'first_name' => 'New',
+            'last_name' => 'Collector',
+            'email' => 'reuse-number@example.test',
+        ];
+
+        $request = StoreCollectorRequest::create('/api/collectors', 'POST', $payload);
+        $request->setUserResolver(fn () => $actor);
+
+        $validator = Validator::make($payload, $request->rules(), $request->messages());
+
+        $this->assertTrue($validator->passes(), 'Re-creating a collector under a freed employee number must validate.');
+    }
+
+    public function test_a_live_collector_still_blocks_its_employee_number(): void
+    {
+        $actor = $this->actor(self::STAFF, 'staff10@example.test');
+
+        DB::table('collectors')->insert([
+            'employee_no' => 'EMP-90005',
+            'first_name' => 'Active',
+            'last_name' => 'Collector',
+            'status' => 'Active',
+        ]);
+
+        $payload = [
+            'employee_no' => 'EMP-90005',
+            'first_name' => 'Dup',
+            'last_name' => 'Collector',
+            'email' => 'duplicate-number@example.test',
+        ];
+
+        $request = StoreCollectorRequest::create('/api/collectors', 'POST', $payload);
+        $request->setUserResolver(fn () => $actor);
+
+        $validator = Validator::make($payload, $request->rules(), $request->messages());
+
+        $this->assertTrue($validator->fails());
+        $this->assertArrayHasKey('employee_no', $validator->errors()->toArray(), 'A live collector must keep its number taken.');
+    }
+
+    /** The update path has the same soft-delete hole: a deleted collector blocked edits to its freed number. */
+    public function test_updating_a_collector_can_use_a_freed_employee_number(): void
+    {
+        $actor = $this->actor(self::STAFF, 'staff11@example.test');
+        $live = $this->target('live-collector@example.test');
+
+        DB::table('collectors')->insertGetId([
+            'employee_no' => 'EMP-90006',
+            'first_name' => 'Old',
+            'last_name' => 'Collector',
+            'status' => 'Active',
+            'user_id' => $live->id,
+            'deleted_at' => now(),
+        ]);
+
+        $collectorId = DB::table('collectors')->insertGetId([
+            'employee_no' => 'EMP-90007',
+            'first_name' => 'Editable',
+            'last_name' => 'Collector',
+            'status' => 'Active',
+        ]);
+
+        $payload = ['employee_no' => 'EMP-90006', 'first_name' => 'Editable', 'last_name' => 'Collector'];
+
+        $request = UpdateCollectorRequest::create('/api/collectors/'.$collectorId, 'PUT', $payload);
+        $request->setRouteResolver(fn () => new TestCollectorRoute($collectorId));
+
+        $validator = Validator::make($payload, $request->rules());
+
+        $this->assertTrue($validator->passes(), 'Editing a collector to take a freed employee number must validate.');
+    }
+
+    /**
+     * Runs the real migration against this schema and proves it at the
+     * database level, not just in the FormRequest: a soft-deleted collector
+     * must no longer hold its employee number, while a live one still does.
+     * SQLite and Postgres build these constraints differently (index vs
+     * constraint), so exercising the migration's own DDL matters.
+     */
+    public function test_the_migration_frees_a_deleted_collectors_employee_number(): void
+    {
+        // This hand-built schema never had a unique index on user_id; add the
+        // pre-migration state so dropUnique() has something to drop.
+        DB::statement('CREATE UNIQUE INDEX collectors_user_id_unique ON collectors (user_id)');
+
+        $migration = require base_path('database/migrations/2026_10_06_020000_release_soft_deleted_collector_uniqueness.php');
+        $migration->up();
+
+        DB::table('collectors')->insert([
+            'employee_no' => 'EMP-90008',
+            'first_name' => 'Archived',
+            'last_name' => 'Collector',
+            'status' => 'Active',
+            'deleted_at' => now(),
+        ]);
+
+        DB::table('collectors')->insert([
+            'employee_no' => 'EMP-90008',
+            'first_name' => 'Reused',
+            'last_name' => 'Collector',
+            'status' => 'Active',
+        ]);
+        $this->assertSame(1, DB::table('collectors')->where('employee_no', 'EMP-90008')->whereNull('deleted_at')->count());
+
+        try {
+            DB::table('collectors')->insert([
+                'employee_no' => 'EMP-90008',
+                'first_name' => 'Second',
+                'last_name' => 'Collector',
+                'status' => 'Active',
+            ]);
+            $this->fail('A live collector must still block its employee number');
+        } catch (QueryException $e) {
+            $this->assertStringContainsString('unique', strtolower($e->getMessage()));
+        }
+
+        // Clear the deliberate duplicates before restoring full uniqueness,
+        // otherwise down() fails by design — that is its documented contract.
+        DB::table('collectors')->where('employee_no', 'EMP-90008')->delete();
+
+        $migration->down();
+
+        DB::table('collectors')->insert(['employee_no' => 'EMP-90009', 'first_name' => 'A', 'last_name' => 'B', 'status' => 'Active']);
+        try {
+            DB::table('collectors')->insert(['employee_no' => 'EMP-90009', 'first_name' => 'C', 'last_name' => 'D', 'status' => 'Active']);
+            $this->fail('Rolling back must restore full uniqueness');
+        } catch (QueryException $e) {
+            $this->assertStringContainsString('unique', strtolower($e->getMessage()));
+        }
+
+        DB::table('collectors')->where('employee_no', 'EMP-90009')->delete();
+    }
+
+}
+
+final class TestCollectorRoute
+{
+    private int $id;
+
+    public function __construct(int $id)
+    {
+        $this->id = $id;
+    }
+
+    public function parameter($name, $default = null)
+    {
+        return $name === 'collector' ? (object) ['id' => $this->id] : $default;
     }
 }
