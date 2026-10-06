@@ -4,6 +4,7 @@ import { apiFetch } from '../utils/api'
 export function useCashAccounts() {
   const [accounts, setAccounts] = useState([])
   const [meta, setMeta] = useState({ current_page: 1, last_page: 1, total: 0 })
+  const [stats, setStats] = useState({ total: 0, active: 0, inactive: 0, archived: 0 })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
@@ -38,12 +39,23 @@ export function useCashAccounts() {
       if (debouncedSearch) params.set('search', debouncedSearch)
       if (typeFilter !== 'all') params.set('type', typeFilter)
 
-      const res = await apiFetch(`/api/cash-accounts?${params}`)
+      // Stats are exact all-pages counts (see CashAccountService::stats),
+      // independent of the filters below — fetched with the list so every
+      // mutation refetch keeps both in sync in one round trip.
+      const [res, statsRes] = await Promise.all([
+        apiFetch(`/api/cash-accounts?${params}`),
+        apiFetch('/api/cash-accounts/stats'),
+      ])
+
       const json = await res.json()
       if (!res.ok || !json.success) throw new Error(json.message || 'Failed to load cash accounts.')
 
+      const statsJson = await statsRes.json()
+      if (!statsRes.ok || !statsJson.success) throw new Error(statsJson.message || 'Failed to load cash account stats.')
+
       setAccounts(json.data)
       setMeta(json.meta)
+      setStats(statsJson.data)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -126,7 +138,7 @@ export function useCashAccounts() {
   }, [fetchAccounts])
 
   return {
-    accounts, meta, loading, saving, error,
+    accounts, meta, stats, loading, saving, error,
     search, setSearch,
     typeFilter, setTypeFilter,
     showArchived, setShowArchived,

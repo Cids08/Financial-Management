@@ -51,7 +51,7 @@ function maskAccountNumber(value) {
 
 export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Master Data', 'Cash Accounts'] }) {
   const {
-    accounts, meta, loading, saving, error,
+    accounts, meta, stats, loading, saving, error,
     search, setSearch,
     typeFilter, setTypeFilter,
     showArchived, setShowArchived,
@@ -95,10 +95,10 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
     })
   }
 
-  // "This page" totals only  -  see Collectors.jsx for the same caveat.
-  // meta.total (used in the Total Accounts card) IS global/accurate.
+  // Balance stays a "this page" figure (labelled as such); the other cards
+  // use exact all-pages counts from GET /api/cash-accounts/stats, which do
+  // not move with search/type/archived filters.
   const totalBalanceThisPage = accounts.filter((a) => a.status === 'Active').reduce((sum, a) => sum + a.current_balance, 0)
-  const inactiveThisPage = accounts.filter((a) => a.status === 'Inactive').length
 
   const openAdd = () => { setForm(EMPTY_FORM); setFormError(''); setBalanceError(''); setModalMode('add') }
   const openEdit = (a) => {
@@ -147,10 +147,10 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
   }
 
   const statCards = [
-    { key: 'total', label: 'Total Accounts', value: meta.total, icon: Wallet, iconBg: 'bg-primary/15', iconColor: 'text-primary-dark', isActive: typeFilter === 'all' && !showArchived, onClick: () => { setTypeFilter('all'); setShowArchived(false) } },
+    { key: 'total', label: 'Total Accounts', value: stats.total, icon: Wallet, iconBg: 'bg-primary/15', iconColor: 'text-primary-dark', isActive: typeFilter === 'all' && !showArchived, onClick: () => { setTypeFilter('all'); setShowArchived(false) } },
     { key: 'balance', label: 'Balance (this page)', value: privacyOn ? maskedAmount() : formatCurrency(totalBalanceThisPage), icon: PiggyBank, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: false, onClick: () => { setTypeFilter('all'); setShowArchived(false) } },
-    { key: 'inactive', label: 'Inactive (this page)', value: inactiveThisPage, icon: Landmark, iconBg: 'bg-red-50 dark:bg-red-500/10', iconColor: 'text-red-600 dark:text-red-400', isActive: false, onClick: () => setShowArchived(false) },
-    { key: 'archived', label: 'Archived', value: showArchived ? meta.total : '—', icon: Archive, iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-500 dark:text-slate-400', isActive: showArchived, onClick: () => setShowArchived(true) },
+    { key: 'inactive', label: 'Inactive', value: stats.inactive, icon: Landmark, iconBg: 'bg-red-50 dark:bg-red-500/10', iconColor: 'text-red-600 dark:text-red-400', isActive: typeFilter === 'all' && !showArchived, onClick: () => { setTypeFilter('all'); setShowArchived(false) } },
+    { key: 'archived', label: 'Archived', value: stats.archived, icon: Archive, iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-500 dark:text-slate-400', isActive: showArchived, onClick: () => setShowArchived(true) },
   ]
 
   const isModalOpen = modalMode !== null

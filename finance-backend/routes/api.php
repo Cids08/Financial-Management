@@ -194,6 +194,8 @@ Route::middleware(['auth:sanctum', 'require.password.change'])->group(function (
     // Cash accounts
     Route::prefix('cash-accounts')->group(function () {
         Route::get('/', [CashAccountController::class, 'index'])->middleware('permission:cash-accounts.view');
+        // Static route registered before any {cashAccount} binding.
+        Route::get('/stats', [CashAccountController::class, 'stats'])->middleware('permission:cash-accounts.view');
         Route::post('/', [CashAccountController::class, 'store'])->middleware('permission:cash-accounts.manage');
         Route::put('/{cashAccount}', [CashAccountController::class, 'update'])->middleware('permission:cash-accounts.manage');
         Route::delete('/{cashAccount}', [CashAccountController::class, 'archive'])->middleware('permission:cash-accounts.manage');

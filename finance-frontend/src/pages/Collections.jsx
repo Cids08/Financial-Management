@@ -238,33 +238,44 @@ function useAssignedInvoices() {
 // Collections hook
 // ---------------------------------------------------------------------------
 function useCollections() {
-  const [collections, setCollections] = useState([])
+  const [liveCollections,   setLiveCollections]   = useState([])
+  const [trashedCollections, setTrashedCollections] = useState([])
+  const [trashedTotal,      setTrashedTotal]      = useState(0)
   const [loading,     setLoading]     = useState(true)
   const [error,       setError]       = useState('')
-  const [meta,        setMeta]        = useState(null)
   const [trashed,     setTrashed]     = useState(false)
 
-  const fetchCollections = (opts = {}) => {
-    const params = new URLSearchParams({
-      per_page: 500,
-      ...(opts.trashed ?? trashed ? { trashed: 1 } : {}),
-    })
+  // Live and archived rows are fetched together (the same dual-fetch the
+  // Users page already does) so the stat cards keep describing the LIVE
+  // records while the table shows the trash. With a single fetch of
+  // whichever view was open, opening Archived made "All Records",
+  // "Collected" and "Pending" count archived rows, and the Archived card
+  // had no count to show at all (it rendered a dash).
+  const fetchCollections = () => {
     setLoading(true)
     setError('')
-    apiFetch(`/api/collections?${params}`)
-      .then((res) => res.json())
-      .then((json) => {
-        if (!json.success) throw new Error(json.message || 'Failed to load collections.')
-        setCollections(json.data)
-        setMeta(json.meta ?? null)
+    Promise.all([
+      apiFetch('/api/collections?per_page=500').then((res) => res.json()),
+      apiFetch('/api/collections?per_page=500&trashed=1').then((res) => res.json()),
+    ])
+      .then(([liveJson, trashedJson]) => {
+        if (!liveJson.success) throw new Error(liveJson.message || 'Failed to load collections.')
+        if (!trashedJson.success) throw new Error(trashedJson.message || 'Failed to load archived collections.')
+        setLiveCollections(liveJson.data)
+        setTrashedCollections(trashedJson.data)
+        // meta.total is the exact archived count even past per_page.
+        setTrashedTotal(trashedJson.meta?.total ?? trashedJson.data.length)
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => { fetchCollections() }, [trashed])
+  // Both sets are loaded on mount; toggling views never refetches.
+  useEffect(() => { fetchCollections() }, [])
 
-  return { collections, loading, error, meta, trashed, setTrashed, refetch: fetchCollections }
+  const collections = trashed ? trashedCollections : liveCollections
+
+  return { collections, liveCollections, trashedTotal, loading, error, trashed, setTrashed, refetch: fetchCollections }
 }
 
 // ---------------------------------------------------------------------------
@@ -276,7 +287,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
     arInfo, collectorName, accountName, userName,
   } = useLookups()
 
-  const { collections, loading, error, meta, trashed, setTrashed, refetch } = useCollections()
+  const { collections, liveCollections, trashedTotal, loading, error, trashed, setTrashed, refetch } = useCollections()
   const { invoices: assignedInvoices, queueLoading, queueError, lastFetched, refetchQueue } = useAssignedInvoices()
 
   useCollectionUpdates(() => { refetch(); refetchQueue() })
@@ -480,7 +491,8 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
       return Number(ar.balance ?? ar.remaining_balance ?? 0) > 0
     }).length
 
-    const relevantCollections = collections.filter((c) => {
+    // Always the live set: cards describe working records, never the trash.
+    const relevantCollections = liveCollections.filter((c) => {
       if (collectorFilter !== 'all' && String(c.collector_id) !== String(collectorFilter)) return false
       return true
     })
@@ -491,7 +503,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
       collected: relevantCollections.filter((c) => c.status === 'Confirmed').reduce((s, c) => s + c.amount_received, 0),
       pending:   relevantCollections.filter((c) => c.status === 'Pending').length,
     }
-  }, [collections, assignedInvoices, isCollectorUser, userCollectorId, collectorFilter])
+  }, [liveCollections, assignedInvoices, isCollectorUser, userCollectorId, collectorFilter])
 
   // -------------------------------------------------------------------------
   // Modal helpers
@@ -512,7 +524,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
       ar_id:           defaultArId,
       collector_id:    defaultCollectorId,
       cash_account_id: cashAccounts[0]?._key ?? '',
-      reference_number: getNextReferenceNo(collections),
+      reference_number: getNextReferenceNo(liveCollections),
     })
     setFormError('')
     setFieldErrors({})
@@ -531,7 +543,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
       ar_id:            String(ar.ar_id ?? ar.id ?? ''),
       collector_id:     String(ar.collector_id ?? ''),
       cash_account_id:  cashAccounts[0]?._key ?? '',
-      reference_number: getNextReferenceNo(collections),
+      reference_number: getNextReferenceNo(liveCollections),
       collection_date:  new Date().toISOString().split('T')[0],
       amount_received:  bal > 0 ? String(bal) : '',
     })
@@ -679,7 +691,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
 
     if (form.reference_number && form.reference_number.trim()) {
       const trimmedRef = form.reference_number.trim().toLowerCase()
-      const dup = collections.find((c) => {
+      const dup = liveCollections.find((c) => {
         if (modalMode !== 'add' && c.id === modalMode?.id) return false
         return (c.reference_number || '').trim().toLowerCase() === trimmedRef
       })
@@ -881,7 +893,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
     { key: 'awaiting',  label: 'Awaiting Collection',  value: stats.awaiting,                             icon: Users,     iconBg: 'bg-violet-50 dark:bg-violet-500/10',     iconColor: 'text-violet-600 dark:text-violet-400',     isActive: statusFilter === 'Awaiting Collection' && !trashed, onClick: () => { setStatusFilter('Awaiting Collection'); setTrashed(false); setOverdueOnly(false) } },
     { key: 'collected', label: 'Confirmed Amount',     value: formatCurrency(stats.collected),              icon: Wallet,    iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: statusFilter === 'Confirmed'            && !trashed, onClick: () => { setStatusFilter('Confirmed');           setTrashed(false); setOverdueOnly(false) } },
     { key: 'pending',   label: 'Unconfirmed Receipts', value: stats.pending,                             icon: Clock3,    iconBg: 'bg-amber-50 dark:bg-amber-500/10',     iconColor: 'text-amber-600 dark:text-amber-400',     isActive: statusFilter === 'Pending'             && !trashed, onClick: () => { setStatusFilter('Pending');             setTrashed(false); setOverdueOnly(false) } },
-    { key: 'archived',  label: 'Archived',             value: '—',                                        icon: Archive,   iconBg: 'bg-slate-100 dark:bg-slate-800',       iconColor: 'text-slate-500 dark:text-slate-400',     isActive: trashed,                                            onClick: () => { setTrashed(true);                   setStatusFilter('all'); setOverdueOnly(false) } },
+    { key: 'archived',  label: 'Archived',             value: trashedTotal,                               icon: Archive,   iconBg: 'bg-slate-100 dark:bg-slate-800',       iconColor: 'text-slate-500 dark:text-slate-400',     isActive: trashed,                                            onClick: () => { setTrashed(true);                   setStatusFilter('all'); setOverdueOnly(false) } },
   ]
 
   const isModalOpen = modalMode !== null
@@ -1480,7 +1492,7 @@ export default function Collections({ title = 'Collections', crumbs = ['Financia
                   setForm((f) => ({ ...f, reference_number: val }))
                   const trimmed = val.trim().toLowerCase()
                   if (trimmed) {
-                    const dup = collections.find((c) => {
+                    const dup = liveCollections.find((c) => {
                       if (modalMode !== 'add' && c.id === modalMode?.id) return false
                       return (c.reference_number || '').trim().toLowerCase() === trimmed
                     })

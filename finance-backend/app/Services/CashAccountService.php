@@ -42,6 +42,26 @@ class CashAccountService
         return $query->paginate($perPage);
     }
 
+    /**
+     * Exact all-pages counts behind the Cash Accounts stat cards.
+     *
+     * Deliberately independent of list(): meta.total is the count of
+     * whatever search/type/archived query is on screen, so the Archived
+     * card could only show a number while you were already in that view
+     * (and then Total Accounts showed the archived total instead).
+     *
+     * @return array{total: int, active: int, inactive: int, archived: int}
+     */
+    public function stats(): array
+    {
+        return [
+            'total'    => CashAccount::count(),
+            'active'   => CashAccount::where('status', 'Active')->count(),
+            'inactive' => CashAccount::where('status', 'Inactive')->count(),
+            'archived' => CashAccount::onlyTrashed()->count(),
+        ];
+    }
+
     public function create(User $user, array $data): CashAccount
     {
         return DB::transaction(function () use ($user, $data) {

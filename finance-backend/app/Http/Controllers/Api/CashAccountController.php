@@ -42,6 +42,18 @@ class CashAccountController extends Controller
         ]);
     }
 
+    /**
+     * GET /api/cash-accounts/stats
+     */
+    public function stats(): JsonResponse
+    {
+        return response()->json([
+            'success' => true,
+            'message' => '',
+            'data'    => $this->cashAccountService->stats(),
+        ]);
+    }
+
     public function store(StoreCashAccountRequest $request): JsonResponse
     {
         $account = $this->cashAccountService->create($request->user(), $request->validated());
