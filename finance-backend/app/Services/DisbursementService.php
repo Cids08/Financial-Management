@@ -21,9 +21,30 @@ class DisbursementService
 {
     use \App\Concerns\LocksReferencePrefix;
     /**
-     * Auto-reconciles any disbursement records that had journal entries posted
-     * but whose status was not persisted due to prior model fillable protection,
-     * and prunes any accidental duplicate GL postings caused by multiple clicks.
+     * Repairs the disbursement ledger: syncs status for disbursements that
+     * already have journal entries posted, prunes duplicate GL postings
+     * caused by multiple release clicks, restores the cash leg those
+     * duplicates were double-counting, unwinds payroll budget charges, and
+     * rebuilds linked AP paid/remaining balances from the journal rather
+     * than by incrementing.
+     *
+     * IT WRITES TO THE LEDGER. It is deliberately NOT called from any read path.
+     *
+     * It used to be called from stats() and paginate(), which back GET
+     * /api/disbursements/stats and GET /api/disbursements. That made every
+     * list page load — and every crawler, prefetch, retry and second tab — a
+     * financial write: entries deleted, cash balances incremented, AP
+     * balances rewritten. Two concurrent reads could each observe the same
+     * duplicate and both credit cash. The whole method is also wrapped in a
+     * single try/catch that swallowed every failure into a log line, so a
+     * half-applied repair looked like a clean page render.
+     *
+     * Run it on purpose instead:
+     *   php artisan ledger:reconcile            (dry run, reports what it would do)
+     *   php artisan ledger:reconcile --apply    (writes)
+     *
+     * The logic itself is idempotent, so running it repeatedly is safe — which
+     * is what made the read-path call look harmless. Idempotent is not free.
      */
     public function reconcileReleasedDisbursements(): void
     {
@@ -158,8 +179,15 @@ class DisbursementService
                 $newPaid = min($releasedTotal, $originalAmount);
                 $newRemaining = max(0, $originalAmount - $newPaid);
 
+                // Overdue and Cancelled are owned by other rules:
+                // AccountsPayableService derives Overdue from the due date,
+                // and Cancelled is a void. Recomputing them here would hide
+                // an overdue bill from the overdue dashboard, or quietly
+                // un-void one, on a ledger repair that has nothing to do with
+                // either. Only the fully-paid conclusion is safe to override.
                 $desiredStatus = match (true) {
                     $newRemaining <= 0 => 'Paid',
+                    in_array($ap->status, ['Overdue', 'Cancelled'], true) => $ap->status,
                     $newPaid > 0 => 'Partially Paid',
                     default => $ap->status,
                 };
@@ -186,7 +214,6 @@ class DisbursementService
 
     public function stats(): array
     {
-        $this->reconcileReleasedDisbursements();
         $active = Disbursement::query()->whereNull('deleted_at');
 
         return [
@@ -202,7 +229,6 @@ class DisbursementService
 
     public function paginate(array $filters, int $perPage = 20)
     {
-        $this->reconcileReleasedDisbursements();
         $query = Disbursement::query()
             ->with(['accountsPayable', 'department', 'cashAccount', 'creator.title', 'approver.title', 'releaser.title'])
             ->withCount(['supportingDocuments as supporting_documents_count']);
