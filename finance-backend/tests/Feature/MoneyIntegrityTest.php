@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Http\Controllers\Api\PermanentDeleteController;
 use App\Models\AccountsPayable;
+use App\Models\CashAccount;
 use App\Models\Disbursement;
 use App\Models\TaxObligation;
 use App\Services\DisbursementService;
@@ -118,6 +119,23 @@ class MoneyIntegrityTest extends TestCase
             $t->timestamps();
         });
 
+        // The duplicate-pruning branch of the reconciler restores the cash leg
+        // of a deleted duplicate posting, so it needs the cash account.
+        Schema::create('cash_accounts', function (Blueprint $t) {
+            $t->id();
+            $t->string('account_code')->nullable();
+            $t->string('account_name');
+            $t->decimal('opening_balance', 15, 2)->default(0);
+            $t->decimal('current_balance', 15, 2)->default(0);
+            $t->unsignedInteger('chart_of_account_id')->nullable();
+            $t->boolean('is_default')->default(false);
+            $t->string('status')->default('Active');
+            $t->unsignedInteger('updated_by')->nullable();
+            $t->unsignedInteger('deleted_by')->nullable();
+            $t->timestamps();
+            $t->softDeletes();
+        });
+
         DB::table('suppliers')->insert(['id' => 1, 'supplier_name' => 'Test Supplier', 'current_balance' => 0]);
     }
 
@@ -211,6 +229,81 @@ class MoneyIntegrityTest extends TestCase
         $this->assertSame('4000.00', $bill->paid_amount);
         $this->assertSame('6000.00', $bill->remaining_balance);
         $this->assertSame('Partially Paid', $bill->status);
+    }
+
+    /**
+     * THE REGRESSION: when the reconciler pruned a duplicate GL posting left
+     * by a double-clicked release, it summed *every credit line* in the entry
+     * and credited the cash account with the total. An AP release with
+     * withholding tax carries two credit lines — net cash out and the EWT
+     * payable — so cash was inflated by the withheld tax on every prune, and
+     * the reconciler runs on ordinary GET requests.
+     *
+     * Only the cash leg needs putting back: the deleted entry takes both sides
+     * out of the ledger, and the cash account's balance is the one derived
+     * figure stored outside the journal.
+     */
+public function test_pruning_a_duplicate_posting_restores_only_the_cash_leg(): void
+    {
+        DB::table('cash_accounts')->insert([
+            'id' => 1,
+            'account_name' => 'BDO Checking',
+            'opening_balance' => 80000,
+            'current_balance' => 80000,
+            'chart_of_account_id' => 200, // the cash account's chart account
+            'status' => 'Active',
+        ]);
+
+        $disbursementId = DB::table('disbursements')->insertGetId([
+            'source_type' => 'ap',
+            'status' => 'Released',
+            'amount_paid' => 100000,
+            'cash_account_id' => 1,
+            'released_date' => '2026-10-01',
+        ]);
+
+        // Gross 100,000 = net cash 90,000 + EWT payable 10,000. Two copies of
+        // the entry, exactly as a double-clicked release left behind.
+        foreach (['DV-KEEP', 'DV-DUP'] as $transactionNo) {
+            $journalId = DB::table('journal_entries')->insertGetId([
+                'transaction_no' => $transactionNo,
+                'status' => 'Posted',
+            ]);
+
+            DB::table('journal_entry_lines')->insert([
+                [
+                    'journal_entry_id' => $journalId, 'account_id' => 300, 'debit' => 100000, 'credit' => 0,
+                    'reference_type' => 'Disbursement', 'reference_id' => $disbursementId,
+                ],
+                [
+                    'journal_entry_id' => $journalId, 'account_id' => 200, 'debit' => 0, 'credit' => 90000,
+                    'reference_type' => 'Disbursement', 'reference_id' => $disbursementId,
+                ],
+                [
+                    'journal_entry_id' => $journalId, 'account_id' => 400, 'debit' => 0, 'credit' => 10000,
+                    'reference_type' => 'Disbursement', 'reference_id' => $disbursementId,
+                ],
+            ]);
+        }
+
+        app(DisbursementService::class)->reconcileReleasedDisbursements();
+
+        // The reconciler swallows exceptions, so prove the branch actually
+        // ran before asserting anything about the balance. The entry is soft
+        // deleted, hence the model-level count rather than a raw table one.
+        $this->assertSame(1, \App\Models\JournalEntry::count(), 'the duplicate entry should have been pruned');
+        $this->assertNotNull(
+            DB::table('journal_entries')->where('transaction_no', 'DV-DUP')->value('deleted_at'),
+            'the duplicate entry should be marked deleted'
+        );
+        $this->assertSame(3, DB::table('journal_entry_lines')->count(), 'the kept entry must be untouched');
+
+        // Only the 90,000 cash credit comes back — not the 10,000 EWT credit.
+        $this->assertSame(
+            '170000.00',
+            CashAccount::find(1)->current_balance,
+            'Only the cash leg of the pruned entry should be restored.'
+        );
     }
 
     /**

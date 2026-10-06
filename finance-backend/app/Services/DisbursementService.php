@@ -63,16 +63,31 @@ class DisbursementService
                     $duplicateIds = $journalEntryIds->slice(1);
 
                     foreach ($duplicateIds as $dupId) {
-                        $cashLines = JournalEntryLine::where('journal_entry_id', $dupId)
-                            ->where('credit', '>', 0)
-                            ->get();
+                        // Restore ONLY the cash leg of the deleted entry.
+                        //
+                        // This used to sum every credit line in the entry and
+                        // credit the cash account with the total. An AP
+                        // release with withholding tax carries two credit
+                        // lines — net cash out *and* the EWT payable — so
+                        // pruning one duplicate inflated cash by the EWT as
+                        // well. The deleted entry removes both sides from the
+                        // ledger, so only the cash account, whose balance is
+                        // a denormalised running total outside the journal,
+                        // needs anything put back.
+                        $cashAcc = $disbursement->cash_account_id
+                            ? CashAccount::find($disbursement->cash_account_id)
+                            : null;
 
-                        foreach ($cashLines as $cl) {
-                            if ($disbursement->cash_account_id) {
-                                $cashAcc = CashAccount::find($disbursement->cash_account_id);
-                                if ($cashAcc) {
-                                    $cashAcc->increment('current_balance', $cl->credit);
-                                }
+                        $cashChartId = $cashAcc?->chart_of_account_id;
+
+                        if ($cashAcc && $cashChartId) {
+                            $cashCredit = (float) JournalEntryLine::where('journal_entry_id', $dupId)
+                                ->where('account_id', $cashChartId)
+                                ->where('credit', '>', 0)
+                                ->sum('credit');
+
+                            if ($cashCredit > 0) {
+                                $cashAcc->increment('current_balance', $cashCredit);
                             }
                         }
 
