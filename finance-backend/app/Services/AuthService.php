@@ -217,6 +217,16 @@ class AuthService
             ]);
         }
 
+        $user = User::findOrFail($pending['user_id']);
+
+        // Checked *before* the code comparison, not after: the lock is the
+        // account's brute-force throttle, so while it stands no verification
+        // work should happen at all. Previously this ran only after a correct
+        // code, which meant a locked account could keep submitting guesses.
+        if ($this->isLocked($user)) {
+            throw new AccountLockedException(now()->diffInSeconds($user->locked_until));
+        }
+
         $hashed = Cache::get($this->codeCacheKey($pendingToken));
 
         if (! $hashed || ! Hash::check($code, $hashed)) {
@@ -226,22 +236,56 @@ class AuthService
                 'agent'   => request()->userAgent(),
             ]);
 
+            // A wrong code counts toward the same failed_login_attempts budget
+            // as a wrong password. Without this the 6-digit code was guessable:
+            // the only limit was throttle:5,1 *per IP*, and
+            // resendLoginTwoFactor() reissues a fresh code against the same
+            // pending ticket, so an attacker rotating source addresses had
+            // nothing at all bounding attempts against one account. 2FA that
+            // can be brute-forced is not a second factor.
+            $this->registerFailedAttempt($user);
+
+            AuditLog::create([
+                'user_id'                => $user->id,
+                'module'                 => 'Authentication',
+                'action'                 => 'failed_2fa',
+                'record_id'              => $user->id,
+                'activity_description'   => sprintf(
+                    'Failed two-factor verification for user %s from IP %s. (Invalid verification code entered)',
+                    $user->name ?? $user->first_name . ' ' . $user->last_name,
+                    request()->ip()
+                ),
+                'ip_address'             => request()->ip(),
+                'user_agent'             => request()->userAgent(),
+            ]);
+
+            // The attempt that just ran may have been the one that tripped the
+            // lock (registerFailedAttempt sets locked_until on $user in-place).
+            // Burn the pending ticket too, so the same code window cannot be
+            // resumed once the lock expires.
+            if ($this->isLocked($user)) {
+                Cache::forget($this->pendingCacheKey($pendingToken));
+                Cache::forget($this->codeCacheKey($pendingToken));
+
+                throw new AccountLockedException(now()->diffInSeconds($user->locked_until));
+            }
+
+            $remaining = self::MAX_FAILED_ATTEMPTS - $user->failed_login_attempts;
+
             throw ValidationException::withMessages([
-                'code' => ['That code is incorrect or has expired.'],
+                'code' => [$remaining <= self::WARN_WHEN_REMAINING_ATTEMPTS ? sprintf(
+                    'That code is incorrect. %d attempt%s remaining before this account is temporarily locked.',
+                    $remaining,
+                    $remaining === 1 ? '' : 's'
+                ) : 'That code is incorrect or has expired.'],
             ]);
         }
-
-        $user = User::findOrFail($pending['user_id']);
 
         // The pending ticket lives independently of the password check that
         // created it. An account can be deactivated or locked AFTER the login
         // attempt that issued the ticket, so step 2 must re-enforce the same
         // boundaries the login() flow enforces — otherwise a deactivated or
         // locked account would still complete sign-in with a stale code.
-        if ($this->isLocked($user)) {
-            throw new AccountLockedException(now()->diffInSeconds($user->locked_until));
-        }
-
         if ($user->status !== 'Active') {
             Log::channel('security')->warning('2FA verification on non-active account', [
                 'user_id' => $user->id,
@@ -261,6 +305,10 @@ class AuthService
 
         Cache::forget($this->pendingCacheKey($pendingToken));
         Cache::forget($this->codeCacheKey($pendingToken));
+
+        // A successful verification clears any failed attempts still on the
+        // account, matching what login() does on a correct password.
+        $this->clearFailedAttempts($user);
 
         Log::channel('security')->info('Successful login via 2FA', [
             'user_id' => $user->id,
@@ -301,6 +349,13 @@ class AuthService
         }
 
         $user = User::findOrFail($pending['user_id']);
+
+        // Refuse to reissue codes while the account is locked: verification
+        // cannot succeed during a lockout, so a resend only extends the window
+        // an attacker is working through.
+        if ($this->isLocked($user)) {
+            throw new AccountLockedException(now()->diffInSeconds($user->locked_until));
+        }
 
         Log::channel('security')->info('2FA login code resent', [
             'user_id' => $user->id,
