@@ -22,4 +22,12 @@ ENV OPENBLAS_NUM_THREADS=1 \
     OMP_NUM_THREADS=1 \
     MKL_NUM_THREADS=1
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "2"]
+# Default port, overridable by the platform. Previously uvicorn was pinned to
+# --port 8001 in the exec form, which cannot read an environment variable at
+# all: if the platform routes to a different port the process starts, answers
+# nothing, and every call surfaces as a connection failure with no signal in
+# the container logs. Going through `sh -c` restores ${PORT} expansion while
+# keeping 8001 as the default.
+ENV PORT=8001
+
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8001} --workers 2"]

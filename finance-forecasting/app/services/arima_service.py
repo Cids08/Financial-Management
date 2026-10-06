@@ -6,6 +6,18 @@ from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tools.sm_exceptions import ConvergenceWarning
 
 
+class ForecastValidationError(ValueError):
+    """
+    The caller sent data or parameters this service refuses to forecast on.
+
+    Deliberately distinct from a bare ValueError. The endpoint hands the
+    message straight back to the caller as a 422, and numpy/statsmodels also
+    raise ValueError for internal reasons (shape mismatches, illegal fits).
+    Echoing those would tell an authenticated caller about the internals of
+    the model stack, so only this type is ever allowed to become a 422.
+    """
+
+
 class ARIMAService:
 
     MODEL_VERSION = "1.0"
@@ -24,20 +36,35 @@ class ARIMAService:
     @staticmethod
     def validate_data(data: list[float]) -> None:
         if len(data) < 6:
-            raise ValueError(
+            raise ForecastValidationError(
                 "At least 6 historical data points are required "
                 "to generate an ARIMA forecast."
             )
 
         if any(not np.isfinite(value) for value in data):
-            raise ValueError(
+            raise ForecastValidationError(
                 "Historical data contains invalid numeric values."
+            )
+
+        # A series where every observation is identical carries no trend, no
+        # seasonality and no variance. statsmodels does not reject one -- it
+        # fits happily and returns a flat forecast with zero-width confidence
+        # intervals (verified on statsmodels 0.14.6: all-zeros forecasts 0.0,
+        # all-50000 forecasts 50000.0). That is indistinguishable at the
+        # response level from a genuinely confident flat prediction, so the
+        # caller sees "revenue will be exactly zero, with no uncertainty"
+        # when in fact the model had nothing to learn from. Refuse it instead.
+        if max(data) == min(data):
+            raise ForecastValidationError(
+                "Historical data has no variation: every period reports the "
+                "same value, so there is nothing for the model to forecast "
+                "from. Supply a series with real movement between periods."
             )
 
     @staticmethod
     def validate_periods(periods: int) -> None:
         if periods < 1:
-            raise ValueError("periods must be at least 1.")
+            raise ForecastValidationError("periods must be at least 1.")
 
     @staticmethod
     def _fit_once(data: np.ndarray, order: tuple[int, int, int]):
@@ -169,17 +196,18 @@ class ARIMAService:
         # value flows into predicted_amount, the bounds and the decimal(15,4)
         # rmse column — Laravel then stores NULL and throws a QueryException,
         # turning a model failure into a 500 that looks like a database bug.
-        # A forecast built from NaN is meaningless, so fail as a 422-style
-        # ValueError the endpoint already maps to "insufficient/unusable data".
+        # A forecast built from NaN is meaningless, so surface it as a
+        # ForecastValidationError, which the endpoint reports as 422 rather
+        # than letting it reach the database layer.
         if not np.all(np.isfinite(np.asarray(forecast_values, dtype=float))):
-            raise ValueError(
+            raise ForecastValidationError(
                 "ARIMA produced non-finite forecast values (NaN/Inf). The model "
                 "did not produce a usable projection for this series; it cannot "
                 "be forecast as configured."
             )
 
         if not np.all(np.isfinite(np.asarray(confidence_intervals, dtype=float))):
-            raise ValueError(
+            raise ForecastValidationError(
                 "ARIMA produced non-finite confidence bounds (NaN/Inf). The "
                 "model did not produce a usable projection for this series."
             )
