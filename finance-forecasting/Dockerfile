@@ -28,6 +28,13 @@ ENV OPENBLAS_NUM_THREADS=1 \
 # nothing, and every call surfaces as a connection failure with no signal in
 # the container logs. Going through `sh -c` restores ${PORT} expansion while
 # keeping 8001 as the default.
+#
+# `exec` matters here. Without it uvicorn runs as a child of the shell rather
+# than as PID 1, so `docker stop` signals the shell, uvicorn never sees the
+# SIGTERM, and both workers are killed after the platform's grace period
+# instead of draining in-flight forecasts. Shells usually optimise a lone
+# command into an exec on their own, but relying on that is how you get an
+# intermittent shutdown hang rather than a reliable one.
 ENV PORT=8001
 
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8001} --workers 2"]
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8001} --workers 2"]
