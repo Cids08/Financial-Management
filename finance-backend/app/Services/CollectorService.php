@@ -47,6 +47,34 @@ class CollectorService
         return $query->paginate(self::PER_PAGE);
     }
 
+    /**
+     * Global counts behind the four Collectors stat cards.
+     *
+     * Deliberately NOT derived from the paginated list: meta.total is the
+     * count of whatever search/status/archived query is on screen, so the
+     * cards showed the archived total as "Total Collectors" while the
+     * Archived card said "—" unless you were already in that view. These
+     * are computed independently of the list filters, so every card is an
+     * exact all-pages figure in any view.
+     *
+     * @param  array{user_id?: int|null}  $filters
+     * @return array{total: int, active: int, inactive: int, archived: int}
+     */
+    public function stats(array $filters = []): array
+    {
+        $scoped = fn () => Collector::query()->when(
+            isset($filters['user_id']),
+            fn ($query) => $query->where('user_id', $filters['user_id'])
+        );
+
+        return [
+            'total'    => $scoped()->count(),
+            'active'   => $scoped()->where('status', 'Active')->count(),
+            'inactive' => $scoped()->where('status', 'Inactive')->count(),
+            'archived' => $scoped()->onlyTrashed()->count(),
+        ];
+    }
+
     public function create(User $user, array $data): Collector
     {
         abort_if($user->hasAnyRole(['collector','Collector']), 403, 'Collectors cannot manage collector profiles.');

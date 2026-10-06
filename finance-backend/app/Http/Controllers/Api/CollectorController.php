@@ -43,6 +43,23 @@ class CollectorController extends Controller
     }
 
     /**
+     * GET /api/collectors/stats
+     *
+     * Exact all-pages counts for the stat cards. Scoped exactly like
+     * index() — a collector-role user only ever counts their own row.
+     */
+    public function stats(Request $request): JsonResponse
+    {
+        return response()->json([
+            'success' => true,
+            'message' => '',
+            'data'    => $this->collectorService->stats([
+                'user_id' => $request->user()->hasAnyRole(['collector', 'Collector']) ? $request->user()->id : null,
+            ]),
+        ]);
+    }
+
+    /**
      * GET /api/collectors/available-users?collector_id=
      *
      * Powers the "Linked User Account" dropdown in Collectors.jsx's

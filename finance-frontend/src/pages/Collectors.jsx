@@ -282,7 +282,7 @@ function EfficiencyModal({ collector, onClose, getEfficiency }) {
 
 export default function Collectors({ title = 'Collectors', crumbs = ['Master Data', 'Collectors'] }) {
   const {
-    collectors, meta, loading, saving, error,
+    collectors, meta, stats, loading, saving, error,
     search, setSearch,
     statusFilter, setStatusFilter,
     showArchived, setShowArchived,
@@ -350,14 +350,9 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
     })
   }
 
-  // Page-scoped, not global  -  an accurate all-pages breakdown would need
-  // a dedicated /api/collectors/stats endpoint (Customers/Suppliers
-  // already have one; Collectors doesn't yet). Total below IS global,
-  // since meta.total comes straight from the paginator.
-  const pageStats = {
-    active: collectors.filter((c) => c.is_active).length,
-    inactive: collectors.filter((c) => !c.is_active).length,
-  }
+  // Exact all-pages counts from GET /api/collectors/stats (see
+  // CollectorService::stats) rather than slices of the current page, which
+  // shift with search/status/archived filters.
 
   const openAdd = () => { setForm(EMPTY_FORM); setFormError(''); setTargetErrors({ monthly_target: '', commission_rate: '' }); setModalMode('add') }
   const openEdit = (c) => {
@@ -428,10 +423,10 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
   }
 
   const statCards = [
-    { key: 'total', label: 'Total Collectors', value: meta.total, icon: UserCheck, iconBg: 'bg-primary/15', iconColor: 'text-primary-dark', isActive: statusFilter === 'all' && !showArchived, onClick: () => { setStatusFilter('all'); setShowArchived(false) } },
-    { key: 'active', label: 'Active (this page)', value: pageStats.active, icon: UserCheck, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: statusFilter === 'active' && !showArchived, onClick: () => { setStatusFilter('active'); setShowArchived(false) } },
-    { key: 'inactive', label: 'Inactive (this page)', value: pageStats.inactive, icon: UserX, iconBg: 'bg-red-50 dark:bg-red-500/10', iconColor: 'text-red-600 dark:text-red-400', isActive: statusFilter === 'inactive' && !showArchived, onClick: () => { setStatusFilter('inactive'); setShowArchived(false) } },
-    { key: 'archived', label: 'Archived', value: showArchived ? meta.total : '—', icon: Archive, iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-500 dark:text-slate-400', isActive: showArchived, onClick: () => setShowArchived(true) },
+    { key: 'total', label: 'Total Collectors', value: stats.total, icon: UserCheck, iconBg: 'bg-primary/15', iconColor: 'text-primary-dark', isActive: statusFilter === 'all' && !showArchived, onClick: () => { setStatusFilter('all'); setShowArchived(false) } },
+    { key: 'active', label: 'Active', value: stats.active, icon: UserCheck, iconBg: 'bg-emerald-50 dark:bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400', isActive: statusFilter === 'active' && !showArchived, onClick: () => { setStatusFilter('active'); setShowArchived(false) } },
+    { key: 'inactive', label: 'Inactive', value: stats.inactive, icon: UserX, iconBg: 'bg-red-50 dark:bg-red-500/10', iconColor: 'text-red-600 dark:text-red-400', isActive: statusFilter === 'inactive' && !showArchived, onClick: () => { setStatusFilter('inactive'); setShowArchived(false) } },
+    { key: 'archived', label: 'Archived', value: stats.archived, icon: Archive, iconBg: 'bg-slate-100 dark:bg-slate-800', iconColor: 'text-slate-500 dark:text-slate-400', isActive: showArchived, onClick: () => setShowArchived(true) },
   ]
 
   return (

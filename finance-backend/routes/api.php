@@ -180,6 +180,9 @@ Route::middleware(['auth:sanctum', 'require.password.change'])->group(function (
     // Collectors (master data)
     Route::prefix('collectors')->group(function () {
         Route::get('/', [CollectorController::class, 'index'])->middleware('permission:collectors.view');
+        // Registered before any {collector} route so 'stats' can never be
+        // bound as a collector id.
+        Route::get('/stats', [CollectorController::class, 'stats'])->middleware('permission:collectors.view');
         Route::post('/', [CollectorController::class, 'store'])->middleware('permission:collectors.manage');
         Route::put('/{collector}', [CollectorController::class, 'update'])->middleware('permission:collectors.manage');
         Route::delete('/{collector}', [CollectorController::class, 'archive'])->middleware('permission:collectors.manage');

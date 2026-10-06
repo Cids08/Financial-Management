@@ -10,6 +10,7 @@ import { apiFetch } from '../utils/api'
 export function useCollectors() {
   const [collectors, setCollectors] = useState([])
   const [meta, setMeta] = useState({ current_page: 1, last_page: 1, total: 0 })
+  const [stats, setStats] = useState({ total: 0, active: 0, inactive: 0, archived: 0 })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
@@ -45,12 +46,23 @@ export function useCollectors() {
       if (debouncedSearch) params.set('search', debouncedSearch)
       if (statusFilter !== 'all') params.set('status', statusFilter)
 
-      const res = await apiFetch(`/api/collectors?${params}`)
+      // The stat cards are exact all-pages counts (see CollectorService::stats),
+      // independent of the filters below — fetched together with the list so
+      // one round trip keeps them in sync after every mutation refetch.
+      const [res, statsRes] = await Promise.all([
+        apiFetch(`/api/collectors?${params}`),
+        apiFetch('/api/collectors/stats'),
+      ])
+
       const json = await res.json()
       if (!res.ok || !json.success) throw new Error(json.message || 'Failed to load collectors.')
 
+      const statsJson = await statsRes.json()
+      if (!statsRes.ok || !statsJson.success) throw new Error(statsJson.message || 'Failed to load collector stats.')
+
       setCollectors(json.data)
       setMeta(json.meta)
+      setStats(statsJson.data)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -150,7 +162,7 @@ export function useCollectors() {
   }, [])
 
   return {
-    collectors, meta, loading, saving, error,
+    collectors, meta, stats, loading, saving, error,
     search, setSearch,
     statusFilter, setStatusFilter,
     showArchived, setShowArchived,
