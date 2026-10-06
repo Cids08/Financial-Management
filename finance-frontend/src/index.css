@@ -603,3 +603,24 @@ select:disabled { cursor: not-allowed; opacity: 0.6; }
   .ai-advisor-launcher, .ai-advisor-launcher > .ai-logo-badge { transition: none; }
   .ai-advisor-launcher:is(:hover, :active) { transform: none; }
 }
+
+/* Chat progress uses a dedicated animation, including reduced-motion feedback. */
+@keyframes advisor-dot-wave {
+  0%, 60%, 100% { transform: translateY(0); opacity: .45; }
+  30% { transform: translateY(-4px); opacity: 1; }
+}
+@keyframes advisor-dot-pulse {
+  0%, 100% { opacity: .4; }
+  50% { opacity: 1; }
+}
+.advisor-loading-dot { display: block; animation: advisor-dot-wave 1.2s ease-in-out infinite; }
+.advisor-loading-dot:nth-child(2) { animation-delay: .16s; }
+.advisor-loading-dot:nth-child(3) { animation-delay: .32s; }
+@media (prefers-reduced-motion: reduce) {
+  .advisor-loading-dot {
+    animation-name: advisor-dot-pulse;
+    animation-duration: 1.8s !important;
+    animation-iteration-count: infinite !important;
+    transform: none;
+  }
+}

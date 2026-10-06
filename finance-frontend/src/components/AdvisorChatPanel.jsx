@@ -553,30 +553,30 @@ export default function AdvisorChatPanel() {
                 <ChatMessageBubble key={i} role={m.role} text={m.text} />
               ))}
               {hydrating && (
-                <div className="flex items-end gap-2.5" aria-label="Loading conversation">
+                <div className="flex items-end gap-2.5" role="status" aria-live="polite" aria-label="Loading conversation">
                   <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-amber-700 dark:text-primary border border-primary/30">
                     <History size={12} />
                   </div>
                   <div className="rounded-2xl rounded-bl-sm border border-border bg-surface px-4 py-3 text-sm text-muted flex items-center gap-2 shadow-sm">
-                    <span className="inline-flex gap-1.5 items-center">
-                      <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.3s]" />
-                      <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.15s]" />
-                      <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce" />
+                    <span className="inline-flex h-5 gap-1.5 items-center" aria-hidden="true">
+                      <span className="h-1.5 w-1.5 rounded-full bg-primary advisor-loading-dot" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-primary advisor-loading-dot" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-primary advisor-loading-dot" />
                     </span>
                     Loading conversation...
                   </div>
                 </div>
               )}
               {isThinking && (
-                <div className="flex items-end gap-2.5" aria-label="AI advisor is typing">
+                <div className="flex items-end gap-2.5" role="status" aria-live="polite" aria-label="AI advisor is preparing a response">
                   <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-amber-700 dark:text-primary border border-primary/30">
                     <AiLogo size={15} />
                   </div>
                   <div className="rounded-2xl rounded-bl-sm border border-border bg-surface px-4 py-3 shadow-sm">
-                    <span className="inline-flex gap-1.5 items-center">
-                      <span className="h-2 w-2 rounded-full bg-primary animate-bounce [animation-delay:-0.3s]" />
-                      <span className="h-2 w-2 rounded-full bg-primary-dark animate-bounce [animation-delay:-0.15s]" />
-                      <span className="h-2 w-2 rounded-full bg-primary animate-bounce" />
+                    <span className="inline-flex h-5 gap-1.5 items-center" aria-hidden="true">
+                      <span className="h-2 w-2 rounded-full bg-primary advisor-loading-dot" />
+                      <span className="h-2 w-2 rounded-full bg-primary-dark advisor-loading-dot" />
+                      <span className="h-2 w-2 rounded-full bg-primary advisor-loading-dot" />
                     </span>
                   </div>
                 </div>
