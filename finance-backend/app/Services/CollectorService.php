@@ -50,6 +50,12 @@ class CollectorService
     public function create(User $user, array $data): Collector
     {
         abort_if($user->hasAnyRole(['collector','Collector']), 403, 'Collectors cannot manage collector profiles.');
+
+        // Linking an existing login is effectively granting that account the
+        // collector identity — and every collector-scope authorization in the
+        // app keys off it. Validate who it points at before writing.
+        $this->guardAgainstLinkingPrivilegedLogin($user, $data);
+
         return DB::transaction(function () use ($user, $data) {
             $temporaryPassword = null;
 
@@ -116,9 +122,51 @@ class CollectorService
         });
     }
 
+    /**
+     * A supplied `user_id` was previously used verbatim: validation only
+     * checked that the row exists and wasn't already bound elsewhere, so any
+     * `collectors.manage` holder could attach an *administrator's* login as a
+     * collector's identity. That rewrites the `User::collector()` relation that
+     * all the collector-scoped Policies key off, so it is an authorization
+     * change, not a data entry.
+     *
+     * Refuse to point a collector profile at an admin-tier account. Callers who
+     * genuinely need that must reassign the account's role instead.
+     *
+     * @throws ValidationException
+     */
+    protected function guardAgainstLinkingPrivilegedLogin(User $actor, array $data): void
+    {
+        if (empty($data['user_id'])) {
+            return;
+        }
+
+        $target = User::find((int) $data['user_id']);
+
+        if (! $target) {
+            throw ValidationException::withMessages([
+                'user_id' => ['The selected login account does not exist.'],
+            ]);
+        }
+
+        if (! $target->hasAnyRole(User::PRIVILEGED_ROLE_NAMES)) {
+            return;
+        }
+
+        // An admin-tier actor may still need to repair a mis-linked profile,
+        // but never an administrative login: that stays a user-management
+        // decision, taken through /api/users.
+        throw ValidationException::withMessages([
+            'user_id' => ['An administrative account cannot be linked as a collector login.'],
+        ]);
+    }
+
     public function update(User $user, Collector $collector, array $data): Collector
     {
         abort_if($user->hasAnyRole(['collector','Collector']), 403, 'Collectors cannot manage collector profiles.');
+
+        $this->guardAgainstLinkingPrivilegedLogin($user, $data);
+
         return DB::transaction(function () use ($user, $collector, $data) {
             $collector->update([
                 ...$data,

@@ -196,7 +196,7 @@ class RoleService
     }
 
     /**
-     * Mirrors UserService::guardAgainstUnauthorizedSuperAdminAssignment —
+     * Mirrors UserService::guardAgainstUnauthorizedPrivilegedRoleAssignment —
      * without this, the bulk endpoint would be a much bigger privilege-
      * escalation hole than the per-user one it was built alongside,
      * since it can grant Super Admin to many accounts in one call.

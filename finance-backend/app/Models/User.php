@@ -122,9 +122,22 @@ class User extends Authenticatable
         'disbursements.approve', 'collections.confirm',
     ];
 
+    /**
+     * Roles that bypass permission checks outright. Because `admin` grants
+     * unconditional access just like `super-admin`, any guard that only
+     * protects the super-admin slug leaves an obvious hole: a caller holding
+     * `users.manage` could mint or promote an `admin` and gain everything.
+     * Guards that ask "may this actor assign that role?" must test against
+     * this list, not against super-admin alone.
+     *
+     * Both the slug and the display casing are included because role names
+     * are free-text and have been observed with either form.
+     */
+    public const PRIVILEGED_ROLE_NAMES = ['super-admin', 'Super Admin', 'admin', 'Admin'];
+
     public function hasPermission(string $permissionName): bool
     {
-        if ($this->hasAnyRole([self::SUPER_ADMIN_ROLE, 'Super Admin', 'admin', 'Admin'])) {
+        if ($this->hasAnyRole(self::PRIVILEGED_ROLE_NAMES)) {
             return true;
         }
 

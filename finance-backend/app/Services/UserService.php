@@ -49,7 +49,7 @@ class UserService
      */
     public function create(User $actor, array $data): User
     {
-        $this->guardAgainstUnauthorizedSuperAdminAssignment($actor, $data);
+        $this->guardAgainstUnauthorizedPrivilegedRoleAssignment($actor, $data);
 
         return DB::transaction(function () use ($actor, $data) {
             $employeeNo = $this->generateEmployeeNo();
@@ -104,7 +104,7 @@ class UserService
      */
     public function update(User $actor, User $user, array $data): User
     {
-        $this->guardAgainstUnauthorizedSuperAdminAssignment($actor, $data);
+        $this->guardAgainstUnauthorizedPrivilegedRoleAssignment($actor, $data);
         $this->guardAgainstSelfLockout($actor, $user, $data);
         $this->guardAgainstStrandingSuperAdmins($user, $data);
 
@@ -337,32 +337,66 @@ class UserService
     }
 
     /**
-     * Only an actor who is themselves an active Super Admin may assign the
-     * Super Admin role to a user (via create or update) — otherwise any
-     * authenticated user hitting this endpoint could grant themselves or
-     * anyone else full access, since role_id is otherwise just a plain
-     * field with no authorization tied to its value.
+     * role_id is otherwise just a plain field, so *what* you assign it to
+     * decides how much access the target ends up with. Two rules apply:
+     *
+     *  1. Assigning `admin` (or `super-admin`) requires an admin-tier actor.
+     *     `admin` bypasses every permission check in hasPermission() exactly
+     *     like super-admin does, so a guard that only recognised the
+     *     super-admin slug would let any users.manage holder mint a full
+     *     admin account through this endpoint.
+     *  2. Assigning `super-admin` stays Super-Admin-only, so the top tier
+     *     cannot be handed out by an ordinary Admin.
      *
      * @throws ValidationException
      */
-    protected function guardAgainstUnauthorizedSuperAdminAssignment(User $actor, array $data): void
+    protected function guardAgainstUnauthorizedPrivilegedRoleAssignment(User $actor, array $data): void
     {
         if (! isset($data['role_id'])) {
             return;
         }
 
-        $superAdminRoleId = Role::where('name', self::SUPER_ADMIN_ROLE)->value('id');
+        $assignedRoleId = (int) $data['role_id'];
 
-        if ($superAdminRoleId === null || (int) $data['role_id'] !== $superAdminRoleId) {
+        $privilegedRoleIds = Role::whereIn('name', User::PRIVILEGED_ROLE_NAMES)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        if (! in_array($assignedRoleId, $privilegedRoleIds, true)) {
             return;
         }
 
-        $actorRoleName = Role::where('id', $actor->role_id)->value('name');
+        if (! $actor->hasAnyRole(User::PRIVILEGED_ROLE_NAMES)) {
+            throw ValidationException::withMessages([
+                'role_id' => ['Only an Admin or Super Admin can assign an administrative role.'],
+            ]);
+        }
 
-        if ($actorRoleName !== self::SUPER_ADMIN_ROLE) {
+        $superAdminRoleId = Role::where('name', self::SUPER_ADMIN_ROLE)->value('id');
+
+        if ($superAdminRoleId !== null
+            && $assignedRoleId === (int) $superAdminRoleId
+            && ! $actor->hasAnyRole([self::SUPER_ADMIN_ROLE, 'Super Admin'])) {
             throw ValidationException::withMessages([
                 'role_id' => ['Only a Super Admin can assign the Super Admin role.'],
             ]);
+        }
+    }
+
+    /**
+     * Whether the given user is allowed to assume the given role at all.
+     * Exposed so the collector endpoints, which can mint accounts as a side
+     * effect, can apply the same ceiling as the user endpoints.
+     */
+    public function canAssignRole(User $actor, int $roleId): bool
+    {
+        try {
+            $this->guardAgainstUnauthorizedPrivilegedRoleAssignment($actor, ['role_id' => $roleId]);
+
+            return true;
+        } catch (ValidationException) {
+            return false;
         }
     }
 
