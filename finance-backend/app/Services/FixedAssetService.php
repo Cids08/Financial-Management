@@ -275,12 +275,61 @@ class FixedAssetService
     public function update(User $user, FixedAsset $asset, array $data): FixedAsset
     {
         return DB::transaction(function () use ($user, $asset, $data) {
-            $depreciation = $this->calculateDepreciation($data);
+            // Fall back to the asset's existing basis for anything the client
+            // omitted, so a missing field cannot silently default to zero.
+            $basis = [
+                'purchase_cost'     => $data['purchase_cost'] ?? $asset->purchase_cost,
+                'salvage_value'     => array_key_exists('salvage_value', $data) ? $data['salvage_value'] : $asset->salvage_value,
+                'useful_life_years' => $data['useful_life_years'] ?? $asset->useful_life_years,
+                'purchase_date'     => $data['purchase_date'] ?? $asset->purchase_date,
+            ];
+
+            $depreciation = $this->calculateDepreciation($basis);
+
+            // executeDepreciationRun() posts a real journal entry — Dr
+            // depreciation expense, Cr the accumulated-depreciation contra
+            // account — and writes these same figures onto the asset. The
+            // blanket recompute below therefore rewrote history: edit an
+            // asset's location and the contra-asset balance in the trial
+            // balance stopped agreeing with the register, with nothing in the
+            // audit log and no reversing entry.
+            //
+            // A *lower* accumulated figure is the destructive direction, since
+            // it contradicts a credit that has already been posted. Refuse it
+            // rather than let the register and the ledger diverge silently.
+            $posted = (float) $asset->accumulated_depreciation;
+            $recomputed = (float) $depreciation['accumulated_depreciation'];
+
+            // Compare like with like. The formula accrues with elapsed time, so
+            // comparing a fresh recomputation against the posted figure would
+            // trip on any edit made after the run — the two are snapshots of
+            // different dates. Recomputing the *previous* basis as well
+            // isolates what the edit itself does: if the new basis depreciates
+            // less than the old one did, the change would contradict a credit
+            // that has already been posted to the contra-asset account.
+            if ($posted > 0) {
+                $previous = (float) $this->calculateDepreciation([
+                    'purchase_cost'     => $asset->purchase_cost,
+                    'salvage_value'     => $asset->salvage_value,
+                    'useful_life_years' => $asset->useful_life_years,
+                    'purchase_date'     => $asset->purchase_date,
+                ])['accumulated_depreciation'];
+
+                if ($recomputed < $previous - 0.005) {
+                    throw ValidationException::withMessages([
+                        'purchase_cost' => [sprintf(
+                            'This change would reduce accumulated depreciation from %s to %s, below the amount already posted to the ledger. Reverse the posted depreciation entries first.',
+                            number_format($previous, 2),
+                            number_format($recomputed, 2)
+                        )],
+                    ]);
+                }
+            }
 
             $asset->update([
                 ...$data,
                 ...$depreciation,
-                'salvage_value' => $data['salvage_value'] ?? 0,
+                'salvage_value' => $basis['salvage_value'],
                 'updated_by'    => $user->id,
             ]);
 
