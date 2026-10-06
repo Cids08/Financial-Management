@@ -123,17 +123,20 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
       return
     }
 
+    // The balance is derived from postings. It is set once, as the opening
+    // balance on create; an edit must never send it, because the API rejects
+    // it — retyping it would move the dashboard and every funds check while
+    // leaving the ledger untouched.
     const payload = {
       account_name: form.account_name,
       bank_name: form.bank_name || null,
       account_number: form.account_number,
       account_type: form.account_type,
-      current_balance: Number(form.current_balance) || 0,
       status: form.status,
     }
 
     const result = modalMode === 'add'
-      ? await createAccount(payload)
+      ? await createAccount({ ...payload, current_balance: Number(form.current_balance) || 0 })
       : await updateAccount(modalMode.cash_account_id, payload)
 
     if (!result.success) {
@@ -387,25 +390,38 @@ export default function CashAccounts({ title = 'Cash Accounts', crumbs = ['Maste
               </select>
             </div>
             <div>
-              <label className={LABEL}>Current Balance</label>
-              <input
-                type="number"
-                min="0"
-                step="any"
-                value={form.current_balance}
-                onChange={(e) => {
-                  const val = e.target.value
-                  setForm((f) => ({ ...f, current_balance: val }))
-                  if (val !== '' && Number(val) < 0) {
-                    setBalanceError('Current balance cannot be negative.')
-                  } else {
-                    setBalanceError('')
-                  }
-                }}
-                className={`${INPUT} ${balanceError ? 'border-status-danger-border' : ''}`}
-                placeholder="0.00"
-              />
-              {balanceError && <p className="mt-1 text-xs text-status-danger">{balanceError}</p>}
+              <label className={LABEL}>{isEditing ? 'Current Balance' : 'Opening Balance'}</label>
+              {isEditing ? (
+                <>
+                  <div className={`${INPUT} flex items-center bg-bg text-muted`}>
+                    {formatCurrency(modalMode.current_balance ?? 0)}
+                  </div>
+                  <p className="mt-1 text-xs text-muted">
+                    Updates automatically as collections, disbursements, and expenses are posted. Not editable here.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={form.current_balance}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setForm((f) => ({ ...f, current_balance: val }))
+                      if (val !== '' && Number(val) < 0) {
+                        setBalanceError('Current balance cannot be negative.')
+                      } else {
+                        setBalanceError('')
+                      }
+                    }}
+                    className={`${INPUT} ${balanceError ? 'border-status-danger-border' : ''}`}
+                    placeholder="0.00"
+                  />
+                  {balanceError && <p className="mt-1 text-xs text-status-danger">{balanceError}</p>}
+                </>
+              )}
             </div>
           </div>
           <div>

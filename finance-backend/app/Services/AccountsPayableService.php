@@ -793,24 +793,43 @@ class AccountsPayableService
      */
     public function executePaymentRun(User $user, array $data): array
     {
-        // 1. Load and lock cash account to check balance
-        $cashAccount = CashAccount::lockForUpdate()->findOrFail($data['cash_account_id']);
-
         $totalProposed = collect($data['proposals'])->sum('amount_to_pay');
-
-        if ((float) $totalProposed > (float) $cashAccount->current_balance) {
-            throw new RuntimeException(
-                sprintf(
-                    'Insufficient cash account balance. Available: ₱%s, Required: ₱%s.',
-                    number_format($cashAccount->current_balance, 2),
-                    number_format($totalProposed, 2)
-                )
-            );
-        }
 
         $created = [];
 
-        DB::transaction(function () use ($user, $data, &$created) {
+        DB::transaction(function () use ($user, $data, &$created, $totalProposed) {
+            // Lock the cash account *inside* the transaction that spends from
+            // it. Previously the lockForUpdate() and this balance check ran
+            // before DB::transaction() opened, i.e. in autocommit — where
+            // FOR UPDATE is released the moment the statement ends. Two
+            // concurrent runs could therefore both pass the funds check
+            // against the same balance and overdraw the account between them.
+            // Every other money path in the app (collection confirm,
+            // disbursement release, expense approval) already locks here.
+            $cashAccount = CashAccount::lockForUpdate()->find($data['cash_account_id']);
+
+            if (! $cashAccount) {
+                throw new RuntimeException('The selected cash account no longer exists.');
+            }
+
+            // Mirrors DepositBatchService: money never leaves an account that
+            // has been set Inactive or archived. This check was missing here.
+            if ($cashAccount->status !== 'Active') {
+                throw new RuntimeException(
+                    sprintf('Cash account "%s" is not active and cannot be paid from.', $cashAccount->account_name)
+                );
+            }
+
+            if ((float) $totalProposed > (float) $cashAccount->current_balance) {
+                throw new RuntimeException(
+                    sprintf(
+                        'Insufficient cash account balance. Available: ₱%s, Required: ₱%s.',
+                        number_format($cashAccount->current_balance, 2),
+                        number_format($totalProposed, 2)
+                    )
+                );
+            }
+
             foreach ($data['proposals'] as $proposal) {
                 $bill = AccountsPayable::findOrFail($proposal['ap_id']);
 

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\AuditLog;
 use App\Models\CashAccount;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -58,10 +59,37 @@ class CashAccountService
 
     public function update(User $user, CashAccount $cashAccount, array $data): CashAccount
     {
+        // current_balance is a running total maintained by the posting paths
+        // (collections, disbursements, expenses, tax payments). Accepting it
+        // from an edit form let an operator retype the number, which moved the
+        // Cash Accounts page, the dashboard's "Cash on Hand", and every
+        // insufficient-funds gate while leaving the journal-derived balance on
+        // the linked chart of accounts untouched — a permanent desync with no
+        // trace. Drop it here as well as in the request rules, so a client
+        // cannot get it through by any route.
+        unset($data['current_balance'], $data['opening_balance']);
+
         return DB::transaction(function () use ($user, $cashAccount, $data) {
+            $before = $cashAccount->only(['account_name', 'account_number', 'account_type', 'bank_name', 'branch_name', 'swift_code', 'status', 'is_default', 'currency']);
+
             $cashAccount->update([
                 ...$data,
                 'updated_by' => $user->id,
+            ]);
+
+            // This service previously wrote no audit entry at all, unlike the
+            // other money services. Bank details are exactly the sort of thing
+            // that needs an attributable before/after.
+            AuditLog::create([
+                'user_id' => $user->id,
+                'module' => 'Cash Accounts',
+                'action' => 'update',
+                'record_id' => $cashAccount->id,
+                'activity_description' => sprintf('Updated cash account %s.', $cashAccount->account_name),
+                'old_values' => $before,
+                'new_values' => $cashAccount->fresh()->only(array_keys($before)),
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
             ]);
 
             return $cashAccount->fresh();

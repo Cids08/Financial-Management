@@ -21,7 +21,12 @@ class UpdateCashAccountRequest extends FormRequest
             'bank_name'       => ['nullable', 'string', 'max:255'],
             'account_number'  => ['required', 'string', 'max:255', Rule::unique('cash_accounts', 'account_number')->ignore($accountId)],
             'account_type'    => ['required', Rule::in(['Checking', 'Savings', 'Petty Cash', 'Money Market'])],
-            'current_balance' => ['nullable', 'numeric', 'min:0'],
+            // current_balance is derived from postings, never typed. Rejecting
+            // it outright (rather than quietly dropping it) means an API client
+            // gets a clear 422 instead of believing it changed something.
+            // The opening balance is set once, at creation.
+            'current_balance' => ['prohibited'],
+            'opening_balance'  => ['prohibited'],
             'status'          => ['sometimes', Rule::in(['Active', 'Inactive'])],
 
             'branch_name' => ['nullable', 'string', 'max:255'],
