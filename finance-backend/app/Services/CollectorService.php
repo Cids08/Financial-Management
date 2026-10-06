@@ -8,6 +8,7 @@ use App\Models\Collection as CollectionModel; // aliased — collides with Illum
 use App\Models\Collector;
 use App\Models\Role;
 use App\Models\User;
+use App\Support\EmployeeNumber;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection as SupportCollection;
@@ -85,6 +86,8 @@ class CollectorService
         $this->guardAgainstLinkingPrivilegedLogin($user, $data);
 
         return DB::transaction(function () use ($user, $data) {
+            $data['employee_no'] = $this->resolveEmployeeNo($data);
+
             $temporaryPassword = null;
 
             // Auto-create User account if no user_id is provided
@@ -151,6 +154,43 @@ class CollectorService
     }
 
     /**
+     * A collector no longer has to be handed a number by whoever is typing
+     * the form. Blank means "mint one" — the same sequence the Users page
+     * already uses for every new account, so both routes converge on one
+     * numbering scheme (see EmployeeNumber).
+     *
+     * When the profile is being linked to an existing login instead, that
+     * login's number is inherited: one person, one employee number.
+     *
+     * @throws ValidationException
+     */
+    protected function resolveEmployeeNo(array $data): string
+    {
+        $employeeNo = trim((string) ($data['employee_no'] ?? ''));
+
+        if ($employeeNo === '' && ! empty($data['user_id'])) {
+            $employeeNo = trim((string) User::find($data['user_id'])?->employee_no);
+        }
+
+        if ($employeeNo === '') {
+            return EmployeeNumber::next();
+        }
+
+        // Request-supplied numbers are already vetted by
+        // StoreCollectorRequest; an inherited one was never in the request
+        // body, so check it here rather than let the insert surface an
+        // unhandled 500. Only live rows count — collectors.employee_no is
+        // a partial index (see 2026_10_06_020000_release_soft_deleted_...).
+        if (Collector::query()->where('employee_no', $employeeNo)->exists()) {
+            throw ValidationException::withMessages([
+                'employee_no' => ['This employee number is already in use.'],
+            ]);
+        }
+
+        return $employeeNo;
+    }
+
+    /**
      * A supplied `user_id` was previously used verbatim: validation only
      * checked that the row exists and wasn't already bound elsewhere, so any
      * `collectors.manage` holder could attach an *administrator's* login as a
@@ -194,6 +234,14 @@ class CollectorService
         abort_if($user->hasAnyRole(['collector','Collector']), 403, 'Collectors cannot manage collector profiles.');
 
         $this->guardAgainstLinkingPrivilegedLogin($user, $data);
+
+        // Blank on edit means "leave the number alone" — an empty string
+        // would otherwise write NULL over a number collections history is
+        // keyed to. (Legacy rows may legitimately have no number yet; they
+        // stay as they are rather than being force-filled here.)
+        if (trim((string) ($data['employee_no'] ?? '')) === '') {
+            unset($data['employee_no']);
+        }
 
         return DB::transaction(function () use ($user, $collector, $data) {
             $collector->update([

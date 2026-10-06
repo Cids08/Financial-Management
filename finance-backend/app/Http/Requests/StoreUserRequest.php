@@ -23,4 +23,16 @@ class StoreUserRequest extends FormRequest
             'status' => ['required', 'string', Rule::in(['Active', 'Inactive'])],
         ];
     }
+
+    /**
+     * users.email is a plain unique index (archived users keep theirs, so a
+     * login address is never handed to a second account) — say that plainly
+     * instead of Laravel's generic "already been taken".
+     */
+    public function messages(): array
+    {
+        return [
+            'email.unique' => 'This email address is already in use.',
+        ];
+    }
 }

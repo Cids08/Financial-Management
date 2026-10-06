@@ -26,4 +26,12 @@ class UpdateUserRequest extends FormRequest
             'status' => ['required', 'string', Rule::in(['Active', 'Inactive'])],
         ];
     }
+
+    /** Same wording as StoreUserRequest — ignore() already exempts the row being edited. */
+    public function messages(): array
+    {
+        return [
+            'email.unique' => 'This email address is already in use.',
+        ];
+    }
 }

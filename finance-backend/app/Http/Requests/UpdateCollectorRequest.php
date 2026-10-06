@@ -17,7 +17,10 @@ class UpdateCollectorRequest extends FormRequest
         $collectorId = $this->route('collector')?->id;
 
         return [
-            'employee_no'      => ['required', 'string', 'max:255', Rule::unique('collectors', 'employee_no')->ignore($collectorId)->whereNull('deleted_at')],
+            // Nullable on edit: blank means "leave the number as it is"
+            // (the form is prefilled, so blank only arrives for legacy rows
+            // that never had one), never "erase it".
+            'employee_no'      => ['nullable', 'string', 'max:255', Rule::unique('collectors', 'employee_no')->ignore($collectorId)->whereNull('deleted_at')],
             'first_name'       => ['required', 'string', 'max:255'],
             'middle_name'      => ['nullable', 'string', 'max:255'],
             'last_name'        => ['required', 'string', 'max:255'],
@@ -33,6 +36,13 @@ class UpdateCollectorRequest extends FormRequest
             // it, re-saving a collector that's already linked to user_id
             // X would fail uniqueness against its own existing row.
             'user_id'          => ['nullable', 'integer', 'exists:users,id', Rule::unique('collectors', 'user_id')->ignore($collectorId)->whereNull('deleted_at')],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'employee_no.unique' => 'This employee number is already in use.',
         ];
     }
 }

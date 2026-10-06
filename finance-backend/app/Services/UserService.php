@@ -6,6 +6,7 @@ use App\Models\AuditLog;
 use App\Models\Collector;
 use App\Models\Role;
 use App\Models\User;
+use App\Support\EmployeeNumber;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -211,10 +212,10 @@ class UserService
 
     protected function generateEmployeeNo(): string
     {
-        // withTrashed so archived users' numbers aren't reused.
-        $next = User::withTrashed()->max('id') + 1;
-
-        return 'EMP-' . str_pad((string) $next, 5, '0', STR_PAD_LEFT);
+        // Minted in EmployeeNumber: withTrashed so archived users' numbers
+        // are never reused, plus a sweep past anything already held in
+        // collectors so the value is legal in both tables.
+        return EmployeeNumber::next();
     }
 
     /**

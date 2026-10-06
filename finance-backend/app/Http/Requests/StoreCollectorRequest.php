@@ -15,16 +15,24 @@ class StoreCollectorRequest extends FormRequest
     public function rules(): array
     {
         return [
+            // Optional. Blank means "mint one for me" — CollectorService
+            // resolves it (EmployeeNumber::next(), or the linked login's
+            // number) before anything is written, so the admin adding a
+            // collector never has to invent or look up a free number.
             'employee_no'      => [
-                'required',
+                'nullable',
                 'string',
                 'max:255',
-                // Collectors are soft-deleted. Without the whereNull(deleted_at),
-                // deleting a collector kept its employee number "taken" forever —
-                // the create form in user management kept rejecting the same
-                // number even though the collector list no longer showed anyone.
+                // collectors.employee_no is a PARTIAL unique index (see
+                // 2026_10_06_020000...): a soft-deleted collector releases
+                // its number, so only live rows count here.
                 Rule::unique('collectors', 'employee_no')->whereNull('deleted_at'),
-                Rule::unique('users', 'employee_no')->whereNull('deleted_at')->ignore($this->user_id, 'id'),
+                // users.employee_no, by contrast, is a plain unique index —
+                // an archived user keeps their number forever. Skipping
+                // archived rows in validation would let the insert through
+                // and the DB would reject it with an unhandled 500 instead
+                // of a form error.
+                Rule::unique('users', 'employee_no')->ignore($this->user_id, 'id'),
             ],
             'first_name'       => ['required', 'string', 'max:255'],
             'middle_name'      => ['nullable', 'string', 'max:255'],
@@ -35,7 +43,10 @@ class StoreCollectorRequest extends FormRequest
                 'nullable',
                 'email',
                 'max:255',
-                Rule::unique('users', 'email')->whereNull('deleted_at')->ignore($this->user_id, 'id'),
+                // users.email is a plain unique index (archived users keep
+                // theirs), so this deliberately does NOT ignore deleted_at —
+                // the message below is what the admin gets instead of a 500.
+                Rule::unique('users', 'email')->ignore($this->user_id, 'id'),
             ],
             'assigned_area'    => ['nullable', 'string', 'max:255'],
             'service_area_id'  => ['nullable', 'integer', 'exists:service_areas,id'],
@@ -51,8 +62,8 @@ class StoreCollectorRequest extends FormRequest
     {
         return [
             'email.required_without' => 'An email address is required to create the collector user account.',
-            'email.unique'           => 'This email address is already registered to an existing user.',
-            'employee_no.unique'     => 'This employee number is already taken.',
+            'email.unique'           => 'This email address is already in use.',
+            'employee_no.unique'     => 'This employee number is already in use.',
         ];
     }
 }

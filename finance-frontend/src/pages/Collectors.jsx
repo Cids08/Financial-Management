@@ -377,8 +377,8 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!form.employee_no.trim() || !form.first_name.trim() || !form.last_name.trim()) {
-      setFormError('Employee no., first name, and last name are required.')
+    if (!form.first_name.trim() || !form.last_name.trim()) {
+      setFormError('First name and last name are required.')
       return
     }
 
@@ -388,7 +388,7 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
     }
 
     const payload = {
-      employee_no: form.employee_no,
+      employee_no: form.employee_no.trim() || null, // blank → backend mints one
       first_name: form.first_name,
       last_name: form.last_name,
       email: form.email || null,
@@ -415,7 +415,7 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
     if (result.temporary_password) {
       setNewCredentials({
         name: `${submittedForm.first_name} ${submittedForm.last_name}`.trim(),
-        employee_no: submittedForm.employee_no,
+        employee_no: result.data?.employee_no || submittedForm.employee_no,
         email: submittedForm.email,
         password: result.temporary_password,
       })
@@ -648,7 +648,7 @@ export default function Collectors({ title = 'Collectors', crumbs = ['Master Dat
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Employee No.</label>
+              <label className={LABEL}>Employee No. <span className="text-muted font-normal">(Auto-generated if blank)</span></label>
               <input type="text" value={form.employee_no} onChange={(e) => setForm((f) => ({ ...f, employee_no: e.target.value }))} className={INPUT} placeholder="EMP-0231" />
             </div>
             <div>
