@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { apiFetch } from '../utils/api'
 
 /**
@@ -35,6 +35,19 @@ export function useExpenses() {
   const [mutating, setMutating] = useState(false)
   const [mutateError, setMutateError] = useState('')
 
+  // Number the list requests. Typing in the search box, paging, and the
+  // refetch after every mutation all call fetchExpenses, and they are not
+  // serialised — a slow request that started first can resolve after a newer
+  // one and overwrite it, leaving the list showing results for filters the
+  // user has already moved away from. Only the newest request may write.
+  const listRequestId = useRef(0)
+
+  // Count in-flight mutations rather than toggling a boolean. Two mutations
+  // can overlap (batch approve finishing while an archive is still going),
+  // and with a boolean the first to settle would clear `mutating` and
+  // re-enable the buttons while the second was still running.
+  const mutationsInFlight = useRef(0)
+
   const buildQuery = useCallback((f) => {
     const params = new URLSearchParams()
     if (f.search) params.set('search', f.search)
@@ -53,16 +66,24 @@ export function useExpenses() {
     setFilters(next)
     setListLoading(true)
     setListError('')
+
+    listRequestId.current += 1
+    const requestId = listRequestId.current
+
     try {
       const res = await apiFetch(`/api/expenses?${buildQuery(next)}`)
       const json = await res.json()
       if (!res.ok || !json.success) throw new Error(json.message || 'Failed to load expenses.')
+      // A newer request has been issued since this one started; its response
+      // is the one the user is waiting for, so drop this one.
+      if (requestId !== listRequestId.current) return
       setExpenses(json.data)
       if (json.meta) setMeta(json.meta)
     } catch (err) {
+      if (requestId !== listRequestId.current) return
       setListError(err.message)
     } finally {
-      setListLoading(false)
+      if (requestId === listRequestId.current) setListLoading(false)
     }
   }, [filters, buildQuery])
 
@@ -81,6 +102,7 @@ export function useExpenses() {
   }, [])
 
   const runMutation = useCallback(async (path, options) => {
+    mutationsInFlight.current += 1
     setMutating(true)
     setMutateError('')
     try {
@@ -97,7 +119,8 @@ export function useExpenses() {
       setMutateError(err.message)
       return { success: false, message: err.message }
     } finally {
-      setMutating(false)
+      mutationsInFlight.current -= 1
+      if (mutationsInFlight.current === 0) setMutating(false)
     }
   }, [])
 
@@ -196,6 +219,7 @@ export function useExpenses() {
   // a Content-Type header here, the browser needs to set its own boundary.
   // Mirrors useBudgets.js's uploadPlan() exactly.
   const uploadReceipt = useCallback(async (id, file) => {
+    mutationsInFlight.current += 1
     setMutating(true)
     setMutateError('')
     try {
@@ -212,7 +236,8 @@ export function useExpenses() {
       setMutateError(err.message)
       return { success: false, message: err.message }
     } finally {
-      setMutating(false)
+      mutationsInFlight.current -= 1
+      if (mutationsInFlight.current === 0) setMutating(false)
     }
   }, [])
 

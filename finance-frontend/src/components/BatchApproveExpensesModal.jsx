@@ -62,6 +62,27 @@ export default function BatchApproveExpensesModal({
   const [proposals, setProposals] = useState([])
   const [totals, setTotals] = useState({ count: 0, total_amount: 0, attachment_missing_count: 0, withheld_expenses: [] })
   const [selected, setSelected] = useState({})
+
+  // Serialises proposal loads. The auto-refresh effect below skips scheduling
+  // while `loadingProposals` is true, so a filter picked mid-flight never
+  // schedules a second load at all -- the in-flight response just lands and
+  // pushes the wizard to Step 1 showing the *previous* filter's expenses,
+  // under a toolbar that says the user picked something else.
+  //
+  // Two mechanisms are needed, because that is two different failures:
+  //  - requestId discards a response when two loads really do overlap.
+  //  - latestFiltersRef catches the case where only ONE load was issued but
+  //    the filters moved underneath it; there is nothing to supersede it, so
+  //    it has to re-issue rather than present results for the old filter.
+  const proposalRequestId = useRef(0)
+  const latestFiltersRef = useRef({ filterCategory, filterBudget, filterDateFrom, filterDateTo })
+  latestFiltersRef.current = { filterCategory, filterBudget, filterDateFrom, filterDateTo }
+
+  const sameFilters = (a, b) =>
+    a.filterCategory === b.filterCategory &&
+    a.filterBudget === b.filterBudget &&
+    a.filterDateFrom === b.filterDateFrom &&
+    a.filterDateTo === b.filterDateTo
   const [proposalError, setProposalError] = useState(null)
 
   // ── Step 2 (Confirmation/Execution) state ────────────────────────────────
@@ -122,8 +143,23 @@ export default function BatchApproveExpensesModal({
     if (filterDateFrom) filters.expense_date_from = filterDateFrom
     if (filterDateTo) filters.expense_date_to = filterDateTo
 
+    proposalRequestId.current += 1
+    const requestId = proposalRequestId.current
+    const requestedFilters = { filterCategory, filterBudget, filterDateFrom, filterDateTo }
+
     if (fetchApprovalProposals) {
       const res = await fetchApprovalProposals(filters)
+      // Superseded by a newer load; leave the spinner for that one to clear.
+      if (requestId !== proposalRequestId.current) return
+
+      // The filters moved while this was in flight and nothing scheduled a
+      // replacement, so this response is already stale. Re-issue against the
+      // current filters instead of rendering the old ones. Spinner stays on.
+      if (!sameFilters(requestedFilters, latestFiltersRef.current)) {
+        loadProposalsRef.current?.()
+        return
+      }
+
       setLoadingProposals(false)
 
       if (!res?.success) {

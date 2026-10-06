@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useState, useRef } from 'react'
 import { apiFetch } from '../utils/api'
 
 /**
@@ -41,6 +41,18 @@ export function useBudgets() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
+  // Number the list requests. Typing in search, changing filters and the
+  // refetch after every mutation all call fetchBudgets without waiting for
+  // each other, so a slow request issued first can land after a newer one and
+  // overwrite it -- the list then shows rows for filters the user has already
+  // navigated away from. Only the newest request may write state.
+  const listRequestId = useRef(0)
+
+  // Count in-flight writes instead of toggling a boolean. create/update/upload
+  // can overlap, and the first to settle would clear `saving` and re-enable
+  // the form while another write was still running.
+  const writesInFlight = useRef(0)
+
   const fetchBudgets = useCallback(async (filters = {}, page = 1, perPage = 20) => {
     setLoading(true)
     setError(null)
@@ -56,17 +68,23 @@ export function useBudgets() {
       params.set('per_page', perPage)
       params.set('page', page)
 
+      listRequestId.current += 1
+      const requestId = listRequestId.current
+
       const res = await apiFetch(`/api/budgets?${params.toString()}`)
       const json = await res.json()
       if (!res.ok || !json.success) throw new Error(json.message || 'Failed to load budgets.')
+      // Superseded while in flight; the newer request owns the state now.
+      if (requestId !== listRequestId.current) return { success: true, superseded: true }
       setBudgets(json.data)
       setMeta(json.meta ?? { current_page: 1, last_page: 1, total: json.data.length })
       return { success: true }
     } catch (err) {
+      if (requestId !== listRequestId.current) return { success: true, superseded: true }
       setError(err.message)
       return { success: false, message: err.message }
     } finally {
-      setLoading(false)
+      if (requestId === listRequestId.current) setLoading(false)
     }
   }, [])
 
@@ -94,6 +112,7 @@ export function useBudgets() {
   }, [])
 
   const createBudget = useCallback(async (payload) => {
+    writesInFlight.current += 1
     setSaving(true)
     setError(null)
     try {
@@ -114,11 +133,13 @@ export function useBudgets() {
       setError(err.message)
       return { success: false, message: err.message, errors: err.errors }
     } finally {
-      setSaving(false)
+      writesInFlight.current -= 1
+      if (writesInFlight.current === 0) setSaving(false)
     }
   }, [])
 
   const updateBudget = useCallback(async (id, payload) => {
+    writesInFlight.current += 1
     setSaving(true)
     setError(null)
     try {
@@ -135,7 +156,8 @@ export function useBudgets() {
       setError(err.message)
       return { success: false, message: err.message }
     } finally {
-      setSaving(false)
+      writesInFlight.current -= 1
+      if (writesInFlight.current === 0) setSaving(false)
     }
   }, [])
 
@@ -143,6 +165,7 @@ export function useBudgets() {
   // UploadBudgetPlanRequest) sent as multipart/form-data  -  do NOT set a
   // Content-Type header here, the browser needs to set its own boundary.
   const uploadPlan = useCallback(async (id, file) => {
+    writesInFlight.current += 1
     setSaving(true)
     setError(null)
     try {
@@ -160,7 +183,8 @@ export function useBudgets() {
       setError(err.message)
       return { success: false, message: err.message }
     } finally {
-      setSaving(false)
+      writesInFlight.current -= 1
+      if (writesInFlight.current === 0) setSaving(false)
     }
   }, [])
 

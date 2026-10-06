@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { X } from 'lucide-react'
 
 const SIZE_MAP = {
@@ -10,12 +10,36 @@ const SIZE_MAP = {
   '3xl': 'max-w-6xl',
 }
 
+// Modals nest — the batch-approve dialog opens a per-expense confirmation,
+// and several detail views open their own edit dialogs. Scroll locking
+// therefore has to be reference counted: the old code set body.overflow to
+// '' on unmount, so closing an inner dialog made the page scrollable behind
+// an outer one that was still open.
+let scrollLockCount = 0
+
+function lockScroll() {
+  scrollLockCount += 1
+  document.body.style.overflow = 'hidden'
+}
+
+function releaseScroll() {
+  scrollLockCount = Math.max(0, scrollLockCount - 1)
+  if (scrollLockCount === 0) document.body.style.overflow = ''
+}
+
 export default function Modal({ open, onClose, title, children, footer, maxWidth = 'max-w-md', size, blurBackdrop = false }) {
   const resolvedMaxWidth = size ? (SIZE_MAP[size] || size) : maxWidth
+  const panelRef = useRef(null)
 
   useEffect(() => {
     if (!open) return
+    lockScroll()
     document.dispatchEvent(new Event('fms:modal-open'))
+    return () => releaseScroll()
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
     const handleKey = (e) => {
       if (e.key !== 'Escape') return
       // Let the browser dismiss an open select before dismissing its dialog.
@@ -23,14 +47,17 @@ export default function Modal({ open, onClose, title, children, footer, maxWidth
         e.stopPropagation()
         return
       }
+      // Every open modal listens on the document, so without this one Escape
+      // in a nested dialog also closed the dialog behind it. Topmost is the
+      // last panel in document order — that is what actually paints on top.
+      // (An effect-order stack gets this backwards: React runs child effects
+      // before parent effects, so a nested child would register first.)
+      const panels = document.querySelectorAll('.app-modal')
+      if (panels.length === 0 || panels[panels.length - 1] !== panelRef.current) return
       if (!e.defaultPrevented) onClose()
     }
     document.addEventListener('keydown', handleKey, true)
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.removeEventListener('keydown', handleKey, true)
-      document.body.style.overflow = ''
-    }
+    return () => document.removeEventListener('keydown', handleKey, true)
   }, [open, onClose])
 
   if (!open) return null
@@ -47,6 +74,7 @@ export default function Modal({ open, onClose, title, children, footer, maxWidth
 
       {/* Panel: capped height + flex-col so header/footer stay pinned and only the body scrolls */}
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-label={typeof title === 'string' ? title : undefined}
